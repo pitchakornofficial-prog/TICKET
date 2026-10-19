@@ -11,6 +11,8 @@ export async function migrateAuth(pool: Pool): Promise<void> {
       baseURL: 'http://127.0.0.1:3000', secret: 'schema-planning-only-not-a-session-secret',
     }));
     await plan.runMigrations();
+    const { ensureInvitationSchema } = await import('./invitation.ts');
+    await ensureInvitationSchema(pool);
   } finally {
     try { await lock.query('SELECT pg_advisory_unlock($1)', [945162001]); }
     finally { lock.release(); }

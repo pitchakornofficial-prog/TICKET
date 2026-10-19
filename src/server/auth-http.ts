@@ -4,13 +4,16 @@ import type { TicketAuth } from './auth.ts';
 export async function handleAuthRequest(auth: TicketAuth, request: Request): Promise<Response> {
   const path = new URL(request.url).pathname;
   const isResetTokenGet = request.method === 'GET' && path.startsWith('/api/auth/reset-password/');
+  const isVerifyInvitationGet = request.method === 'GET' && path === '/api/auth/verify-invitation';
   const isTestInspectToken = request.method === 'GET' && path === '/api/auth/test-inspect-reset-token';
-  const allowed = (request.method === 'GET' && (path === '/api/auth/get-session' || isResetTokenGet || isTestInspectToken))
+  const allowed = (request.method === 'GET' && (path === '/api/auth/get-session' || isResetTokenGet || isVerifyInvitationGet || isTestInspectToken))
     || (request.method === 'POST' && [
       '/api/auth/sign-in/email',
       '/api/auth/sign-out',
       '/api/auth/request-password-reset',
       '/api/auth/reset-password',
+      '/api/auth/invite-organizer',
+      '/api/auth/accept-invitation',
     ].includes(path));
   if (!allowed) return Response.json({ message: 'ไม่พบเส้นทางที่ร้องขอ' }, { status: 404, headers: { 'Cache-Control': 'no-store' } });
 
@@ -26,6 +29,17 @@ export async function handleAuthRequest(auth: TicketAuth, request: Request): Pro
         await pool.query('DELETE FROM auth_rate_limit WHERE key = $1', [`reset_pwd:${uRes.rows[0].id}`]);
       }
       return Response.json({ cleared: true }, { status: 200, headers: { 'Cache-Control': 'no-store' } });
+    }
+    const type = url.searchParams.get('type') || 'reset';
+    if (type === 'invitation') {
+      const invRes = await pool.query(
+        'SELECT token FROM organizer_invitations WHERE email = $1 ORDER BY "createdAt" DESC LIMIT 1',
+        [email],
+      );
+      if (invRes.rowCount === 0) {
+        return Response.json({ token: null }, { status: 404 });
+      }
+      return Response.json({ token: invRes.rows[0].token }, { status: 200, headers: { 'Cache-Control': 'no-store' } });
     }
     const userRes = await pool.query('SELECT id FROM auth_user WHERE email = $1', [email]);
     if (userRes.rowCount === 0) {
@@ -74,6 +88,79 @@ export async function handleAuthRequest(auth: TicketAuth, request: Request): Pro
       { message: 'หากอีเมลนี้มีอยู่ในระบบ ลิงก์ตั้งรหัสผ่านใหม่จะถูกส่งไปยังอีเมลของคุณ' },
       { status: 200, headers: { 'Cache-Control': 'no-store' } }
     );
+  }
+
+  // Verify invitation token
+  if (isVerifyInvitationGet) {
+    const url = new URL(request.url);
+    const token = url.searchParams.get('token') || '';
+    const pool = auth.options.database as import('pg').Pool;
+    const { verifyInvitation } = await import('./invitation.ts');
+    const result = await verifyInvitation(pool, token);
+    return Response.json(result, {
+      status: result.valid ? 200 : 400,
+      headers: { 'Cache-Control': 'no-store' },
+    });
+  }
+
+  // Invite organizer (Owner only)
+  if (request.method === 'POST' && path === '/api/auth/invite-organizer') {
+    const session = await auth.api.getSession({ headers: request.headers });
+    if (session?.user.role !== 'owner') {
+      return Response.json({ message: 'ไม่อนุญาต: เฉพาะเจ้าของเว็บเท่านั้นที่สามารถเชิญผู้จัดงานได้' }, {
+        status: 403,
+        headers: { 'Cache-Control': 'no-store' },
+      });
+    }
+
+    const cloned = request.clone();
+    let body: { email?: string } = {};
+    try { body = await cloned.json(); } catch {}
+    const email = typeof body.email === 'string' ? body.email.trim() : '';
+
+    if (!email) {
+      return Response.json({ message: 'กรุณาระบุอีเมล' }, { status: 400, headers: { 'Cache-Control': 'no-store' } });
+    }
+
+    try {
+      const pool = auth.options.database as import('pg').Pool;
+      const { createOrganizerInvitation } = await import('./invitation.ts');
+      const inv = await createOrganizerInvitation(pool, email, auth.options.baseURL);
+      return Response.json({ message: 'ส่งคำเชิญสำเร็จ', id: inv.id, email: inv.email }, {
+        status: 200,
+        headers: { 'Cache-Control': 'no-store' },
+      });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'ไม่สามารถส่งคำเชิญได้';
+      return Response.json({ message }, { status: 400, headers: { 'Cache-Control': 'no-store' } });
+    }
+  }
+
+  // Accept invitation
+  if (request.method === 'POST' && path === '/api/auth/accept-invitation') {
+    const cloned = request.clone();
+    let body: { token?: string; name?: string; password?: string } = {};
+    try { body = await cloned.json(); } catch {}
+    const token = typeof body.token === 'string' ? body.token.trim() : '';
+    const name = typeof body.name === 'string' ? body.name.trim() : '';
+    const password = typeof body.password === 'string' ? body.password : '';
+
+    if (!token || !name || !password) {
+      return Response.json({ message: 'ข้อมูลไม่ครบถ้วน' }, { status: 400, headers: { 'Cache-Control': 'no-store' } });
+    }
+
+    try {
+      const pool = auth.options.database as import('pg').Pool;
+      const { acceptOrganizerInvitation } = await import('./invitation.ts');
+      const user = await acceptOrganizerInvitation(pool, token, { name, password });
+      return Response.json({ message: 'ตั้งบัญชีผู้จัดงานสำเร็จ', user }, {
+        status: 200,
+        headers: { 'Cache-Control': 'no-store' },
+      });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'ไม่สามารถตอบรับคำเชิญได้';
+      return Response.json({ message }, { status: 400, headers: { 'Cache-Control': 'no-store' } });
+    }
   }
 
   const response = await auth.handler(request);

@@ -4,6 +4,7 @@ import { getAuth, readActor } from '@/server/auth';
 import { isRole, roleAccess } from '@/lib/back-office-access';
 import { SignOutButton } from '@/components/sign-out-button';
 import { TicketIcon } from '@/components/ticket-icon';
+import { InviteOrganizerForm } from '@/components/invite-organizer-form';
 
 const roleNames = { owner: 'เจ้าของเว็บ', organizer: 'ผู้จัดงาน', scanner: 'ทีมสแกนบัตร' };
 
@@ -22,6 +23,7 @@ export default async function Workspace({ params }: { params: Promise<{ role: st
         <p className="intro">ยินดีต้อนรับ {actor.name}</p>
         <dl className="account-details"><div><dt>ชื่อบัญชี</dt><dd>{actor.name}</dd></div><div><dt>บทบาท</dt><dd>{roleNames[actor.role]}</dd></div></dl>
         <p className="account-note">คุณเข้าสู่ระบบด้วยสิทธิ์{roleNames[actor.role]}<br />การเข้าสู่ระบบมีอายุสูงสุด 8 ชั่วโมง</p>
+        {role === 'owner' && <InviteOrganizerForm />}
         <SignOutButton />
       </div>
       <div className="opening-mark" aria-hidden="true"><span className="vertical-word">BEHIND THE SHOW</span><TicketIcon className="large-ticket" /><span className="mark-caption">TICKET</span></div>
