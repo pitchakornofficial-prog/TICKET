@@ -1,0 +1,31 @@
+# TASK-029: เจ้าของเว็บจ่ายรายสัปดาห์และบันทึกหลักฐานโดยไม่จ่ายยอดเดิมซ้ำได้
+
+- Status: todo
+- Spec: [SPEC-001](../specs/SPEC-001-concert-ticket-lifecycle.md)
+
+## Goal
+
+Owner บันทึก manual weekly payout จากยอดพร้อมจ่ายได้แม้งานยังขายอยู่ โดยหัก approved refund/fee/reserve/paid เดิมและปกป้องหลักฐาน
+
+อ้างอิง [สัญญาพฤติกรรม](../specs/SPEC-001-concert-ticket-lifecycle.md#user-flow-and-behavior), [Verification Policy](../../CONTEXT.md#verification-policy), [AGENTS](../../AGENTS.md), [ADR-0001](../adr/0001-application-and-shared-data.md), [ADR-0003](../adr/0003-external-integrations.md)
+
+## Blocked by
+
+- TASK-028 — [ผู้จัดงานอ่านยอดขาย ค่าบริการ และยอดพร้อมจ่ายของงานตนได้](TASK-028-organizer-money-report.md)
+- TASK-023 — [เจ้าของเว็บบันทึกการโอนคืนและหลักฐานส่วนตัวได้](TASK-023-manual-refund-proof.md)
+
+## Todo
+
+- [ ] ส่งมอบและตรวจ AC-27, AC-30, AC-31, AC-79, AC-87 ครบตามข้อความและ verification rows ใน SPEC-001; ใช้ criteria เดิม ไม่เพิ่ม/เปลี่ยน product scope
+- [ ] ส่วนร่วม AC-92: สิทธิ์ไฟล์หลักฐาน payout ร่วม TASK-023; criteria นี้ครบเมื่อส่วนที่ระบุใน TASK-023 เสร็จร่วมกัน ไม่ใช้ test fixture อ้างว่าส่งมอบอีก task แล้ว
+- [ ] ส่วนร่วม AC-93: manual payout failure/retry ร่วม TASK-023; criteria นี้ครบเมื่อส่วนที่ระบุใน TASK-023 เสร็จร่วมกัน ไม่ใช้ test fixture อ้างว่าส่งมอบอีก task แล้ว
+- [ ] ทำ weekly payout cycle/owner UI จาก report ของ TASK-028; วันจริงเป็น configuration NQ-01 ไม่เดาวันจ่าย และไม่บังคับรอจบคอนเสิร์ต
+- [ ] ยอดแนะนำ/ที่บันทึกตาม flow ปกติไม่เกิน max(0,L-H); approved refund ลดสิทธิ์ตั้งแต่ approval ไม่ลดซ้ำตอน transfer สำเร็จ และ flat fee carry ถูกหักจนเต็มจากงานเดิม
+- [ ] Owner โอนนอกระบบแล้วบันทึก P/ยอด/หลักฐานจริง ไม่มี bank disbursement API; duplicate record/สอง request เดิมไม่หัก payable ซ้ำ และบันทึก failure ไม่เป็น completed
+- [ ] ใช้ private proof boundary จาก TASK-023 กับ payout: owner เปิดได้ organizer เห็นยอด/สถานะตนแต่ไม่เปิดไฟล์ buyer/scanner ไม่อ่าน payout proof; เงินโอนจริงคลาดกับยอดที่ระบบรองรับต้องแสดงให้ owner กระทบยอด ไม่อ้างว่า database ป้องกันคนโอนนอกระบบซ้ำได้
+- [ ] Verification — Unit/accounting integration controlled weekly cycles: งานยังไม่จบจ่ายได้ E=900/H=90 จ่าย810แล้วพร้อมจ่าย0, flat fee มากกว่ายอดแรก carry ไปครั้งถัดไปไม่เก็บเต็มซ้ำ
+- [ ] Verification — Integration + E2E approval→payout→refund transfer, payout failure/duplicate/concurrency และ direct private proof access ทุก role; ตรวจ provider cost อยู่ owner และไม่มี external transfer API
+- [ ] ใช้ Verification Policy ใน CONTEXT: unit-test/integration-test/e2e-test/code-review เป็น required เมื่อเกี่ยวข้อง; รันวิธีตรวจที่ระบุและบันทึก commands/results จริง หากเกี่ยวข้องแต่ไม่มี runner/tool หรือไม่ผ่านให้บล็อกพร้อมเงื่อนไขปลดบล็อก ห้ามลดเป็น auto/off หรือใช้ manual check แทน automated critical journey
+- [ ] ใช้คำสั่ง dev/build/lint/typecheck/test ที่ TASK-001 บันทึกและ repository ปัจจุบันรองรับ เลือกรัน checks ที่เกี่ยวข้องกับการเปลี่ยนแปลงจริง; บันทึก evidence ใน Todo นี้โดยไม่แต่งคำสั่ง/ผลผ่าน และคง local-first
+- [ ] นำ focused change และ evidence เข้า code-review ที่เกี่ยวข้องตาม policy และแก้ finding ก่อนถือว่างานจบ; การสร้าง task หรือมีโค้ดอย่างเดียวไม่ใช่ผล review ผ่าน
+- [ ] หากผู้ใช้หรือนโยบายที่มีผลกำหนดให้ commit ให้ commit เฉพาะการเปลี่ยนแปลงของ task นี้ มิฉะนั้นเตรียม focused diff สำหรับ review; ไม่ init Git/commit/push อัตโนมัติ และต้องตรวจว่ามี Git repository ใช้งานได้ก่อนทำ Git workflow

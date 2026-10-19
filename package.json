@@ -1,0 +1,47 @@
+{
+  "name": "ticket",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24 <25",
+    "npm": ">=12 <13"
+  },
+  "packageManager": "npm@12.0.2",
+  "scripts": {
+    "dev": "next dev --hostname 127.0.0.1",
+    "build": "next build && node scripts/prepare-standalone.mjs",
+    "start": "HOSTNAME=127.0.0.1 node .next/standalone/server.js",
+    "typecheck": "next typegen && tsc --noEmit",
+    "lint": "biome lint --error-on-warnings",
+    "db:up": "docker compose up -d --wait db db-test",
+    "db:stop": "docker compose stop db db-test",
+    "db:down": "docker compose down",
+    "test:unit": "vitest run --config vitest.unit.config.ts",
+    "test:integration": "node --env-file-if-exists=.env.test.local node_modules/vitest/vitest.mjs run --config vitest.integration.config.ts",
+    "test:e2e": "PLAYWRIGHT_BROWSERS_PATH=.cache/ms-playwright playwright test",
+    "browser:install": "PLAYWRIGHT_BROWSERS_PATH=.cache/ms-playwright playwright install chromium",
+    "db:check": "node --env-file=.env.local scripts/db-check.ts",
+    "auth:local": "node scripts/init-local-auth.mjs",
+    "db:migrate": "node --env-file=.env.local scripts/migrate-auth.ts",
+    "owner:bootstrap": "node --env-file=.env.local scripts/bootstrap-owner.ts"
+  },
+  "dependencies": {
+    "@fontsource/kanit": "5.3.0",
+    "better-auth": "1.7.11",
+    "next": "16.4.2",
+    "pg": "8.23.1",
+    "react": "19.3.1",
+    "react-dom": "19.3.1"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.5.15",
+    "@playwright/test": "1.64.1",
+    "@types/node": "24.19.2",
+    "@types/pg": "8.23.1",
+    "@types/react": "19.3.0",
+    "@types/react-dom": "19.3.0",
+    "typescript": "6.0.3",
+    "vitest": "5.0.5"
+  }
+}

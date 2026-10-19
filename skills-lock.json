@@ -1,0 +1,143 @@
+{
+  "version": 1,
+  "skills": {
+    "agent-security": {
+      "source": "phatysddev/skills",
+      "sourceType": "github",
+      "skillPath": ".agents/skills/agent-security/SKILL.md",
+      "computedHash": "83b21d7ed66dcd5745a37cfaef626abea8932d1e3d06f89b72aaa8473943a2d4"
+    },
+    "ask-workflow": {
+      "source": "phatysddev/skills",
+      "sourceType": "github",
+      "skillPath": ".agents/skills/ask-workflow/SKILL.md",
+      "computedHash": "5b3540b37730c8cbd025dec5bcaf7f2c39871e376a5d108857b769c53bc06785"
+    },
+    "auto-implement": {
+      "source": "phatysddev/skills",
+      "sourceType": "github",
+      "skillPath": ".agents/skills/auto-implement/SKILL.md",
+      "computedHash": "be91e4af4aa9e12e8d2a58d5c649d2bfde4dad061ba4d8eaea2b5ad7f62cc916"
+    },
+    "change-scope": {
+      "source": "phatysddev/skills",
+      "sourceType": "github",
+      "skillPath": ".agents/skills/change-scope/SKILL.md",
+      "computedHash": "41f24ab35d2e8a311e8a023234d1515e01f927e5e8f35c59996bfc09744abedd"
+    },
+    "code-review": {
+      "source": "phatysddev/skills",
+      "sourceType": "github",
+      "skillPath": ".agents/skills/code-review/SKILL.md",
+      "computedHash": "2b532f1f56865395797d67541c685c963760ff4a69f0bf87dc532a690bdf5f09"
+    },
+    "code-to-context": {
+      "source": "phatysddev/skills",
+      "sourceType": "github",
+      "skillPath": ".agents/skills/code-to-context/SKILL.md",
+      "computedHash": "57db965cc955b5722d522fc52564c7ba7fe379fce4f66515734d4c8ef8ba7034"
+    },
+    "compact-context": {
+      "source": "phatysddev/skills",
+      "sourceType": "github",
+      "skillPath": ".agents/skills/compact-context/SKILL.md",
+      "computedHash": "a585a82faf52eff4e51ebb2ef83a1280f113d1b2a0b96778c9d5e7bddd6cf93b"
+    },
+    "debug-task": {
+      "source": "phatysddev/skills",
+      "sourceType": "github",
+      "skillPath": ".agents/skills/debug-task/SKILL.md",
+      "computedHash": "9c370d2e8798368b290d71f292fcecd2926c37406465fa8c77d31a82cd689216"
+    },
+    "e2e-test": {
+      "source": "phatysddev/skills",
+      "sourceType": "github",
+      "skillPath": ".agents/skills/e2e-test/SKILL.md",
+      "computedHash": "0f9515cce8bd0fdbcc11534b2490995878b0a694c41edbf60eb70ce21e2bf9dd"
+    },
+    "edit-prototype": {
+      "source": "phatysddev/skills",
+      "sourceType": "github",
+      "skillPath": ".agents/skills/edit-prototype/SKILL.md",
+      "computedHash": "2903fcac46e88862afb1f746f97b8ed6c95a144862972c04eddb88ed76d04bf2"
+    },
+    "grill-design": {
+      "source": "phatysddev/skills",
+      "sourceType": "github",
+      "skillPath": ".agents/skills/grill-design/SKILL.md",
+      "computedHash": "eb9635921c28fe6d437a9c183bf5898217e3518100dfd08f543a1495eb62c43f"
+    },
+    "grill-workflow": {
+      "source": "phatysddev/skills",
+      "sourceType": "github",
+      "skillPath": ".agents/skills/grill-workflow/SKILL.md",
+      "computedHash": "269a157b74582901ce3c9e9f28f9e05e8f4d9a7d2dde6ebf1c8ed66a0fb640cd"
+    },
+    "implement-task": {
+      "source": "phatysddev/skills",
+      "sourceType": "github",
+      "skillPath": ".agents/skills/implement-task/SKILL.md",
+      "computedHash": "a226128f76ae21c17a70d72c5f757b12334119ae4808b68d3479b83c6a7d853d"
+    },
+    "integration-test": {
+      "source": "phatysddev/skills",
+      "sourceType": "github",
+      "skillPath": ".agents/skills/integration-test/SKILL.md",
+      "computedHash": "533378fe062cf45c452165c305026f06ea302a9db4ed98ad15c231f188c56af8"
+    },
+    "release-check": {
+      "source": "phatysddev/skills",
+      "sourceType": "github",
+      "skillPath": ".agents/skills/release-check/SKILL.md",
+      "computedHash": "2e94a4a2409b36b696bc5c6bdf2d5231b267ebea47f926e35f95794a096b617a"
+    },
+    "setup-project": {
+      "source": "phatysddev/skills",
+      "sourceType": "github",
+      "skillPath": ".agents/skills/setup-project/SKILL.md",
+      "computedHash": "97add917d1277996f0bfefb5ea4a31a218bed33ecae4e14c17cb6dde27151aff"
+    },
+    "spec-with-prototype": {
+      "source": "phatysddev/skills",
+      "sourceType": "github",
+      "skillPath": ".agents/skills/spec-with-prototype/SKILL.md",
+      "computedHash": "f10ab94a48f5f82408714192749e982f93042e96d30431391d8ec7968de28e6f"
+    },
+    "to-prototype": {
+      "source": "phatysddev/skills",
+      "sourceType": "github",
+      "skillPath": ".agents/skills/to-prototype/SKILL.md",
+      "computedHash": "76ce07f695a9a9307250eba12f33c6ae39db41f1d582555f2d8b4c278583978a"
+    },
+    "to-tasks": {
+      "source": "phatysddev/skills",
+      "sourceType": "github",
+      "skillPath": ".agents/skills/to-tasks/SKILL.md",
+      "computedHash": "d6ed6411fb2747f13fd375938b96a3d3cd0e6b236a7cfb59b7a5a5ca8055da5f"
+    },
+    "ui-design": {
+      "source": "phatysddev/skills",
+      "sourceType": "github",
+      "skillPath": ".agents/skills/ui-design/SKILL.md",
+      "computedHash": "f0abb987b328ca146ef516e747a5b3ae1da68492568f9a191847a31db4ae9d7b"
+    },
+    "unit-test": {
+      "source": "phatysddev/skills",
+      "sourceType": "github",
+      "skillPath": ".agents/skills/unit-test/SKILL.md",
+      "computedHash": "fee9e55aefdce8d9dc9502e65945a54bf86e31cb16e0d545fcfa6285c0e837e6"
+    },
+    "verify-feature": {
+      "source": "phatysddev/skills",
+      "sourceType": "github",
+      "skillPath": ".agents/skills/verify-feature/SKILL.md",
+      "computedHash": "295d1f6efec551461bd924110e2b2dd09c5ac6afadc9ea7b894fb216d724fc62"
+    },
+    "write-spec": {
+      "source": "phatysddev/skills",
+      "sourceType": "github",
+      "skillPath": ".agents/skills/write-spec/SKILL.md",
+      "computedHash": "1eac07e88b179df8d58ce7fae8f7e822e18180c908eae5fa009872c55e19a8a6"
+    }
+  }
+}
