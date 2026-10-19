@@ -23,7 +23,7 @@ test('login failure is visible without losing the form', async ({ page }) => {
   await page.getByLabel('อีเมล', { exact: true }).fill(fixtureAccounts.owner.email);
   await page.getByLabel('รหัสผ่าน', { exact: true }).fill('incorrect fixture password');
   await page.getByRole('button', { name: 'เข้าสู่ระบบ', exact: true }).click();
-  await expect(page.getByRole('alert')).toContainText('อีเมลหรือรหัสผ่านไม่ถูกต้อง');
+  await expect(page.locator('#login-error')).toContainText('อีเมลหรือรหัสผ่านไม่ถูกต้อง');
   await expect(page.getByRole('button', { name: 'เข้าสู่ระบบ', exact: true })).toBeEnabled();
 });
 
