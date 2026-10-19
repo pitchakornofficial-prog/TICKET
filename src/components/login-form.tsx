@@ -34,6 +34,9 @@ export function LoginForm() {
       <div><label htmlFor="password">รหัสผ่าน</label><input id="password" name="password" type="password" autoComplete="current-password" required maxLength={128} aria-describedby={error ? 'login-error' : undefined} /></div>
       {error && <p id="login-error" className="form-error" role="alert"><AlertIcon />{error}</p>}
       <button className="primary-button" type="submit" disabled={pending}>{pending ? 'กำลังเข้าสู่ระบบ…' : 'เข้าสู่ระบบ'}</button>
+      <div className="login-links">
+        <a href="/forgot-password">ลืมรหัสผ่าน?</a>
+      </div>
     </form>
   );
 }

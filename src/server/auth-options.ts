@@ -20,6 +20,16 @@ export function authOptions(pool: Pool, settings: { baseURL: string; secret: str
       disableSignUp: true,
       minPasswordLength: minimumPasswordLength,
       maxPasswordLength: maximumPasswordLength,
+      resetPasswordTokenExpiresIn: 30 * 60,
+      sendResetPassword: async ({ user, url }) => {
+        const { emailTransport } = await import('./email.ts');
+        await emailTransport.send({
+          from: 'noreply@ticket.invalid',
+          to: user.email,
+          subject: 'ตั้งรหัสผ่านใหม่สำหรับระบบ TICKET',
+          text: `คุณได้ขอตั้งรหัสผ่านใหม่ กรุณาคลิกลิงก์ด้านล่างภายใน 30 นาที:\n${url}`,
+        });
+      },
     },
     user: {
       modelName: 'auth_user',

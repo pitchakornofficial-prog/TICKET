@@ -14,6 +14,11 @@ export const fixtureAccounts = {
   organizer: { email: 'organizer@ticket.invalid', name: 'ผู้จัดงานทดสอบ' },
   scanner: { email: 'scanner@ticket.invalid', name: 'ทีมสแกนทดสอบ' },
 };
+export const resetAccounts = {
+  owner: { email: 'reset-owner@ticket.invalid', name: 'เจ้าของเว็บรีเซ็ต' },
+  organizer: { email: 'reset-organizer@ticket.invalid', name: 'ผู้จัดงานรีเซ็ต' },
+  scanner: { email: 'reset-scanner@ticket.invalid', name: 'ทีมสแกนรีเซ็ต' },
+};
 
 export async function authFixture(prefix: 'integration' | 'e2e', baseURL = 'http://127.0.0.1:3100') {
   const databaseUrl = testDatabaseUrl();
@@ -41,6 +46,17 @@ export async function authFixture(prefix: 'integration' | 'e2e', baseURL = 'http
         await client.query('INSERT INTO auth_user (id,name,email,"emailVerified",role,"createdAt","updatedAt") VALUES ($1,$2,$3,false,$4,now(),now())', [ids[role], account.name, account.email, role]);
         await client.query('INSERT INTO auth_account (id,"accountId","providerId","userId",password,"createdAt","updatedAt") VALUES ($1,$2,$3,$2,$4,now(),now())', [randomUUID(), ids[role], 'credential', password]);
       });
+    }
+    if (prefix === 'e2e') {
+      for (const role of ['owner', 'organizer', 'scanner'] as const) {
+        const resetAcc = resetAccounts[role];
+        const resetId = randomUUID();
+        const password = await hashPassword(fixturePassword);
+        await inTransaction(pool, async client => {
+          await client.query('INSERT INTO auth_user (id,name,email,"emailVerified",role,"createdAt","updatedAt") VALUES ($1,$2,$3,false,$4,now(),now())', [resetId, resetAcc.name, resetAcc.email, role]);
+          await client.query('INSERT INTO auth_account (id,"accountId","providerId","userId",password,"createdAt","updatedAt") VALUES ($1,$2,$3,$2,$4,now(),now())', [randomUUID(), resetId, 'credential', password]);
+        });
+      }
     }
     return { auth, pool, settings, databaseUrl: scopedUrl.toString(), ids, schema, cleanup };
   } catch (error) { await cleanup(); throw error; }
