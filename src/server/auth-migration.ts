@@ -13,6 +13,8 @@ export async function migrateAuth(pool: Pool): Promise<void> {
     await plan.runMigrations();
     const { ensureInvitationSchema } = await import('./invitation.ts');
     await ensureInvitationSchema(pool);
+    const { ensureEventSchema } = await import('./events.ts');
+    await ensureEventSchema(pool);
   } finally {
     try { await lock.query('SELECT pg_advisory_unlock($1)', [945162001]); }
     finally { lock.release(); }
