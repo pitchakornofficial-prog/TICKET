@@ -10,7 +10,7 @@ export interface EventDraftInput {
   description?: string;
   location: string;
   posterUrl?: string;
-  limitPerOrder: number;
+  limitPerOrder?: number;
 }
 
 export interface SessionDraftInput {
@@ -77,7 +77,8 @@ export async function createEventDraft(
 ) {
   if (!eventInput.title?.trim()) throw new Error('กรุณาระบุชื่องานคอนเสิร์ต');
   if (!eventInput.location?.trim()) throw new Error('กรุณาระบุสถานที่จัดงาน');
-  if (eventInput.limitPerOrder <= 0) throw new Error('จำกัดการซื้อต่อคำสั่งซื้อต้องมากกว่า 0');
+  const limit = eventInput.limitPerOrder ?? 4;
+  if (limit <= 0) throw new Error('จำกัดการซื้อต่อคำสั่งซื้อต้องมากกว่า 0');
 
   await ensureEventSchema(pool);
 
@@ -93,7 +94,7 @@ export async function createEventDraft(
         eventInput.description?.trim() || '',
         eventInput.location.trim(),
         eventInput.posterUrl || null,
-        eventInput.limitPerOrder,
+        limit,
       ],
     );
 
@@ -220,6 +221,60 @@ export async function submitSessionForApproval(
   });
 }
 
+export async function approveSession(
+  pool: Pool,
+  sessionId: string,
+  ownerId: string,
+) {
+  await ensureEventSchema(pool);
+  return inTransaction(pool, async client => {
+    // Check owner role
+    const userRes = await client.query('SELECT role FROM auth_user WHERE id = $1', [ownerId]);
+    if (userRes.rowCount === 0 || userRes.rows[0].role !== 'owner') {
+      throw new Error('ไม่อนุญาต: เฉพาะเจ้าของเว็บเท่านั้นที่สามารถอนุมัติรอบการแสดงได้');
+    }
+
+    const sessRes = await client.query(
+      `SELECT s.id, s."eventId", s.status, e.title 
+       FROM event_sessions s
+       JOIN events e ON e.id = s."eventId"
+       WHERE s.id = $1`,
+      [sessionId],
+    );
+    if (sessRes.rowCount === 0) throw new Error('ไม่พบข้อมูลรอบการแสดง');
+
+    // Update session status to approved
+    await client.query(
+      `UPDATE event_sessions SET status = 'approved', "updatedAt" = now() WHERE id = $1`,
+      [sessionId],
+    );
+
+    // If event is draft or pending, mark event as approved too
+    await client.query(
+      `UPDATE events SET status = 'approved', "updatedAt" = now() WHERE id = $1`,
+      [sessRes.rows[0].eventId],
+    );
+
+    return { success: true, sessionId, eventId: sessRes.rows[0].eventId };
+  });
+}
+
+export async function listPendingSessionsForOwner(pool: Pool) {
+  await ensureEventSchema(pool);
+  const res = await pool.query(
+    `SELECT s.id AS "sessionId", s."startTime", s."endTime", s.status AS "sessionStatus",
+            e.id AS "eventId", e.title AS "eventTitle", e.location, e."posterUrl",
+            u.name AS "organizerName", u.email AS "organizerEmail",
+            (SELECT COUNT(*) FROM ticket_types tt WHERE tt."sessionId" = s.id) AS "ticketTypeCount"
+     FROM event_sessions s
+     JOIN events e ON e.id = s."eventId"
+     JOIN auth_user u ON u.id = e."organizerId"
+     WHERE s.status = 'pending_approval'
+     ORDER BY s."createdAt" ASC`,
+  );
+  return res.rows;
+}
+
 export async function listOrganizerEvents(pool: Pool, organizerId: string) {
   await ensureEventSchema(pool);
   const res = await pool.query(
@@ -253,6 +308,38 @@ export async function getEventDetails(clientOrPool: { query: Pool['query'] }, ev
   for (const sess of sessRes.rows) {
     const ttRes = await clientOrPool.query(
       'SELECT * FROM ticket_types WHERE "sessionId" = $1 ORDER BY price ASC',
+      [sess.id],
+    );
+    sessions.push({ ...sess, ticketTypes: ttRes.rows });
+  }
+
+  return { ...event, sessions };
+}
+
+// Public catalog access: only approved events with approved sessions are public
+export async function getPublicEventWithApprovedSessions(pool: Pool, eventId: string) {
+  await ensureEventSchema(pool);
+  const evRes = await pool.query(
+    `SELECT id, title, description, location, "posterUrl", "limitPerOrder", status 
+     FROM events 
+     WHERE id = $1 AND status = 'approved'`,
+    [eventId],
+  );
+  if (evRes.rowCount === 0) return null;
+  const event = evRes.rows[0];
+
+  const sessRes = await pool.query(
+    `SELECT id, "startTime", "endTime", "admissionStartTime", "admissionEndTime", status
+     FROM event_sessions
+     WHERE "eventId" = $1 AND status = 'approved'
+     ORDER BY "startTime" ASC`,
+    [eventId],
+  );
+
+  const sessions = [];
+  for (const sess of sessRes.rows) {
+    const ttRes = await pool.query(
+      'SELECT id, name, price, quota, description FROM ticket_types WHERE "sessionId" = $1 ORDER BY price ASC',
       [sess.id],
     );
     sessions.push({ ...sess, ticketTypes: ttRes.rows });
