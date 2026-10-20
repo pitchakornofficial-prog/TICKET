@@ -26,6 +26,21 @@ export interface SessionDraftInput {
   }[];
 }
 
+export interface PublicEventSummary {
+  id: string;
+  title: string;
+  description: string;
+  location: string;
+  posterUrl: string | null;
+  limitPerOrder: number;
+  status: string;
+  earliestStartTime: string;
+  latestEndTime: string;
+  startingPrice: number;
+  approvedSessionCount: number;
+  totalQuota: number;
+}
+
 export async function ensureEventSchema(pool: Pool): Promise<void> {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS events (
@@ -162,7 +177,6 @@ export async function updateEventDraft(
     }
 
     if (sessionsInput) {
-      // Delete existing draft sessions and replace
       await client.query('DELETE FROM event_sessions WHERE "eventId" = $1 AND status = \'draft\'', [eventId]);
       for (const session of sessionsInput) {
         const sessionId = randomUUID();
@@ -228,7 +242,6 @@ export async function approveSession(
 ) {
   await ensureEventSchema(pool);
   return inTransaction(pool, async client => {
-    // Check owner role
     const userRes = await client.query('SELECT role FROM auth_user WHERE id = $1', [ownerId]);
     if (userRes.rowCount === 0 || userRes.rows[0].role !== 'owner') {
       throw new Error('ไม่อนุญาต: เฉพาะเจ้าของเว็บเท่านั้นที่สามารถอนุมัติรอบการแสดงได้');
@@ -243,13 +256,11 @@ export async function approveSession(
     );
     if (sessRes.rowCount === 0) throw new Error('ไม่พบข้อมูลรอบการแสดง');
 
-    // Update session status to approved
     await client.query(
       `UPDATE event_sessions SET status = 'approved', "updatedAt" = now() WHERE id = $1`,
       [sessionId],
     );
 
-    // If event is draft or pending, mark event as approved too
     await client.query(
       `UPDATE events SET status = 'approved', "updatedAt" = now() WHERE id = $1`,
       [sessRes.rows[0].eventId],
@@ -317,33 +328,91 @@ export async function getEventDetails(clientOrPool: { query: Pool['query'] }, ev
 }
 
 // Public catalog access: only approved events with approved sessions are public
-export async function getPublicEventWithApprovedSessions(pool: Pool, eventId: string) {
-  await ensureEventSchema(pool);
-  const evRes = await pool.query(
-    `SELECT id, title, description, location, "posterUrl", "limitPerOrder", status 
-     FROM events 
-     WHERE id = $1 AND status = 'approved'`,
-    [eventId],
-  );
-  if (evRes.rowCount === 0) return null;
-  const event = evRes.rows[0];
-
-  const sessRes = await pool.query(
-    `SELECT id, "startTime", "endTime", "admissionStartTime", "admissionEndTime", status
-     FROM event_sessions
-     WHERE "eventId" = $1 AND status = 'approved'
-     ORDER BY "startTime" ASC`,
-    [eventId],
-  );
-
-  const sessions = [];
-  for (const sess of sessRes.rows) {
-    const ttRes = await pool.query(
-      'SELECT id, name, price, quota, description FROM ticket_types WHERE "sessionId" = $1 ORDER BY price ASC',
-      [sess.id],
-    );
-    sessions.push({ ...sess, ticketTypes: ttRes.rows });
+export async function listPublicEvents(pool: Pool, search?: string): Promise<PublicEventSummary[]> {
+  try {
+    await ensureEventSchema(pool);
+    const query = `
+      SELECT 
+        e.id, 
+        e.title, 
+        e.description, 
+        e.location, 
+        e."posterUrl", 
+        e."limitPerOrder",
+        e.status,
+        MIN(s."startTime") AS "earliestStartTime",
+        MAX(s."endTime") AS "latestEndTime",
+        COALESCE(MIN(tt.price), 0) AS "startingPrice",
+        COUNT(DISTINCT s.id)::int AS "approvedSessionCount",
+        COALESCE(SUM(tt.quota), 0)::int AS "totalQuota"
+      FROM events e
+      JOIN event_sessions s ON s."eventId" = e.id AND s.status = 'approved'
+      LEFT JOIN ticket_types tt ON tt."sessionId" = s.id
+      WHERE e.status = 'approved'
+        AND ($1::text IS NULL OR e.title ILIKE '%' || $1 || '%' OR e.location ILIKE '%' || $1 || '%')
+      GROUP BY e.id, e.title, e.description, e.location, e."posterUrl", e."limitPerOrder", e.status
+      ORDER BY MIN(s."startTime") ASC
+    `;
+    const res = await pool.query(query, [search?.trim() ? search.trim() : null]);
+    return res.rows.map(r => ({
+      ...r,
+      startingPrice: Number(r.startingPrice),
+      approvedSessionCount: Number(r.approvedSessionCount),
+      totalQuota: Number(r.totalQuota),
+      earliestStartTime: r.earliestStartTime instanceof Date ? r.earliestStartTime.toISOString() : String(r.earliestStartTime),
+      latestEndTime: r.latestEndTime instanceof Date ? r.latestEndTime.toISOString() : String(r.latestEndTime),
+    }));
+  } catch (error) {
+    const err = error as { code?: string; message?: string };
+    if (err?.code === 'ECONNREFUSED') {
+      console.warn('[TICKET] ฐานข้อมูล PostgreSQL ยังไม่พร้อมทำงานที่ 127.0.0.1:55432 (รัน "npm run db:up" เพื่อเปิดใช้งาน)');
+    } else {
+      console.error('Failed to list public events:', error);
+    }
+    return [];
   }
+}
 
-  return { ...event, sessions };
+export async function getPublicEventWithApprovedSessions(pool: Pool, eventId: string) {
+  try {
+    await ensureEventSchema(pool);
+    const evRes = await pool.query(
+      `SELECT id, title, description, location, "posterUrl", "limitPerOrder", status 
+       FROM events 
+       WHERE id = $1 AND status = 'approved'`,
+      [eventId],
+    );
+    if (evRes.rowCount === 0) return null;
+    const event = evRes.rows[0];
+
+    const sessRes = await pool.query(
+      `SELECT id, "startTime", "endTime", "admissionStartTime", "admissionEndTime", status
+       FROM event_sessions
+       WHERE "eventId" = $1 AND status = 'approved'
+       ORDER BY "startTime" ASC`,
+      [eventId],
+    );
+
+    const sessions = [];
+    for (const sess of sessRes.rows) {
+      const ttRes = await pool.query(
+        'SELECT id, name, price, quota, description FROM ticket_types WHERE "sessionId" = $1 ORDER BY price ASC',
+        [sess.id],
+      );
+      sessions.push({
+        ...sess,
+        ticketTypes: ttRes.rows.map(tt => ({ ...tt, price: Number(tt.price) })),
+      });
+    }
+
+    return { ...event, sessions };
+  } catch (error) {
+    const err = error as { code?: string; message?: string };
+    if (err?.code === 'ECONNREFUSED') {
+      console.warn('[TICKET] ฐานข้อมูล PostgreSQL ยังไม่พร้อมทำงานที่ 127.0.0.1:55432 (รัน "npm run db:up" เพื่อเปิดใช้งาน)');
+    } else {
+      console.error('Failed to get public event details:', error);
+    }
+    return null;
+  }
 }

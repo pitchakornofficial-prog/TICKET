@@ -14,6 +14,15 @@ export function createDatabasePool(connectionString = process.env.DATABASE_URL):
   });
 }
 
+let sharedPool: Pool | undefined;
+
+export function getDatabasePool(): Pool {
+  if (!sharedPool) {
+    sharedPool = createDatabasePool();
+  }
+  return sharedPool;
+}
+
 // Every statement of a transaction uses the same checked-out connection.
 export async function inTransaction<T>(pool: Pool, work: (client: PoolClient) => Promise<T>): Promise<T> {
   const client = await pool.connect();

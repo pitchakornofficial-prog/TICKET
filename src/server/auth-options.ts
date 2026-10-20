@@ -48,5 +48,13 @@ export function authOptions(pool: Pool, settings: { baseURL: string; secret: str
     rateLimit: { enabled: true, storage: 'database', modelName: 'auth_rate_limit', window: 60, max: 100 },
     advanced: { cookiePrefix: 'ticket', useSecureCookies: url.protocol === 'https:', disableOriginCheck: false, disableCSRFCheck: false },
     telemetry: { enabled: false },
+    logger: {
+      log: (level: 'info' | 'warn' | 'error' | 'debug', message: string, ...args: unknown[]) => {
+        if (message.includes('Could not validate the database schema')) return;
+        if (level === 'error') console.error(message, ...args);
+        else if (level === 'warn') console.warn(message, ...args);
+        else console.log(message, ...args);
+      },
+    },
   } satisfies BetterAuthOptions;
 }

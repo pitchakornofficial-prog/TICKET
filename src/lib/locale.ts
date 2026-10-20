@@ -13,3 +13,15 @@ export function formatDateTime(instant: Date): string {
     timeZone, dateStyle: 'long', timeStyle: 'short',
   }).format(instant);
 }
+
+export function formatDate(instant: Date): string {
+  return new Intl.DateTimeFormat(locale, {
+    timeZone, dateStyle: 'long',
+  }).format(instant);
+}
+
+export function formatTime(instant: Date): string {
+  return new Intl.DateTimeFormat(locale, {
+    timeZone, timeStyle: 'short',
+  }).format(instant);
+}

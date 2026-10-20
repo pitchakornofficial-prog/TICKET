@@ -21,7 +21,16 @@ export function getAuth(): TicketAuth {
 }
 
 export async function readActor(instance: TicketAuth, headers: HeadersInit): Promise<Actor | null> {
-  const session = await instance.api.getSession({ headers });
-  if (!session || !isRole(session.user.role)) return null;
-  return { id: session.user.id, role: session.user.role, name: session.user.name };
+  try {
+    const session = await instance.api.getSession({ headers });
+    if (!session || !isRole(session.user.role)) return null;
+    return { id: session.user.id, role: session.user.role, name: session.user.name };
+  } catch (error) {
+    const err = error as { code?: string; message?: string };
+    if (err?.code === 'ECONNREFUSED') {
+      console.warn('[TICKET] ฐานข้อมูล PostgreSQL ยังไม่พร้อมทำงานที่ 127.0.0.1:55432 (รัน "npm run db:up" เพื่อเปิดใช้งาน)');
+      return null;
+    }
+    throw error;
+  }
 }

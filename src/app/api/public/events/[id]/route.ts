@@ -1,6 +1,5 @@
-import { getAuth } from '@/server/auth';
+import { getDatabasePool } from '@/server/database';
 import { getPublicEventWithApprovedSessions } from '@/server/events';
-import type { Pool } from 'pg';
 
 export const runtime = 'nodejs';
 
@@ -9,8 +8,7 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
-  const auth = getAuth();
-  const pool = auth.options.database as Pool;
+  const pool = getDatabasePool();
 
   const event = await getPublicEventWithApprovedSessions(pool, id);
   if (!event) {
