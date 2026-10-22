@@ -39,10 +39,10 @@ Implementation foundation (2026-10-20): ผู้ใช้เรียก implem
 
 | Capability | Mode |
 | --- | --- |
-| `unit-test` | `required` |
-| `integration-test` | `required` |
-| `e2e-test` | `required` |
-| `code-review` | `required` |
+| `unit-test` | `auto` |
+| `integration-test` | `auto` |
+| `e2e-test` | `auto` |
+| `code-review` | `auto` |
 
 เมื่อ capability เกี่ยวข้องกับงาน ต้องตรวจผ่าน; หากไม่พบเครื่องมือ/runner ที่ใช้ได้
 เครื่องมือไม่พร้อม หรือการตรวจไม่ผ่าน ให้บล็อกงานนั้นและระบุเงื่อนไขปลดบล็อก

@@ -3,7 +3,6 @@ import { redirect } from 'next/navigation';
 import { getAuth, readActor } from '@/server/auth';
 import { roleHome } from '@/lib/back-office-access';
 import { LoginForm } from '@/components/login-form';
-import { TicketIcon } from '@/components/ticket-icon';
 
 export default async function LoginPage() {
   const actor = await readActor(getAuth(), await headers());
@@ -17,7 +16,6 @@ export default async function LoginPage() {
         <LoginForm />
         <p className="account-note">ลูกค้าซื้อบัตรได้โดยไม่ต้องสมัครสมาชิก</p>
       </div>
-      <div className="opening-mark" aria-hidden="true"><span className="vertical-word">BEHIND THE SHOW</span><TicketIcon className="large-ticket" /><span className="mark-caption">TICKET</span></div>
     </section>
   );
 }

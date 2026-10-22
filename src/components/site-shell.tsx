@@ -13,6 +13,8 @@ export function SiteShell({ children }: { children: ReactNode }) {
         </Link>
         <nav className="header-nav" aria-label="เมนูหลัก">
           <Link className="header-nav-link" href="/">หน้าแรก</Link>
+          <Link className="header-nav-link" href="/my-tickets">ค้นหาบัตรของฉัน</Link>
+          <Link className="header-nav-link" href="/news">ข่าวสาร</Link>
           <Link className="header-nav-link" href="/about">เกี่ยวกับเรา</Link>
           <Link className="header-nav-link" href="/contact">ติดต่อเรา</Link>
           <Link className="header-caption" href="/login">เข้าสู่ระบบหลังบ้าน</Link>
@@ -32,6 +34,8 @@ export function SiteShell({ children }: { children: ReactNode }) {
             <h3 className="footer-heading">เมนูหลัก</h3>
             <ul className="footer-links">
               <li><Link href="/">หน้าแรก / คอนเสิร์ต</Link></li>
+              <li><Link href="/my-tickets">ค้นหาบัตรของฉัน</Link></li>
+              <li><Link href="/news">ข่าวสารและประกาศ</Link></li>
               <li><Link href="/about">เกี่ยวกับเรา</Link></li>
               <li><Link href="/contact">ติดต่อเรา</Link></li>
             </ul>
@@ -53,7 +57,7 @@ export function SiteShell({ children }: { children: ReactNode }) {
           </div>
         </div>
         <div className="footer-bottom">
-          <p>© 2026 TICKET. สงวนลิขสิทธิ์ทั้งหมด · เวลามาตรฐานประเทศไทย (Asia/Bangkok)</p>
+          <p>Copyright 2026 TICKET. สงวนลิขสิทธิ์ทั้งหมด · เวลามาตรฐานประเทศไทย (Asia/Bangkok)</p>
         </div>
       </footer>
     </div>

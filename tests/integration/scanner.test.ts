@@ -1,0 +1,116 @@
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { randomUUID } from 'node:crypto';
+import { hashPassword } from 'better-auth/crypto';
+import { authFixture, fixturePassword } from '../support/auth-fixture';
+import {
+  createEventDraft,
+  addScannerToEvent,
+  listScannersForEvent,
+  removeScannerFromEvent,
+  listEventsForScanner,
+} from '../../src/server/events';
+
+describe('Scanner account assignment and event-scoping integration (TASK-009, AC-09)', () => {
+  let fixture: Awaited<ReturnType<typeof authFixture>>;
+  const baseURL = 'http://127.0.0.1:3100';
+  let secondOrganizerId: string;
+
+  beforeAll(async () => {
+    fixture = await authFixture('integration', baseURL);
+
+    // Create second organizer
+    secondOrganizerId = randomUUID();
+    const password = await hashPassword(fixturePassword);
+    await fixture.pool.query(
+      'INSERT INTO auth_user (id, name, email, "emailVerified", role, "createdAt", "updatedAt") VALUES ($1, $2, $3, true, $4, now(), now())',
+      [secondOrganizerId, 'ผู้จัดงานคนที่สอง', 'second-org@ticket.invalid', 'organizer'],
+    );
+    await fixture.pool.query(
+      'INSERT INTO auth_account (id, "accountId", "providerId", "userId", password, "createdAt", "updatedAt") VALUES ($1, $2, $3, $2, $4, now(), now())',
+      [randomUUID(), secondOrganizerId, 'credential', password],
+    );
+  }, 30000);
+
+  afterAll(async () => {
+    if (fixture) await fixture.cleanup();
+  });
+
+  it('organizer A adds scanner to Event A; organizer B cannot manage Event A; scanner sees only Event A', async () => {
+    const orgA = fixture.ids.organizer;
+    const orgB = secondOrganizerId;
+
+    // 1. Organizer A creates Event A
+    const eventA = await createEventDraft(
+      fixture.pool,
+      orgA,
+      { title: 'คอนเสิร์ตผู้จัด A', location: 'อิมแพ็ค อารีน่า' },
+      [
+        {
+          startTime: '2026-11-20T19:00:00.000Z',
+          endTime: '2026-11-20T22:00:00.000Z',
+          ticketTypes: [{ name: 'VIP', price: 3500, quota: 100 }],
+        },
+      ],
+    );
+
+    // 2. Organizer B creates Event B
+    const eventB = await createEventDraft(
+      fixture.pool,
+      orgB,
+      { title: 'คอนเสิร์ตผู้จัด B', location: 'พารากอน ฮอลล์' },
+      [
+        {
+          startTime: '2026-12-01T19:00:00.000Z',
+          endTime: '2026-12-01T22:00:00.000Z',
+          ticketTypes: [{ name: 'Regular', price: 1500, quota: 200 }],
+        },
+      ],
+    );
+
+    // 3. Organizer A adds scanner to Event A
+    const scannerEmail = 'team-gate-a@ticket.invalid';
+    const scannerResult = await addScannerToEvent(fixture.pool, orgA, eventA.id, {
+      name: 'ทีมสแกน ประตู A',
+      email: scannerEmail,
+      password: 'Scanner-Secure-Password!001',
+    });
+
+    expect(scannerResult.scannerId).toBeDefined();
+    expect(scannerResult.name).toBe('ทีมสแกน ประตู A');
+    expect(scannerResult.email).toBe(scannerEmail);
+
+    // Verify role in auth_user is scanner, not owner or organizer (AC-09)
+    const userRow = await fixture.pool.query<{ role: string }>('SELECT role FROM auth_user WHERE id = $1', [scannerResult.scannerId]);
+    expect(userRow.rows[0].role).toBe('scanner');
+
+    // 4. Organizer A tries to add scanner to Event B (owned by Org B) -> MUST FAIL (AC-07, AC-09)
+    await expect(
+      addScannerToEvent(fixture.pool, orgA, eventB.id, {
+        name: 'สแกนเนอร์ไม่ได้รับอนุญาต',
+        email: 'unauthorized-scanner@ticket.invalid',
+      }),
+    ).rejects.toThrow('คุณไม่มีสิทธิ์จัดการทีมสแกนของงานนี้');
+
+    // 5. Organizer B tries to list scanners for Event A -> MUST FAIL
+    await expect(listScannersForEvent(fixture.pool, orgB, eventA.id)).rejects.toThrow('คุณไม่มีสิทธิ์เข้าถึงทีมสแกนของงานนี้');
+
+    // 6. Organizer A lists scanners for Event A
+    const scannersA = await listScannersForEvent(fixture.pool, orgA, eventA.id);
+    expect(scannersA.length).toBe(1);
+    expect(scannersA[0].email).toBe(scannerEmail);
+
+    // 7. Scanner queries assigned events -> only sees Event A, not Event B
+    const scannerEvents = await listEventsForScanner(fixture.pool, scannerResult.scannerId);
+    expect(scannerEvents.length).toBe(1);
+    expect(scannerEvents[0].id).toBe(eventA.id);
+    expect(scannerEvents[0].title).toBe('คอนเสิร์ตผู้จัด A');
+    expect(scannerEvents.some(e => e.id === eventB.id)).toBe(false);
+
+    // 8. Organizer A removes scanner from Event A
+    const removed = await removeScannerFromEvent(fixture.pool, orgA, eventA.id, scannerResult.scannerId);
+    expect(removed).toBe(true);
+
+    const afterRemove = await listEventsForScanner(fixture.pool, scannerResult.scannerId);
+    expect(afterRemove.length).toBe(0);
+  });
+});

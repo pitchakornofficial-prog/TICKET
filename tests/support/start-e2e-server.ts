@@ -6,6 +6,7 @@ const child = spawn(process.execPath, ['node_modules/next/dist/bin/next', 'dev',
   stdio: 'inherit',
   env: {
     ...process.env,
+    NEXT_DIST_DIR: '.next-e2e',
     DATABASE_URL: fixture.databaseUrl,
     BETTER_AUTH_URL: fixture.settings.baseURL,
     BETTER_AUTH_SECRET: fixture.settings.secret,

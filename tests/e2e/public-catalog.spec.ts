@@ -9,10 +9,10 @@ test.describe('Public customer pages and navigation (TASK-007, D-02, D-05, D-08,
     await expect(page.locator('html')).toHaveAttribute('lang', 'th');
 
     // Header nav links
-    await expect(page.getByRole('link', { name: 'หน้าแรก' })).toBeVisible();
-    await expect(page.getByRole('link', { name: 'เกี่ยวกับเรา' })).toBeVisible();
-    await expect(page.getByRole('link', { name: 'ติดต่อเรา' })).toBeVisible();
-    await expect(page.getByRole('link', { name: 'เข้าสู่ระบบหลังบ้าน' })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'หน้าแรก', exact: true })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'เกี่ยวกับเรา' }).first()).toBeVisible();
+    await expect(page.getByRole('link', { name: 'ติดต่อเรา' }).first()).toBeVisible();
+    await expect(page.getByRole('link', { name: 'เข้าสู่ระบบหลังบ้าน' }).first()).toBeVisible();
 
     // Search input
     const searchInput = page.getByRole('searchbox', { name: 'ค้นหาชื่องานคอนเสิร์ต' });

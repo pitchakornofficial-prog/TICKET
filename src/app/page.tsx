@@ -51,8 +51,8 @@ export default async function Home({
             <SearchForm initialQuery={q} />
           </div>
 
-          {/* Empty / Not yet selling notice for clean state */}
-          {!hasEvents && !isSearching && (
+          {/* Honest notice about not yet selling tickets in this phase */}
+          {!isSearching && (
             <div className="opening-notice">
               <TicketIcon />
               <div>
@@ -61,12 +61,6 @@ export default async function Home({
               </div>
             </div>
           )}
-        </div>
-
-        <div className="opening-mark" aria-hidden="true">
-          <span className="vertical-word">LIVE MUSIC</span>
-          <TicketIcon className="large-ticket" />
-          <span className="mark-caption">TICKET</span>
         </div>
       </section>
 

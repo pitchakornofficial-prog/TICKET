@@ -1,5 +1,7 @@
 import { defineConfig, devices } from '@playwright/test';
 
+process.env.PLAYWRIGHT_BROWSERS_PATH ??= '.cache/ms-playwright';
+
 export default defineConfig({
   testDir: './tests/e2e',
   fullyParallel: false,

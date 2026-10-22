@@ -1,4 +1,3 @@
-import { TicketIcon } from '@/components/ticket-icon';
 import { AcceptInvitationForm } from '@/components/accept-invitation-form';
 import { getAuth } from '@/server/auth';
 import { verifyInvitation } from '@/server/invitation';
@@ -50,11 +49,6 @@ export default async function AcceptInvitationPage({
             </div>
           </div>
         )}
-      </div>
-      <div className="opening-mark" aria-hidden="true">
-        <span className="vertical-word">BEHIND THE SHOW</span>
-        <TicketIcon className="large-ticket" />
-        <span className="mark-caption">TICKET</span>
       </div>
     </section>
   );

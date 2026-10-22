@@ -3,10 +3,21 @@ import { notFound, redirect } from 'next/navigation';
 import { getAuth, readActor } from '@/server/auth';
 import { isRole, roleAccess } from '@/lib/back-office-access';
 import { SignOutButton } from '@/components/sign-out-button';
-import { TicketIcon } from '@/components/ticket-icon';
 import { InviteOrganizerForm } from '@/components/invite-organizer-form';
 import { OrganizerEventsManager } from '@/components/organizer-events-manager';
 import { OwnerSessionApprovalManager } from '@/components/owner-session-approval-manager';
+import { OwnerNewsManager } from '@/components/owner-news-manager';
+import { OwnerFeeSettingsManager } from '@/components/owner-fee-settings-manager';
+import { OwnerPaymentRecoveryManager } from '@/components/owner-payment-recovery-manager';
+import { OwnerEmailDeliveriesManager } from '@/components/owner-email-deliveries-manager';
+import { OwnerContactCorrectionManager } from '@/components/owner-contact-correction-manager';
+import { OwnerRefundApprovalManager } from '@/components/owner-refund-approval-manager';
+import { OwnerWeeklyPayoutManager } from '@/components/owner-weekly-payout-manager';
+import { OwnerReserveReleaseManager } from '@/components/owner-reserve-release-manager';
+import { OwnerDebtRepaymentManager } from '@/components/owner-debt-repayment-manager';
+import { OwnerSyncConflictManager } from '@/components/owner-sync-conflict-manager';
+import { OrganizerScannerManager } from '@/components/organizer-scanner-manager';
+import { ScannerEventsView } from '@/components/scanner-events-view';
 
 const roleNames = { owner: 'เจ้าของเว็บ', organizer: 'ผู้จัดงาน', scanner: 'ทีมสแกนบัตร' };
 
@@ -29,12 +40,27 @@ export default async function Workspace({ params }: { params: Promise<{ role: st
           <>
             <InviteOrganizerForm />
             <OwnerSessionApprovalManager />
+            <OwnerNewsManager />
+            <OwnerFeeSettingsManager />
+            <OwnerPaymentRecoveryManager />
+            <OwnerEmailDeliveriesManager />
+            <OwnerContactCorrectionManager />
+            <OwnerRefundApprovalManager />
+            <OwnerWeeklyPayoutManager />
+            <OwnerReserveReleaseManager />
+            <OwnerDebtRepaymentManager />
+            <OwnerSyncConflictManager />
           </>
         )}
-        {role === 'organizer' && <OrganizerEventsManager />}
+        {role === 'organizer' && (
+          <>
+            <OrganizerEventsManager />
+            <OrganizerScannerManager />
+          </>
+        )}
+        {role === 'scanner' && <ScannerEventsView />}
         <SignOutButton />
       </div>
-      <div className="opening-mark" aria-hidden="true"><span className="vertical-word">BEHIND THE SHOW</span><TicketIcon className="large-ticket" /><span className="mark-caption">TICKET</span></div>
     </section>
   );
 }

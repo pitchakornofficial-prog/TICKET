@@ -31,6 +31,35 @@ export async function handleAuthRequest(auth: TicketAuth, request: Request): Pro
       return Response.json({ cleared: true }, { status: 200, headers: { 'Cache-Control': 'no-store' } });
     }
     const type = url.searchParams.get('type') || 'reset';
+    if (type === 'clear_guest_cooldown' && email) {
+      await pool.query('DELETE FROM guest_otp_tracking WHERE key LIKE $1', [`${email}:%`]);
+      return Response.json({ cleared: true }, { status: 200, headers: { 'Cache-Control': 'no-store' } });
+    }
+    if (type === 'expire_order') {
+      const orderId = url.searchParams.get('orderId') || '';
+      if (orderId) {
+        await pool.query(
+          `UPDATE orders
+           SET "expiresAt" = now() - interval '1 second', status = 'expired', "updatedAt" = now()
+           WHERE id = $1`,
+          [orderId],
+        );
+        return Response.json({ expired: true }, { status: 200, headers: { 'Cache-Control': 'no-store' } });
+      }
+    }
+    if (type === 'guest_otp') {
+      const otpRes = await pool.query(
+        'SELECT code, "requestId" FROM guest_otp WHERE email = $1 AND "consumedAt" IS NULL ORDER BY "createdAt" DESC LIMIT 1',
+        [email],
+      );
+      if (otpRes.rowCount === 0) {
+        return Response.json({ code: null }, { status: 404 });
+      }
+      return Response.json(
+        { code: otpRes.rows[0].code, requestId: otpRes.rows[0].requestId },
+        { status: 200, headers: { 'Cache-Control': 'no-store' } },
+      );
+    }
     if (type === 'invitation') {
       const invRes = await pool.query(
         'SELECT token FROM organizer_invitations WHERE email = $1 ORDER BY "createdAt" DESC LIMIT 1',

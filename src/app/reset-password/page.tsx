@@ -1,4 +1,3 @@
-import { TicketIcon } from '@/components/ticket-icon';
 import { ResetPasswordForm } from '@/components/reset-password-form';
 
 export default async function ResetPasswordPage({
@@ -28,11 +27,6 @@ export default async function ResetPasswordPage({
             </div>
           </div>
         )}
-      </div>
-      <div className="opening-mark" aria-hidden="true">
-        <span className="vertical-word">BEHIND THE SHOW</span>
-        <TicketIcon className="large-ticket" />
-        <span className="mark-caption">TICKET</span>
       </div>
     </section>
   );

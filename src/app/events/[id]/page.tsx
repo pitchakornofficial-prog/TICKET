@@ -13,6 +13,7 @@ import {
 import { getDatabasePool } from '@/server/database';
 import { getPublicEventWithApprovedSessions } from '@/server/events';
 import { formatBaht, formatDate, formatTime } from '@/lib/locale';
+import { TicketReservationFlow } from '@/components/ticket-reservation-flow';
 
 interface TicketType {
   id: string;
@@ -33,10 +34,13 @@ interface EventSession {
 
 interface EventDetailPageProps {
   params: Promise<{ id: string }>;
+  searchParams?: Promise<{ orderId?: string }>;
 }
 
-export default async function EventDetailPage({ params }: EventDetailPageProps) {
+export default async function EventDetailPage({ params, searchParams }: EventDetailPageProps) {
   const { id } = await params;
+  const resolvedSearchParams = searchParams ? await searchParams : {};
+  const orderId = resolvedSearchParams.orderId;
   let event = null;
 
   try {
@@ -63,6 +67,44 @@ export default async function EventDetailPage({ params }: EventDetailPageProps) 
           <ArrowLeftIcon /> ย้อนกลับไปหน้าแรก
         </Link>
       </nav>
+
+      {orderId && (
+        <div
+          style={{
+            backgroundColor: '#eff6ff',
+            border: '1px solid #bfdbfe',
+            borderRadius: '6px',
+            padding: '12px 16px',
+            marginBottom: '20px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: '12px',
+            fontSize: '14px',
+            color: '#1e40af',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <InfoIcon />
+            <span>ท่านมีคำสั่งซื้อ <strong>{orderId}</strong> สำหรับคอนเสิร์ตนี้</span>
+          </div>
+          <Link
+            href={`/my-tickets?orderId=${encodeURIComponent(orderId)}`}
+            style={{
+              backgroundColor: '#1848ed',
+              color: '#ffffff',
+              padding: '6px 14px',
+              borderRadius: '4px',
+              textDecoration: 'none',
+              fontWeight: 'bold',
+              fontSize: '13px',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            ยืนยันตัวตนเพื่อเปิดดูบัตร
+          </Link>
+        </div>
+      )}
 
       {/* Main detail layout */}
       <div className="detail-layout">
@@ -217,6 +259,13 @@ export default async function EventDetailPage({ params }: EventDetailPageProps) 
               </div>
             )}
           </section>
+
+          {/* Ticket selection, guest verification and 15-minute reservation flow (TASK-011, TASK-012) */}
+          <TicketReservationFlow
+            eventId={event.id}
+            limitPerOrder={event.limitPerOrder}
+            sessions={sessions}
+          />
 
           {/* Booking terms reminder */}
           <section className="booking-notice-card">
