@@ -3,63 +3,79 @@ import { notFound, redirect } from 'next/navigation';
 import { getAuth, readActor } from '@/server/auth';
 import { isRole, roleAccess } from '@/lib/back-office-access';
 import { SignOutButton } from '@/components/sign-out-button';
-import { InviteOrganizerForm } from '@/components/invite-organizer-form';
 import { OrganizerEventsManager } from '@/components/organizer-events-manager';
-import { OwnerSessionApprovalManager } from '@/components/owner-session-approval-manager';
-import { OwnerNewsManager } from '@/components/owner-news-manager';
-import { OwnerFeeSettingsManager } from '@/components/owner-fee-settings-manager';
-import { OwnerPaymentRecoveryManager } from '@/components/owner-payment-recovery-manager';
-import { OwnerEmailDeliveriesManager } from '@/components/owner-email-deliveries-manager';
-import { OwnerContactCorrectionManager } from '@/components/owner-contact-correction-manager';
-import { OwnerRefundApprovalManager } from '@/components/owner-refund-approval-manager';
-import { OwnerWeeklyPayoutManager } from '@/components/owner-weekly-payout-manager';
-import { OwnerReserveReleaseManager } from '@/components/owner-reserve-release-manager';
-import { OwnerDebtRepaymentManager } from '@/components/owner-debt-repayment-manager';
-import { OwnerSyncConflictManager } from '@/components/owner-sync-conflict-manager';
 import { OrganizerScannerManager } from '@/components/organizer-scanner-manager';
 import { ScannerEventsView } from '@/components/scanner-events-view';
+import { OwnerWorkspaceView } from '@/components/owner-workspace-view';
+import { TicketIcon } from '@/components/ticket-icon';
 
 const roleNames = { owner: 'เจ้าของเว็บ', organizer: 'ผู้จัดงาน', scanner: 'ทีมสแกนบัตร' };
 
-export default async function Workspace({ params }: { params: Promise<{ role: string }> }) {
+export default async function Workspace({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ role: string }>;
+  searchParams?: Promise<{ section?: string }>;
+}) {
   const { role } = await params;
   if (!isRole(role)) notFound();
   const actor = await readActor(getAuth(), await headers());
   const access = roleAccess(actor, role);
   if (access === 'unauthenticated') redirect('/login');
   if (access !== 'allowed' || !actor) notFound();
+  const search = searchParams ? await searchParams : undefined;
+
   return (
-    <section className="opening account-page" aria-labelledby="workspace-title">
-      <div className="opening-copy account-copy workspace-copy">
-        <p className="eyebrow">TICKET / พื้นที่ทีมงาน</p>
-        <h1 id="workspace-title">พื้นที่{roleNames[role]}</h1>
-        <p className="intro">ยินดีต้อนรับ {actor.name}</p>
-        <dl className="account-details"><div><dt>ชื่อบัญชี</dt><dd>{actor.name}</dd></div><div><dt>บทบาท</dt><dd>{roleNames[actor.role]}</dd></div></dl>
-        <p className="account-note">คุณเข้าสู่ระบบด้วยสิทธิ์{roleNames[actor.role]}<br />การเข้าสู่ระบบมีอายุสูงสุด 8 ชั่วโมง</p>
-        {role === 'owner' && (
-          <>
-            <InviteOrganizerForm />
-            <OwnerSessionApprovalManager />
-            <OwnerNewsManager />
-            <OwnerFeeSettingsManager />
-            <OwnerPaymentRecoveryManager />
-            <OwnerEmailDeliveriesManager />
-            <OwnerContactCorrectionManager />
-            <OwnerRefundApprovalManager />
-            <OwnerWeeklyPayoutManager />
-            <OwnerReserveReleaseManager />
-            <OwnerDebtRepaymentManager />
-            <OwnerSyncConflictManager />
-          </>
-        )}
+    <section className="admin-portal-wrapper" aria-labelledby="workspace-title">
+      {/* Modern Enterprise Top Header Bar */}
+      <header className="admin-topbar">
+        <div className="admin-topbar-left">
+          <div className="admin-brand-badge">
+            <TicketIcon />
+            <span className="brand admin-brand-name">TICKET</span>
+            <span className="admin-portal-pill">ADMIN</span>
+          </div>
+          <span className="admin-topbar-separator" aria-hidden="true">/</span>
+          <div className="admin-title-wrap">
+            <p className="eyebrow admin-eyebrow">TICKET / พื้นที่ทีมงาน</p>
+            <h1 id="workspace-title" className="admin-workspace-title">
+              พื้นที่{roleNames[role]}
+            </h1>
+          </div>
+        </div>
+
+        <div className="admin-topbar-right">
+          <div className="admin-user-profile-badge">
+            <div className="admin-user-avatar" aria-hidden="true">
+              {actor.name.charAt(0).toUpperCase()}
+            </div>
+            <div className="admin-user-details">
+              <span className="admin-user-name">{actor.name}</span>
+              <span className="admin-user-role-pill">{roleNames[actor.role]}</span>
+            </div>
+            <span className="admin-session-badge">เซสชัน 8 ชม.</span>
+          </div>
+          <div className="admin-logout-wrap">
+            <SignOutButton />
+          </div>
+        </div>
+      </header>
+
+      {/* Main Admin Workspace Canvas */}
+      <div className="admin-portal-body">
+        {role === 'owner' && <OwnerWorkspaceView initialSection={search?.section} />}
         {role === 'organizer' && (
-          <>
+          <div className="organizer-workspace-canvas">
             <OrganizerEventsManager />
             <OrganizerScannerManager />
-          </>
+          </div>
         )}
-        {role === 'scanner' && <ScannerEventsView />}
-        <SignOutButton />
+        {role === 'scanner' && (
+          <div className="scanner-workspace-canvas">
+            <ScannerEventsView />
+          </div>
+        )}
       </div>
     </section>
   );

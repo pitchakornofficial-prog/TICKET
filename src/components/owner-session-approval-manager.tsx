@@ -194,6 +194,7 @@ export function OwnerSessionApprovalManager() {
   return (
     <div
       id="owner-session-approval-manager"
+      data-testid="owner-session-approval-manager"
       className="owner-approvals-section"
       style={{
         marginTop: '2rem',

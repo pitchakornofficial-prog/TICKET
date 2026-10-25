@@ -2,16 +2,17 @@
 
 - Status: ready
 - Created: 2026-10-19 (Asia/Bangkok)
-- Updated: 2026-10-20 (Asia/Bangkok), write-spec reconciliation ครบ G-01–G-52
+- Updated: 2026-10-20 (Asia/Bangkok), write-spec reconciliation ครบ G-01–G-52; change-scope 2026-10-22 เพิ่ม AC-115–AC-116; change-scope 2026-10-23 เพิ่ม AC-117 (multi-step purchase journey: events -> queue -> checkout -> payment ตาม D-27)
 - Clarification follow-up: G-48–G-52 นำมาปรับสูตร พฤติกรรม และ AC/verification แล้ว; รักษาแหล่งหลักใน CONTEXT
-- Requirement: [Product scope และ D-01–D-14](../requirement.md)
+- Requirement: [Product scope และ D-01–D-27](../requirement.md)
 - Context: [Domain rules และ Verification Policy](../../CONTEXT.md)
 - ADRs: [Application/shared data](../adr/0001-application-and-shared-data.md), [Local-first/AWS](../adr/0002-local-first-and-aws-production.md), [Integrations](../adr/0003-external-integrations.md), [Identity/security parameters](../adr/0004-invitation-and-back-office-login.md)
 - Ownership: SPEC-001 เดิมเป็นเจ้าของวงจรบัตรรุ่นแรกทั้งหมด ไม่มีสเปกแข่งขันหรือ prototype ใหม่
-- Task plan: [TASK-001–TASK-037 และ acceptance coverage](../tasks/README.md), planned 2026-10-20; ทุก task เริ่ม todo ไม่มี implementation evidence จากการแตกงาน
+- Task plan: [TASK-001–TASK-040 และ acceptance coverage](../tasks/README.md), planned 2026-10-20; TASK-001–TASK-039 เป็นผลส่งมอบเดิม ส่วน [TASK-040](../tasks/TASK-040-multi-step-purchase-journey.md) เพิ่มจาก change-scope 2026-10-23
 - Visual evidence: design discovery completed; ยังไม่มี accepted prototype และไม่มีคำขอทำ prototype ในรอบนี้
 
 ข้อตกลง G-01–G-52 ถูกนำมาปรับพฤติกรรม สูตรเงิน สิทธิ์ และ AC/verification แล้ว โดยรักษา AC-01–AC-109 และเพิ่ม AC-110–AC-114
+Change-scope 2026-10-22 เพิ่ม AC-115–AC-116; change-scope 2026-10-23 เพิ่ม AC-117 (multi-step purchase journey: events -> queue -> checkout -> payment); งาน TASK-001–TASK-039 เดิมคงเป็นผลส่งมอบ และงานใหม่คือ TASK-040
 เอกสารนี้ระบุสัญญาสำหรับแตกงาน ไม่ใช่ผลทดสอบแอปหรือการอนุมัติ implementation/deployment
 คำถามต่อเนื่อง BQ-07-R1/R2 และ BQ-06-R1 ปิดตามคำตอบที่ยืนยันแล้ว; รายละเอียดที่ไม่บล็อกอยู่ใน Open questions
 
@@ -26,7 +27,7 @@
 ## In scope
 
 - ลูกค้า: หน้าแรก ค้นหางาน ข่าว รายละเอียดงาน/รอบ/ประเภทบัตร ข้อมูลผู้ซื้อ OTP ชำระเงิน เปิด order/ticket และขอคืนเงิน
-- Owner: ข่าว คำเชิญ organizer อนุมัติรอบ/แก้ไข/เลื่อน/ยกเลิก fee/reserve ตรวจ refund และบันทึก manual refund/payout
+- Owner: ข่าว คำเชิญ organizer อนุมัติรอบ/แก้ไข/เลื่อน/ยกเลิก fee/reserve ตรวจ refund และบันทึก manual refund/payout; หน้าภาพรวมงานค้างและเมนูกลุ่มของหลังบ้าน owner (D-15–D-20)
 - Organizer: งาน/รอบ/ประเภทบัตรของตน limit ต่อ order รายงานยอด และเพิ่ม scanner เฉพาะงาน รวมถึงกำหนดเครื่องหลัก/ช่วงรับเข้า
 - Guest checkout, reservation 15 นาที, Omise PromptPay ราย order, Resend และ QR เฉพาะ ticket
 - Refund บางใบ การยกเลิก/เลื่อนรอบ จ่ายผู้จัดงานรายสัปดาห์ระหว่างขาย เงินสำรอง และยอดค้างงานเดิม
@@ -473,6 +474,9 @@ AC-01–AC-109 รักษา ID เดิมและปรับตามค�
 - AC-112: Given reservation ยังไม่ยืนยันชำระ เมื่อ owner อนุมัติยกเลิกรอบ Then ยุติ reservation คืน quota ครั้งเดียวโดยไม่เปิดขายรอบนั้น หยุดเสนอ QR ให้ชำระต่อ และยังประมวลผลเงินจริงที่มาภายหลังตาม G-51/G-52/G-35
 - AC-113: Given order ยังไม่ออกบัตรและ provider ยืนยัน T<=D กับ T<C เมื่อผลมาถึงหลังรอบยกเลิก Then ถือว่าซื้อก่อนยกเลิก สร้างรายการคืนเฉพาะราคาบัตรตาม R5 ไม่ออก QR ที่ใช้เข้างานยกเลิก และไม่คืน customer fee
 - AC-114: Given order ยังไม่ออกบัตรและ provider ยืนยัน T<=D กับ T>=C เมื่อรับผลหลังรอบยกเลิก Then ไม่ออกบัตร สร้างเคส owner ตรวจคืนเต็มยอดรวม customer fee รวมกรณี T=C
+- AC-115: Given owner เข้าใช้งานหลังบ้าน /back-office/owner เมื่อดูหน้าภาพรวม (Overview dashboard) Then แสดงตัวเลขสรุปงานค้างที่ต้องดำเนินการ (รอบ/แก้ไข/ยกเลิกที่รออนุมัติ, คำขอคืนเงินที่รอตรวจ, อีเมลที่ส่งไม่สำเร็จ, เงินเข้าล่าช้า/ผิดปกติ, ข้อมูลสแกนออฟไลน์ที่ขัดแย้ง) พร้อมลิงก์/ปุ่มคลิกเพื่อกระโดดไปยังเมนูดังกล่าวได้ทันทีตาม D-17
+- AC-116: Given owner เข้าใช้งานหลังบ้าน /back-office/owner เมื่อเปิดใช้งานผ่านเมนูด้านข้าง (Sidebar) หรือเมนูบนมือถือ Then แสดงรายการทั้ง 12 ผู้จัดการแบ่งตาม 4 หมวดหมู่ (อนุมัติ, การเงิน, ลูกค้า, ระบบ) และแสดงเฉพาะเนื้อหาหมวดหมู่ที่เลือก ไม่แสดงหน้ายาวต่อกันทั้งหมด พร้อมตารางแสดงผลข้อมูลแน่นที่เลื่อนแนวนอนได้บนจอมือถือตาม D-15, D-16, D-18, D-19
+- AC-117: Given ลูกค้าเลือกดูคอนเสิร์ตที่หน้า /events/[id] เมื่อเริ่มกระบวนการซื้อบัตร Then ระบบแยกขั้นตอนเป็น 4 หน้าพร้อม Step Indicator ด้านบน (1. รายละเอียดคอนเสิร์ต -> 2. ห้องรอคิว /events/[id]/queue -> 3. เลือกบัตรและกรอกข้อมูลผู้ซื้อ & ยืนยัน OTP /events/[id]/checkout -> 4. ชำระเงิน PromptPay QR และนับถอยหลัง 15 นาที /orders/[id]/payment) ตาม D-27
 
 ## Verification plan
 
@@ -597,6 +601,9 @@ Code review ต้องตรวจขอบเขต สิทธิ์ concur
 | AC-112 | G-50 | Integration + E2E cancel pending reservation→expiry/repeated cancellation→late provider result; ตรวจ quota/UI/order เก่าไม่หาย |
 | AC-113 | G-51/R5 | Integration controlled timestamps + E2E callback after cancellation: C=19:05 D=19:15 T=19:04; inspect quote/refund/QR/payout |
 | AC-114 | G-52 | Unit/integration/E2E timestamp boundary T<C/T=C/T>C และ T=D/T>D; ตรวจเต็มยอดสำหรับ G-52/G-35 และ callback ซ้ำไม่มีเคสซ้ำ |
+| AC-115 | requirement owner overview; D-17 | Unit + Integration + E2E local: ดึงจำนวนงานค้างทั้ง 5 หมวดและคลิกนำทางไปยังส่วนงานที่เกี่ยวข้อง |
+| AC-116 | requirement owner navigation; D-15, D-16, D-18, D-19 | E2E local desktop/mobile: สลับกลุ่มเมนู 4 หมวด แสดงเฉพาะหมวดที่เลือก และตรวจตารางเลื่อนแนวนอนบนมือถือ |
+| AC-117 | requirement multi-step purchase; D-27 | E2E local desktop/mobile: ตรวจสอบการนำทางแต่ละขั้นตอน รายละเอียด -> รอคิว -> เลือกบัตรและกรอกข้อมูล -> ชำระเงิน พร้อม Step Indicator |
 
 ### Verification environment and evidence limits
 
@@ -626,7 +633,7 @@ Source column ของ verification table เชื่อมทุก AC กล
 | BQ-09 | Provider-confirmed basis, E/F/L/reserve/paid separation, same-event debt/manual repayment มีสูตรและ fixture ครบ | AC-28–AC-31, AC-80, AC-82–AC-87, AC-93, AC-107, AC-110 |
 | BQ-10 | Admission/reentry, primary assignment/handover, window, offline audit/conflict และ lost-local stop ระบุแล้ว; storage mechanism เป็น NQ | AC-40, AC-41, AC-49, AC-50, AC-94, AC-95, AC-96, AC-97, AC-98, AC-99, AC-100, AC-101, AC-102, AC-103 |
 
-UI constraints D-01/D-05/D-11–D-14 → AC-43–AC-48; preferences D-02–D-04/D-06–D-10 เป็น supplementary design review เท่านั้น
+UI constraints D-01/D-05/D-11–D-20 → AC-43–AC-48, AC-115, AC-116; preferences D-02–D-04/D-06–D-10 เป็น supplementary design review เท่านั้น
 ADR-0001 → AC-14/18/101/102/105/106/109 และ shared-counter checks; ADR-0002 → verification timing ข้างต้น
 ADR-0003 → AC-15–AC-20/37/75 และ integration boundaries; ADR-0004 → AC-51–AC-59 และ policy ที่เกี่ยวข้อง
 
@@ -660,7 +667,7 @@ ADR-0003 → AC-15–AC-20/37/75 และ integration boundaries; ADR-0004 → 
 
 - Existing owner: อัปเดต SPEC-001 เดิม ไม่สร้างสเปกแข่งขันหรือ implementation tasks
 - Scope/source: ใช้ requirement/CONTEXT/ADR ที่มีแล้ว รวม constraints/preferences ตาม Kind เดิม; ข้ออนุมานด้านความถูกต้องระบุที่มาจาก shared state/สิทธิ์/ยอด
-- Acceptance: 114 AC แบบ unique ID (เก็บ AC-01–AC-109 และเพิ่ม AC-110–AC-114) ทุก AC มีแถว source/verification และเป็น planned ทั้งหมด
+- Acceptance: 116 AC แบบ unique ID (เก็บ AC-01–AC-109 และเพิ่ม AC-110–AC-116) ทุก AC มีแถว source/verification และเป็น planned ทั้งหมด
 - Status: **ready** สำหรับ to-tasks เท่านั้น G-48–G-52 reconcile ครบ ไม่มี blocking decision และผ่านการตรวจโครงสร้าง/traceability/verification mapping ของเอกสาร; ไม่ใช่ผลทดสอบแอปหรือการอนุมัติ implementation
 - Verification: ตรวจโครงสร้างเอกสาร/ลิงก์/coverage ในขั้นเขียนสเปก ไม่อ้างว่าได้รัน unit/integration/E2E หรือ code review ของแอป
 - Local-first: functional work/verification บน local; deployment และ scale validation อยู่ช่วงท้ายตามเดิม

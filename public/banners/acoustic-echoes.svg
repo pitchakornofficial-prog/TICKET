@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 600" width="100%" height="100%">
+  <defs>
+    <linearGradient id="hall-acoustic" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#090d16" />
+      <stop offset="50%" stop-color="#1c1917" />
+      <stop offset="100%" stop-color="#0c0a09" />
+    </linearGradient>
+    <radialGradient id="acoustic-spotlight" cx="50%" cy="30%" r="55%">
+      <stop offset="0%" stop-color="#fef3c7" stop-opacity="0.8" />
+      <stop offset="35%" stop-color="#d97706" stop-opacity="0.35" />
+      <stop offset="70%" stop-color="#78350f" stop-opacity="0.1" />
+      <stop offset="100%" stop-color="#000000" stop-opacity="0" />
+    </radialGradient>
+  </defs>
+
+  <!-- Dark Theater Hall Background -->
+  <rect width="1400" height="600" fill="url(#hall-acoustic)" />
+
+  <!-- Overhead Golden Warm Spotlight -->
+  <rect width="1400" height="600" fill="url(#acoustic-spotlight)" />
+
+  <!-- Theater Curved Architectural Ribs -->
+  <g fill="none" stroke="#ca8a04" stroke-width="2" opacity="0.25">
+    <path d="M 100,0 C 300,300 1100,300 1300,0" />
+    <path d="M 200,0 C 380,240 1020,240 1200,0" />
+    <path d="M 300,0 C 450,180 950,180 1100,0" />
+  </g>
+
+  <!-- Warm Golden Particles / Dust Motes -->
+  <g fill="#fef08a" opacity="0.45">
+    <circle cx="680" cy="220" r="4" />
+    <circle cx="720" cy="260" r="3" />
+    <circle cx="640" cy="280" r="5" />
+    <circle cx="760" cy="310" r="3" />
+    <circle cx="700" cy="350" r="6" />
+    <circle cx="610" cy="380" r="4" />
+    <circle cx="780" cy="400" r="5" />
+    <circle cx="660" cy="430" r="3.5" />
+  </g>
+
+  <!-- Center Acoustic Stage Spotlight Beam -->
+  <polygon points="695,0 705,0 850,560 550,560" fill="#fef3c7" opacity="0.15" />
+
+  <!-- Intimate Theater Audience Silhouette -->
+  <path d="M 0,600 L 0,560
+    Q 50,545 100,560 Q 150,540 200,560 Q 250,545 300,560
+    Q 350,540 400,560 Q 450,545 500,560 Q 550,540 600,560
+    Q 650,545 700,560 Q 750,540 800,560 Q 850,545 900,560
+    Q 950,540 1000,560 Q 1050,545 1100,560 Q 1150,540 1200,560
+    Q 1250,545 1300,560 Q 1350,540 1400,560 L 1400,600 Z"
+    fill="#080706" />
+</svg>

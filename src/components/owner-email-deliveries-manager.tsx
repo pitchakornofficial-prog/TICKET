@@ -58,6 +58,8 @@ export function OwnerEmailDeliveriesManager() {
   return (
     <section
       className="account-card"
+      id="owner-email-deliveries-manager"
+      data-testid="owner-email-deliveries-manager"
       style={{
         marginTop: '2rem',
         background: 'var(--white)',

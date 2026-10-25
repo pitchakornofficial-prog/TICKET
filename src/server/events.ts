@@ -452,9 +452,11 @@ export async function getPublicEventWithApprovedSessions(pool: Pool, eventId: st
   try {
     await ensureEventSchema(pool);
     const evRes = await pool.query(
-      `SELECT id, title, description, location, "posterUrl", "limitPerOrder", status 
-       FROM events 
-       WHERE id = $1 AND status = 'approved'`,
+      `SELECT e.id, e.title, e.description, e.location, e."posterUrl", e."limitPerOrder", e.status,
+              u.name as "organizerName", u.email as "organizerEmail"
+       FROM events e
+       LEFT JOIN auth_user u ON e."organizerId" = u.id
+       WHERE e.id = $1 AND e.status = 'approved'`,
       [eventId],
     );
     if (evRes.rowCount === 0) return null;

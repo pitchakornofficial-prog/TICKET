@@ -250,7 +250,7 @@ export function GuestOrderLookupView({ initialOrderId }: GuestOrderLookupViewPro
   };
 
   return (
-    <div className="guest-lookup-container" style={{ maxWidth: '800px', margin: '0 auto', padding: '24px 16px' }}>
+    <div className="guest-lookup-container" style={{ width: '100%', maxWidth: '100%', margin: '0', padding: '24px var(--space)' }}>
       {/* Search Header */}
       <div style={{ marginBottom: '24px' }}>
         <h1 style={{ fontSize: '24px', fontWeight: 'bold', color: '#0f172a', margin: '0 0 8px 0' }}>
@@ -264,12 +264,13 @@ export function GuestOrderLookupView({ initialOrderId }: GuestOrderLookupViewPro
       {/* Mode 1: Search Form */}
       {mode === 'search' && (
         <div
+          className="guest-lookup-card"
           style={{
             backgroundColor: '#ffffff',
-            borderRadius: '8px',
-            border: '1px solid #e2e8f0',
-            padding: '24px',
-            boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+            borderRadius: '16px',
+            border: '1px solid rgba(226, 232, 240, 0.85)',
+            padding: '28px',
+            boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.03)',
           }}
         >
           {orderId && (
@@ -399,12 +400,13 @@ export function GuestOrderLookupView({ initialOrderId }: GuestOrderLookupViewPro
       {/* Mode 2: OTP Verification Form */}
       {mode === 'otp' && (
         <div
+          className="guest-lookup-card"
           style={{
             backgroundColor: '#ffffff',
-            borderRadius: '8px',
-            border: '1px solid #e2e8f0',
-            padding: '24px',
-            boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+            borderRadius: '16px',
+            border: '1px solid rgba(226, 232, 240, 0.85)',
+            padding: '28px',
+            boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.03)',
           }}
         >
           <div style={{ textAlign: 'center', marginBottom: '20px' }}>
@@ -561,7 +563,7 @@ export function GuestOrderLookupView({ initialOrderId }: GuestOrderLookupViewPro
             style={{
               backgroundColor: '#f8fafc',
               border: '1px solid #e2e8f0',
-              borderRadius: '8px',
+              borderRadius: '12px',
               padding: '14px 18px',
               marginBottom: '20px',
               display: 'flex',
@@ -600,12 +602,14 @@ export function GuestOrderLookupView({ initialOrderId }: GuestOrderLookupViewPro
           {/* Orders list */}
           {orders.length === 0 ? (
             <div
+              className="guest-lookup-card"
               style={{
                 backgroundColor: '#ffffff',
-                borderRadius: '8px',
-                border: '1px solid #e2e8f0',
+                borderRadius: '16px',
+                border: '1px solid rgba(226, 232, 240, 0.85)',
                 padding: '40px 20px',
                 textAlign: 'center',
+                boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.03)',
               }}
             >
               <TicketIcon />
@@ -626,11 +630,12 @@ export function GuestOrderLookupView({ initialOrderId }: GuestOrderLookupViewPro
                   <div
                     key={order.id}
                     id={`order-${order.id}`}
+                    className="order-card"
                     style={{
                       backgroundColor: '#ffffff',
-                      borderRadius: '8px',
-                      border: expandedOrderId === order.id ? '2px solid #1848ed' : '1px solid #e2e8f0',
-                      boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+                      borderRadius: '16px',
+                      border: expandedOrderId === order.id ? '2px solid #1848ed' : '1px solid rgba(226, 232, 240, 0.85)',
+                      boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.03)',
                       overflow: 'hidden',
                     }}
                   >
@@ -831,11 +836,12 @@ export function GuestOrderLookupView({ initialOrderId }: GuestOrderLookupViewPro
                                   <div
                                     key={ticket.id}
                                     style={{
-                                      border: '1px solid #cbd5e1',
-                                      borderRadius: '8px',
+                                      border: '1px solid #e2e8f0',
+                                      borderRadius: '12px',
                                       padding: '16px',
                                       backgroundColor: '#ffffff',
                                       textAlign: 'center',
+                                      boxShadow: '0 2px 8px rgba(0, 0, 0, 0.04)',
                                     }}
                                   >
                                     <div

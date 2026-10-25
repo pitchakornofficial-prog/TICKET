@@ -13,8 +13,10 @@ export interface VerifiedBuyerInfo {
 
 export function GuestCheckoutEntry({
   onVerified,
+  stepNumber,
 }: {
   onVerified?: (buyer: VerifiedBuyerInfo) => void;
+  stepNumber?: number;
 }) {
   const [step, setStep] = useState<'details' | 'otp' | 'verified'>('details');
 
@@ -181,6 +183,10 @@ export function GuestCheckoutEntry({
           phone: data.buyer.phone,
         };
 
+        if (typeof window !== 'undefined' && data.verifiedToken) {
+          sessionStorage.setItem('ticket_guest_otp_token', data.verifiedToken);
+        }
+
         setVerifiedBuyer(buyerInfo);
         setStep('verified');
         setSuccessMsg('ยืนยันตัวตนสำเร็จแล้ว');
@@ -195,7 +201,11 @@ export function GuestCheckoutEntry({
   return (
     <section className="checkout-verification-card" style={{ marginTop: '2rem' }} aria-labelledby="checkout-step-title">
       <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.8rem' }}>
-        <ShieldCheckIcon style={{ width: '24px', height: '24px', color: 'var(--blue)' }} />
+        {stepNumber ? (
+          <span className="step-badge-number">{stepNumber}</span>
+        ) : (
+          <ShieldCheckIcon style={{ width: '24px', height: '24px', color: 'var(--blue)' }} />
+        )}
         <h2 id="checkout-step-title" style={{ margin: 0, fontSize: '1.25rem' }}>
           ข้อมูลผู้ซื้อและยืนยันอีเมล (Guest Checkout)
         </h2>
@@ -250,7 +260,7 @@ export function GuestCheckoutEntry({
 
       {/* Step 1: Buyer Details Form */}
       {step === 'details' && (
-        <form onSubmit={handleRequestOtp} noValidate style={{ background: '#fafafb', border: '1px solid var(--line)', borderRadius: '8px', padding: '1.5rem' }}>
+        <form onSubmit={handleRequestOtp} noValidate style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '1.5rem' }}>
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '1.2rem', marginBottom: '1.5rem' }}>
             <div>
               <label htmlFor="buyer-name" style={{ display: 'block', fontWeight: 600, fontSize: '0.95rem', marginBottom: '0.4rem' }}>
@@ -346,7 +356,7 @@ export function GuestCheckoutEntry({
 
       {/* Step 2: OTP Verification Form */}
       {step === 'otp' && (
-        <form onSubmit={handleVerifyOtp} noValidate style={{ background: '#fafafb', border: '1px solid var(--line)', borderRadius: '8px', padding: '1.5rem' }}>
+        <form onSubmit={handleVerifyOtp} noValidate style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '1.5rem' }}>
           <div style={{ marginBottom: '1.2rem', paddingBottom: '0.8rem', borderBottom: '1px solid var(--line)' }}>
             <span style={{ fontSize: '0.85rem', color: 'var(--blue)', fontWeight: 600, textTransform: 'uppercase' }}>
               ขั้นตอนที่ 2: กรอกรหัส OTP
@@ -449,7 +459,7 @@ export function GuestCheckoutEntry({
 
       {/* Step 3: Verified Status */}
       {step === 'verified' && verifiedBuyer && (
-        <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '8px', padding: '1.5rem' }}>
+        <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: '12px', padding: '1.5rem' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.8rem' }}>
             <CheckCircleIcon style={{ width: '24px', height: '24px', color: '#166534' }} />
             <h3 style={{ margin: 0, fontSize: '1.15rem', color: '#166534' }}>
@@ -459,7 +469,7 @@ export function GuestCheckoutEntry({
           <p style={{ margin: '0 0 1rem', fontSize: '0.95rem', color: '#166534' }}>
             อีเมลของคุณได้รับการยืนยันแล้ว สามารถดำเนินการเลือกจำนวนบัตรและทำการกันบัตรในขั้นตอนต่อไปได้
           </p>
-          <div style={{ background: 'var(--white)', border: '1px solid #bbf7d0', borderRadius: '6px', padding: '1rem', fontSize: '0.9rem', lineHeight: 1.6 }}>
+          <div style={{ background: 'var(--white)', border: '1px solid #bbf7d0', borderRadius: '10px', padding: '1rem', fontSize: '0.9rem', lineHeight: 1.6 }}>
             <div><strong>ชื่อผู้ซื้อ:</strong> <span id="verified-buyer-name">{verifiedBuyer.name}</span></div>
             <div><strong>อีเมล:</strong> <span id="verified-buyer-email">{verifiedBuyer.email}</span></div>
             <div><strong>เบอร์โทรศัพท์:</strong> <span id="verified-buyer-phone">{verifiedBuyer.phone}</span></div>

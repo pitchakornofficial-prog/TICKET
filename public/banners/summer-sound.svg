@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 600" width="100%" height="100%">
+  <defs>
+    <linearGradient id="summer-sunset" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#1e1b4b" />
+      <stop offset="35%" stop-color="#701a75" />
+      <stop offset="65%" stop-color="#c2410c" />
+      <stop offset="100%" stop-color="#ea580c" />
+    </linearGradient>
+    <radialGradient id="sun-glow" cx="50%" cy="55%" r="45%">
+      <stop offset="0%" stop-color="#fef08a" stop-opacity="0.9" />
+      <stop offset="30%" stop-color="#f97316" stop-opacity="0.6" />
+      <stop offset="70%" stop-color="#ea580c" stop-opacity="0" />
+    </radialGradient>
+  </defs>
+
+  <!-- Twilight Sunset Sky -->
+  <rect width="1400" height="600" fill="url(#summer-sunset)" />
+
+  <!-- Blazing Sun & Ambient Stage Glow -->
+  <circle cx="700" cy="350" r="260" fill="url(#sun-glow)" />
+
+  <!-- Festival Stage Beams and Spotlights -->
+  <g opacity="0.35">
+    <polygon points="690,460 710,460 300,0 200,0" fill="#fde047" />
+    <polygon points="690,460 710,460 1100,0 1200,0" fill="#fde047" />
+    <polygon points="695,460 705,460 650,0 750,0" fill="#fed7aa" />
+    <polygon points="690,460 710,460 480,0 560,0" fill="#fb923c" />
+    <polygon points="690,460 710,460 840,0 920,0" fill="#fb923c" />
+  </g>
+
+  <!-- Festival Stage Rig Truss Structure -->
+  <g stroke="#18181b" stroke-width="4" opacity="0.8">
+    <line x1="450" y1="360" x2="950" y2="360" />
+    <line x1="500" y1="330" x2="900" y2="330" />
+    <line x1="450" y1="360" x2="450" y2="550" stroke-width="8" />
+    <line x1="950" y1="360" x2="950" y2="550" stroke-width="8" />
+  </g>
+
+  <!-- Festival Crowd Silhouette -->
+  <path d="M 0,600 L 0,540
+    Q 40,510 70,550 Q 110,480 140,550 Q 180,520 220,560
+    Q 260,470 290,545 Q 330,515 370,555 Q 410,460 440,540
+    Q 480,510 520,555 Q 560,450 600,545 Q 640,520 680,560
+    Q 710,440 750,540 Q 790,510 830,555 Q 870,455 910,545
+    Q 950,520 990,560 Q 1030,465 1070,545 Q 1110,510 1150,555
+    Q 1190,470 1230,545 Q 1270,520 1310,560 Q 1350,480 1400,540 L 1400,600 Z"
+    fill="#0f172a" />
+</svg>

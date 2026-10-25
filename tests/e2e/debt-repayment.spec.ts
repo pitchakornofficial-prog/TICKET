@@ -142,6 +142,7 @@ test.describe('Event debt repayment and cross-event isolation (TASK-031, AC-85, 
     // 4. Owner pays out 810 THB for Event A
     await ownerPage.goto('/back-office/owner');
     await ownerPage.reload();
+    await ownerPage.locator('[data-testid="owner-nav-finance"]').click();
     const payoutManager = ownerPage.locator('[data-testid="owner-weekly-payout-manager"]');
     await expect(payoutManager).toBeVisible();
     const payoutSelect = payoutManager.locator('#payout-event-select');
@@ -223,6 +224,7 @@ test.describe('Event debt repayment and cross-event isolation (TASK-031, AC-85, 
     // 10. Owner navigates to Debt Repayment Manager (TASK-031, AC-86)
     await ownerPage.goto('/back-office/owner');
     await ownerPage.reload();
+    await ownerPage.locator('[data-testid="owner-nav-finance"]').click();
     const debtManager = ownerPage.locator('[data-testid="owner-debt-repayment-manager"]');
     await expect(debtManager).toBeVisible();
 

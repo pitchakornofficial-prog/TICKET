@@ -156,6 +156,7 @@ test.describe('Reserve release after final session: calculation, release, and ro
     // 4. Owner verifies initial accounting and pays out 810 THB
     // E = 900, Reserve target = 90, Held H = 90, Payable = 810, Paid = 0
     await ownerPage.goto('/back-office/owner');
+    await ownerPage.locator('[data-testid="owner-nav-finance"]').click();
     const payoutManager = ownerPage.locator('[data-testid="owner-weekly-payout-manager"]');
     await expect(payoutManager).toBeVisible();
 
