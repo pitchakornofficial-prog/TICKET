@@ -8,11 +8,11 @@ test.describe('Public customer pages and navigation (TASK-007, D-02, D-05, D-08,
     await expect(page).toHaveTitle(/TICKET/);
     await expect(page.locator('html')).toHaveAttribute('lang', 'th');
 
-    // Header nav links
+    // Header nav links (D-33: no back-office login link on public UI)
     await expect(page.getByRole('link', { name: 'หน้าแรก', exact: true })).toBeVisible();
     await expect(page.getByRole('link', { name: 'เกี่ยวกับเรา' }).first()).toBeVisible();
     await expect(page.getByRole('link', { name: 'ติดต่อเรา' }).first()).toBeVisible();
-    await expect(page.getByRole('link', { name: 'เข้าสู่ระบบหลังบ้าน' }).first()).toBeVisible();
+    await expect(page.getByRole('link', { name: 'เข้าสู่ระบบหลังบ้าน' })).toHaveCount(0);
 
     // Search input
     const searchInput = page.getByRole('searchbox', { name: 'ค้นหาชื่องานคอนเสิร์ต' });

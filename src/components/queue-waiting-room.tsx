@@ -19,6 +19,8 @@ interface QueueWaitingRoomProps {
   eventLocation: string;
 }
 
+const TOTAL_QUEUE_COUNT = 36;
+
 export function QueueWaitingRoom({
   eventId,
   eventTitle,
@@ -29,7 +31,7 @@ export function QueueWaitingRoom({
     const num = Math.floor(100 + Math.random() * 899);
     return `A-${num}`;
   });
-  const [peopleAhead, setPeopleAhead] = useState(3);
+  const [peopleAhead, setPeopleAhead] = useState(TOTAL_QUEUE_COUNT);
   const [isReady, setIsReady] = useState(false);
 
   useEffect(() => {
@@ -46,13 +48,13 @@ export function QueueWaitingRoom({
       }
       const redirectTimer = setTimeout(() => {
         router.push(`/events/${eventId}/checkout`);
-      }, 1200);
+      }, 1500);
       return () => clearTimeout(redirectTimer);
     }
 
     const interval = setInterval(() => {
       setPeopleAhead(prev => Math.max(0, prev - 1));
-    }, 900);
+    }, 2000);
 
     return () => clearInterval(interval);
   }, [peopleAhead, eventId, queueNumber, router]);
@@ -70,7 +72,19 @@ export function QueueWaitingRoom({
     router.push(`/events/${eventId}/checkout`);
   };
 
-  const progressPercent = Math.min(100, Math.round(((3 - peopleAhead) / 3) * 100));
+  const progressPercent = Math.min(
+    100,
+    Math.round(((TOTAL_QUEUE_COUNT - peopleAhead) / TOTAL_QUEUE_COUNT) * 100),
+  );
+
+  const totalSeconds = peopleAhead * 2;
+  const minutes = Math.floor(totalSeconds / 60);
+  const remainingSeconds = totalSeconds % 60;
+  const estimatedTimeText = isReady
+    ? 'พร้อมทันที'
+    : minutes > 0
+      ? `~${minutes} นาที ${remainingSeconds > 0 ? `${remainingSeconds} วินาที` : ''}`
+      : `~${remainingSeconds} วินาที`;
 
   return (
     <div className="event-detail-page">
@@ -124,7 +138,7 @@ export function QueueWaitingRoom({
             <div className="queue-metric-box">
               <span className="queue-metric-label">เวลารอโดยประมาณ</span>
               <strong className="queue-metric-value">
-                {isReady ? 'พร้อมทันที' : `~${Math.max(1, peopleAhead * 2)} วินาที`}
+                {estimatedTimeText}
               </strong>
             </div>
           </div>
@@ -146,6 +160,39 @@ export function QueueWaitingRoom({
                 className="queue-progress-fill"
                 style={{ width: `${progressPercent}%` }}
               />
+            </div>
+          </div>
+
+          {/* Preparation Checklist during waiting (D-36) */}
+          <div className="queue-preparation-card">
+            <h3 className="queue-prep-title">
+              <InfoIcon style={{ width: '20px', height: '20px', color: 'var(--blue)' }} />
+              ข้อแนะนำและการเตรียมตัวระหว่างรอคิว
+            </h3>
+            <div className="queue-prep-list">
+              <div className="queue-prep-item">
+                <div className="queue-prep-num">1</div>
+                <div>
+                  <strong>เตรียมอีเมลและเบอร์โทรศัพท์ที่ใช้งานได้จริง</strong>
+                  <p>ระบบจะส่งรหัส OTP ทางอีเมลเพื่อยืนยันตัวตนก่อนเข้าสู่ขั้นตอนชำระเงิน กรุณาตรวจสอบว่าท่านสามารถเข้าถึงกล่องจดหมายได้ทันที</p>
+                </div>
+              </div>
+
+              <div className="queue-prep-item">
+                <div className="queue-prep-num">2</div>
+                <div>
+                  <strong>เตรียมแอปพลิเคชัน Mobile Banking</strong>
+                  <p>หลังจากยืนยันจำนวนบัตรแล้ว ท่านจะมีเวลากันบัตร 15 นาทีเพื่อสแกนชำระผ่าน PromptPay QR Code กรุณาเตรียมแอปธนาคารให้พร้อม</p>
+                </div>
+              </div>
+
+              <div className="queue-prep-item queue-prep-warning">
+                <div className="queue-prep-num queue-prep-num-warning">!</div>
+                <div>
+                  <strong className="queue-prep-warning-title">กรุณาอย่าปิดหรือรีเฟรชหน้าจอนี้</strong>
+                  <p className="queue-prep-warning-desc">ระบบกำลังรักษาสิทธิ์ลำดับคิวของท่านอย่างปลอดภัย การรีเฟรชหรือปิดหน้าต่างเบราว์เซอร์อาจทำให้ท่านหลุดจากคิวและต้องเริ่มต่อคิวใหม่</p>
+                </div>
+              </div>
             </div>
           </div>
 

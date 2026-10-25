@@ -28,7 +28,6 @@ export function HomeConcertCatalog({
   const [currentSlide, setCurrentSlide] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
   const autoPlayTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const rowScrollRef = useRef<HTMLDivElement | null>(null);
 
   // Sync state with browser navigation (back/forward)
   useEffect(() => {
@@ -90,17 +89,6 @@ export function HomeConcertCatalog({
       if (autoPlayTimerRef.current) clearInterval(autoPlayTimerRef.current);
     };
   }, [isSearching, totalSlides, isPaused, nextSlide]);
-
-  // Smooth scroll for horizontal catalog row (D-30)
-  const scrollRow = (direction: 'left' | 'right') => {
-    if (rowScrollRef.current) {
-      const scrollAmount = rowScrollRef.current.clientWidth * 0.75;
-      rowScrollRef.current.scrollBy({
-        left: direction === 'left' ? -scrollAmount : scrollAmount,
-        behavior: 'smooth',
-      });
-    }
-  };
 
   // Filter events by search query
   const searchFilteredEvents = isSearching
@@ -311,19 +299,10 @@ export function HomeConcertCatalog({
           </div>
         )}
 
-        {/* Horizontal Scrollable Row for 4:5 Poster Cards (D-30) */}
+        {/* Horizontal Scrollable Row for 4:5 Poster Cards (D-30, D-32) */}
         {catalogEvents.length > 0 && (
           <div className="concert-row-wrapper">
-            <button
-              type="button"
-              className="row-nav-btn row-nav-prev"
-              onClick={() => scrollRow('left')}
-              aria-label="เลื่อนดูคอนเสิร์ตก่อนหน้า"
-            >
-              <ChevronLeftIcon />
-            </button>
-
-            <div className="concert-scroll-track" ref={rowScrollRef}>
+            <div className="concert-scroll-track">
               {catalogEvents.map(event => (
                 <article key={event.id} className="concert-card-split">
                   <Link
@@ -363,7 +342,7 @@ export function HomeConcertCatalog({
                           </span>
                         </div>
                         <span className="card-split-buy-btn">
-                          ซื้อบัตร &rarr;
+                          ซื้อบัตร
                         </span>
                       </div>
                     </div>
@@ -371,15 +350,6 @@ export function HomeConcertCatalog({
                 </article>
               ))}
             </div>
-
-            <button
-              type="button"
-              className="row-nav-btn row-nav-next"
-              onClick={() => scrollRow('right')}
-              aria-label="เลื่อนดูคอนเสิร์ตถัดไป"
-            >
-              <ChevronRightIcon />
-            </button>
           </div>
         )}
       </section>

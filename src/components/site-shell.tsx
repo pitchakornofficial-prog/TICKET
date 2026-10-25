@@ -51,7 +51,6 @@ export function SiteShell({ children }: { children: ReactNode }) {
             <Link className="header-nav-link" href="/news">ข่าวสาร</Link>
             <Link className="header-nav-link" href="/about">เกี่ยวกับเรา</Link>
             <Link className="header-nav-link" href="/contact">ติดต่อเรา</Link>
-            <Link className="header-caption" href="/login">เข้าสู่ระบบหลังบ้าน</Link>
           </nav>
         </div>
       </header>
@@ -87,7 +86,6 @@ export function SiteShell({ children }: { children: ReactNode }) {
             <div className="footer-col">
               <h3 className="footer-heading">ทีมงานและผู้จัดงาน</h3>
               <ul className="footer-links">
-                <li><Link href="/login">เข้าสู่ระบบหลังบ้าน</Link></li>
                 <li><Link href="/contact">ติดต่อฝากขายบัตร</Link></li>
               </ul>
             </div>

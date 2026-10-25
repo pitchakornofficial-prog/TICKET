@@ -30,6 +30,7 @@ export default async function EventCheckoutPage({ params }: EventCheckoutPagePro
       eventId={event.id}
       eventTitle={event.title}
       eventLocation={event.location}
+      eventPosterUrl={event.posterUrl}
       limitPerOrder={event.limitPerOrder}
       sessions={event.sessions || []}
     />

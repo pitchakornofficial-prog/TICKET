@@ -1,6 +1,5 @@
 'use client';
 
-import Link from 'next/link';
 import { CheckCircleIcon } from './icons';
 
 export type PurchaseStep = 'details' | 'queue' | 'checkout' | 'payment';
@@ -19,7 +18,7 @@ const STEPS: { key: 'details' | 'checkout' | 'payment'; number: number; label: s
 
 export function PurchaseStepIndicator({
   currentStep,
-  eventId,
+  eventId: _eventId,
 }: PurchaseStepIndicatorProps) {
   // Map 'queue' to step 2 (checkout) as an active transition state
   const activeKey = currentStep === 'queue' ? 'checkout' : currentStep;
@@ -55,13 +54,7 @@ export function PurchaseStepIndicator({
 
           return (
             <li key={step.key} className="purchase-step-li">
-              {step.key === 'details' && eventId && isCompleted ? (
-                <Link href={`/events/${eventId}`} className="purchase-step-link">
-                  {stepContent}
-                </Link>
-              ) : (
-                stepContent
-              )}
+              {stepContent}
               {idx < STEPS.length - 1 && (
                 <div
                   className={`purchase-step-connector ${idx < currentIdx ? 'connector-completed' : ''}`}

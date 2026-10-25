@@ -37,6 +37,10 @@ export interface OrderReservationDetail {
   id: string;
   eventId: string;
   sessionId: string;
+  eventTitle?: string;
+  eventLocation?: string;
+  sessionStartTime?: string;
+  sessionAdmissionStartTime?: string;
   buyerEmail: string;
   buyerName: string;
   buyerPhone: string;
@@ -400,11 +404,15 @@ export async function getOrderReservation(
   );
 
   const orderRes = await pool.query(
-    `SELECT id, "eventId", "sessionId", "buyerEmail", "buyerName", "buyerPhone",
-            status, subtotal, "customerFee", total, "customerFeeMode", "customerFeeRate",
-            "reservedAt", "expiresAt"
-     FROM orders
-     WHERE id = $1`,
+    `SELECT o.id, o."eventId", o."sessionId", o."buyerEmail", o."buyerName", o."buyerPhone",
+            o.status, o.subtotal, o."customerFee", o.total, o."customerFeeMode", o."customerFeeRate",
+            o."reservedAt", o."expiresAt",
+            e.title as "eventTitle", e.location as "eventLocation",
+            s."startTime" as "sessionStartTime", s."admissionStartTime" as "sessionAdmissionStartTime"
+     FROM orders o
+     JOIN events e ON o."eventId" = e.id
+     JOIN event_sessions s ON o."sessionId" = s.id
+     WHERE o.id = $1`,
     [orderId],
   );
 
@@ -430,6 +438,10 @@ export async function getOrderReservation(
     id: o.id,
     eventId: o.eventId,
     sessionId: o.sessionId,
+    eventTitle: o.eventTitle || undefined,
+    eventLocation: o.eventLocation || undefined,
+    sessionStartTime: o.sessionStartTime ? new Date(o.sessionStartTime).toISOString() : undefined,
+    sessionAdmissionStartTime: o.sessionAdmissionStartTime ? new Date(o.sessionAdmissionStartTime).toISOString() : undefined,
     buyerEmail: o.buyerEmail,
     buyerName: o.buyerName,
     buyerPhone: o.buyerPhone,

@@ -48,6 +48,12 @@ export async function handleAuthRequest(auth: TicketAuth, request: Request): Pro
       }
     }
     if (type === 'guest_otp') {
+      try {
+        const { ensureGuestOtpSchema } = await import('./guest-otp.ts');
+        await ensureGuestOtpSchema(pool);
+      } catch {
+        // ignore schema error
+      }
       const otpRes = await pool.query(
         'SELECT code, "requestId" FROM guest_otp WHERE email = $1 AND "consumedAt" IS NULL ORDER BY "createdAt" DESC LIMIT 1',
         [email],

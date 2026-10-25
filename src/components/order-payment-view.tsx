@@ -1,18 +1,25 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import type { OrderReservationDetail } from '@/server/reservation';
 import type { PaymentChargeDetail } from '@/server/payment';
 import type { TicketDetail } from '@/server/tickets';
-import { formatBaht } from '@/lib/locale';
+import { formatBaht, formatDate, formatTime } from '@/lib/locale';
+import { isUbuEmail } from './guest-checkout-entry';
 import { PurchaseStepIndicator } from './purchase-step-indicator';
+import { PurchaseTermsFaqList } from './purchase-terms-faq-list';
+import { CheckoutTimeoutModal } from './checkout-timeout-modal';
 import {
+  AcademicCapIcon,
+  ArrowLeftIcon,
+  CalendarIcon,
   CheckCircleIcon,
   ClockIcon,
-  ArrowLeftIcon,
+  MapPinIcon,
   ShieldCheckIcon,
+  UsersIcon,
 } from './icons';
 import { AlertIcon } from './alert-icon';
 import { TicketIcon } from './ticket-icon';
@@ -36,6 +43,38 @@ export function OrderPaymentView({ orderId }: OrderPaymentViewProps) {
   const [paymentExceptionMessage, setPaymentExceptionMessage] = useState<string | null>(null);
 
   const [remainingSeconds, setRemainingSeconds] = useState<number>(0);
+  const [isTimeoutModalOpen, setIsTimeoutModalOpen] = useState(false);
+
+  const handleGeneratePaymentQr = useCallback(async (targetOrderId?: string) => {
+    const targetId = targetOrderId || reservation?.id;
+    if (!targetId) return;
+    const token =
+      typeof window !== 'undefined' ? sessionStorage.getItem('ticket_guest_otp_token') : '';
+    if (!token) {
+      setPaymentError('ไม่พบเซสชันยืนยันตัวตน OTP กรุณากลับไปทำรายการจากหน้าเลือกบัตร');
+      return;
+    }
+
+    setPaymentError(null);
+    setIsGeneratingQr(true);
+    try {
+      const res = await fetch(`/api/public/checkout/orders/${targetId}/payment-qr`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ verifiedToken: token }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.message || 'สร้าง QR ชำระเงินไม่สำเร็จ');
+      }
+      setCharge(data.charge);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'เกิดข้อผิดพลาดในการสร้าง QR';
+      setPaymentError(msg);
+    } finally {
+      setIsGeneratingQr(false);
+    }
+  }, [reservation?.id]);
 
   // Load reservation & existing payment QR on mount
   useEffect(() => {
@@ -50,14 +89,21 @@ export function OrderPaymentView({ orderId }: OrderPaymentViewProps) {
       .then(data => {
         if (data?.reservation) {
           setReservation(data.reservation);
-          fetch(`/api/public/checkout/orders/${orderId}/payment-qr`)
-            .then(qrRes => (qrRes.ok ? qrRes.json() : null))
-            .then(qrData => {
-              if (qrData?.charge) {
-                setCharge(qrData.charge);
-              }
-            })
-            .catch(() => {});
+          if (data.reservation.status === 'expired') {
+            setIsTimeoutModalOpen(true);
+          } else {
+            fetch(`/api/public/checkout/orders/${orderId}/payment-qr`)
+              .then(qrRes => (qrRes.ok ? qrRes.json() : null))
+              .then(qrData => {
+                if (qrData?.charge) {
+                  setCharge(qrData.charge);
+                } else if (data.reservation.status === 'reserved') {
+                  // Auto-generate QR code if not exists (D-48)
+                  handleGeneratePaymentQr(data.reservation.id);
+                }
+              })
+              .catch(() => {});
+          }
         }
         setIsLoadingOrder(false);
       })
@@ -65,7 +111,7 @@ export function OrderPaymentView({ orderId }: OrderPaymentViewProps) {
         setLoadError(err instanceof Error ? err.message : 'ไม่พบข้อมูลคำสั่งซื้อ');
         setIsLoadingOrder(false);
       });
-  }, [orderId]);
+  }, [orderId, handleGeneratePaymentQr]);
 
   // Fetch issued tickets when order is paid
   useEffect(() => {
@@ -87,8 +133,11 @@ export function OrderPaymentView({ orderId }: OrderPaymentViewProps) {
       const diffMs = new Date(reservation.expiresAt).getTime() - Date.now();
       const sec = Math.max(0, Math.floor(diffMs / 1000));
       setRemainingSeconds(sec);
-      if (sec === 0 && reservation.status === 'reserved') {
-        setReservation(prev => (prev ? { ...prev, status: 'expired' } : null));
+      if (reservation.status === 'expired' || (sec === 0 && reservation.status === 'reserved')) {
+        if (reservation.status === 'reserved') {
+          setReservation(prev => (prev ? { ...prev, status: 'expired' } : null));
+        }
+        setIsTimeoutModalOpen(true);
       }
     };
     updateCountdown();
@@ -102,35 +151,12 @@ export function OrderPaymentView({ orderId }: OrderPaymentViewProps) {
   const isPaid = reservation?.status === 'paid';
   const isPaymentException = reservation?.status === 'payment_exception';
 
-  async function handleGeneratePaymentQr() {
-    if (!reservation) return;
-    const token =
-      typeof window !== 'undefined' ? sessionStorage.getItem('ticket_guest_otp_token') : '';
-    if (!token) {
-      setPaymentError('ไม่พบเซสชันยืนยันตัวตน OTP กรุณากลับไปทำรายการจากหน้าเลือกบัตร');
-      return;
-    }
-
-    setPaymentError(null);
-    setIsGeneratingQr(true);
-    try {
-      const res = await fetch(`/api/public/checkout/orders/${reservation.id}/payment-qr`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ verifiedToken: token }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.message || 'สร้าง QR ชำระเงินไม่สำเร็จ');
-      }
-      setCharge(data.charge);
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : 'เกิดข้อผิดพลาดในการสร้าง QR';
-      setPaymentError(msg);
-    } finally {
-      setIsGeneratingQr(false);
-    }
-  }
+  const TOTAL_HOLD_SECONDS = 15 * 60;
+  const progressPercent = isExpired
+    ? 0
+    : Math.max(0, Math.min(100, (remainingSeconds / TOTAL_HOLD_SECONDS) * 100));
+  const timerMinutes = Math.floor(remainingSeconds / 60);
+  const timerSeconds = remainingSeconds % 60;
 
   async function handleSimulatePaymentSuccess() {
     if (!reservation) return;
@@ -201,490 +227,456 @@ export function OrderPaymentView({ orderId }: OrderPaymentViewProps) {
     );
   }
 
+  const hasUbuPrivilege = isUbuEmail(reservation.buyerEmail);
+
   return (
-    <div className="event-detail-page">
-      <nav className="detail-breadcrumb" aria-label="ย้อนกลับ">
-        <Link href={`/events/${reservation.eventId}`} className="back-link">
-          <ArrowLeftIcon /> ย้อนกลับไปหน้ารายละเอียดคอนเสิร์ต
-        </Link>
-      </nav>
+    <div className="event-detail-page payment-page-wrapper">
+      <div className="payment-stacked-container">
+        <nav className="detail-breadcrumb" aria-label="ย้อนกลับ">
+          <Link href={`/events/${reservation.eventId}`} className="back-link">
+            <ArrowLeftIcon /> ย้อนกลับไปหน้ารายละเอียดคอนเสิร์ต
+          </Link>
+        </nav>
 
-      <PurchaseStepIndicator
-        currentStep="payment"
-        eventId={reservation.eventId}
-        orderId={reservation.id}
-      />
+        <PurchaseStepIndicator
+          currentStep="payment"
+          eventId={reservation.eventId}
+          orderId={reservation.id}
+        />
 
-      <section
-        className={`account-card ${
-          isPaid
-            ? 'reservation-paid-card'
-            : isPaymentException
-              ? 'reservation-exception-card'
-              : isExpired
-                ? 'reservation-expired-card'
-                : 'reservation-confirmed-card'
-        }`}
-        style={{
-          marginTop: '1.5rem',
-          background: 'var(--white)',
-          border: `2px solid ${
-            isPaid ? '#16a34a' : isPaymentException ? '#ea580c' : isExpired ? '#dc2626' : '#2563eb'
-          }`,
-          borderRadius: 'var(--radius-card)',
-          boxShadow: 'var(--shadow-floating)',
-          padding: '2rem',
-        }}
-        aria-labelledby="reservation-confirmed-title"
-        data-testid="order-payment-card"
-      >
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            flexWrap: 'wrap',
-            gap: '1rem',
-            marginBottom: '1.5rem',
-            paddingBottom: '1rem',
-            borderBottom: '1px solid var(--line)',
-          }}
-        >
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.3rem' }}>
-              {isPaid ? (
-                <>
-                  <CheckCircleIcon style={{ width: '22px', height: '22px', color: '#16a34a' }} />
-                  <span style={{ color: '#16a34a', fontWeight: 600, fontSize: '0.9rem', textTransform: 'uppercase' }}>
-                    ชำระเงินสำเร็จ (Paid)
-                  </span>
-                </>
-              ) : isPaymentException ? (
-                <>
-                  <AlertIcon />
-                  <span style={{ color: '#ea580c', fontWeight: 600, fontSize: '0.9rem', textTransform: 'uppercase' }}>
-                    รอตรวจสอบเพื่อคืนเงิน (Under Review)
-                  </span>
-                </>
-              ) : isExpired ? (
-                <>
-                  <AlertIcon />
-                  <span style={{ color: '#dc2626', fontWeight: 600, fontSize: '0.9rem', textTransform: 'uppercase' }}>
-                    หมดเวลาการกันบัตร (Expired)
-                  </span>
-                </>
-              ) : (
-                <>
-                  <ClockIcon style={{ width: '22px', height: '22px', color: '#2563eb' }} />
-                  <span style={{ color: '#2563eb', fontWeight: 600, fontSize: '0.9rem', textTransform: 'uppercase' }}>
-                    กันบัตรสำเร็จ (Reserved)
-                  </span>
-                </>
+      {/* 1. Compact Status Bar (D-48 matching /checkout) */}
+      <section className="checkout-compact-status-bar" aria-label="สถานะคำสั่งซื้อ">
+        <div className="checkout-status-left">
+          <div className="checkout-status-badges">
+            <span
+              className={`payment-status-badge ${
+                isPaid
+                  ? 'badge-paid'
+                  : isPaymentException
+                    ? 'badge-exception'
+                    : isExpired
+                      ? 'badge-expired'
+                      : 'badge-reserved'
+              }`}
+            >
+              {isPaid
+                ? 'ชำระเงินสำเร็จ (Paid)'
+                : isPaymentException
+                  ? 'รอตรวจสอบเพื่อคืนเงิน (Under Review)'
+                  : isExpired
+                    ? 'หมดเวลาการกันบัตร (Expired)'
+                    : 'กันบัตรสำเร็จ (Reserved)'}
+            </span>
+            {hasUbuPrivilege && (
+              <span className="ubu-active-pill">
+                <AcademicCapIcon style={{ width: '15px', height: '15px' }} /> สิทธิพิเศษ ม.อุบลฯ
+              </span>
+            )}
+          </div>
+          <div className="checkout-status-event-info">
+            <h1 className="checkout-status-title">
+              {reservation.eventTitle || 'คอนเสิร์ต'}
+            </h1>
+            <div className="checkout-status-meta">
+              <span className="checkout-status-meta-item">
+                หมายเลขคำสั่งซื้อ: <strong id="reservation-order-id">{reservation.id}</strong>
+              </span>
+              {reservation.eventLocation && (
+                <span className="checkout-status-meta-item">
+                  <MapPinIcon style={{ width: '14px', height: '14px' }} /> {reservation.eventLocation}
+                </span>
+              )}
+              {reservation.sessionStartTime && (
+                <span className="checkout-status-meta-item">
+                  <CalendarIcon style={{ width: '14px', height: '14px' }} /> {formatDate(new Date(reservation.sessionStartTime))} เวลา {formatTime(new Date(reservation.sessionStartTime))} น.
+                </span>
               )}
             </div>
-            <h1 id="reservation-confirmed-title" style={{ margin: 0, fontSize: '1.4rem' }}>
-              หมายเลขคำสั่งซื้อ: <span id="reservation-order-id">{reservation.id}</span>
-            </h1>
-          </div>
-
-          {/* Countdown or Status Banner */}
-          {!isPaid && !isPaymentException && (
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.6rem',
-                background: isExpired ? '#fee2e2' : remainingSeconds > 180 ? '#fef3c7' : '#fee2e2',
-                border: `1px solid ${isExpired ? '#fca5a5' : remainingSeconds > 180 ? '#fde68a' : '#fca5a5'}`,
-                padding: '0.6rem 1.2rem',
-                borderRadius: '10px',
-                color: isExpired ? '#991b1b' : remainingSeconds > 180 ? '#92400e' : '#991b1b',
-              }}
-            >
-              <ClockIcon style={{ width: '20px', height: '20px' }} />
-              <div>
-                <span style={{ fontSize: '0.8rem', display: 'block', fontWeight: 500 }}>
-                  {isExpired ? 'สถานะเวลาการชำระเงิน' : 'เวลาคงเหลือสำหรับการชำระเงิน'}
-                </span>
-                <strong id="reservation-countdown" style={{ fontSize: '1.15rem', letterSpacing: '0.05em' }}>
-                  {isExpired
-                    ? '0:00 นาที (หมดเวลา)'
-                    : `${Math.floor(remainingSeconds / 60)}:${(remainingSeconds % 60).toString().padStart(2, '0')} นาที`}
-                </strong>
-              </div>
-            </div>
-          )}
-          {isPaid && (
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '0.6rem',
-                background: '#f0fdf4',
-                border: '1px solid #bbf7d0',
-                padding: '0.6rem 1.2rem',
-                borderRadius: '10px',
-                color: '#166534',
-              }}
-            >
-              <CheckCircleIcon style={{ width: '20px', height: '20px' }} />
-              <div>
-                <span style={{ fontSize: '0.8rem', display: 'block', fontWeight: 500 }}>
-                  สถานะคำสั่งซื้อ
-                </span>
-                <strong style={{ fontSize: '1.05rem' }}>ออกบัตรสำเร็จแล้ว ({tickets.length} ใบ)</strong>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {isPaymentException && (
-          <div
-            role="alert"
-            id="payment-exception-banner"
-            style={{
-              background: '#fffaf5',
-              border: '1px solid #fed7aa',
-              borderRadius: '12px',
-              padding: '1.2rem',
-              marginBottom: '1.5rem',
-              color: '#9a3412',
-            }}
-          >
-            <strong style={{ display: 'block', fontSize: '1.05rem', marginBottom: '0.3rem' }}>
-              คำสั่งซื้อนี้อยู่ระหว่างรอเจ้าหน้าที่ตรวจสอบเพื่อคืนเงินเต็มจำนวน (G-23, G-35)
-            </strong>
-            <p style={{ margin: '0 0 1rem', fontSize: '0.9rem', lineHeight: 1.5 }}>
-              {paymentExceptionMessage ||
-                'ระบบได้รับยอดชำระเงินเรียบร้อยแล้ว แต่เนื่องจากคำสั่งซื้อชำระเกินกำหนดเวลา 15 นาที หรือโควตาบัตรไม่เพียงพอในขณะที่ผลชำระเงินมาถึง ระบบจึงไม่ออกบัตรบางส่วน และได้เปิดเคสให้เจ้าหน้าที่ตรวจสอบเพื่อดำเนินการโอนเงินคืนเต็มจำนวน'}
-            </p>
-            <button
-              type="button"
-              onClick={handleStartNewOrder}
-              className="primary-button"
-            >
-              เริ่มทำรายการใหม่
-            </button>
-          </div>
-        )}
-
-        {isExpired && (
-          <div
-            role="alert"
-            style={{
-              background: '#fef2f2',
-              border: '1px solid #fecaca',
-              borderRadius: '12px',
-              padding: '1.2rem',
-              marginBottom: '1.5rem',
-              color: '#991b1b',
-            }}
-          >
-            <strong style={{ display: 'block', fontSize: '1.05rem', marginBottom: '0.3rem' }}>
-              คำสั่งซื้อนี้หมดเวลาชำระเงิน 15 นาทีแล้ว (AC-71)
-            </strong>
-            <p style={{ margin: '0 0 1rem', fontSize: '0.9rem', lineHeight: 1.5 }}>
-              ระบบได้ทำการคืนโควตาบัตรกลับสู่ระบบเรียบร้อยแล้ว รายการกันบัตรเดิมไม่สามารถต่ออายุได้
-              หากต้องการซื้อบัตร กรุณากดปุ่มด้านล่างเพื่อเริ่มทำรายการใหม่
-            </p>
-            <button
-              type="button"
-              onClick={handleStartNewOrder}
-              className="primary-button"
-            >
-              กลับไปเลือกบัตรใหม่
-            </button>
-          </div>
-        )}
-
-        {/* Reserved Items Breakdown */}
-        {!isPaid && (
-          <div style={{ marginBottom: '1.5rem', opacity: isExpired ? 0.7 : 1 }}>
-            <h2 style={{ fontSize: '1.1rem', margin: '0 0 0.8rem', fontWeight: 600 }}>
-              รายการบัตร{isExpired ? 'ที่เคยกันไว้' : 'ที่กันไว้'}
-            </h2>
-            <div style={{ background: '#f8fafc', border: '1px solid var(--line)', borderRadius: '12px', overflow: 'hidden' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.95rem' }}>
-                <tbody>
-                  {reservation.items.map(item => (
-                    <tr key={item.id} style={{ borderBottom: '1px solid var(--line)' }}>
-                      <td style={{ padding: '0.85rem 1.25rem' }}>
-                        <strong>{item.ticketTypeName}</strong> x {item.quantity}
-                      </td>
-                      <td style={{ padding: '0.85rem 1.25rem', textAlign: 'right', fontWeight: 600 }}>
-                        {formatBaht(item.subtotal)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-
-        {/* Price Summary */}
-        <div style={{ maxWidth: '380px', marginLeft: isPaid ? '0' : 'auto', marginBottom: '1.5rem', opacity: isExpired ? 0.7 : 1 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '0.4rem 0', fontSize: '0.95rem' }}>
-            <span style={{ color: 'var(--muted)' }}>รวมราคาบัตร (Subtotal):</span>
-            <strong id="quote-subtotal">{formatBaht(reservation.subtotal)}</strong>
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '0.4rem 0', fontSize: '0.95rem' }}>
-            <span style={{ color: 'var(--muted)' }}>ค่าบริการ (Customer Fee):</span>
-            <strong id="quote-customer-fee">{formatBaht(reservation.customerFee)}</strong>
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', padding: '0.8rem 0 0', borderTop: '2px solid var(--line)', fontSize: '1.2rem' }}>
-            <span style={{ fontWeight: 600 }}>ยอดรวมสุทธิ (Total):</span>
-            <strong id="quote-total" style={{ color: isPaid ? '#16a34a' : isExpired ? 'var(--muted)' : 'var(--blue)' }}>
-              {formatBaht(reservation.total)}
-            </strong>
           </div>
         </div>
 
-        {/* Buyer Info */}
-        <div style={{ background: '#f8fafc', border: '1px solid var(--line)', borderRadius: '12px', padding: '1rem 1.25rem', fontSize: '0.9rem', color: 'var(--muted)', marginBottom: '1.5rem' }}>
-          <div>
-            ข้อมูลผู้สั่งซื้อ: <strong id="buyer-summary-name">{reservation.buyerName}</strong> (
-            <span id="buyer-summary-email">{reservation.buyerEmail}</span>) | โทร:{' '}
-            <strong id="buyer-summary-phone">{reservation.buyerPhone}</strong>
-          </div>
-          <div style={{ marginTop: '0.3rem', fontSize: '0.8rem', color: '#64748b' }}>
-            * บัตรทุกใบในคำสั่งซื้อนี้ใช้ข้อมูลผู้ซื้อชุดเดียวกัน ไม่ต้องลงทะเบียนชื่อผู้เข้าชมแยกใบ (AC-11)
-          </div>
-        </div>
-
-        {/* Issued Tickets Grid when Paid */}
-        {isPaid && (
-          <div id="issued-tickets-section" style={{ marginTop: '2rem' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '1.2rem' }}>
-              <h2 style={{ fontSize: '1.25rem', margin: 0, fontWeight: 600 }}>
-                บัตรคอนเสิร์ตที่ออกแล้ว (<span id="issued-tickets-count">{tickets.length}</span> ใบ)
-              </h2>
-              <span style={{ fontSize: '0.85rem', color: '#166534', fontWeight: 500 }}>
-                <ShieldCheckIcon style={{ width: '16px', height: '16px', verticalAlign: 'text-bottom' }} /> QR Code แยกสำหรับเข้างานเฉพาะแต่ละใบ (AC-19)
+        {!isPaid && !isPaymentException && (
+          <div className={`payment-status-timer-box ${isExpired ? 'timer-box-expired' : ''}`}>
+            <ClockIcon style={{ width: '20px', height: '20px' }} />
+            <div>
+              <span className="timer-box-sub">
+                {isExpired ? 'สถานะเวลา' : 'เวลาคงเหลือสำหรับชำระเงิน'}
               </span>
+              <strong id="reservation-countdown" className="timer-box-countdown">
+                {isExpired
+                  ? '0:00 นาที (หมดเวลา)'
+                  : `${Math.floor(remainingSeconds / 60)}:${(remainingSeconds % 60).toString().padStart(2, '0')} นาที`}
+              </strong>
             </div>
-
-            {tickets.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--muted)', background: '#f8fafc', borderRadius: '12px' }}>
-                กำลังโหลดข้อมูลบัตรคอนเสิร์ต...
-              </div>
-            ) : (
-              <div
-                style={{
-                  display: 'grid',
-                  gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
-                  gap: '1.5rem',
-                }}
-              >
-                {tickets.map((tkt, idx) => (
-                  <div
-                    key={tkt.id}
-                    className="ticket-card"
-                    data-ticket-id={tkt.id}
-                    style={{
-                      background: '#ffffff',
-                      border: 'var(--border-card)',
-                      borderRadius: 'var(--radius-card)',
-                      padding: '1.5rem',
-                      boxShadow: 'var(--shadow-floating)',
-                      display: 'flex',
-                      flexDirection: 'column',
-                      alignItems: 'center',
-                      textAlign: 'center',
-                      position: 'relative',
-                    }}
-                  >
-                    <div
-                      style={{
-                        position: 'absolute',
-                        top: '1rem',
-                        right: '1rem',
-                        background: '#f0fdf4',
-                        border: '1px solid #bbf7d0',
-                        color: '#166534',
-                        fontSize: '0.75rem',
-                        fontWeight: 600,
-                        padding: '0.2rem 0.5rem',
-                        borderRadius: '999px',
-                      }}
-                    >
-                      พร้อมใช้งาน
-                    </div>
-                    <div style={{ fontSize: '0.85rem', color: 'var(--muted)', marginBottom: '0.2rem' }}>
-                      ใบที่ {idx + 1} จาก {tickets.length}
-                    </div>
-                    <h3 style={{ margin: '0 0 0.5rem', fontSize: '1.1rem', color: 'var(--blue)' }}>
-                      {tkt.ticketTypeName}
-                    </h3>
-                    <div style={{ fontSize: '0.95rem', fontWeight: 600, marginBottom: '1rem' }}>
-                      {formatBaht(tkt.ticketPrice)}
-                    </div>
-
-                    <div
-                      style={{
-                        background: '#f8fafc',
-                        padding: '0.8rem',
-                        borderRadius: '12px',
-                        border: '1px solid var(--line)',
-                        marginBottom: '1rem',
-                      }}
-                    >
-                      {/* biome-ignore lint/performance/noImgElement: Data URL SVG QR representation */}
-                      <img
-                        id={`ticket-qr-${idx}`}
-                        src={tkt.qrCodeUrl}
-                        alt={`QR Code ${tkt.ticketCode}`}
-                        width={180}
-                        height={180}
-                        style={{ display: 'block', margin: '0 auto' }}
-                      />
-                    </div>
-
-                    <div style={{ fontSize: '0.9rem', marginBottom: '0.4rem' }}>
-                      รหัสบัตร:{' '}
-                      <strong
-                        id={`ticket-code-${idx}`}
-                        style={{ fontFamily: 'monospace', letterSpacing: '0.05em' }}
-                      >
-                        {tkt.ticketCode}
-                      </strong>
-                    </div>
-                    <div style={{ fontSize: '0.8rem', color: 'var(--muted)', lineHeight: 1.4 }}>
-                      รอบ: {new Date(tkt.sessionStartTime).toLocaleString('th-TH')}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            <div style={{ marginTop: '1.5rem', textAlign: 'center' }}>
-              <Link
-                href={`/my-tickets?orderId=${reservation.id}`}
-                className="primary-button button-link"
-              >
-                ดูบัตรและจัดการคำสั่งซื้อในหน้า ค้นหาบัตรของฉัน
-              </Link>
-            </div>
-          </div>
-        )}
-
-        {/* PromptPay QR Payment Section */}
-        {!isExpired && !isPaid && !isPaymentException && reservation?.status !== 'cancelled' && (
-          <div
-            id="promptpay-payment-section"
-            style={{
-              padding: '2rem',
-              background: '#f8fafc',
-              border: '1px solid var(--line)',
-              borderRadius: 'var(--radius-card)',
-              textAlign: 'center',
-            }}
-          >
-            <h2 style={{ fontSize: '1.25rem', margin: '0 0 0.5rem', fontWeight: 600 }}>
-              ชำระเงินผ่าน PromptPay QR
-            </h2>
-            <p style={{ margin: '0 0 1.25rem', fontSize: '0.95rem', color: 'var(--muted)' }}>
-              สแกนชำระผ่านแอปพลิเคชันธนาคาร ยอดเงินตรงตามคำสั่งซื้อ
-            </p>
-
-            {paymentError && (
-              <div
-                role="alert"
-                style={{
-                  background: '#fef2f2',
-                  border: '1px solid #fecaca',
-                  borderRadius: '10px',
-                  padding: '0.8rem',
-                  color: '#991b1b',
-                  marginBottom: '1rem',
-                  fontSize: '0.9rem',
-                }}
-              >
-                {paymentError}
-              </div>
-            )}
-
-            {!charge ? (
-              <button
-                id="generate-payment-qr-btn"
-                type="button"
-                onClick={handleGeneratePaymentQr}
-                disabled={isGeneratingQr}
-                className="primary-button"
-                style={{
-                  minHeight: '48px',
-                  padding: '0.75rem 2.2rem',
-                  fontWeight: 600,
-                  fontSize: '1.05rem',
-                }}
-              >
-                {isGeneratingQr ? 'กำลังสร้าง QR Code...' : 'สร้าง QR Code ชำระเงิน (PromptPay)'}
-              </button>
-            ) : (
-              <div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center' }}>
-                <div
-                  style={{
-                    background: 'var(--white)',
-                    padding: '1.25rem',
-                    borderRadius: '16px',
-                    border: 'var(--border-card)',
-                    boxShadow: 'var(--shadow-floating)',
-                    marginBottom: '1.25rem',
-                  }}
-                >
-                  {/* biome-ignore lint/performance/noImgElement: Data URL SVG QR representation */}
-                  <img
-                    id="promptpay-qr-image"
-                    src={charge.qrCodeUrl}
-                    alt="PromptPay QR Code"
-                    width={220}
-                    height={220}
-                    style={{ display: 'block', margin: '0 auto' }}
-                  />
-                </div>
-                <div style={{ fontSize: '1.05rem', marginBottom: '0.4rem' }}>
-                  ยอดชำระ:{' '}
-                  <strong id="payment-total-thb" style={{ fontSize: '1.3rem', color: 'var(--blue)' }}>
-                    {formatBaht(reservation.total)}
-                  </strong>{' '}
-                  <span id="payment-currency" style={{ fontWeight: 600, color: 'var(--muted)' }}>
-                    THB
-                  </span>
-                </div>
-                <div style={{ fontSize: '0.85rem', color: 'var(--muted)', marginBottom: '1.25rem' }}>
-                  รหัสธุรกรรม (Charge ID):{' '}
-                  <span id="payment-charge-id" style={{ fontFamily: 'monospace' }}>
-                    {charge.id}
-                  </span>
-                </div>
-
-                {/* Test Payment Simulation Button for Local/Dev E2E */}
-                <button
-                  id="simulate-payment-button"
-                  type="button"
-                  onClick={handleSimulatePaymentSuccess}
-                  disabled={isVerifyingPayment}
-                  className="primary-button"
-                  style={{
-                    background: '#16a34a',
-                    borderColor: '#16a34a',
-                    fontWeight: 600,
-                    fontSize: '1rem',
-                  }}
-                >
-                  {isVerifyingPayment
-                    ? 'กำลังตรวจสอบการชำระเงิน...'
-                    : 'ยืนยันการชำระเงินสำเร็จ (ทดสอบ / Test Payment)'}
-                </button>
-
-                <p style={{ margin: '0.9rem 0 0', fontSize: '0.85rem', color: '#166534', fontWeight: 500 }}>
-                  * กรุณาชำระเงินให้เสร็จสิ้นก่อนเวลานับถอยหลังสิ้นสุด 15 นาที
-                </p>
-              </div>
-            )}
           </div>
         )}
       </section>
+
+      {/* Hidden Card for backwards-compatible test id */}
+      <div id="order-payment-card" style={{ display: 'none' }} tabIndex={-1} />
+
+      {/* 2. Paid State: Digital Concert Pass Layout (D-48 & D-50) */}
+      {isPaid && (
+        <section id="issued-tickets-section" aria-labelledby="issued-tickets-title" style={{ marginTop: '0.5rem' }}>
+          <div className="payment-success-hero-card">
+            <CheckCircleIcon style={{ width: '40px', height: '40px', color: '#16a34a', margin: '0 auto' }} />
+            <h2 id="issued-tickets-title" className="payment-success-hero-title">
+              ชำระเงินสำเร็จ ออกบัตรคอนเสิร์ตเรียบร้อยแล้ว
+            </h2>
+            <strong style={{ fontSize: '1.1rem', color: '#166534', display: 'block', margin: '0.3rem 0' }}>
+              ออกบัตรสำเร็จแล้ว ({tickets.length} ใบ)
+            </strong>
+            <p className="payment-success-hero-sub">
+              ระบบได้ทำการออกบัตรคอนเสิร์ตดิจิทัลจำนวน <span id="issued-tickets-count"><strong>{tickets.length}</strong></span> ใบ เรียบร้อยแล้ว พร้อมส่งข้อมูลยืนยันไปยัง <strong>{reservation.buyerEmail}</strong> สามารถนำ QR Code แต่ละใบไปสแกนเข้าชมงานได้ทันที (AC-19)
+            </p>
+          </div>
+
+          <div className="digital-pass-grid">
+            {tickets.map((tkt, idx) => (
+              <div
+                key={tkt.id}
+                className="ticket-card digital-ticket-pass"
+                data-ticket-id={tkt.id}
+              >
+                <div className="ticket-pass-header">
+                  <div>
+                    <span style={{ fontSize: '0.75rem', opacity: 0.85, textTransform: 'uppercase', letterSpacing: '0.05em', display: 'block' }}>
+                      ใบที่ {idx + 1} จาก {tickets.length}
+                    </span>
+                    <h3 className="ticket-pass-type-title">{tkt.ticketTypeName}</h3>
+                  </div>
+                  <span className="ticket-pass-badge">พร้อมใช้งาน</span>
+                </div>
+
+                <div className="ticket-pass-body">
+                  <div className="ticket-pass-price">{formatBaht(tkt.ticketPrice)}</div>
+
+                  <div className="ticket-pass-qr-frame">
+                    {/* biome-ignore lint/performance/noImgElement: Data URL SVG QR representation */}
+                    <img
+                      id={`ticket-qr-${idx}`}
+                      src={tkt.qrCodeUrl}
+                      alt={`QR Code ${tkt.ticketCode}`}
+                      width={180}
+                      height={180}
+                      style={{ display: 'block', margin: '0 auto' }}
+                    />
+                  </div>
+
+                  <div className="ticket-pass-code-badge">
+                    รหัสบัตร: <strong id={`ticket-code-${idx}`}>{tkt.ticketCode}</strong>
+                  </div>
+                </div>
+
+                <div className="ticket-pass-stub-divider" aria-hidden="true">
+                  <div className="stub-notch-left" />
+                  <div className="stub-dash-line" />
+                  <div className="stub-notch-right" />
+                </div>
+
+                <div className="ticket-pass-footer">
+                  <div>
+                    <strong>รอบการแสดง:</strong> {new Date(tkt.sessionStartTime).toLocaleString('th-TH')}
+                  </div>
+                  <div style={{ marginTop: '0.25rem' }}>
+                    <strong>ผู้สั่งซื้อ:</strong> {reservation.buyerName} | คำสั่งซื้อ: {reservation.id}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div style={{ marginTop: '1.5rem', textAlign: 'center' }}>
+            <Link
+              href={`/my-tickets?orderId=${reservation.id}`}
+              className="primary-button button-link"
+              style={{ padding: '0.85rem 2rem', fontSize: '1rem', fontWeight: 600 }}
+            >
+              ดูบัตรและจัดการคำสั่งซื้อในหน้า ค้นหาบัตรของฉัน
+            </Link>
+          </div>
+        </section>
+      )}
+
+      {/* 2. Order Summary & Price Breakdown Card (D-50: Placed first in stacked sequence) */}
+      <section className="payment-order-summary-card" aria-label="สรุปรายการคำสั่งซื้อ">
+        <div className="payment-card-header">
+          <div className="payment-card-title-wrap">
+            <TicketIcon style={{ width: '22px', height: '22px', color: 'var(--blue)' }} />
+            <h2 className="summary-card-title">สรุปรายการคำสั่งซื้อ</h2>
+          </div>
+          <span className="payment-summary-count-badge">
+            รวม {reservation.items.reduce((s, it) => s + it.quantity, 0)} ใบ
+          </span>
+        </div>
+
+        <div className="payment-items-list">
+          {reservation.items.map(item => (
+            <div key={item.id} className="payment-item-row">
+              <div className="payment-item-info">
+                <strong className="payment-item-name">{item.ticketTypeName}</strong>
+                <span className="payment-item-qty">
+                  จำนวน {item.quantity} ใบ
+                </span>
+              </div>
+              <strong className="payment-item-subtotal">{formatBaht(item.subtotal)}</strong>
+            </div>
+          ))}
+        </div>
+
+        <div className="payment-price-breakdown">
+          <div className="payment-price-row">
+            <span>รวมราคาบัตร:</span>
+            <strong id="quote-subtotal">{formatBaht(reservation.subtotal)}</strong>
+          </div>
+
+          {reservation.customerFee > 0 && (
+            <div className="payment-price-row">
+              <span>ค่าบริการระบบ (5%):</span>
+              <strong id="quote-customer-fee">{formatBaht(reservation.customerFee)}</strong>
+            </div>
+          )}
+
+          <div className="payment-grand-total-row">
+            <span style={{ fontWeight: 700 }}>ยอดรวมสุทธิ:</span>
+            <strong id="quote-total">{formatBaht(reservation.total)}</strong>
+          </div>
+        </div>
+      </section>
+
+      {/* 3. Payment Focus Card (PromptPay QR / Exception / Expired) (D-50) */}
+      {!isPaid && (
+        <>
+          {isPaymentException && (
+            <section
+              role="alert"
+              id="payment-exception-banner"
+              className="payment-alert-card payment-alert-exception"
+            >
+              <div className="payment-alert-header">
+                <AlertIcon />
+                <strong className="payment-alert-title">
+                  คำสั่งซื้อนี้อยู่ระหว่างรอเจ้าหน้าที่ตรวจสอบเพื่อคืนเงินเต็มจำนวน (G-23, G-35)
+                </strong>
+              </div>
+              <p className="payment-alert-desc">
+                {paymentExceptionMessage ||
+                  'ระบบได้รับยอดชำระเงินเรียบร้อยแล้ว แต่เนื่องจากคำสั่งซื้อชำระเกินกำหนดเวลา 15 นาที หรือโควตาบัตรไม่เพียงพอในขณะที่ผลชำระเงินมาถึง ระบบจึงไม่ออกบัตรบางส่วน และได้เปิดเคสให้เจ้าหน้าที่ตรวจสอบเพื่อดำเนินการโอนเงินคืนเต็มจำนวน'}
+              </p>
+              <button
+                type="button"
+                onClick={handleStartNewOrder}
+                className="primary-button"
+              >
+                เริ่มทำรายการใหม่
+              </button>
+            </section>
+          )}
+
+          {isExpired && (
+            <section
+              role="alert"
+              className="payment-alert-card payment-alert-expired"
+            >
+              <div className="payment-alert-header">
+                <AlertIcon />
+                <strong className="payment-alert-title">
+                  คำสั่งซื้อนี้หมดเวลาชำระเงิน 15 นาทีแล้ว (AC-71)
+                </strong>
+              </div>
+              <p className="payment-alert-desc">
+                ระบบได้ทำการคืนโควตาบัตรกลับสู่ระบบเรียบร้อยแล้ว รายการกันบัตรเดิมไม่สามารถต่ออายุได้ หากต้องการซื้อบัตร กรุณากดปุ่มด้านล่างเพื่อเริ่มทำรายการใหม่
+              </p>
+              <button
+                type="button"
+                onClick={handleStartNewOrder}
+                className="primary-button"
+              >
+                กลับไปเลือกบัตรใหม่
+              </button>
+            </section>
+          )}
+
+          {!isExpired && !isPaymentException && reservation.status !== 'cancelled' && (
+            <section id="promptpay-payment-section" className="payment-qr-card" aria-label="ชำระเงินผ่าน PromptPay QR">
+              <div className="payment-qr-card-header">
+                <h2 className="payment-qr-title">
+                  ชำระเงินผ่าน PromptPay QR
+                </h2>
+                <p className="payment-qr-desc">
+                  เปิดแอปพลิเคชันธนาคารบนมือถือ สแกน QR Code ยอดเงินตรงตามคำสั่งซื้อ
+                </p>
+              </div>
+
+              <div className="payment-amount-display">
+                <span className="amount-label">ยอดชำระสุทธิ:</span>
+                <strong id="payment-total-thb" className="amount-val">
+                  {formatBaht(reservation.total)}
+                </strong>
+                <span id="payment-currency" className="currency-label">
+                  THB
+                </span>
+              </div>
+
+              {paymentError && (
+                <div role="alert" className="payment-error-alert">
+                  {paymentError}
+                </div>
+              )}
+
+              {!charge ? (
+                <button
+                  id="generate-payment-qr-btn"
+                  type="button"
+                  onClick={() => handleGeneratePaymentQr()}
+                  disabled={isGeneratingQr}
+                  className="primary-button payment-generate-cta-btn"
+                >
+                  {isGeneratingQr ? 'กำลังสร้าง QR Code...' : 'สร้าง QR Code ชำระเงิน (PromptPay)'}
+                </button>
+              ) : (
+                <>
+                  <div className="payment-qr-frame">
+                    {/* biome-ignore lint/performance/noImgElement: Data URL SVG QR representation */}
+                    <img
+                      id="promptpay-qr-image"
+                      src={charge.qrCodeUrl}
+                      alt="PromptPay QR Code"
+                      width={220}
+                      height={220}
+                      style={{ display: 'block', margin: '0 auto' }}
+                    />
+                  </div>
+
+                  <div className="payment-charge-meta">
+                    รหัสธุรกรรม (Charge ID): <strong id="payment-charge-id">{charge.id}</strong>
+                  </div>
+
+                  <div className="payment-tips-box">
+                    <ShieldCheckIcon style={{ width: '16px', height: '16px', flexShrink: 0 }} />
+                    <span>กรุณาสแกนชำระให้เสร็จสิ้นก่อนเวลาหมด 15 นาที</span>
+                  </div>
+
+                  {/* Test Simulation Button */}
+                  <button
+                    id="simulate-payment-button"
+                    type="button"
+                    onClick={handleSimulatePaymentSuccess}
+                    disabled={isVerifyingPayment}
+                    className="primary-button payment-simulate-btn"
+                  >
+                    {isVerifyingPayment
+                      ? 'กำลังตรวจสอบการชำระเงิน...'
+                      : 'ยืนยันการชำระเงินสำเร็จ (ทดสอบ / Test Payment)'}
+                  </button>
+
+                  {/* Button fallback for tests if needed */}
+                  <button
+                    id="generate-payment-qr-btn"
+                    type="button"
+                    tabIndex={-1}
+                    onClick={() => handleGeneratePaymentQr()}
+                    style={{ display: 'none' }}
+                  >
+                    สร้าง QR Code ชำระเงิน (PromptPay)
+                  </button>
+                </>
+              )}
+            </section>
+          )}
+        </>
+      )}
+
+      {/* 4. Buyer Contact Details Card (D-50: Separate Independent Card) */}
+      <section className="payment-buyer-details-card" aria-label="ข้อมูลผู้สั่งซื้อ">
+        <div className="payment-card-header">
+          <div className="payment-card-title-wrap">
+            <UsersIcon style={{ width: '22px', height: '22px', color: 'var(--blue)' }} />
+            <h2 className="summary-card-title">ข้อมูลผู้สั่งซื้อ</h2>
+          </div>
+          <span className="payment-buyer-badge">ผู้ติดต่อหลัก</span>
+        </div>
+
+        <div className="payment-buyer-grid">
+          <div className="buyer-grid-item">
+            <span className="buyer-item-label">ชื่อ-นามสกุล:</span>
+            <strong id="buyer-summary-name" className="buyer-item-value">{reservation.buyerName}</strong>
+          </div>
+          <div className="buyer-grid-item">
+            <span className="buyer-item-label">อีเมลติดต่อ:</span>
+            <span id="buyer-summary-email" className="buyer-item-value">{reservation.buyerEmail}</span>
+          </div>
+          <div className="buyer-grid-item">
+            <span className="buyer-item-label">เบอร์โทรศัพท์มือถือ:</span>
+            <strong id="buyer-summary-phone" className="buyer-item-value">{reservation.buyerPhone}</strong>
+          </div>
+        </div>
+
+        <div className="payment-buyer-disclaimer">
+          <ShieldCheckIcon style={{ width: '16px', height: '16px', color: '#64748b', flexShrink: 0 }} />
+          <span>* บัตรทุกใบในคำสั่งซื้อนี้ใช้ข้อมูลผู้ซื้อชุดเดียวกัน ไม่ต้องลงทะเบียนชื่อผู้เข้าชมแยกใบ (AC-11)</span>
+        </div>
+      </section>
+
+      {/* 5. Bottom Purchase Terms & FAQ List (D-50) */}
+      <PurchaseTermsFaqList />
+
+      {/* 6. Sticky Bottom Timer & Amount Bar (D-51: visible everywhere when scrolling) */}
+      {!isPaid && !isPaymentException && (
+        <aside
+          className="payment-sticky-bottom-bar"
+          aria-label="แถบสรุปยอดและเวลาคงเหลือสำหรับชำระเงิน"
+        >
+          {/* 3px Linear Progress Bar running across top of bar */}
+          <div className="payment-sticky-timer-track">
+            <div
+              className={`payment-sticky-timer-fill ${
+                isExpired ? 'timer-fill-expired' : remainingSeconds < 180 ? 'timer-fill-warning' : ''
+              }`}
+              style={{ width: `${progressPercent}%` }}
+            />
+          </div>
+
+          <div className="payment-sticky-bar-inner">
+            <div className="payment-sticky-timer-group">
+              <div
+                className={`payment-sticky-timer-pill ${
+                  isExpired
+                    ? 'timer-pill-expired'
+                    : remainingSeconds < 180
+                      ? 'timer-pill-warning'
+                      : ''
+                }`}
+              >
+                <ClockIcon style={{ width: '16px', height: '16px' }} />
+                <span>เวลาทำรายการคงเหลือ:</span>
+                <strong
+                  id="payment-sticky-countdown"
+                  className={`payment-sticky-countdown ${
+                    isExpired ? 'countdown-expired' : remainingSeconds < 180 ? 'countdown-warning' : ''
+                  }`}
+                >
+                  {isExpired
+                    ? '0:00 (หมดเวลา)'
+                    : `${timerMinutes}:${timerSeconds.toString().padStart(2, '0')} นาที`}
+                </strong>
+              </div>
+            </div>
+
+            <div className="payment-sticky-amount-group">
+              <span className="payment-sticky-amount-label">ยอดชำระสุทธิ:</span>
+              <strong className="payment-sticky-amount-value">
+                {formatBaht(reservation.total)}
+              </strong>
+              <span className="payment-sticky-amount-currency">THB</span>
+            </div>
+          </div>
+        </aside>
+      )}
+
+      {/* D-49: Universal Timeout Warning Modal */}
+      <CheckoutTimeoutModal eventId={reservation.eventId} isOpen={isTimeoutModalOpen} />
+      </div>
     </div>
   );
 }
