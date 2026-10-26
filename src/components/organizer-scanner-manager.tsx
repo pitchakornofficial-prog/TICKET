@@ -1,8 +1,17 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { TicketIcon } from './ticket-icon';
-import { CheckCircleIcon, AlertTriangleIcon } from './icons';
+import {
+  CheckCircleIcon,
+  AlertTriangleIcon,
+  UsersIcon,
+  UserPlusIcon,
+  ClockIcon,
+  SearchIcon,
+  SlidersIcon,
+  InfoIcon,
+} from './icons';
 
 interface OrganizerEvent {
   id: string;
@@ -46,6 +55,8 @@ interface HandoverHistoryItem {
   createdAt: string;
 }
 
+type ScannerSubTab = 'manage' | 'create' | 'history';
+
 export function OrganizerScannerManager() {
   const [events, setEvents] = useState<OrganizerEvent[]>([]);
   const [selectedEventId, setSelectedEventId] = useState<string>('');
@@ -54,6 +65,18 @@ export function OrganizerScannerManager() {
   const [handovers, setHandovers] = useState<HandoverHistoryItem[]>([]);
   const [loadingEvents, setLoadingEvents] = useState(true);
   const [loadingScanners, setLoadingScanners] = useState(false);
+
+  // Sub-tabs navigation state (D-67)
+  const [activeSubTab, setActiveSubTab] = useState<ScannerSubTab>('manage');
+  const [hasUserManuallySwitchedTab, setHasUserManuallySwitchedTab] = useState(false);
+
+  // Search & Filter states (D-67)
+  const [searchScanner, setSearchScanner] = useState('');
+  const [scannerStatusFilter, setScannerStatusFilter] = useState<'all' | 'primary' | 'standard'>('all');
+  const [searchHistory, setSearchHistory] = useState('');
+  const [historyActionFilter, setHistoryActionFilter] = useState<'all' | 'HANDOVER' | 'EMERGENCY_STOP' | 'RESUME_RECONCILIATION'>('all');
+
+  // Form state
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -122,7 +145,15 @@ export function OrganizerScannerManager() {
 
       if (scRes.ok) {
         const data = await scRes.json();
-        setScanners(data.scanners || []);
+        const scList: ScannerItem[] = data.scanners || [];
+        setScanners(scList);
+
+        // If no scanners exist and user hasn't explicitly clicked a tab, default to 'create' tab (E2E test alignment)
+        if (scList.length === 0 && !hasUserManuallySwitchedTab) {
+          setActiveSubTab('create');
+        } else if (scList.length > 0 && !hasUserManuallySwitchedTab) {
+          setActiveSubTab('manage');
+        }
       }
       if (ctrlRes.ok) {
         const data = await ctrlRes.json();
@@ -134,7 +165,7 @@ export function OrganizerScannerManager() {
     } finally {
       setLoadingScanners(false);
     }
-  }, []);
+  }, [hasUserManuallySwitchedTab]);
 
   useEffect(() => {
     if (selectedEventId) {
@@ -145,6 +176,34 @@ export function OrganizerScannerManager() {
       setHandovers([]);
     }
   }, [selectedEventId, loadEventData]);
+
+  // Filtered lists
+  const filteredScanners = useMemo(() => {
+    return scanners.filter(s => {
+      const matchSearch =
+        !searchScanner.trim() ||
+        s.name.toLowerCase().includes(searchScanner.toLowerCase()) ||
+        s.email.toLowerCase().includes(searchScanner.toLowerCase());
+      const matchStatus =
+        scannerStatusFilter === 'all' ||
+        (scannerStatusFilter === 'primary' && s.isPrimary) ||
+        (scannerStatusFilter === 'standard' && !s.isPrimary);
+      return matchSearch && matchStatus;
+    });
+  }, [scanners, searchScanner, scannerStatusFilter]);
+
+  const filteredHandovers = useMemo(() => {
+    return handovers.filter(h => {
+      const matchSearch =
+        !searchHistory.trim() ||
+        (h.reason?.toLowerCase().includes(searchHistory.toLowerCase()) ?? false) ||
+        h.actorName.toLowerCase().includes(searchHistory.toLowerCase()) ||
+        (h.oldScannerName?.toLowerCase().includes(searchHistory.toLowerCase()) ?? false) ||
+        (h.newScannerName?.toLowerCase().includes(searchHistory.toLowerCase()) ?? false);
+      const matchAction = historyActionFilter === 'all' || h.action === historyActionFilter;
+      return matchSearch && matchAction;
+    });
+  }, [handovers, searchHistory, historyActionFilter]);
 
   async function handleAddScanner(e: React.FormEvent) {
     e.preventDefault();
@@ -180,6 +239,9 @@ export function OrganizerScannerManager() {
         setName('');
         setEmail('');
         setPassword('');
+        // Switch to manage tab so user and E2E tests see the newly created account immediately
+        setActiveSubTab('manage');
+        setHasUserManuallySwitchedTab(true);
         loadEventData(selectedEventId);
       }
     } catch {
@@ -352,13 +414,47 @@ export function OrganizerScannerManager() {
 
   const currentPrimaryScanner = scanners.find(s => s.isPrimary);
   const isHalted = offlineControl?.offlineStatus === 'halted_reconciliation_required';
+  const selectedEventObj = events.find(e => e.id === selectedEventId);
 
   return (
     <section className="form-card organizer-scanner-card" aria-labelledby="organizer-scanner-heading">
-      <h2 id="organizer-scanner-heading">จัดการทีมสแกนบัตรเฉพาะงาน</h2>
-      <p className="card-caption">
-        กำหนดสิทธิ์ให้ทีมสแกนเข้าถึงเฉพาะงานคอนเสิร์ตที่เลือก โดยไม่มีสิทธิ์ในการจัดการงานอื่นหรือสิทธิ์ผู้ดูแลระบบ
-      </p>
+      {/* Top Header & Global Event Selector */}
+      <div className="scanner-workspace-header">
+        <div className="scanner-workspace-title-wrap">
+          <h2 id="organizer-scanner-heading">จัดการทีมสแกนบัตรเฉพาะงาน</h2>
+          <p className="card-caption">
+            กำหนดสิทธิ์ให้ทีมสแกนเข้าถึงเฉพาะงานคอนเสิร์ตที่เลือก พร้อมระบบตรวจสอบสิทธิ์และบันทึกประวัติการทำงาน
+          </p>
+        </div>
+
+        {/* Global Event Selector Filter */}
+        {events.length > 0 && (
+          <div className="scanner-global-event-filter">
+            <label htmlFor="select-scanner-event" className="filter-label">
+              เลือกงานคอนเสิร์ตที่ต้องการจัดทีมสแกน
+            </label>
+            <div className="filter-select-wrap">
+              <TicketIcon />
+              <select
+                id="select-scanner-event"
+                className="text-input"
+                value={selectedEventId}
+                onChange={e => {
+                  setSelectedEventId(e.target.value);
+                  setSearchScanner('');
+                  setSearchHistory('');
+                }}
+              >
+                {events.map(ev => (
+                  <option key={ev.id} value={ev.id}>
+                    {ev.title} ({ev.status === 'approved' ? 'อนุมัติแล้ว' : 'ฉบับร่าง'})
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+        )}
+      </div>
 
       {message && (
         <div className="status-banner success" role="status">
@@ -424,217 +520,478 @@ export function OrganizerScannerManager() {
         </div>
       ) : (
         <>
-          {/* Select Event */}
-          <div className="form-group event-selector-group">
-            <label htmlFor="select-scanner-event">เลือกงานคอนเสิร์ตที่ต้องการจัดทีมสแกน</label>
-            <select
-              id="select-scanner-event"
-              className="text-input"
-              value={selectedEventId}
-              onChange={e => setSelectedEventId(e.target.value)}
+          {/* Internal Tabs Switcher (D-67: 3 Sub-Tabs) */}
+          <div className="scanner-sub-tabs" role="tablist" aria-label="แท็บจัดการทีมสแกนบัตร">
+            <button
+              type="button"
+              role="tab"
+              id="scanner-tab-manage"
+              data-testid="scanner-tab-manage"
+              aria-selected={activeSubTab === 'manage'}
+              aria-controls="scanner-panel-manage"
+              className={`scanner-sub-tab-btn ${activeSubTab === 'manage' ? 'active' : ''}`}
+              onClick={() => {
+                setActiveSubTab('manage');
+                setHasUserManuallySwitchedTab(true);
+              }}
             >
-              {events.map(ev => (
-                <option key={ev.id} value={ev.id}>
-                  {ev.title} ({ev.status === 'approved' ? 'อนุมัติแล้ว' : 'ฉบับร่าง'})
-                </option>
-              ))}
-            </select>
+              <UsersIcon />
+              <span>จัดการบัญชี</span>
+              <span className="tab-count-badge">{scanners.length}</span>
+            </button>
+
+            <button
+              type="button"
+              role="tab"
+              id="scanner-tab-create"
+              data-testid="scanner-tab-create"
+              aria-selected={activeSubTab === 'create'}
+              aria-controls="scanner-panel-create"
+              className={`scanner-sub-tab-btn ${activeSubTab === 'create' ? 'active' : ''}`}
+              onClick={() => {
+                setActiveSubTab('create');
+                setHasUserManuallySwitchedTab(true);
+              }}
+            >
+              <UserPlusIcon />
+              <span>สร้างบัญชีใหม่</span>
+            </button>
+
+            <button
+              type="button"
+              role="tab"
+              id="scanner-tab-history"
+              data-testid="scanner-tab-history"
+              aria-selected={activeSubTab === 'history'}
+              aria-controls="scanner-panel-history"
+              className={`scanner-sub-tab-btn ${activeSubTab === 'history' ? 'active' : ''}`}
+              onClick={() => {
+                setActiveSubTab('history');
+                setHasUserManuallySwitchedTab(true);
+              }}
+            >
+              <ClockIcon />
+              <span>ประวัติการทำงาน</span>
+              <span className="tab-count-badge">{handovers.length}</span>
+            </button>
           </div>
 
-          {/* Add Scanner Form */}
-          <form onSubmit={handleAddScanner} className="scanner-add-form">
-            <h3>เพิ่มทีมสแกนใหม่สำหรับงานนี้</h3>
-            <div className="form-row-three">
-              <div className="form-group">
-                <label htmlFor="scanner-name">ชื่อทีมสแกน / ผู้สแกน</label>
-                <input
-                  id="scanner-name"
-                  type="text"
-                  className="text-input"
-                  placeholder="เช่น ทีมประตู A, สมชาย"
-                  value={name}
-                  onChange={e => setName(e.target.value)}
-                  disabled={submitting}
-                />
-              </div>
-              <div className="form-group">
-                <label htmlFor="scanner-email">อีเมลทีมสแกน *</label>
-                <input
-                  id="scanner-email"
-                  type="email"
-                  className="text-input"
-                  placeholder="scanner@example.com"
-                  value={email}
-                  onChange={e => setEmail(e.target.value)}
-                  disabled={submitting}
-                  required
-                />
-              </div>
-              <div className="form-group">
-                <label htmlFor="scanner-password">รหัสผ่านเริ่มต้น *</label>
-                <input
-                  id="scanner-password"
-                  type="password"
-                  className="text-input"
-                  placeholder="อย่างน้อย 8 ตัวอักษร"
-                  value={password}
-                  onChange={e => setPassword(e.target.value)}
-                  disabled={submitting}
-                  required
-                />
-              </div>
-            </div>
+          {/* TAB 1: MANAGE ACCOUNTS */}
+          {activeSubTab === 'manage' && (
+            <div
+              id="scanner-panel-manage"
+              role="tabpanel"
+              aria-labelledby="scanner-tab-manage"
+              className="scanner-tab-panel"
+            >
+              {/* Header & Quick Actions */}
+              <div className="scanner-panel-top-row">
+                <div className="scanner-panel-title-group">
+                  <h3 className="scanner-panel-heading">
+                    รายชื่อทีมสแกนของงานนี้ ({filteredScanners.length})
+                  </h3>
+                  <p className="scanner-panel-sub-caption">
+                    * กำหนดเครื่องหลัก (Primary Device) ได้ 1 เครื่องทั้งงานขณะออนไลน์ (AC-94, G-41)
+                    {currentPrimaryScanner ? ` — ปัจจุบันคือ: ${currentPrimaryScanner.name}` : ' — ยังไม่ได้กำหนดเครื่องหลัก'}
+                  </p>
+                </div>
 
-            <button type="submit" className="primary-button" disabled={submitting}>
-              {submitting ? 'กำลังเพิ่ม...' : 'เพิ่มทีมสแกนสำหรับงานนี้'}
-            </button>
-          </form>
+                <div className="scanner-panel-actions-group">
+                  <button
+                    type="button"
+                    className="primary-button small"
+                    onClick={() => {
+                      setActiveSubTab('create');
+                      setHasUserManuallySwitchedTab(true);
+                    }}
+                  >
+                    <UserPlusIcon />
+                    <span>+ เพิ่มทีมสแกนใหม่</span>
+                  </button>
 
-          {/* List Scanners for Selected Event */}
-          <div className="scanner-list-wrap">
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px', flexWrap: 'wrap', gap: '8px' }}>
-              <div>
-                <h3 style={{ margin: 0 }}>รายชื่อทีมสแกนของงานนี้ ({scanners.length})</h3>
-                <p style={{ margin: '4px 0 0', fontSize: '13px', color: '#64748b' }}>
-                  * กำหนดเครื่องหลัก (Primary Device) ได้ 1 เครื่องทั้งงานขณะออนไลน์ (AC-94, G-41)
-                  {currentPrimaryScanner ? ` — ปัจจุบันคือ: ${currentPrimaryScanner.name}` : ' — ยังไม่ได้กำหนดเครื่องหลัก'}
-                </p>
+                  {currentPrimaryScanner && !isHalted && (
+                    <button
+                      type="button"
+                      id="emergency-stop-offline-btn"
+                      data-testid="emergency-stop-offline-btn"
+                      className="danger-button small"
+                      onClick={() => setShowEmergencyModal(true)}
+                    >
+                      <AlertTriangleIcon />
+                      <span>แจ้งเครื่องหลักชำรุด / ระงับออฟไลน์ (AC-98)</span>
+                    </button>
+                  )}
+                </div>
               </div>
 
-              {currentPrimaryScanner && !isHalted && (
-                <button
-                  type="button"
-                  id="emergency-stop-offline-btn"
-                  data-testid="emergency-stop-offline-btn"
-                  className="danger-button small"
-                  onClick={() => setShowEmergencyModal(true)}
-                >
-                  แจ้งเครื่องหลักชำรุด / ระงับออฟไลน์เพื่อกระทบยอด (AC-98)
-                </button>
+              {/* Filter Bar for Manage Accounts */}
+              <div className="scanner-filter-bar">
+                <div className="scanner-search-wrap">
+                  <SearchIcon />
+                  <input
+                    type="text"
+                    className="text-input scanner-search-input"
+                    placeholder="ค้นหาชื่อทีมสแกน หรืออีเมล..."
+                    value={searchScanner}
+                    onChange={e => setSearchScanner(e.target.value)}
+                  />
+                  {searchScanner && (
+                    <button
+                      type="button"
+                      className="clear-search-btn"
+                      onClick={() => setSearchScanner('')}
+                      aria-label="ล้างคำค้นหา"
+                    >
+                      ×
+                    </button>
+                  )}
+                </div>
+
+                <div className="scanner-filter-dropdown-wrap">
+                  <SlidersIcon />
+                  <select
+                    className="text-input scanner-filter-select"
+                    value={scannerStatusFilter}
+                    onChange={e => setScannerStatusFilter(e.target.value as 'all' | 'primary' | 'standard')}
+                    aria-label="กรองตามสถานะเครื่องหลัก"
+                  >
+                    <option value="all">สถานะทั้งหมด</option>
+                    <option value="primary">เครื่องหลักประจำงาน (Primary)</option>
+                    <option value="standard">ทีมสแกนทั่วไป (Standard)</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Data Table */}
+              {loadingScanners ? (
+                <p className="loading-text">กำลังโหลดรายชื่อทีมสแกน...</p>
+              ) : scanners.length === 0 ? (
+                <div className="empty-sub-card">
+                  <TicketIcon />
+                  <p>ยังไม่มีทีมสแกนสำหรับงานนี้</p>
+                  <button
+                    type="button"
+                    className="primary-button small"
+                    onClick={() => {
+                      setActiveSubTab('create');
+                      setHasUserManuallySwitchedTab(true);
+                    }}
+                  >
+                    + สร้างบัญชีทีมสแกนแรกสำหรับงานนี้
+                  </button>
+                </div>
+              ) : filteredScanners.length === 0 ? (
+                <div className="empty-sub-card">
+                  <SearchIcon />
+                  <p>ไม่พบทีมสแกนที่ตรงกับเงื่อนไขการค้นหาหรือตัวกรอง</p>
+                  <button
+                    type="button"
+                    className="secondary-button small"
+                    onClick={() => {
+                      setSearchScanner('');
+                      setScannerStatusFilter('all');
+                    }}
+                  >
+                    ล้างตัวกรองทั้งหมด
+                  </button>
+                </div>
+              ) : (
+                <div className="owner-news-table-wrap scanner-enterprise-table-wrap">
+                  <table className="data-table">
+                    <thead>
+                      <tr>
+                        <th>ชื่อทีม</th>
+                        <th>อีเมล</th>
+                        <th>สถานะเครื่องหลัก (AC-94, AC-97)</th>
+                        <th>บทบาท</th>
+                        <th>การดำเนินการ</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredScanners.map(s => (
+                        <tr key={s.id} data-testid={`scanner-row-${s.scannerId}`}>
+                          <td><strong>{s.name}</strong></td>
+                          <td>{s.email}</td>
+                          <td>
+                            {s.isPrimary ? (
+                              <span
+                                className="status-badge approved"
+                                data-testid={`primary-scanner-badge-${s.scannerId}`}
+                                style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}
+                              >
+                                เครื่องหลักประจำงาน (Primary — AC-94)
+                              </span>
+                            ) : currentPrimaryScanner ? (
+                              <button
+                                type="button"
+                                className="secondary-button small"
+                                id={`handover-primary-scanner-${s.scannerId}`}
+                                data-testid={`handover-primary-scanner-${s.scannerId}`}
+                                onClick={() => {
+                                  setHandoverTarget(s);
+                                  setDeclaredOldPending(0);
+                                  setHandoverReason('');
+                                  setReadinessResult(null);
+                                }}
+                                disabled={isHalted || settingPrimaryId === s.scannerId}
+                              >
+                                สลับเป็นเครื่องหลัก (Handover — AC-97)
+                              </button>
+                            ) : (
+                              <button
+                                type="button"
+                                className="secondary-button small"
+                                id={`set-primary-scanner-${s.scannerId}`}
+                                data-testid={`set-primary-scanner-${s.scannerId}`}
+                                onClick={() => handleSetPrimary(s.scannerId)}
+                                disabled={isHalted || settingPrimaryId === s.scannerId}
+                              >
+                                {settingPrimaryId === s.scannerId ? 'กำลังบันทึก...' : 'กำหนดเป็นเครื่องหลัก'}
+                              </button>
+                            )}
+                          </td>
+                          <td>
+                            <span className="status-badge open">ทีมสแกนเฉพาะงาน</span>
+                          </td>
+                          <td>
+                            <button
+                              type="button"
+                              className="danger-button small"
+                              onClick={() => handleRemoveScanner(s.scannerId)}
+                              disabled={s.isPrimary}
+                            >
+                              นำออก
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               )}
             </div>
+          )}
 
-            {loadingScanners ? (
-              <p className="loading-text">กำลังโหลดรายชื่อทีมสแกน...</p>
-            ) : scanners.length === 0 ? (
-              <div className="empty-sub-card">
-                <TicketIcon />
-                <p>ยังไม่มีทีมสแกนสำหรับงานนี้</p>
+          {/* TAB 2: CREATE NEW SCANNER */}
+          {activeSubTab === 'create' && (
+            <div
+              id="scanner-panel-create"
+              role="tabpanel"
+              aria-labelledby="scanner-tab-create"
+              className="scanner-tab-panel"
+            >
+              <div className="scanner-create-layout">
+                {/* Add Scanner Form */}
+                <form onSubmit={handleAddScanner} className="scanner-add-form modern-create-card">
+                  <div className="create-card-header">
+                    <div className="card-badge primary">
+                      <UserPlusIcon />
+                      <span>สร้างบัญชี</span>
+                    </div>
+                    <h3 style={{ margin: 0 }}>เพิ่มทีมสแกนใหม่สำหรับงานนี้</h3>
+                    {selectedEventObj && (
+                      <p className="target-event-badge">
+                        งานที่กำหนดสิทธิ์: <strong>{selectedEventObj.title}</strong>
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="form-row-three">
+                    <div className="form-group">
+                      <label htmlFor="scanner-name">ชื่อทีมสแกน / ผู้สแกน</label>
+                      <input
+                        id="scanner-name"
+                        type="text"
+                        className="text-input"
+                        placeholder="เช่น ทีมประตู A, สมชาย"
+                        value={name}
+                        onChange={e => setName(e.target.value)}
+                        disabled={submitting}
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label htmlFor="scanner-email">อีเมลทีมสแกน *</label>
+                      <input
+                        id="scanner-email"
+                        type="email"
+                        className="text-input"
+                        placeholder="scanner@example.com"
+                        value={email}
+                        onChange={e => setEmail(e.target.value)}
+                        disabled={submitting}
+                        required
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label htmlFor="scanner-password">รหัสผ่าน (อย่างน้อย 15 ตัวอักษร)</label>
+                      <input
+                        id="scanner-password"
+                        type="password"
+                        className="text-input"
+                        placeholder="อย่างน้อย 15 ตัวอักษร"
+                        value={password}
+                        onChange={e => setPassword(e.target.value)}
+                        disabled={submitting}
+                        required
+                      />
+                    </div>
+                  </div>
+
+                  <div className="create-form-actions">
+                    <button type="submit" className="primary-button" disabled={submitting}>
+                      {submitting ? 'กำลังเพิ่ม...' : 'เพิ่มทีมสแกนสำหรับงานนี้'}
+                    </button>
+                    {scanners.length > 0 && (
+                      <button
+                        type="button"
+                        className="secondary-button"
+                        onClick={() => setActiveSubTab('manage')}
+                        disabled={submitting}
+                      >
+                        กลับไปยังรายการทีมสแกน
+                      </button>
+                    )}
+                  </div>
+                </form>
+
+                {/* Guidance & Security Instructions */}
+                <div className="scanner-guidance-card">
+                  <div className="guidance-card-header">
+                    <InfoIcon />
+                    <h4>คำแนะนำและนโยบายความปลอดภัยของบัญชีทีมสแกน</h4>
+                  </div>
+                  <ul className="guidance-list">
+                    <li>
+                      <strong>ขอบเขตสิทธิ์เฉพาะงาน:</strong> บัญชีทีมสแกนจะได้รับสิทธิ์เข้าถึงเฉพาะงานคอนเสิร์ตที่ระบุเท่านั้น ไม่สามารถดูข้อมูลคอนเสิร์ตอื่นหรือจัดการข้อมูลการเงินได้
+                    </li>
+                    <li>
+                      <strong>มาตรฐานรหัสผ่าน:</strong> เพื่อความปลอดภัยสูงสุด รหัสผ่านต้องมีความยาวอย่างน้อย 15 ตัวอักษร
+                    </li>
+                    <li>
+                      <strong>การสแกนแบบออฟไลน์ (AC-94):</strong> หลังสร้างบัญชีแล้ว ผู้จัดงานสามารถกำหนดให้บัญชีนี้เป็น &ldquo;เครื่องหลักประจำงาน (Primary Device)&rdquo; ได้ที่แท็บจัดการบัญชี เพื่อให้เครื่องสามารถดาวน์โหลดชุดข้อมูลและสแกนบัตรในโหมดออฟไลน์ได้
+                    </li>
+                  </ul>
+                </div>
               </div>
-            ) : (
-              <div className="owner-news-table-wrap">
-                <table className="data-table">
-                  <thead>
-                    <tr>
-                      <th>ชื่อทีม</th>
-                      <th>อีเมล</th>
-                      <th>สถานะเครื่องหลัก (AC-94, AC-97)</th>
-                      <th>บทบาท</th>
-                      <th>การดำเนินการ</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {scanners.map(s => (
-                      <tr key={s.id} data-testid={`scanner-row-${s.scannerId}`}>
-                        <td><strong>{s.name}</strong></td>
-                        <td>{s.email}</td>
-                        <td>
-                          {s.isPrimary ? (
-                            <span
-                              className="status-badge approved"
-                              data-testid={`primary-scanner-badge-${s.scannerId}`}
-                              style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}
-                            >
-                              เครื่องหลักประจำงาน (Primary — AC-94)
+            </div>
+          )}
+
+          {/* TAB 3: HISTORY & AUDIT LOGS */}
+          {activeSubTab === 'history' && (
+            <div
+              id="scanner-panel-history"
+              role="tabpanel"
+              aria-labelledby="scanner-tab-history"
+              className="scanner-tab-panel"
+            >
+              {/* Header */}
+              <div className="scanner-panel-top-row">
+                <div className="scanner-panel-title-group">
+                  <h3 className="scanner-panel-heading">
+                    ประวัติการสลับเครื่องหลักและการระงับเพื่อกระทบยอด ({filteredHandovers.length})
+                  </h3>
+                  <p className="scanner-panel-sub-caption">
+                    บันทึกประวัติการสลับเครื่องหลัก (Handover), การระงับโหมดออฟไลน์ฉุกเฉิน (Emergency Stop) และการปลดระงับกระทบยอด (Resume)
+                  </p>
+                </div>
+              </div>
+
+              {/* Filter Bar for History */}
+              <div className="scanner-filter-bar">
+                <div className="scanner-search-wrap">
+                  <SearchIcon />
+                  <input
+                    type="text"
+                    className="text-input scanner-search-input"
+                    placeholder="ค้นหาเหตุผล, เครื่อง หรือชื่อผู้ทำรายการ..."
+                    value={searchHistory}
+                    onChange={e => setSearchHistory(e.target.value)}
+                  />
+                  {searchHistory && (
+                    <button
+                      type="button"
+                      className="clear-search-btn"
+                      onClick={() => setSearchHistory('')}
+                      aria-label="ล้างคำค้นหา"
+                    >
+                      ×
+                    </button>
+                  )}
+                </div>
+
+                <div className="scanner-filter-dropdown-wrap">
+                  <SlidersIcon />
+                  <select
+                    className="text-input scanner-filter-select"
+                    value={historyActionFilter}
+                    onChange={e => setHistoryActionFilter(e.target.value as 'all' | 'HANDOVER' | 'EMERGENCY_STOP' | 'RESUME_RECONCILIATION')}
+                    aria-label="กรองตามประเภทการดำเนินการ"
+                  >
+                    <option value="all">การดำเนินการทั้งหมด</option>
+                    <option value="HANDOVER">สลับเครื่องหลัก (HANDOVER)</option>
+                    <option value="EMERGENCY_STOP">ระงับฉุกเฉิน (EMERGENCY_STOP)</option>
+                    <option value="RESUME_RECONCILIATION">ปลดระงับกระทบยอด (RESUME)</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* History Table */}
+              {handovers.length === 0 ? (
+                <div className="empty-sub-card">
+                  <ClockIcon />
+                  <p>ยังไม่มีประวัติการสลับเครื่องหลักหรือการระงับในงานนี้</p>
+                </div>
+              ) : filteredHandovers.length === 0 ? (
+                <div className="empty-sub-card">
+                  <SearchIcon />
+                  <p>ไม่พบบันทึกประวัติที่ตรงกับคำค้นหาหรือตัวกรอง</p>
+                  <button
+                    type="button"
+                    className="secondary-button small"
+                    onClick={() => {
+                      setSearchHistory('');
+                      setHistoryActionFilter('all');
+                    }}
+                  >
+                    ล้างตัวกรองทั้งหมด
+                  </button>
+                </div>
+              ) : (
+                <div className="owner-news-table-wrap scanner-enterprise-table-wrap">
+                  <table className="data-table">
+                    <thead>
+                      <tr>
+                        <th>เวลา</th>
+                        <th>การดำเนินการ</th>
+                        <th>เครื่องเดิม</th>
+                        <th>เครื่องใหม่</th>
+                        <th>รายการค้างเดิม</th>
+                        <th>เหตุผล</th>
+                        <th>ผู้ทำรายการ</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredHandovers.map(h => (
+                        <tr key={h.id}>
+                          <td style={{ fontSize: '12px' }}>
+                            {new Date(h.createdAt).toLocaleString('th-TH', { timeZone: 'Asia/Bangkok' })}
+                          </td>
+                          <td>
+                            <span className={`status-badge ${h.action === 'HANDOVER' ? 'approved' : h.action === 'EMERGENCY_STOP' ? 'rejected' : 'open'}`}>
+                              {h.action === 'HANDOVER' ? 'สลับเครื่องหลัก (AC-97)' : h.action === 'EMERGENCY_STOP' ? 'ระงับฉุกเฉิน (AC-98)' : 'ปลดระงับกระทบยอด'}
                             </span>
-                          ) : currentPrimaryScanner ? (
-                            <button
-                              type="button"
-                              className="secondary-button small"
-                              id={`handover-primary-scanner-${s.scannerId}`}
-                              data-testid={`handover-primary-scanner-${s.scannerId}`}
-                              onClick={() => {
-                                setHandoverTarget(s);
-                                setDeclaredOldPending(0);
-                                setHandoverReason('');
-                                setReadinessResult(null);
-                              }}
-                              disabled={isHalted || settingPrimaryId === s.scannerId}
-                            >
-                              สลับเป็นเครื่องหลัก (Handover — AC-97)
-                            </button>
-                          ) : (
-                            <button
-                              type="button"
-                              className="secondary-button small"
-                              id={`set-primary-scanner-${s.scannerId}`}
-                              data-testid={`set-primary-scanner-${s.scannerId}`}
-                              onClick={() => handleSetPrimary(s.scannerId)}
-                              disabled={isHalted || settingPrimaryId === s.scannerId}
-                            >
-                              {settingPrimaryId === s.scannerId ? 'กำลังบันทึก...' : 'กำหนดเป็นเครื่องหลัก'}
-                            </button>
-                          )}
-                        </td>
-                        <td>
-                          <span className="status-badge open">ทีมสแกนเฉพาะงาน</span>
-                        </td>
-                        <td>
-                          <button
-                            type="button"
-                            className="danger-button small"
-                            onClick={() => handleRemoveScanner(s.scannerId)}
-                            disabled={s.isPrimary}
-                          >
-                            นำออก
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-
-          {/* Handover History Section */}
-          {handovers.length > 0 && (
-            <div style={{ marginTop: '24px' }}>
-              <h3>ประวัติการสลับเครื่องหลักและการระงับเพื่อกระทบยอด ({handovers.length})</h3>
-              <div className="owner-news-table-wrap">
-                <table className="data-table">
-                  <thead>
-                    <tr>
-                      <th>เวลา</th>
-                      <th>การดำเนินการ</th>
-                      <th>เครื่องเดิม</th>
-                      <th>เครื่องใหม่</th>
-                      <th>รายการค้างเดิม</th>
-                      <th>เหตุผล</th>
-                      <th>ผู้ทำรายการ</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {handovers.map(h => (
-                      <tr key={h.id}>
-                        <td style={{ fontSize: '12px' }}>
-                          {new Date(h.createdAt).toLocaleString('th-TH', { timeZone: 'Asia/Bangkok' })}
-                        </td>
-                        <td>
-                          <span className={`status-badge ${h.action === 'HANDOVER' ? 'approved' : h.action === 'EMERGENCY_STOP' ? 'rejected' : 'open'}`}>
-                            {h.action === 'HANDOVER' ? 'สลับเครื่องหลัก (AC-97)' : h.action === 'EMERGENCY_STOP' ? 'ระงับฉุกเฉิน (AC-98)' : 'ปลดระงับกระทบยอด'}
-                          </span>
-                        </td>
-                        <td>{h.oldScannerName || '-'}</td>
-                        <td>{h.newScannerName || '-'}</td>
-                        <td>{h.oldScannerPendingCount} รายการ</td>
-                        <td style={{ fontSize: '12px' }}>{h.reason || '-'}</td>
-                        <td style={{ fontSize: '12px' }}>{h.actorName}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                          </td>
+                          <td>{h.oldScannerName || '-'}</td>
+                          <td>{h.newScannerName || '-'}</td>
+                          <td>{h.oldScannerPendingCount} รายการ</td>
+                          <td style={{ fontSize: '12px' }}>{h.reason || '-'}</td>
+                          <td style={{ fontSize: '12px' }}>{h.actorName}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           )}
 

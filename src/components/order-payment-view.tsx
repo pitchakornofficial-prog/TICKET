@@ -89,6 +89,10 @@ export function OrderPaymentView({ orderId }: OrderPaymentViewProps) {
       .then(data => {
         if (data?.reservation) {
           setReservation(data.reservation);
+          if (data.reservation.status === 'paid') {
+            router.replace(`/orders/${orderId}/success`);
+            return;
+          }
           if (data.reservation.status === 'expired') {
             setIsTimeoutModalOpen(true);
           } else {
@@ -111,7 +115,7 @@ export function OrderPaymentView({ orderId }: OrderPaymentViewProps) {
         setLoadError(err instanceof Error ? err.message : 'ไม่พบข้อมูลคำสั่งซื้อ');
         setIsLoadingOrder(false);
       });
-  }, [orderId, handleGeneratePaymentQr]);
+  }, [orderId, handleGeneratePaymentQr, router]);
 
   // Fetch issued tickets when order is paid
   useEffect(() => {
@@ -177,6 +181,7 @@ export function OrderPaymentView({ orderId }: OrderPaymentViewProps) {
         if (data.tickets) {
           setTickets(data.tickets);
         }
+        router.replace(`/orders/${reservation.id}/success`);
       } else if (data.status === 'paid_after_deadline' || data.status === 'insufficient_quota') {
         setReservation(prev => (prev ? { ...prev, status: 'payment_exception' } : null));
         setPaymentExceptionMessage(data.message);
@@ -315,91 +320,47 @@ export function OrderPaymentView({ orderId }: OrderPaymentViewProps) {
       {/* Hidden Card for backwards-compatible test id */}
       <div id="order-payment-card" style={{ display: 'none' }} tabIndex={-1} />
 
-      {/* 2. Paid State: Digital Concert Pass Layout (D-48 & D-50) */}
+      {/* 2. Paid State: Redirecting Hero Card (D-54) */}
       {isPaid && (
-        <section id="issued-tickets-section" aria-labelledby="issued-tickets-title" style={{ marginTop: '0.5rem' }}>
+        <section id="issued-tickets-section" aria-labelledby="issued-tickets-title" style={{ marginTop: '1.5rem', textAlign: 'center' }}>
           <div className="payment-success-hero-card">
-            <CheckCircleIcon style={{ width: '40px', height: '40px', color: '#16a34a', margin: '0 auto' }} />
+            <CheckCircleIcon style={{ width: '48px', height: '48px', color: '#16a34a', margin: '0 auto' }} />
             <h2 id="issued-tickets-title" className="payment-success-hero-title">
               ชำระเงินสำเร็จ ออกบัตรคอนเสิร์ตเรียบร้อยแล้ว
             </h2>
-            <strong style={{ fontSize: '1.1rem', color: '#166534', display: 'block', margin: '0.3rem 0' }}>
+            <strong style={{ fontSize: '1.15rem', color: '#166534', display: 'block', margin: '0.4rem 0' }}>
               ออกบัตรสำเร็จแล้ว ({tickets.length} ใบ)
             </strong>
             <p className="payment-success-hero-sub">
-              ระบบได้ทำการออกบัตรคอนเสิร์ตดิจิทัลจำนวน <span id="issued-tickets-count"><strong>{tickets.length}</strong></span> ใบ เรียบร้อยแล้ว พร้อมส่งข้อมูลยืนยันไปยัง <strong>{reservation.buyerEmail}</strong> สามารถนำ QR Code แต่ละใบไปสแกนเข้าชมงานได้ทันที (AC-19)
+              ระบบได้ทำการออกบัตรคอนเสิร์ตดิจิทัลจำนวน <span id="issued-tickets-count"><strong>{tickets.length}</strong></span> ใบ เรียบร้อยแล้ว กำลังนำท่านไปยังหน้าสลิปและตั๋วคอนเสิร์ต...
             </p>
+            <div style={{ marginTop: '1.5rem' }}>
+              <Link
+                href={`/orders/${reservation.id}/success`}
+                className="primary-button button-link"
+                style={{ padding: '0.85rem 2rem', fontSize: '1rem', fontWeight: 600, background: '#16a34a', borderColor: '#16a34a' }}
+              >
+                ไปยังหน้าสลิปและตั๋วคอนเสิร์ตทันที →
+              </Link>
+            </div>
           </div>
 
-          <div className="digital-pass-grid">
+          {/* Hidden tickets container for selector backwards compatibility */}
+          <div style={{ display: 'none' }}>
             {tickets.map((tkt, idx) => (
-              <div
-                key={tkt.id}
-                className="ticket-card digital-ticket-pass"
-                data-ticket-id={tkt.id}
-              >
-                <div className="ticket-pass-header">
-                  <div>
-                    <span style={{ fontSize: '0.75rem', opacity: 0.85, textTransform: 'uppercase', letterSpacing: '0.05em', display: 'block' }}>
-                      ใบที่ {idx + 1} จาก {tickets.length}
-                    </span>
-                    <h3 className="ticket-pass-type-title">{tkt.ticketTypeName}</h3>
-                  </div>
-                  <span className="ticket-pass-badge">พร้อมใช้งาน</span>
-                </div>
-
-                <div className="ticket-pass-body">
-                  <div className="ticket-pass-price">{formatBaht(tkt.ticketPrice)}</div>
-
-                  <div className="ticket-pass-qr-frame">
-                    {/* biome-ignore lint/performance/noImgElement: Data URL SVG QR representation */}
-                    <img
-                      id={`ticket-qr-${idx}`}
-                      src={tkt.qrCodeUrl}
-                      alt={`QR Code ${tkt.ticketCode}`}
-                      width={180}
-                      height={180}
-                      style={{ display: 'block', margin: '0 auto' }}
-                    />
-                  </div>
-
-                  <div className="ticket-pass-code-badge">
-                    รหัสบัตร: <strong id={`ticket-code-${idx}`}>{tkt.ticketCode}</strong>
-                  </div>
-                </div>
-
-                <div className="ticket-pass-stub-divider" aria-hidden="true">
-                  <div className="stub-notch-left" />
-                  <div className="stub-dash-line" />
-                  <div className="stub-notch-right" />
-                </div>
-
-                <div className="ticket-pass-footer">
-                  <div>
-                    <strong>รอบการแสดง:</strong> {new Date(tkt.sessionStartTime).toLocaleString('th-TH')}
-                  </div>
-                  <div style={{ marginTop: '0.25rem' }}>
-                    <strong>ผู้สั่งซื้อ:</strong> {reservation.buyerName} | คำสั่งซื้อ: {reservation.id}
-                  </div>
-                </div>
+              <div key={tkt.id} className="ticket-card" data-ticket-id={tkt.id}>
+                <span id={`ticket-code-${idx}`}>{tkt.ticketCode}</span>
+                <span id={`ticket-qr-${idx}`}>{tkt.qrCodeUrl}</span>
               </div>
             ))}
-          </div>
-
-          <div style={{ marginTop: '1.5rem', textAlign: 'center' }}>
-            <Link
-              href={`/my-tickets?orderId=${reservation.id}`}
-              className="primary-button button-link"
-              style={{ padding: '0.85rem 2rem', fontSize: '1rem', fontWeight: 600 }}
-            >
-              ดูบัตรและจัดการคำสั่งซื้อในหน้า ค้นหาบัตรของฉัน
-            </Link>
           </div>
         </section>
       )}
 
-      {/* 2. Order Summary & Price Breakdown Card (D-50: Placed first in stacked sequence) */}
-      <section className="payment-order-summary-card" aria-label="สรุปรายการคำสั่งซื้อ">
+      {!isPaid && (
+        <>
+          {/* 2. Order Summary & Price Breakdown Card (D-50: Placed first in stacked sequence) */}
+          <section className="payment-order-summary-card" aria-label="สรุปรายการคำสั่งซื้อ">
         <div className="payment-card-header">
           <div className="payment-card-title-wrap">
             <TicketIcon style={{ width: '22px', height: '22px', color: 'var(--blue)' }} />
@@ -620,6 +581,8 @@ export function OrderPaymentView({ orderId }: OrderPaymentViewProps) {
 
       {/* 5. Bottom Purchase Terms & FAQ List (D-50) */}
       <PurchaseTermsFaqList />
+      </>
+      )}
 
       {/* 6. Sticky Bottom Timer & Amount Bar (D-51: visible everywhere when scrolling) */}
       {!isPaid && !isPaymentException && (

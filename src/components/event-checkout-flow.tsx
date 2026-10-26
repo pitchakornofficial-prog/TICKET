@@ -7,10 +7,12 @@ import {
   GuestCheckoutEntry,
   isUbuEmail,
   type VerifiedBuyerInfo,
+  type BuyerQuotaInfo,
 } from './guest-checkout-entry';
 import { PurchaseStepIndicator } from './purchase-step-indicator';
 import { PurchaseTermsFaqList } from './purchase-terms-faq-list';
 import { CheckoutTimeoutModal } from './checkout-timeout-modal';
+import { QuotaLimitAlertModal } from './quota-limit-alert-modal';
 import { formatBaht, formatDate, formatTime } from '@/lib/locale';
 import {
   AcademicCapIcon,
@@ -67,6 +69,9 @@ export function EventCheckoutFlow({
   );
   const [quantities, setQuantities] = useState<Record<string, number>>({});
   const [buyer, setBuyer] = useState<VerifiedBuyerInfo | null>(null);
+  const [buyerQuota, setBuyerQuota] = useState<BuyerQuotaInfo | null>(null);
+  const [quotaModalData, setQuotaModalData] = useState<BuyerQuotaInfo | null>(null);
+  const [isQuotaModalOpen, setIsQuotaModalOpen] = useState(false);
   const [checkoutStep, setCheckoutStep] = useState<'details' | 'otp' | 'verified'>('details');
   const [queueBadge, setQueueBadge] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -174,6 +179,8 @@ export function EventCheckoutFlow({
   const serviceFee = Math.round(baseTicketSubtotal * SERVICE_FEE_RATE);
   const grandTotal = baseTicketSubtotal + serviceFee;
 
+  const effectiveLimit = buyerQuota ? buyerQuota.remainingQuota : limitPerOrder;
+
   function handleQuantityChange(ticketTypeId: string, delta: number, maxQuota: number) {
     setError(null);
     setQuantities(prev => {
@@ -185,8 +192,16 @@ export function EventCheckoutFlow({
         return prev;
       }
       const nextTotal = totalTickets - current + next;
-      if (nextTotal > limitPerOrder) {
-        setError(`จำกัดการซื้อสูงสุดไม่เกิน ${limitPerOrder} ใบ ต่อหนึ่งคำสั่งซื้อ`);
+      if (nextTotal > effectiveLimit) {
+        if (buyerQuota && buyerQuota.alreadyPurchased > 0) {
+          setQuotaModalData(buyerQuota);
+          setIsQuotaModalOpen(true);
+          setError(
+            `ท่านเคยสั่งซื้อไปแล้ว ${buyerQuota.alreadyPurchased} ใบ สามารถซื้อเพิ่มได้อีกสูงสุด ${buyerQuota.remainingQuota} ใบ (จำกัดสูงสุด ${limitPerOrder} ใบ ต่อหนึ่งท่านในคอนเสิร์ตนี้)`,
+          );
+        } else {
+          setError(`จำกัดการซื้อสูงสุดไม่เกิน ${limitPerOrder} ใบ ต่อหนึ่งคำสั่งซื้อ`);
+        }
         return prev;
       }
       return {
@@ -202,6 +217,15 @@ export function EventCheckoutFlow({
 
     if (totalTickets <= 0) {
       setError('กรุณาเลือกจำนวนบัตรอย่างน้อย 1 ใบ ในขั้นตอนที่ 1');
+      return;
+    }
+
+    if (buyerQuota && totalTickets > buyerQuota.remainingQuota) {
+      setQuotaModalData(buyerQuota);
+      setIsQuotaModalOpen(true);
+      setError(
+        `ท่านเคยสั่งซื้อไปแล้ว ${buyerQuota.alreadyPurchased} ใบ สามารถซื้อเพิ่มได้อีกสูงสุด ${buyerQuota.remainingQuota} ใบ (จำกัดสูงสุด ${limitPerOrder} ใบ ต่อหนึ่งท่านในคอนเสิร์ตนี้)`,
+      );
       return;
     }
 
@@ -503,7 +527,7 @@ export function EventCheckoutFlow({
                       <button
                         type="button"
                         aria-label={`เพิ่มจำนวน ${tt.name}`}
-                        disabled={isSoldOut || qty >= tt.quota || totalTickets >= limitPerOrder || isPending || isLocked}
+                        disabled={isSoldOut || qty >= tt.quota || totalTickets >= effectiveLimit || isPending || isLocked}
                         onClick={() => handleQuantityChange(tt.id, 1, tt.quota)}
                         style={{
                           width: '38px',
@@ -514,8 +538,8 @@ export function EventCheckoutFlow({
                           color: 'var(--white)',
                           fontWeight: 600,
                           fontSize: '1.1rem',
-                          cursor: isSoldOut || qty >= tt.quota || totalTickets >= limitPerOrder || isLocked ? 'not-allowed' : 'pointer',
-                          opacity: isSoldOut || qty >= tt.quota || totalTickets >= limitPerOrder || isLocked ? 0.4 : 1,
+                          cursor: isSoldOut || qty >= tt.quota || totalTickets >= effectiveLimit || isLocked ? 'not-allowed' : 'pointer',
+                          opacity: isSoldOut || qty >= tt.quota || totalTickets >= effectiveLimit || isLocked ? 0.4 : 1,
                         }}
                       >
                         +
@@ -530,7 +554,45 @@ export function EventCheckoutFlow({
 
         {/* Step 2: Progressive Buyer Info & OTP Verification */}
         <div style={{ marginTop: '2rem' }}>
+          {buyerQuota && buyerQuota.alreadyPurchased > 0 && (
+            <button
+              type="button"
+              className="buyer-cumulative-quota-card"
+              onClick={() => {
+                setQuotaModalData(buyerQuota);
+                setIsQuotaModalOpen(true);
+              }}
+              style={{
+                width: '100%',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                padding: '0.875rem 1.25rem',
+                background: 'rgba(238, 242, 255, 0.95)',
+                border: '1px solid #c7d2fe',
+                borderRadius: '12px',
+                marginBottom: '1.25rem',
+                fontSize: '0.92rem',
+                color: '#3730a3',
+                cursor: 'pointer',
+                textAlign: 'left',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                <ShieldCheckIcon style={{ width: '20px', height: '20px', flexShrink: 0, color: '#4f46e5' }} />
+                <div>
+                  <strong>ตรวจสอบสิทธิ์สะสม:</strong> เคยซื้อแล้ว <strong>{buyerQuota.alreadyPurchased}</strong> ใบ — ซื้อเพิ่มได้อีก <strong>{buyerQuota.remainingQuota}</strong> ใบ (จากเพดาน {buyerQuota.limitPerOrder} ใบ/ท่าน)
+                </div>
+              </div>
+              <span style={{ fontSize: '0.82rem', textDecoration: 'underline', color: '#4338ca', whiteSpace: 'nowrap', marginLeft: '0.5rem' }}>
+                ดูรายละเอียด
+              </span>
+            </button>
+          )}
+
           <GuestCheckoutEntry
+            eventId={eventId}
+            totalTickets={totalTickets}
             stepNumber={2}
             hasSelectedTickets={totalTickets > 0}
             onStepChange={setCheckoutStep}
@@ -543,13 +605,35 @@ export function EventCheckoutFlow({
                 .map(tt => `${tt.name} (${quantities[tt.id]} ใบ)`)
                 .join(', ') || undefined,
             }}
-            onVerified={verifiedInfo => {
+            onQuotaExceeded={quota => {
+              setQuotaModalData(quota);
+              setIsQuotaModalOpen(true);
+              setError(
+                quota.remainingQuota <= 0
+                  ? `ท่านได้สั่งซื้อบัตรคอนเสิร์ตนี้ครบตามจำนวนจำกัดแล้ว (${quota.alreadyPurchased} / ${quota.limitPerOrder} ใบ สำหรับอีเมลนี้) เพื่อกระจายสิทธิ์ให้แก่ผู้ชมท่านอื่น`
+                  : `ท่านเคยสั่งซื้อไปแล้ว ${quota.alreadyPurchased} ใบ สามารถซื้อเพิ่มได้อีกสูงสุด ${quota.remainingQuota} ใบ (จำกัดสูงสุด ${quota.limitPerOrder} ใบ ต่อหนึ่งท่านในคอนเสิร์ตนี้)`,
+              );
+            }}
+            onVerified={(verifiedInfo, quotaInfo) => {
               setBuyer(verifiedInfo);
+              if (quotaInfo) {
+                setBuyerQuota(quotaInfo);
+                if (totalTickets > quotaInfo.remainingQuota) {
+                  setQuotaModalData(quotaInfo);
+                  setIsQuotaModalOpen(true);
+                  setError(
+                    `ท่านเลือกบัตร ${totalTickets} ใบ เกินสิทธิ์คงเหลือที่สามารถซื้อได้อีก ${quotaInfo.remainingQuota} ใบ สำหรับคอนเสิร์ตนี้ (ท่านเคยซื้อแล้ว ${quotaInfo.alreadyPurchased} ใบ จากจำกัดสูงสุด ${quotaInfo.limitPerOrder} ใบ)`,
+                  );
+                }
+              }
               setError(null);
             }}
             onResetVerification={() => {
               setBuyer(null);
+              setBuyerQuota(null);
+              setQuotaModalData(null);
               setError(null);
+              setIsQuotaModalOpen(false);
             }}
           />
         </div>
@@ -744,6 +828,31 @@ export function EventCheckoutFlow({
 
       {/* D-49: Universal Timeout Warning Modal */}
       <CheckoutTimeoutModal eventId={eventId} isOpen={isTimeoutModalOpen} />
+
+      {/* D-60: Centralized Quota Limit Alert Modal */}
+      <QuotaLimitAlertModal
+        isOpen={isQuotaModalOpen}
+        onClose={() => setIsQuotaModalOpen(false)}
+        onEditBuyer={() => {
+          setIsQuotaModalOpen(false);
+          setBuyer(null);
+          setBuyerQuota(null);
+          setQuotaModalData(null);
+          setError(null);
+          setTimeout(() => {
+            const emailInput = document.getElementById('buyer-email') as HTMLInputElement | null;
+            if (emailInput) {
+              emailInput.focus();
+              emailInput.select();
+            }
+          }, 100);
+        }}
+        buyerEmail={quotaModalData?.email || buyer?.email}
+        alreadyPurchased={quotaModalData?.alreadyPurchased ?? 0}
+        limitPerOrder={quotaModalData?.limitPerOrder ?? limitPerOrder}
+        remainingQuota={quotaModalData?.remainingQuota ?? 0}
+        requestedQuantity={totalTickets}
+      />
     </div>
   );
 }

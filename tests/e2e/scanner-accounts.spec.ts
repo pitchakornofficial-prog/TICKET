@@ -22,6 +22,10 @@ test.describe('Scanner account assignment and scoping (TASK-009, AC-09)', () => 
     await expect(page).toHaveURL('/back-office/organizer');
 
     // 2. Organizer creates an event
+    if (testInfo.project.name === 'mobile-chromium') {
+      await page.getByTestId('organizer-mobile-menu-toggle').click();
+    }
+    await page.getByTestId('organizer-nav-events').click();
     await page.getByRole('button', { name: '+ สร้างงานคอนเสิร์ตใหม่' }).click();
     await page.getByLabel('ชื่องานคอนเสิร์ต').fill(eventTitle);
     await page.getByLabel('สถานที่จัดงาน').fill('ศูนย์การประชุมแห่งชาติสิริกิติ์');
@@ -29,6 +33,10 @@ test.describe('Scanner account assignment and scoping (TASK-009, AC-09)', () => 
     await expect(page.getByText('บันทึกงานคอนเสิร์ตสำเร็จ')).toBeVisible();
 
     // 3. Organizer assigns scanner to the event
+    if (testInfo.project.name === 'mobile-chromium') {
+      await page.getByTestId('organizer-mobile-menu-toggle').click();
+    }
+    await page.getByTestId('organizer-nav-scanners').click();
     await expect(page.getByRole('heading', { name: 'จัดการทีมสแกนบัตรเฉพาะงาน' })).toBeVisible();
     await page.getByLabel('เลือกงานคอนเสิร์ตที่ต้องการจัดทีมสแกน').selectOption({ label: `${eventTitle} (ฉบับร่าง)` });
 

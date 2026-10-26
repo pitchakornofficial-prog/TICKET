@@ -28,6 +28,7 @@ export async function POST(request: Request) {
     description?: string;
     location?: string;
     posterUrl?: string;
+    ticketTemplateUrl?: string;
     limitPerOrder?: number;
     sessions?: {
       startTime: string;
@@ -63,6 +64,7 @@ export async function POST(request: Request) {
         description: body.description,
         location: body.location,
         posterUrl: body.posterUrl,
+        ticketTemplateUrl: body.ticketTemplateUrl,
         limitPerOrder: body.limitPerOrder ?? 4,
       },
       body.sessions || [],

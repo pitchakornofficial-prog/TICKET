@@ -14,6 +14,7 @@ export interface EventDraftInput {
   description?: string;
   location: string;
   posterUrl?: string;
+  ticketTemplateUrl?: string;
   limitPerOrder?: number;
 }
 
@@ -59,11 +60,13 @@ export async function ensureEventSchema(pool: Pool): Promise<void> {
       description TEXT NOT NULL DEFAULT '',
       location TEXT NOT NULL,
       "posterUrl" TEXT,
+      "ticketTemplateUrl" TEXT,
       "limitPerOrder" INTEGER NOT NULL DEFAULT 4,
       status TEXT NOT NULL DEFAULT 'draft',
       "createdAt" TIMESTAMPTZ NOT NULL DEFAULT now(),
       "updatedAt" TIMESTAMPTZ NOT NULL DEFAULT now()
     );
+    ALTER TABLE events ADD COLUMN IF NOT EXISTS "ticketTemplateUrl" TEXT;
     CREATE INDEX IF NOT EXISTS idx_events_organizerId ON events("organizerId");
 
     CREATE TABLE IF NOT EXISTS event_sessions (
@@ -175,8 +178,8 @@ export async function createEventDraft(
   return inTransaction(pool, async client => {
     const eventId = randomUUID();
     await client.query(
-      `INSERT INTO events (id, "organizerId", title, description, location, "posterUrl", "limitPerOrder", status, "createdAt", "updatedAt")
-       VALUES ($1, $2, $3, $4, $5, $6, $7, 'draft', now(), now())`,
+      `INSERT INTO events (id, "organizerId", title, description, location, "posterUrl", "ticketTemplateUrl", "limitPerOrder", status, "createdAt", "updatedAt")
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'draft', now(), now())`,
       [
         eventId,
         organizerId,
@@ -184,6 +187,7 @@ export async function createEventDraft(
         eventInput.description?.trim() || '',
         eventInput.location.trim(),
         eventInput.posterUrl || null,
+        eventInput.ticketTemplateUrl || null,
         limit,
       ],
     );
@@ -246,6 +250,9 @@ export async function updateEventDraft(
     }
     if (eventInput.posterUrl !== undefined) {
       await client.query('UPDATE events SET "posterUrl" = $1, "updatedAt" = now() WHERE id = $2', [eventInput.posterUrl, eventId]);
+    }
+    if (eventInput.ticketTemplateUrl !== undefined) {
+      await client.query('UPDATE events SET "ticketTemplateUrl" = $1, "updatedAt" = now() WHERE id = $2', [eventInput.ticketTemplateUrl, eventId]);
     }
     if (eventInput.limitPerOrder !== undefined) {
       await client.query('UPDATE events SET "limitPerOrder" = $1, "updatedAt" = now() WHERE id = $2', [eventInput.limitPerOrder, eventId]);
@@ -452,7 +459,7 @@ export async function getPublicEventWithApprovedSessions(pool: Pool, eventId: st
   try {
     await ensureEventSchema(pool);
     const evRes = await pool.query(
-      `SELECT e.id, e.title, e.description, e.location, e."posterUrl", e."limitPerOrder", e.status,
+      `SELECT e.id, e.title, e.description, e.location, e."posterUrl", e."ticketTemplateUrl", e."limitPerOrder", e.status,
               u.name as "organizerName", u.email as "organizerEmail"
        FROM events e
        LEFT JOIN auth_user u ON e."organizerId" = u.id

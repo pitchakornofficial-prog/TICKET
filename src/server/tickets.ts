@@ -23,6 +23,8 @@ export interface TicketDetail {
   sessionEndTime: string;
   location: string;
   eventTitle: string;
+  ticketTemplateUrl?: string | null;
+  eventPosterUrl?: string | null;
   createdAt: string;
 }
 
@@ -96,7 +98,7 @@ export async function issueTicketsForOrder(
             t."createdAt", tt.name as "ticketTypeName", tt.price as "ticketPrice",
             o."buyerName", o."buyerEmail", o."buyerPhone",
             es."startTime" as "sessionStartTime", es."endTime" as "sessionEndTime",
-            e.location, e.title as "eventTitle"
+            e.location, e.title as "eventTitle", e."ticketTemplateUrl", e."posterUrl" as "eventPosterUrl"
      FROM tickets t
      JOIN ticket_types tt ON t."ticketTypeId" = tt.id
      JOIN orders o ON t."orderId" = o.id
@@ -215,7 +217,7 @@ export async function getOrderTickets(pool: Pool, orderId: string): Promise<Tick
             t."createdAt", tt.name as "ticketTypeName", tt.price as "ticketPrice",
             o."buyerName", o."buyerEmail", o."buyerPhone",
             es."startTime" as "sessionStartTime", es."endTime" as "sessionEndTime",
-            e.location, e.title as "eventTitle"
+            e.location, e.title as "eventTitle", e."ticketTemplateUrl", e."posterUrl" as "eventPosterUrl"
      FROM tickets t
      JOIN ticket_types tt ON t."ticketTypeId" = tt.id
      JOIN orders o ON t."orderId" = o.id
@@ -247,6 +249,8 @@ export async function getOrderTickets(pool: Pool, orderId: string): Promise<Tick
     sessionEndTime: new Date(r.sessionEndTime).toISOString(),
     location: r.location,
     eventTitle: r.eventTitle,
+    ticketTemplateUrl: r.ticketTemplateUrl || null,
+    eventPosterUrl: r.eventPosterUrl || null,
     createdAt: new Date(r.createdAt).toISOString(),
   }));
 }

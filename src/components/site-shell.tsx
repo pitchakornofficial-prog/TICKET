@@ -5,10 +5,27 @@ import { usePathname } from 'next/navigation';
 import { Suspense, type ReactNode } from 'react';
 import { TicketIcon } from './ticket-icon';
 import { NavbarSearch } from './navbar-search';
+import { ShieldCheckIcon } from './icons';
 
 export function SiteShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const isBackOffice = pathname?.startsWith('/back-office');
+
+  const isFocusedCheckout = Boolean(
+    pathname &&
+      (/\/events\/[^/]+\/(queue|checkout)$/.test(pathname) ||
+        /\/orders\/[^/]+\/payment$/.test(pathname)),
+  );
+
+  const handleBrandExitClick = (e: React.MouseEvent) => {
+    if (typeof window === 'undefined') return;
+    const confirmed = window.confirm(
+      'คุณแน่ใจหรือไม่ที่จะออกจากหน้านี้? หากกำลังรอคิวหรืออยู่ในขั้นตอนการซื้อบัตร ข้อมูลการกันบัตรของคุณจะถูกยกเลิก',
+    );
+    if (!confirmed) {
+      e.preventDefault();
+    }
+  };
 
   if (isBackOffice) {
     return (
@@ -29,29 +46,45 @@ export function SiteShell({ children }: { children: ReactNode }) {
   return (
     <div className="site-shell">
       <a className="skip-link" href="#main">ข้ามไปเนื้อหาหลัก</a>
-      <header className="site-header">
+      <header className={`site-header ${isFocusedCheckout ? 'focused-checkout-header' : ''}`}>
         <div className="site-header-inner">
           <div className="header-brand-wrap">
-            <Link href="/" className="brand" aria-label="TICKET หน้าแรก">
+            <Link
+              href="/"
+              className="brand"
+              aria-label="TICKET หน้าแรก"
+              onClick={isFocusedCheckout ? handleBrandExitClick : undefined}
+            >
               <TicketIcon />
               TICKET
             </Link>
           </div>
 
-          {/* Center Navbar Instant Search */}
-          <div className="header-search-center">
-            <Suspense fallback={<div className="navbar-search-wrapper" />}>
-              <NavbarSearch />
-            </Suspense>
-          </div>
+          {isFocusedCheckout ? (
+            <div className="focused-checkout-badge-wrap">
+              <div className="focused-checkout-security-pill">
+                <ShieldCheckIcon style={{ width: '16px', height: '16px', color: '#16a34a' }} />
+                <span>ระบบสั่งซื้อบัตรปลอดภัย (Secure Checkout)</span>
+              </div>
+            </div>
+          ) : (
+            <>
+              {/* Center Navbar Instant Search */}
+              <div className="header-search-center">
+                <Suspense fallback={<div className="navbar-search-wrapper" />}>
+                  <NavbarSearch />
+                </Suspense>
+              </div>
 
-          <nav className="header-nav" aria-label="เมนูหลัก">
-            <Link className="header-nav-link" href="/">หน้าแรก</Link>
-            <Link className="header-nav-link" href="/my-tickets">ค้นหาบัตรของฉัน</Link>
-            <Link className="header-nav-link" href="/news">ข่าวสาร</Link>
-            <Link className="header-nav-link" href="/about">เกี่ยวกับเรา</Link>
-            <Link className="header-nav-link" href="/contact">ติดต่อเรา</Link>
-          </nav>
+              <nav className="header-nav" aria-label="เมนูหลัก">
+                <Link className="header-nav-link" href="/">หน้าแรก</Link>
+                <Link className="header-nav-link" href="/my-tickets">ค้นหาบัตรของฉัน</Link>
+                <Link className="header-nav-link" href="/news">ข่าวสาร</Link>
+                <Link className="header-nav-link" href="/about">เกี่ยวกับเรา</Link>
+                <Link className="header-nav-link" href="/contact">ติดต่อเรา</Link>
+              </nav>
+            </>
+          )}
         </div>
       </header>
       <main id="main" tabIndex={-1}>{children}</main>

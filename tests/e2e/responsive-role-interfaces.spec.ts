@@ -1,6 +1,12 @@
 import { test, expect } from '@playwright/test';
 import { fixtureAccounts, fixturePassword } from '../support/auth-fixture';
 
+let nextIp = 50;
+test.beforeEach(async ({ context }, testInfo) => {
+  const base = testInfo.project.name === 'desktop-chromium' ? 120 : 170;
+  await context.setExtraHTTPHeaders({ 'x-forwarded-for': `198.51.100.${base + (nextIp++ % 50)}` });
+});
+
 test.describe('TASK-036: Responsive Role Interfaces and Mandatory Contract (AC-43, AC-44, AC-45, AC-46, AC-47, AC-48, AC-104)', () => {
   test('AC-43, AC-45, AC-46, AC-47: Brand, Kanit typography, 60/30/10 theme, and zero emojis across customer and back-office', async ({ page }) => {
     // 1. Customer homepage

@@ -3,8 +3,7 @@ import { notFound, redirect } from 'next/navigation';
 import { getAuth, readActor } from '@/server/auth';
 import { isRole, roleAccess } from '@/lib/back-office-access';
 import { SignOutButton } from '@/components/sign-out-button';
-import { OrganizerEventsManager } from '@/components/organizer-events-manager';
-import { OrganizerScannerManager } from '@/components/organizer-scanner-manager';
+import { OrganizerWorkspaceView } from '@/components/organizer-workspace-view';
 import { ScannerEventsView } from '@/components/scanner-events-view';
 import { OwnerWorkspaceView } from '@/components/owner-workspace-view';
 import { TicketIcon } from '@/components/ticket-icon';
@@ -65,12 +64,7 @@ export default async function Workspace({
       {/* Main Admin Workspace Canvas */}
       <div className="admin-portal-body">
         {role === 'owner' && <OwnerWorkspaceView initialSection={search?.section} />}
-        {role === 'organizer' && (
-          <div className="organizer-workspace-canvas">
-            <OrganizerEventsManager />
-            <OrganizerScannerManager />
-          </div>
-        )}
+        {role === 'organizer' && <OrganizerWorkspaceView initialSection={search?.section} />}
         {role === 'scanner' && (
           <div className="scanner-workspace-canvas">
             <ScannerEventsView />

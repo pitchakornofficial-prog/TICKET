@@ -11,6 +11,13 @@ export interface VerifiedBuyerInfo {
   phone: string;
 }
 
+export interface BuyerQuotaInfo {
+  alreadyPurchased: number;
+  limitPerOrder: number;
+  remainingQuota: number;
+  email?: string;
+}
+
 export interface OrderSummaryDetails {
   sessionText?: string;
   ticketsText?: string;
@@ -24,15 +31,21 @@ export function isUbuEmail(emailAddress: string): boolean {
 }
 
 export function GuestCheckoutEntry({
+  eventId,
+  totalTickets = 0,
   onVerified,
-  onResetVerification: _onResetVerification,
+  onResetVerification,
+  onQuotaExceeded,
   onStepChange,
   stepNumber,
   hasSelectedTickets = true,
   summaryDetails,
 }: {
-  onVerified?: (buyer: VerifiedBuyerInfo) => void;
+  eventId?: string;
+  totalTickets?: number;
+  onVerified?: (buyer: VerifiedBuyerInfo, quota?: BuyerQuotaInfo) => void;
   onResetVerification?: () => void;
+  onQuotaExceeded?: (quota: BuyerQuotaInfo) => void;
   onStepChange?: (step: 'details' | 'otp' | 'verified') => void;
   stepNumber?: number;
   hasSelectedTickets?: boolean;
@@ -122,11 +135,21 @@ export function GuestCheckoutEntry({
           body: JSON.stringify({
             buyer: { name, email, phone },
             purpose: 'checkout',
+            eventId,
+            requestedQuantity: totalTickets,
           }),
         });
 
         const data = await res.json();
         if (!res.ok) {
+          if (data.code === 'CUMULATIVE_LIMIT_EXCEEDED' && onQuotaExceeded) {
+            onQuotaExceeded({
+              alreadyPurchased: data.alreadyPurchased,
+              limitPerOrder: data.limitPerOrder,
+              remainingQuota: data.remainingQuota ?? 0,
+              email: data.email || email,
+            });
+          }
           throw new Error(data.message || 'ขอรหัส OTP ไม่สำเร็จ');
         }
 
@@ -165,11 +188,21 @@ export function GuestCheckoutEntry({
           body: JSON.stringify({
             buyer: { name, email, phone },
             purpose: 'checkout',
+            eventId,
+            requestedQuantity: totalTickets,
           }),
         });
 
         const data = await res.json();
         if (!res.ok) {
+          if (data.code === 'CUMULATIVE_LIMIT_EXCEEDED' && onQuotaExceeded) {
+            onQuotaExceeded({
+              alreadyPurchased: data.alreadyPurchased,
+              limitPerOrder: data.limitPerOrder,
+              remainingQuota: data.remainingQuota ?? 0,
+              email: data.email || email,
+            });
+          }
           throw new Error(data.message || 'ส่งรหัส OTP ใหม่ไม่สำเร็จ');
         }
 
@@ -282,12 +315,21 @@ export function GuestCheckoutEntry({
             code: otpCode.trim(),
             requestId,
             purpose: 'checkout',
+            eventId,
             buyer: { name, email, phone },
           }),
         });
 
         const data = await res.json();
         if (!res.ok) {
+          if (data.code === 'CUMULATIVE_LIMIT_EXCEEDED' && onQuotaExceeded) {
+            onQuotaExceeded({
+              alreadyPurchased: data.alreadyPurchased,
+              limitPerOrder: data.limitPerOrder,
+              remainingQuota: data.remainingQuota ?? 0,
+              email: data.email || email,
+            });
+          }
           throw new Error(data.message || 'ยืนยันรหัส OTP ไม่สำเร็จ');
         }
 
@@ -306,7 +348,7 @@ export function GuestCheckoutEntry({
         setStep('verified');
         if (onStepChange) onStepChange('verified');
         setSuccessMsg('ยืนยันตัวตนสำเร็จแล้ว');
-        if (onVerified) onVerified(buyerInfo);
+        if (onVerified) onVerified(buyerInfo, data.buyerQuota);
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : 'เกิดข้อผิดพลาดในการยืนยัน OTP';
         setError(msg);
@@ -410,7 +452,10 @@ export function GuestCheckoutEntry({
                   type="text"
                   required
                   value={name}
-                  onChange={e => setName(e.target.value)}
+                  onChange={e => {
+                    setName(e.target.value);
+                    setError(null);
+                  }}
                   placeholder="เช่น สมชาย ใจดี"
                   className="guest-step-input"
                 />
@@ -435,7 +480,10 @@ export function GuestCheckoutEntry({
                   type="tel"
                   required
                   value={phone}
-                  onChange={e => setPhone(e.target.value)}
+                  onChange={e => {
+                    setPhone(e.target.value);
+                    setError(null);
+                  }}
                   placeholder="เช่น 0812345678"
                   className="guest-step-input"
                 />
@@ -460,7 +508,11 @@ export function GuestCheckoutEntry({
                   type="email"
                   required
                   value={email}
-                  onChange={e => setEmail(e.target.value)}
+                  onChange={e => {
+                    setEmail(e.target.value);
+                    setError(null);
+                    if (onResetVerification) onResetVerification();
+                  }}
                   placeholder="เช่น your-email@ubu.ac.th หรือ your-email@example.com"
                   className="guest-step-input"
                   style={{
@@ -613,22 +665,45 @@ export function GuestCheckoutEntry({
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '1rem' }}>
-            <button
-              type="button"
-              onClick={handleResendOtp}
-              disabled={cooldownSeconds > 0 || isPending}
-              style={{
-                background: 'none',
-                border: '1px solid var(--line)',
-                padding: '0.6rem 1.2rem',
-                borderRadius: '8px',
-                fontSize: '0.9rem',
-                cursor: cooldownSeconds > 0 || isPending ? 'not-allowed' : 'pointer',
-                color: cooldownSeconds > 0 ? 'var(--muted)' : 'var(--black)',
-              }}
-            >
-              {cooldownSeconds > 0 ? `ขอรหัสใหม่ได้ในอีก ${cooldownSeconds} วินาที` : 'ขอรหัส OTP ใหม่'}
-            </button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+              <button
+                type="button"
+                onClick={handleResendOtp}
+                disabled={cooldownSeconds > 0 || isPending}
+                style={{
+                  background: 'none',
+                  border: '1px solid var(--line)',
+                  padding: '0.6rem 1.2rem',
+                  borderRadius: '8px',
+                  fontSize: '0.9rem',
+                  cursor: cooldownSeconds > 0 || isPending ? 'not-allowed' : 'pointer',
+                  color: cooldownSeconds > 0 ? 'var(--muted)' : 'var(--black)',
+                }}
+              >
+                {cooldownSeconds > 0 ? `ขอรหัสใหม่ได้ในอีก ${cooldownSeconds} วินาที` : 'ขอรหัส OTP ใหม่'}
+              </button>
+              <button
+                type="button"
+                id="back-to-details-btn"
+                onClick={() => {
+                  setStep('details');
+                  setError(null);
+                  if (onStepChange) onStepChange('details');
+                  if (onResetVerification) onResetVerification();
+                }}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  padding: '0.4rem 0.6rem',
+                  fontSize: '0.85rem',
+                  color: 'var(--muted)',
+                  cursor: 'pointer',
+                  textDecoration: 'underline',
+                }}
+              >
+                แก้ไขอีเมลหรือเบอร์โทร
+              </button>
+            </div>
 
             <button
               type="submit"
@@ -679,6 +754,34 @@ export function GuestCheckoutEntry({
             <div><strong>ชื่อผู้ซื้อ:</strong> <span id="verified-buyer-name">{verifiedBuyer.name}</span></div>
             <div><strong>อีเมล:</strong> <span id="verified-buyer-email">{verifiedBuyer.email}</span></div>
             <div><strong>เบอร์โทรศัพท์:</strong> <span id="verified-buyer-phone">{verifiedBuyer.phone}</span></div>
+          </div>
+
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '0.75rem' }}>
+            <button
+              type="button"
+              id="reset-buyer-details-btn"
+              onClick={() => {
+                setStep('details');
+                setVerifiedBuyer(null);
+                setOtpCode('');
+                setOtpDigits(['', '', '', '', '', '']);
+                if (onStepChange) onStepChange('details');
+                if (onResetVerification) onResetVerification();
+              }}
+              style={{
+                background: 'transparent',
+                border: '1px solid #cbd5e1',
+                borderRadius: '8px',
+                padding: '0.45rem 0.9rem',
+                fontSize: '0.85rem',
+                color: '#475569',
+                cursor: 'pointer',
+                fontWeight: 500,
+                transition: 'all 0.15s ease',
+              }}
+            >
+              แก้ไขข้อมูลผู้ซื้อ / ใช้อีเมลอื่น
+            </button>
           </div>
         </div>
       )}
