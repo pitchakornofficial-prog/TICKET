@@ -8,11 +8,15 @@ import {
   CalendarIcon,
   ShieldCheckIcon,
   SlidersIcon,
+  ChatBubbleLeftRightIcon,
+  BookOpenIcon,
 } from '@/components/icons';
 import { TicketIcon } from '@/components/ticket-icon';
 
 import { OrganizerSettingsView } from '@/components/organizer-settings-view';
 import { OrganizerNewsView } from '@/components/organizer-news-view';
+import { OrganizerContactView } from '@/components/organizer-contact-view';
+import { OrganizerGuideView } from '@/components/organizer-guide-view';
 
 export type OrganizerSectionId =
   | 'overview'
@@ -21,6 +25,8 @@ export type OrganizerSectionId =
   | 'finance'
   | 'news'
   | 'policies'
+  | 'guide'
+  | 'contact'
   | 'settings';
 
 export interface OrganizerWorkspaceViewProps {
@@ -45,6 +51,14 @@ const HASH_TO_SECTION: Record<string, OrganizerSectionId> = {
   policy: 'policies',
   terms: 'policies',
   agreement: 'policies',
+  guide: 'guide',
+  manual: 'guide',
+  howto: 'guide',
+  docs: 'guide',
+  contact: 'contact',
+  owner: 'contact',
+  support: 'contact',
+  help: 'contact',
   settings: 'settings',
   setting: 'settings',
   profile: 'settings',
@@ -171,6 +185,26 @@ export function OrganizerWorkspaceView({ initialSection }: OrganizerWorkspaceVie
             <div className="organizer-subnav-right-group">
               <button
                 type="button"
+                data-testid="organizer-nav-guide"
+                className={`organizer-subnav-tab ${activeSection === 'guide' ? 'active' : ''}`}
+                onClick={() => handleSelectTab('guide')}
+              >
+                <BookOpenIcon className="organizer-subnav-icon" />
+                <span>คู่มือ</span>
+              </button>
+
+              <button
+                type="button"
+                data-testid="organizer-nav-contact"
+                className={`organizer-subnav-tab ${activeSection === 'contact' ? 'active' : ''}`}
+                onClick={() => handleSelectTab('contact')}
+              >
+                <ChatBubbleLeftRightIcon className="organizer-subnav-icon" />
+                <span>ติดต่อเจ้าของ</span>
+              </button>
+
+              <button
+                type="button"
                 data-testid="organizer-nav-settings"
                 className={`organizer-subnav-tab ${activeSection === 'settings' ? 'active' : ''}`}
                 onClick={() => handleSelectTab('settings')}
@@ -189,6 +223,10 @@ export function OrganizerWorkspaceView({ initialSection }: OrganizerWorkspaceVie
           <OrganizerSettingsView />
         ) : activeSection === 'news' ? (
           <OrganizerNewsView />
+        ) : activeSection === 'contact' ? (
+          <OrganizerContactView />
+        ) : activeSection === 'guide' ? (
+          <OrganizerGuideView />
         ) : (
           <div
             className="organizer-blank-canvas"
