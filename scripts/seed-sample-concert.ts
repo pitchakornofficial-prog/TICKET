@@ -3,6 +3,8 @@ import { hashPassword } from 'better-auth/crypto';
 import { createDatabasePool, inTransaction } from '../src/server/database.ts';
 import { ensureEventSchema } from '../src/server/events.ts';
 import { ensureFeeSchema } from '../src/server/fees.ts';
+import { ensureNewsSchema } from '../src/server/news.ts';
+import { CURATED_NEWS_LIST } from '../src/server/curated-news.ts';
 
 const pool = createDatabasePool();
 
@@ -306,6 +308,18 @@ try {
   await pool.query(
     "UPDATE events SET \"posterUrl\" = '/banners/acoustic-echoes.svg' WHERE title = 'ACOUSTIC ECHOES IN THE HALL 2026'"
   );
+
+  // Seed sample news announcements (D-70)
+  await ensureNewsSchema(pool);
+  for (const item of CURATED_NEWS_LIST) {
+    await pool.query(
+      `INSERT INTO news (id, title, content, status, "coverUrl", "publishedAt", "createdAt", "updatedAt", "authorId")
+       VALUES ($1, $2, $3, 'published', $4, $5, now(), now(), $6)
+       ON CONFLICT (id) DO UPDATE SET title = $2, content = $3, status = 'published', "coverUrl" = $4, "publishedAt" = $5, "updatedAt" = now()`,
+      [item.id, item.title, item.content, item.coverUrl, item.publishedAt, organizerId]
+    );
+  }
+  console.log('สร้างชุดข่าวสารและประกาศตัวอย่าง (D-70) เรียบร้อยแล้ว');
 
   console.log(`\nลิงก์ดูหน้าคอนเสิร์ต: http://localhost:3000/events/${eventId}`);
   console.log('ลิงก์หน้าแรก: http://localhost:3000/');

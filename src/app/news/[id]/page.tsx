@@ -3,6 +3,7 @@ import { notFound } from 'next/navigation';
 import { CalendarIcon, ArrowLeftIcon, CheckCircleIcon } from '@/components/icons';
 import { getDatabasePool } from '@/server/database';
 import { getPublishedNewsById } from '@/server/news';
+import { CURATED_NEWS_LIST } from '@/server/curated-news';
 import { formatDate } from '@/lib/locale';
 
 export default async function NewsDetailPage({
@@ -11,15 +12,45 @@ export default async function NewsDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  let newsItem = null;
+  let newsItem: {
+    id: string;
+    title: string;
+    content: string;
+    coverUrl: string | null;
+    category?: string;
+    publishedAt: string;
+    authorName: string;
+  } | null = null;
 
   try {
     const pool = getDatabasePool();
-    newsItem = await getPublishedNewsById(pool, id);
+    const dbItem = await getPublishedNewsById(pool, id);
+    if (dbItem) {
+      newsItem = {
+        ...dbItem,
+        category: 'ข่าวสาร',
+      };
+    }
   } catch (error) {
     const err = error as { code?: string };
     if (err?.code !== 'ECONNREFUSED') {
       console.warn('Unable to load news detail:', error);
+    }
+  }
+
+  // Fallback to curated news if not found in database (D-70)
+  if (!newsItem) {
+    const curated = CURATED_NEWS_LIST.find(n => n.id === id);
+    if (curated) {
+      newsItem = {
+        id: curated.id,
+        title: curated.title,
+        content: curated.content,
+        coverUrl: curated.coverUrl,
+        category: curated.category,
+        publishedAt: curated.publishedAt,
+        authorName: curated.authorName,
+      };
     }
   }
 
@@ -38,8 +69,21 @@ export default async function NewsDetailPage({
         </Link>
       </div>
 
+      {newsItem.coverUrl && (
+        <div className="news-detail-cover">
+          {/* biome-ignore lint/performance/noImgElement: news detail cover */}
+          <img
+            src={newsItem.coverUrl}
+            alt={`ภาพประกอบ ${newsItem.title}`}
+            className="news-detail-cover-img"
+          />
+        </div>
+      )}
+
       <header className="news-article-header">
-        <p className="eyebrow">TICKET / ข่าวสารและประกาศ</p>
+        {newsItem.category && (
+          <span className="news-category-pill">{newsItem.category}</span>
+        )}
         <h1 className="news-article-title">{newsItem.title}</h1>
         <div className="news-article-meta">
           <span className="news-meta-item">
@@ -57,14 +101,17 @@ export default async function NewsDetailPage({
 
       <div className="news-article-body">
         {paragraphs.map(para => (
-          <p key={para.slice(0, 32)} className="news-paragraph">{para}</p>
+          <p key={para.slice(0, 32)} className="news-paragraph">
+            {para}
+          </p>
         ))}
       </div>
 
       <footer className="news-article-footer">
         <div className="news-footer-box">
           <p>
-            <strong>ต้องการสอบถามข้อมูลเพิ่มเติม?</strong><br />
+            <strong>ต้องการสอบถามข้อมูลเพิ่มเติม?</strong>
+            <br />
             ติดต่อทีมงาน TICKET ได้ตลอดเวลาผ่านหน้า{' '}
             <Link href="/contact" className="inline-link">
               ติดต่อเรา

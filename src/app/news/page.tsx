@@ -1,9 +1,7 @@
-import Link from 'next/link';
-import { TicketIcon } from '@/components/ticket-icon';
-import { CalendarIcon, ChevronRightIcon } from '@/components/icons';
 import { getDatabasePool } from '@/server/database';
 import { listPublishedNews, type PublicNewsSummary } from '@/server/news';
-import { formatDate } from '@/lib/locale';
+import { CURATED_NEWS_LIST } from '@/server/curated-news';
+import { NewsListClient, type NewsItemDisplay } from '@/components/news-list-client';
 
 export const metadata = {
   title: 'ข่าวสารและประกาศ — TICKET',
@@ -11,11 +9,11 @@ export const metadata = {
 };
 
 export default async function NewsListPage() {
-  let newsList: PublicNewsSummary[] = [];
+  let dbNewsList: PublicNewsSummary[] = [];
 
   try {
     const pool = getDatabasePool();
-    newsList = await listPublishedNews(pool);
+    dbNewsList = await listPublishedNews(pool);
   } catch (error) {
     const err = error as { code?: string };
     if (err?.code !== 'ECONNREFUSED') {
@@ -23,7 +21,25 @@ export default async function NewsListPage() {
     }
   }
 
-  const hasNews = newsList.length > 0;
+  // Use database news if published, otherwise use curated news announcements (D-70)
+  const newsList: NewsItemDisplay[] =
+    dbNewsList.length > 0
+      ? dbNewsList.map(n => ({
+          id: n.id,
+          title: n.title,
+          snippet: n.snippet,
+          coverUrl: undefined,
+          category: 'ข่าวสาร',
+          publishedAt: n.publishedAt,
+        }))
+      : CURATED_NEWS_LIST.map(n => ({
+          id: n.id,
+          title: n.title,
+          snippet: n.snippet,
+          coverUrl: n.coverUrl,
+          category: n.category,
+          publishedAt: n.publishedAt,
+        }));
 
   return (
     <article className="static-page news-page" aria-labelledby="news-title">
@@ -35,41 +51,7 @@ export default async function NewsListPage() {
         </p>
       </header>
 
-      {!hasNews ? (
-        <section className="empty-catalog-card news-empty-card" aria-label="ยังไม่มีข่าวสาร">
-          <TicketIcon className="empty-icon" />
-          <h2>ยังไม่มีข่าวสารในขณะนี้</h2>
-          <p>เมื่อมีประกาศหรือข่าวสารใหม่จากทีมงาน จะแสดงในหน้านี้</p>
-          <Link href="/" className="primary-button button-link">
-            กลับหน้าแรก
-          </Link>
-        </section>
-      ) : (
-        <section className="news-grid" aria-label="รายการข่าวสาร">
-          {newsList.map(item => (
-            <article key={item.id} className="news-card">
-              <div className="news-card-body">
-                <div className="news-card-meta">
-                  <span className="news-date">
-                    <CalendarIcon />
-                    <time dateTime={item.publishedAt}>{formatDate(new Date(item.publishedAt))}</time>
-                  </span>
-                </div>
-                <h2 className="news-card-title">
-                  <Link href={`/news/${item.id}`}>{item.title}</Link>
-                </h2>
-                <p className="news-card-snippet">{item.snippet}</p>
-              </div>
-              <div className="news-card-footer">
-                <Link href={`/news/${item.id}`} className="news-read-more">
-                  <span>อ่านรายละเอียด</span>
-                  <ChevronRightIcon />
-                </Link>
-              </div>
-            </article>
-          ))}
-        </section>
-      )}
+      <NewsListClient initialNews={newsList} />
     </article>
   );
 }
