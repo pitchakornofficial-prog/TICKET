@@ -242,10 +242,10 @@ const GUIDE_MODULES: GuideModule[] = [
 export function OrganizerGuideView() {
   const [searchQuery, setSearchQuery] = useState('');
   const [expandedModules, setExpandedModules] = useState<Record<string, boolean>>({
-    scanning: true,
-    concerts: true,
-    finance: true,
-    news: true,
+    scanning: false,
+    concerts: false,
+    finance: false,
+    news: false,
   });
   const [showScrollTop, setShowScrollTop] = useState(false);
 
@@ -262,6 +262,22 @@ export function OrganizerGuideView() {
       ...prev,
       [moduleId]: !prev[moduleId],
     }));
+  };
+
+  const handleExpandAll = () => {
+    const allExpanded: Record<string, boolean> = {};
+    for (const mod of GUIDE_MODULES) {
+      allExpanded[mod.id] = true;
+    }
+    setExpandedModules(allExpanded);
+  };
+
+  const handleCollapseAll = () => {
+    const allCollapsed: Record<string, boolean> = {};
+    for (const mod of GUIDE_MODULES) {
+      allCollapsed[mod.id] = false;
+    }
+    setExpandedModules(allCollapsed);
   };
 
   const filteredModules = GUIDE_MODULES.filter((mod) => {
@@ -327,6 +343,29 @@ export function OrganizerGuideView() {
             )}
           </div>
         </header>
+
+        {/* Actions Bar (Expand/Collapse All) */}
+        {filteredModules.length > 0 && (
+          <div className="guide-toolbar-actions">
+            <span className="guide-modules-count">ทั้งหมด {filteredModules.length} หมวดหมู่</span>
+            <div className="guide-expand-collapse-group">
+              <button
+                type="button"
+                className="guide-action-pill-btn"
+                onClick={handleExpandAll}
+              >
+                ขยายทั้งหมด
+              </button>
+              <button
+                type="button"
+                className="guide-action-pill-btn"
+                onClick={handleCollapseAll}
+              >
+                พับทั้งหมด
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Modules List */}
         <div className="guide-modules-list">

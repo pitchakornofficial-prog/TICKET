@@ -17,6 +17,8 @@ import { OrganizerSettingsView } from '@/components/organizer-settings-view';
 import { OrganizerNewsView } from '@/components/organizer-news-view';
 import { OrganizerContactView } from '@/components/organizer-contact-view';
 import { OrganizerGuideView } from '@/components/organizer-guide-view';
+import { OrganizerScannerManager } from '@/components/organizer-scanner-manager';
+import { OrganizerEventsManager } from '@/components/organizer-events-manager';
 
 export type OrganizerSectionId =
   | 'overview'
@@ -227,6 +229,10 @@ export function OrganizerWorkspaceView({ initialSection }: OrganizerWorkspaceVie
           <OrganizerContactView />
         ) : activeSection === 'guide' ? (
           <OrganizerGuideView />
+        ) : activeSection === 'scanners' ? (
+          <OrganizerScannerManager />
+        ) : activeSection === 'events' ? (
+          <OrganizerEventsManager />
         ) : (
           <div
             className="organizer-blank-canvas"

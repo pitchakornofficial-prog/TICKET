@@ -331,6 +331,8 @@ export function PencilSquareIcon(props: SVGProps<SVGSVGElement>) {
   );
 }
 
+export const PencilIcon = PencilSquareIcon;
+
 export function PhoneIcon(props: SVGProps<SVGSVGElement>) {
   return (
     <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...props}>
@@ -373,6 +375,15 @@ export function QrCodeIcon(props: SVGProps<SVGSVGElement>) {
       <rect x="14" y="14" width="7" height="7" />
       <rect x="3" y="14" width="7" height="7" />
       <path d="M7 17h.01M17 17h.01M7 7h.01M17 7h.01" />
+    </svg>
+  );
+}
+
+export function XIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...props}>
+      <line x1="18" y1="6" x2="6" y2="18" />
+      <line x1="6" y1="6" x2="18" y2="18" />
     </svg>
   );
 }

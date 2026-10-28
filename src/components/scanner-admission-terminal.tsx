@@ -358,7 +358,8 @@ export function ScannerAdmissionTerminal({
   }
 
   return (
-    <div className="terminal-container" id="admission-terminal-container">
+    <div className="terminal-centered-wrapper">
+      <div className="terminal-container" id="admission-terminal-container">
       <header className="terminal-header">
         <div className="terminal-title-area">
           <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap', marginBottom: '4px' }}>
@@ -770,5 +771,6 @@ export function ScannerAdmissionTerminal({
         )}
       </section>
     </div>
+  </div>
   );
 }

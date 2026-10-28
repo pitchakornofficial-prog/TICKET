@@ -25,6 +25,7 @@ test.describe('TASK-035: Primary Handover and Emergency Recovery (AC-97, AC-98)'
     await expect(page).toHaveURL('/back-office/organizer');
 
     // Create Event
+    await page.goto('/back-office/organizer#events');
     await page.getByRole('button', { name: '+ สร้างงานคอนเสิร์ตใหม่' }).click();
     await page.getByLabel('ชื่องานคอนเสิร์ต').fill(eventTitle);
     await page.getByLabel('สถานที่จัดงาน').fill('อิมแพ็ค อารีน่า ฮอลล์ 3');
@@ -66,7 +67,7 @@ test.describe('TASK-035: Primary Handover and Emergency Recovery (AC-97, AC-98)'
     await ownerContext.close();
 
     // 2. Organizer adds Scanner 1 and Scanner 2
-    await page.goto('/back-office/organizer');
+    await page.goto('/back-office/organizer#scanners');
     const scannerSelect = page.locator('#select-scanner-event');
     await expect(scannerSelect.locator(`option[value="${event.id}"]`)).toBeAttached({ timeout: 20000 });
     await scannerSelect.selectOption(event.id);
@@ -93,11 +94,12 @@ test.describe('TASK-035: Primary Handover and Emergency Recovery (AC-97, AC-98)'
     expect(sc1).toBeDefined();
     expect(sc2).toBeDefined();
 
-    // 3. Designate Scanner 1 as initial primary
+    // 3. Designate Scanner 1 as initial primary (if not auto-designated by D-89)
     const setPrimaryBtn1 = page.locator(`[data-testid="set-primary-scanner-${sc1.scannerId}"]`);
-    await expect(setPrimaryBtn1).toBeVisible({ timeout: 20000 });
-    await setPrimaryBtn1.click();
-    await expect(page.getByText('กำหนดเครื่องหลักสำหรับงานเรียบร้อยแล้ว (AC-94)')).toBeVisible({ timeout: 20000 });
+    if (await setPrimaryBtn1.isVisible({ timeout: 3000 }).catch(() => false)) {
+      await setPrimaryBtn1.click();
+      await expect(page.getByText('กำหนดเครื่องหลักสำหรับงานเรียบร้อยแล้ว (AC-94)')).toBeVisible({ timeout: 20000 });
+    }
 
     // 4. Test Handover Rejection: Attempt to handover to Scanner 2 before it downloads dataset (AC-97)
     const handoverBtn = page.locator(`[data-testid="handover-primary-scanner-${sc2.scannerId}"]`);

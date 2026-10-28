@@ -693,6 +693,39 @@ export async function removeScannerFromEvent(
   return (result.rowCount ?? 0) > 0;
 }
 
+export async function updateScannerName(
+  pool: Pool,
+  organizerId: string,
+  eventId: string,
+  scannerId: string,
+  newName: string,
+): Promise<{ id: string; name: string }> {
+  await ensureEventSchema(pool);
+
+  const evRes = await pool.query<{ organizerId: string }>('SELECT "organizerId" FROM events WHERE id = $1', [eventId]);
+  if (evRes.rowCount === 0) throw new Error('ไม่พบงานคอนเสิร์ต');
+  if (evRes.rows[0].organizerId !== organizerId) {
+    throw new Error('คุณไม่มีสิทธิ์จัดการทีมสแกนของงานนี้');
+  }
+
+  const trimmedName = newName.trim();
+  if (!trimmedName) {
+    throw new Error('กรุณาระบุชื่อเจ้าหน้าที่หรือจุดตรวจ');
+  }
+
+  const scRes = await pool.query('SELECT id FROM event_scanners WHERE "eventId" = $1 AND "scannerId" = $2', [eventId, scannerId]);
+  if ((scRes.rowCount ?? 0) === 0) {
+    throw new Error('ไม่พบข้อมูลทีมสแกนในงานนี้');
+  }
+
+  await inTransaction(pool, async client => {
+    await client.query('UPDATE auth_user SET name = $1, "updatedAt" = now() WHERE id = $2', [trimmedName, scannerId]);
+    await client.query('UPDATE event_primary_scanners SET "scannerName" = $1 WHERE "eventId" = $2 AND "scannerId" = $3', [trimmedName, eventId, scannerId]);
+  });
+
+  return { id: scannerId, name: trimmedName };
+}
+
 export async function listEventsForScanner(
   pool: Pool,
   scannerId: string,

@@ -74,6 +74,8 @@ describe('Organizer User Guide Workspace (D-86)', () => {
     expect(cssContent).toContain('.organizer-guide-page');
     expect(cssContent).toContain('.guide-page-container');
     expect(cssContent).toContain('.guide-header-text');
+    expect(cssContent).toContain('.guide-toolbar-actions');
+    expect(cssContent).toContain('.guide-action-pill-btn');
     expect(cssContent).toContain('.guide-module-card');
     expect(cssContent).toContain('.guide-step-content-card');
     expect(cssContent).toContain('.organizer-subnav-left-group');
@@ -96,6 +98,25 @@ describe('Organizer User Guide Workspace (D-86)', () => {
     expect(guideContent).toContain('aria-label="กลับสู่ด้านบนสุด"');
 
     // 3. Zero emojis check
+    expect(guideContent).not.toMatch(/\p{Extended_Pictographic}/u);
+  });
+
+  it('implements D-88: default collapsed state for all 4 guide modules', () => {
+    const guideContent = readFileSync(
+      join(rootDir, 'src/components/organizer-guide-view.tsx'),
+      'utf8',
+    );
+    // Initial state has scanning, concerts, finance, news set to false
+    expect(guideContent).toContain('scanning: false');
+    expect(guideContent).toContain('concerts: false');
+    expect(guideContent).toContain('finance: false');
+    expect(guideContent).toContain('news: false');
+
+    // Expand all and collapse all buttons exist
+    expect(guideContent).toContain('ขยายทั้งหมด');
+    expect(guideContent).toContain('พับทั้งหมด');
+
+    // Zero emojis check
     expect(guideContent).not.toMatch(/\p{Extended_Pictographic}/u);
   });
 });
