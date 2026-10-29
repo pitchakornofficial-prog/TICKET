@@ -57,4 +57,22 @@ describe('Admin Notifications Menu & Interactive Detail Modal (D-80)', () => {
     expect(cssContent).toContain('.notification-summary-card.is-unread');
     expect(cssContent).toContain('.notification-modal-card');
   });
+
+  it('enforces 100% monochrome black and white styling across all notification components (D-125)', () => {
+    const cssContent = readFileSync(
+      join(rootDir, 'src/app/globals.css'),
+      'utf8',
+    );
+    // Bell unread dot uses black (#0f172a), no red
+    expect(cssContent).toMatch(/\.bell-unread-dot\s*\{[^}]*background:\s*#0f172a/);
+    // Unread pill uses monochrome
+    expect(cssContent).toMatch(/\.notifications-unread-pill\s*\{[^}]*color:\s*#0f172a/);
+    // Unread card uses dark border
+    expect(cssContent).toMatch(/\.notification-summary-card\.is-unread\s*\{[^}]*border-left:\s*3\.5px solid #0f172a/);
+    // Badges are monochrome
+    expect(cssContent).toMatch(/\.notification-category-badge\s*\{[^}]*color:\s*#0f172a/);
+    // View full link uses underline
+    expect(cssContent).toMatch(/\.notification-view-full-btn\s*\{[^}]*text-decoration:\s*underline/);
+    expect(cssContent).toMatch(/\.notification-view-full-btn\s*\{[^}]*color:\s*#0f172a/);
+  });
 });

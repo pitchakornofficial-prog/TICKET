@@ -688,7 +688,7 @@ export function OwnerRefundApprovalManager() {
                             disabled={isProcessing}
                             data-testid={`confirm-reject-btn-${req.id}`}
                             style={{
-                              backgroundColor: '#dc2626',
+                              backgroundColor: '#0f172a',
                               color: '#ffffff',
                               border: 'none',
                               borderRadius: '6px',
@@ -753,7 +753,7 @@ export function OwnerRefundApprovalManager() {
                             disabled={isProcessing}
                             data-testid={`approve-refund-btn-${req.id}`}
                             style={{
-                              backgroundColor: '#1848ed',
+                              backgroundColor: '#0f172a',
                               color: '#ffffff',
                               border: 'none',
                               borderRadius: '6px',
@@ -844,10 +844,11 @@ export function OwnerRefundApprovalManager() {
                             onClick={() => handleCompleteTransfer(req)}
                             disabled={isProcessing}
                             data-testid={`confirm-complete-transfer-btn-${req.id}`}
+                            className="ui-btn ui-btn-primary ui-btn-sm"
                             style={{
-                              backgroundColor: '#16a34a',
+                              backgroundColor: '#0f172a',
                               color: '#ffffff',
-                              border: 'none',
+                              border: '1px solid #0f172a',
                               borderRadius: '6px',
                               padding: '8px 16px',
                               fontSize: '13px',
@@ -931,7 +932,7 @@ export function OwnerRefundApprovalManager() {
                             disabled={isProcessing}
                             data-testid={`confirm-record-failure-btn-${req.id}`}
                             style={{
-                              backgroundColor: '#dc2626',
+                              backgroundColor: '#0f172a',
                               color: '#ffffff',
                               border: 'none',
                               borderRadius: '6px',
@@ -995,10 +996,11 @@ export function OwnerRefundApprovalManager() {
                             onClick={() => setTransferringId(req.id)}
                             disabled={isProcessing}
                             data-testid={`open-transfer-btn-${req.id}`}
+                            className="ui-btn ui-btn-primary ui-btn-sm"
                             style={{
-                              backgroundColor: '#16a34a',
+                              backgroundColor: '#0f172a',
                               color: '#ffffff',
-                              border: 'none',
+                              border: '1px solid #0f172a',
                               borderRadius: '6px',
                               padding: '6px 16px',
                               fontSize: '13px',

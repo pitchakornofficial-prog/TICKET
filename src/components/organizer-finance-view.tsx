@@ -17,6 +17,7 @@ import {
   ChevronDownIcon,
 } from '@/components/icons';
 import { TicketIcon } from '@/components/ticket-icon';
+import { Button, Badge } from '@/components/ui';
 
 export interface OrganizerEventItem {
   id: string;
@@ -225,38 +226,13 @@ export function OrganizerFinanceView() {
 
   return (
     <div className="finance-management-container" data-testid="organizer-finance-view">
-      {/* 1. Header Toolbar & Quick Utilities */}
+      {/* 1. Header Toolbar (D-122: Clean Baseline) */}
       <header className="finance-management-header">
         <div className="finance-management-title-wrap">
           <h1 className="finance-management-title">รายงานการเงินและยอดรับเงิน</h1>
           <p className="finance-management-desc">
             ตรวจสอบภาพรวมรายได้จากการขายบัตร ยอดเงินสุทธิพร้อมรับ และประวัติการโอนเงินรายสัปดาห์
           </p>
-        </div>
-        <div className="finance-header-actions">
-          <button
-            type="button"
-            className="finance-action-btn btn-print"
-            onClick={() => window.print()}
-            data-testid="finance-print-btn"
-            title="พิมพ์หรือบันทึกเป็นเอกสาร PDF"
-            aria-label="พิมพ์หรือบันทึกเป็นเอกสาร PDF"
-          >
-            <PrinterIcon width={16} height={16} />
-            <span>พิมพ์ / บันทึก PDF รายงาน</span>
-          </button>
-          <button
-            type="button"
-            className="finance-action-btn btn-refresh"
-            onClick={handleRefresh}
-            disabled={loading || reportLoading}
-            data-testid="finance-refresh-btn"
-            title="รีเฟรชข้อมูลการเงินล่าสุด"
-            aria-label="รีเฟรชข้อมูลการเงินล่าสุด"
-          >
-            <RefreshIcon width={16} height={16} className={reportLoading ? 'icon-spinning' : ''} />
-            <span>รีเฟรชข้อมูล</span>
-          </button>
         </div>
       </header>
 
@@ -326,27 +302,58 @@ export function OrganizerFinanceView() {
         </div>
       </section>
 
-      {/* 3. Two Core Tabs Navigation */}
-      <nav className="finance-tabs-nav" aria-label="แถบสลับรายงานการเงิน">
-        <button
-          type="button"
-          className={`finance-tab-btn ${activeTab === 'breakdown' ? 'is-active' : ''}`}
-          onClick={() => setActiveTab('breakdown')}
-          data-testid="finance-tab-breakdown"
-        >
-          <BanknotesIcon width={16} height={16} />
-          <span>รายงานแยกรายคอนเสิร์ต</span>
-        </button>
-        <button
-          type="button"
-          className={`finance-tab-btn ${activeTab === 'payouts' ? 'is-active' : ''}`}
-          onClick={() => setActiveTab('payouts')}
-          data-testid="finance-tab-payouts"
-        >
-          <ClockIcon width={16} height={16} />
-          <span>ประวัติรอบโอนเงิน ({allPayouts.length})</span>
-        </button>
-      </nav>
+      {/* 3. Two Core Tabs Navigation & Actions Toolbar (D-122) */}
+      <div className="finance-tabs-wrapper">
+        <nav className="finance-tabs-nav" aria-label="แถบสลับรายงานการเงิน">
+          <button
+            type="button"
+            className={`finance-tab-btn ${activeTab === 'breakdown' ? 'is-active' : ''}`}
+            onClick={() => setActiveTab('breakdown')}
+            data-testid="finance-tab-breakdown"
+          >
+            <BanknotesIcon width={16} height={16} />
+            <span>รายงานแยกรายคอนเสิร์ต</span>
+          </button>
+          <button
+            type="button"
+            className={`finance-tab-btn ${activeTab === 'payouts' ? 'is-active' : ''}`}
+            onClick={() => setActiveTab('payouts')}
+            data-testid="finance-tab-payouts"
+          >
+            <ClockIcon width={16} height={16} />
+            <span>ประวัติรอบโอนเงิน ({allPayouts.length})</span>
+          </button>
+        </nav>
+
+        <div className="finance-header-actions">
+          <Button
+            variant="outline"
+            size="md"
+            className="finance-action-btn btn-print"
+            onClick={() => window.print()}
+            data-testid="finance-print-btn"
+            title="พิมพ์หรือบันทึกเป็นเอกสาร PDF"
+            aria-label="พิมพ์หรือบันทึกเป็นเอกสาร PDF"
+            icon={<PrinterIcon width={16} height={16} />}
+          >
+            พิมพ์ / บันทึก PDF รายงาน
+          </Button>
+          <Button
+            variant="outline"
+            size="md"
+            className="finance-action-btn btn-refresh"
+            onClick={handleRefresh}
+            disabled={loading || reportLoading}
+            loading={reportLoading}
+            data-testid="finance-refresh-btn"
+            title="รีเฟรชข้อมูลการเงินล่าสุด"
+            aria-label="รีเฟรชข้อมูลการเงินล่าสุด"
+            icon={<RefreshIcon width={16} height={16} />}
+          >
+            รีเฟรชข้อมูล
+          </Button>
+        </div>
+      </div>
 
       {/* 4. TAB 1: CONCERT BREAKDOWN */}
       {activeTab === 'breakdown' && (
@@ -684,7 +691,9 @@ export function OrganizerFinanceView() {
           >
             <div className="finance-modal-header">
               <div className="finance-modal-title-col">
-                <span className="finance-modal-badge">หลักฐานการโอนเงิน</span>
+                <Badge variant="brand" size="sm" className="finance-modal-badge">
+                  หลักฐานการโอนเงิน
+                </Badge>
                 <h3 id="payout-modal-title" className="finance-modal-title">
                   รายละเอียดการโอนเงินรายสัปดาห์
                 </h3>
@@ -703,7 +712,9 @@ export function OrganizerFinanceView() {
               <div className="finance-proof-summary-box">
                 <span className="finance-proof-amount-label">ยอดเงินที่โอนสำเร็จ</span>
                 <div className="finance-proof-amount-val">{formatBaht(selectedPayout.amount)}</div>
-                <span className="finance-proof-status-pill">โอนเข้าบัญชีเรียบร้อย</span>
+                <Badge variant="success" size="md" className="finance-proof-status-pill">
+                  โอนเข้าบัญชีเรียบร้อย
+                </Badge>
               </div>
 
               <div className="finance-proof-details-list">

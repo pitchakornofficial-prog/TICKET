@@ -500,7 +500,7 @@ export function OwnerWeeklyPayoutManager() {
                     fontSize: '14px',
                     fontWeight: 600,
                     borderRadius: '6px',
-                    backgroundColor: '#dc2626',
+                    backgroundColor: '#0f172a',
                     color: '#ffffff',
                     border: 'none',
                     cursor: submitting ? 'not-allowed' : 'pointer',

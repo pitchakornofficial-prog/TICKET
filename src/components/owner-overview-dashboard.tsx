@@ -155,7 +155,10 @@ export function OwnerOverviewDashboard({
                 ศูนย์ควบคุม ติดตามสถานะงานค้าง การอนุมัติ และภาพรวมทั้งแพลตฟอร์ม
               </p>
             </div>
+          </header>
 
+          {/* Quick Actions Bar (D-122: Action Toolbar) */}
+          <div className="owner-overview-quick-actions-bar">
             <div className="owner-overview-header-actions">
               <button
                 type="button"
@@ -179,7 +182,7 @@ export function OwnerOverviewDashboard({
                 <span>{loading ? 'กำลังโหลด...' : 'รีเฟรช'}</span>
               </button>
             </div>
-          </header>
+          </div>
 
           {/* Top 4 Platform KPI Summary Strip */}
           <section className="owner-kpi-grid" aria-label="สรุปตัวชี้วัดสำคัญระดับแพลตฟอร์ม">

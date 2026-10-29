@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import Link from 'next/link';
 import { TicketIcon } from './ticket-icon';
+import { Button, Badge } from '@/components/ui';
 import {
   CheckCircleIcon,
   AlertTriangleIcon,
@@ -688,12 +689,14 @@ export function OrganizerScannerManager() {
 
   return (
     <section className="form-card organizer-scanner-card" aria-labelledby="organizer-scanner-heading">
-      {/* Top Header */}
+      {/* Top Header (D-119) */}
       <div className="scanner-workspace-header">
         <div className="scanner-workspace-title-wrap">
-          <h2 id="organizer-scanner-heading">จัดการทีมสแกนบัตรเฉพาะงาน</h2>
-          <p className="card-caption">
-            เพิ่มทีมสแกนเพิ่มเติมได้สูงสุด 3 คนต่อคอนเสิร์ต เข้าใช้งานผ่านลิงก์หรือคิวอาร์โค้ดโดยไม่ต้องล็อกอินเอง
+          <h1 id="organizer-scanner-heading" className="scanner-workspace-title">
+            เจ้าหน้าที่และอุปกรณ์สแกนบัตร
+          </h1>
+          <p className="scanner-workspace-desc card-caption">
+            เพิ่มและจัดการทีมสแกนเนอร์ ตรวจสอบสถานะการเชื่อมต่อ และควบคุมประตูเข้างาน
           </p>
         </div>
       </div>
@@ -774,9 +777,13 @@ export function OrganizerScannerManager() {
                   เลือกงานคอนเสิร์ตที่ต้องการจัดทีมสแกน
                 </label>
                 {selectedEventObj && (
-                  <span className={`trigger-status-badge ${selectedEventObj.status === 'approved' ? 'approved' : 'draft'}`}>
+                  <Badge
+                    variant={selectedEventObj.status === 'approved' ? 'success' : 'neutral'}
+                    size="sm"
+                    className={`trigger-status-badge ${selectedEventObj.status === 'approved' ? 'approved' : 'draft'}`}
+                  >
                     {selectedEventObj.status === 'approved' ? 'อนุมัติแล้ว' : 'ฉบับร่าง'}
-                  </span>
+                  </Badge>
                 )}
               </div>
 
@@ -942,8 +949,9 @@ export function OrganizerScannerManager() {
 
             {/* Right: Action Buttons Toolbar */}
             <div className="scanner-control-actions-toolbar">
-              <button
-                type="button"
+              <Button
+                variant="primary"
+                size="md"
                 className="scanner-control-btn btn-add-scanner"
                 onClick={() => {
                   if (isQuotaFull) return;
@@ -954,23 +962,24 @@ export function OrganizerScannerManager() {
                 }}
                 disabled={isQuotaFull}
                 title={isQuotaFull ? 'ครบโควตาทีมงานเสริม 3 คนแล้ว (ไม่รวมเครื่องหลัก)' : 'เพิ่มเจ้าหน้าที่สแกนใหม่'}
+                icon={<UserPlusIcon width={15} height={15} />}
               >
-                <UserPlusIcon width={15} height={15} />
-                <span>+ เพิ่มเจ้าหน้าที่สแกน</span>
-              </button>
+                + เพิ่มเจ้าหน้าที่สแกน
+              </Button>
 
               {currentPrimaryScanner && !isHalted && (
-                <button
-                  type="button"
+                <Button
+                  variant="danger"
+                  size="md"
                   id="emergency-stop-offline-btn"
                   data-testid="emergency-stop-offline-btn"
                   className="scanner-control-btn btn-emergency-halt"
                   onClick={() => setShowEmergencyModal(true)}
                   title="แจ้งเครื่องหลักชำรุด หรือระงับการใช้งานออฟไลน์เพื่อกระทบยอด"
+                  icon={<AlertTriangleIcon width={15} height={15} className="scanner-control-emergency-icon" />}
                 >
-                  <AlertTriangleIcon width={15} height={15} className="scanner-control-emergency-icon" />
-                  <span>แจ้งเครื่องหลักชำรุด / ระงับออฟไลน์ (AC-98)</span>
-                </button>
+                  แจ้งเครื่องหลักชำรุด / ระงับออฟไลน์ (AC-98)
+                </Button>
               )}
             </div>
           </div>

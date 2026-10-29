@@ -20,6 +20,7 @@ import {
 } from './icons';
 import { TicketIcon } from './ticket-icon';
 import { AlertIcon } from './alert-icon';
+import { Button, Badge } from '@/components/ui';
 import { OrganizerMoneyReportView } from './organizer-money-report-view';
 import { formatBaht, formatDate, formatTime } from '@/lib/locale';
 
@@ -579,7 +580,7 @@ export function OrganizerEventsManager({
 
   return (
     <div className="events-management-container">
-      {/* 1. Header with Title & Create Button (D-109) */}
+      {/* 1. Header with Title & Description (D-122: Clean Baseline) */}
       <header className="events-management-header">
         <div className="events-management-title-wrap">
           <h1 className="events-management-title">งานคอนเสิร์ตของคุณ</h1>
@@ -587,18 +588,6 @@ export function OrganizerEventsManager({
             สร้างฉบับร่าง จัดการรอบการแสดง ขอแก้ไขราคา หรือตรวจสอบรายงานการเงินแยกรายคอนเสิร์ต
           </p>
         </div>
-        <button
-          type="button"
-          className="events-create-btn"
-          onClick={() => {
-            setShowForm(true);
-            setWizardStep(1);
-          }}
-          data-testid="open-create-concert-btn"
-        >
-          <PlusIcon width={16} height={16} />
-          <span>+ สร้างงานคอนเสิร์ตใหม่</span>
-        </button>
       </header>
 
       {error && <p className="form-error status-banner error" role="alert">{error}</p>}
@@ -641,17 +630,32 @@ export function OrganizerEventsManager({
           </button>
         </nav>
 
-        <div className="events-search-wrap">
-          <SearchIcon width={16} height={16} style={{ color: '#94a3b8' }} />
-          <label htmlFor={filterSearchInputId} className="sr-only">ค้นหารายการหรือสถานที่จัดแสดง</label>
-          <input
-            id={filterSearchInputId}
-            type="search"
-            className="events-search-input"
-            placeholder="ค้นหาชื่องาน หรือสถานที่จัดงาน..."
-            value={searchQuery}
-            onChange={e => setSearchQuery(e.target.value)}
-          />
+        <div className="events-filter-actions">
+          <div className="events-search-wrap">
+            <SearchIcon width={16} height={16} style={{ color: '#94a3b8' }} />
+            <label htmlFor={filterSearchInputId} className="sr-only">ค้นหารายการหรือสถานที่จัดแสดง</label>
+            <input
+              id={filterSearchInputId}
+              type="search"
+              className="events-search-input"
+              placeholder="ค้นหาชื่องาน หรือสถานที่จัดงาน..."
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+            />
+          </div>
+          <Button
+            variant="primary"
+            size="md"
+            className="events-create-btn"
+            onClick={() => {
+              setShowForm(true);
+              setWizardStep(1);
+            }}
+            data-testid="open-create-concert-btn"
+            icon={<PlusIcon width={16} height={16} />}
+          >
+            + สร้างงานคอนเสิร์ตใหม่
+          </Button>
         </div>
       </div>
 
@@ -1302,9 +1306,13 @@ export function OrganizerEventsManager({
               {/* Body (Clean No-Thumbnail Layout - D-110) */}
               <div className="events-card-body">
                 <div className="events-card-badges-row">
-                  <span className={`events-status-badge status-${ev.status}`}>
+                  <Badge
+                    variant={ev.status === 'approved' ? 'success' : ev.status === 'draft' ? 'neutral' : 'warning'}
+                    size="sm"
+                    className={`events-status-badge status-${ev.status}`}
+                  >
                     สถานะ: {ev.status}
-                  </span>
+                  </Badge>
                   {ev.createdAt && (
                     <span className="events-card-timestamp" style={{ fontSize: '0.75rem', color: '#64748b', display: 'inline-flex', alignItems: 'center', gap: '4px' }}>
                       <ClockIcon width={12} height={12} />
@@ -1595,7 +1603,7 @@ export function OrganizerEventsManager({
                     disabled={amendmentSubmitting}
                     data-testid="submit-amendment-btn"
                     style={{
-                      backgroundColor: '#1848ed',
+                      backgroundColor: '#0f172a',
                       color: '#ffffff',
                       border: 'none',
                       borderRadius: '4px',
@@ -1755,7 +1763,7 @@ export function OrganizerEventsManager({
                     disabled={cancelSubmitting}
                     data-testid="submit-cancel-session-btn"
                     style={{
-                      backgroundColor: '#dc2626',
+                      backgroundColor: '#0f172a',
                       color: '#ffffff',
                       border: 'none',
                       borderRadius: '4px',

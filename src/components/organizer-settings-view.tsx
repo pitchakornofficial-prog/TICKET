@@ -10,6 +10,7 @@ import {
   ShieldCheckIcon,
   CrossCircleIcon,
 } from '@/components/icons';
+import { Button } from '@/components/ui';
 
 interface BankAccount {
   id: string;
@@ -256,6 +257,16 @@ export function OrganizerSettingsView() {
 
   return (
     <div className="settings-page-container">
+      {/* Standardized Header Toolbar (D-119) */}
+      <header className="settings-page-header">
+        <div className="settings-header-text">
+          <h1 className="settings-page-title">การตั้งค่าโปรไฟล์และบัญชีผู้จัดงาน</h1>
+          <p className="settings-page-desc">
+            จัดการข้อมูลผู้จัดงาน ข้อมูลติดต่อฉุกเฉิน ความปลอดภัยรหัสผ่าน และบัญชีธนาคารสำหรับรับเงิน
+          </p>
+        </div>
+      </header>
+
       {/* 1. Jump Toolbar (D-78) */}
       <nav className="settings-jump-toolbar" aria-label="แถบปุ่มลัดไปยังส่วนต่าง ๆ">
         <span className="jump-toolbar-label">ไปที่การ์ด:</span>
@@ -396,9 +407,9 @@ export function OrganizerSettingsView() {
             </div>
 
             <div className="settings-form-actions">
-              <button type="submit" className="primary-button">
+              <Button type="submit" variant="primary" size="md">
                 บันทึกข้อมูลโปรไฟล์
-              </button>
+              </Button>
             </div>
           </form>
         </section>

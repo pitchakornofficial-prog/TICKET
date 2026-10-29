@@ -13,6 +13,7 @@ import {
   ClockIcon,
 } from '@/components/icons';
 import { TicketIcon } from '@/components/ticket-icon';
+import { Button, Badge } from '@/components/ui';
 
 export interface OrganizerNewsItem {
   id: string;
@@ -372,7 +373,7 @@ export function OrganizerNewsView() {
 
       {/* MAIN VIEW: LIST (Always retained as base view) */}
       <div className="news-management-container">
-        {/* Header Toolbar */}
+        {/* Header Toolbar (D-122: Clean Baseline) */}
         <header className="news-management-header">
           <div className="news-management-title-wrap">
             <h1 className="news-management-title">จัดการข่าวสารและประกาศ</h1>
@@ -381,59 +382,63 @@ export function OrganizerNewsView() {
               เพื่อให้เจ้าของระบบตรวจสอบและอนุมัติก่อนเผยแพร่สู่สาธารณะ
             </p>
           </div>
-          <button
-            type="button"
-            className="news-create-btn"
-            onClick={handleStartCreate}
-          >
-            <PencilSquareIcon width={16} height={16} />
-            <span>+ เขียนข่าวสารใหม่</span>
-          </button>
         </header>
 
-        {/* Status Filter Tabs */}
-        <nav className="news-status-tabs" aria-label="ตัวกรองสถานะข่าวสาร">
-          <button
-            type="button"
-            className={`news-status-tab ${activeTab === 'all' ? 'is-active' : ''}`}
-            onClick={() => setActiveTab('all')}
+        {/* Filter Bar with Status Tabs & Create Action */}
+        <div className="news-filter-bar">
+          <nav className="news-status-tabs" aria-label="ตัวกรองสถานะข่าวสาร">
+            <button
+              type="button"
+              className={`news-status-tab ${activeTab === 'all' ? 'is-active' : ''}`}
+              onClick={() => setActiveTab('all')}
+            >
+              <span>ทั้งหมด</span>
+              <span className="news-tab-count">{countByStatus.all}</span>
+            </button>
+            <button
+              type="button"
+              className={`news-status-tab ${activeTab === 'draft' ? 'is-active' : ''}`}
+              onClick={() => setActiveTab('draft')}
+            >
+              <span>ฉบับร่าง</span>
+              <span className="news-tab-count">{countByStatus.draft}</span>
+            </button>
+            <button
+              type="button"
+              className={`news-status-tab ${activeTab === 'pending' ? 'is-active' : ''}`}
+              onClick={() => setActiveTab('pending')}
+            >
+              <span>รออนุมัติ</span>
+              <span className="news-tab-count">{countByStatus.pending}</span>
+            </button>
+            <button
+              type="button"
+              className={`news-status-tab ${activeTab === 'published' ? 'is-active' : ''}`}
+              onClick={() => setActiveTab('published')}
+            >
+              <span>เผยแพร่แล้ว</span>
+              <span className="news-tab-count">{countByStatus.published}</span>
+            </button>
+            <button
+              type="button"
+              className={`news-status-tab ${activeTab === 'rejected' ? 'is-active' : ''}`}
+              onClick={() => setActiveTab('rejected')}
+            >
+              <span>ส่งกลับแก้ไข</span>
+              <span className="news-tab-count">{countByStatus.rejected}</span>
+            </button>
+          </nav>
+
+          <Button
+            variant="primary"
+            size="md"
+            className="news-create-btn"
+            onClick={handleStartCreate}
+            icon={<PencilSquareIcon width={16} height={16} />}
           >
-            <span>ทั้งหมด</span>
-            <span className="news-tab-count">{countByStatus.all}</span>
-          </button>
-          <button
-            type="button"
-            className={`news-status-tab ${activeTab === 'draft' ? 'is-active' : ''}`}
-            onClick={() => setActiveTab('draft')}
-          >
-            <span>ฉบับร่าง</span>
-            <span className="news-tab-count">{countByStatus.draft}</span>
-          </button>
-          <button
-            type="button"
-            className={`news-status-tab ${activeTab === 'pending' ? 'is-active' : ''}`}
-            onClick={() => setActiveTab('pending')}
-          >
-            <span>รออนุมัติ</span>
-            <span className="news-tab-count">{countByStatus.pending}</span>
-          </button>
-          <button
-            type="button"
-            className={`news-status-tab ${activeTab === 'published' ? 'is-active' : ''}`}
-            onClick={() => setActiveTab('published')}
-          >
-            <span>เผยแพร่แล้ว</span>
-            <span className="news-tab-count">{countByStatus.published}</span>
-          </button>
-          <button
-            type="button"
-            className={`news-status-tab ${activeTab === 'rejected' ? 'is-active' : ''}`}
-            onClick={() => setActiveTab('rejected')}
-          >
-            <span>ส่งกลับแก้ไข</span>
-            <span className="news-tab-count">{countByStatus.rejected}</span>
-          </button>
-        </nav>
+            + เขียนข่าวสารใหม่
+          </Button>
+        </div>
 
         {/* News Items List (แบบ A - Horizontal Editorial Cards) */}
         <div className="news-cards-list">
@@ -461,9 +466,21 @@ export function OrganizerNewsView() {
                 {/* Details & Metadata (Clean No-Thumbnail Layout per D-84) */}
                 <div className="news-card-body">
                   <div className="news-card-badges-row">
-                    <span className={`news-status-badge ${STATUS_LABELS[item.status].class}`}>
+                    <Badge
+                      variant={
+                        item.status === 'published'
+                          ? 'success'
+                          : item.status === 'pending'
+                            ? 'warning'
+                            : item.status === 'rejected'
+                              ? 'danger'
+                              : 'neutral'
+                      }
+                      size="sm"
+                      className={`news-status-badge ${STATUS_LABELS[item.status].class}`}
+                    >
                       {STATUS_LABELS[item.status].label}
-                    </span>
+                    </Badge>
                     <span className="news-category-badge">{item.category}</span>
                     {item.relatedConcert && (
                       <span className="news-concert-badge">

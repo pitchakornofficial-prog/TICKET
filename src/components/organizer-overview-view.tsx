@@ -16,6 +16,7 @@ import {
   AlertTriangleIcon,
 } from './icons';
 import { TicketIcon } from './ticket-icon';
+import { Button, Badge } from '@/components/ui';
 import { formatBaht } from '@/lib/locale';
 import type { OrganizerSectionId } from './organizer-workspace-view';
 
@@ -169,43 +170,13 @@ export function OrganizerOverviewView({
 
   return (
     <div className="overview-workspace-container" data-testid="organizer-overview-view">
-      {/* Header Toolbar */}
+      {/* Header Toolbar (D-122: Clean Baseline) */}
       <header className="overview-header-toolbar">
         <div className="overview-header-titles">
           <h1 className="overview-header-title">ภาพรวมระบบผู้จัดงาน</h1>
           <p className="overview-header-subtitle">
             ติดตามสถานะงานคอนเสิร์ต ยอดจำหน่ายบัตร และความพร้อมของทีมงานแบบเรียลไทม์
           </p>
-        </div>
-
-        <div className="overview-header-actions">
-          <button
-            type="button"
-            className="overview-create-btn"
-            data-testid="overview-create-event-btn"
-            onClick={() => {
-              if (onOpenCreateConcert) {
-                onOpenCreateConcert();
-              } else if (onNavigateSection) {
-                onNavigateSection('events');
-              }
-            }}
-          >
-            <PlusIcon className="btn-icon" />
-            <span>สร้างคอนเสิร์ตใหม่</span>
-          </button>
-
-          <button
-            type="button"
-            className="overview-refresh-btn"
-            data-testid="overview-refresh-btn"
-            onClick={handleRefresh}
-            disabled={refreshing || loading}
-            aria-label="รีเฟรชข้อมูลภาพรวม"
-          >
-            <RefreshIcon className={`btn-icon ${refreshing ? 'animate-spin' : ''}`} />
-            <span>รีเฟรชข้อมูล</span>
-          </button>
         </div>
       </header>
 
@@ -215,6 +186,42 @@ export function OrganizerOverviewView({
           <span>{error}</span>
         </div>
       )}
+
+      {/* Quick Actions Bar (D-122: Action Toolbar) */}
+      <div className="overview-quick-actions-bar">
+        <div className="overview-header-actions">
+          <Button
+            variant="primary"
+            size="md"
+            className="overview-create-btn"
+            data-testid="overview-create-event-btn"
+            icon={<PlusIcon className="btn-icon" />}
+            onClick={() => {
+              if (onOpenCreateConcert) {
+                onOpenCreateConcert();
+              } else if (onNavigateSection) {
+                onNavigateSection('events');
+              }
+            }}
+          >
+            สร้างคอนเสิร์ตใหม่
+          </Button>
+
+          <Button
+            variant="outline"
+            size="md"
+            className="overview-refresh-btn"
+            data-testid="overview-refresh-btn"
+            onClick={handleRefresh}
+            disabled={refreshing || loading}
+            loading={refreshing}
+            icon={<RefreshIcon className="btn-icon" />}
+            aria-label="รีเฟรชข้อมูลภาพรวม"
+          >
+            รีเฟรชข้อมูล
+          </Button>
+        </div>
+      </div>
 
       {/* Top 4 Summary KPI Strip */}
       <section className="overview-kpi-grid" aria-label="สรุปตัวชี้วัดสำคัญภาพรวม">
@@ -421,9 +428,21 @@ export function OrganizerOverviewView({
                 <div key={ev.id} className="overview-event-card" data-testid={`overview-event-card-${ev.id}`}>
                   <div className="overview-event-main">
                     <div className="overview-event-header-line">
-                      <span className={`status-badge status-${ev.status}`}>
+                      <Badge
+                        variant={
+                          ev.status === 'approved'
+                            ? 'success'
+                            : ev.status === 'pending_approval'
+                              ? 'warning'
+                              : ev.status === 'cancelled'
+                                ? 'danger'
+                                : 'neutral'
+                        }
+                        size="sm"
+                        className={`status-badge status-${ev.status}`}
+                      >
                         {getStatusLabel(ev.status)}
-                      </span>
+                      </Badge>
                       <h3 className="overview-event-title">{ev.title}</h3>
                     </div>
 

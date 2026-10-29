@@ -11,6 +11,7 @@ import {
   AlertTriangleIcon,
 } from '@/components/icons';
 import { TicketIcon } from '@/components/ticket-icon';
+import { Button, Badge } from '@/components/ui';
 
 interface GuideStep {
   stepNum: number;
@@ -374,13 +375,14 @@ export function OrganizerGuideView() {
               <BookOpenIcon width={40} height={40} />
               <h2 className="guide-empty-title">ไม่พบหัวข้อคู่มือที่ตรงกับ &quot;{searchQuery}&quot;</h2>
               <p className="guide-empty-desc">ลองค้นหาด้วยคำสั้น ๆ หรือกดปุ่มด้านล่างเพื่อแสดงคู่มือทั้งหมด</p>
-              <button
-                type="button"
+              <Button
+                variant="primary"
+                size="sm"
                 className="guide-reset-btn"
                 onClick={() => setSearchQuery('')}
               >
                 ดูคู่มือทั้งหมด
-              </button>
+              </Button>
             </div>
           ) : (
             filteredModules.map((module) => {
@@ -405,7 +407,9 @@ export function OrganizerGuideView() {
                       </div>
                       <div className="guide-module-title-col">
                         <div className="guide-module-meta-row">
-                          <span className="guide-module-badge">{module.badge}</span>
+                          <Badge variant="brand" size="sm" className="guide-module-badge">
+                            {module.badge}
+                          </Badge>
                           <span className="guide-steps-count">{module.steps.length} ขั้นตอนสำคัญ</span>
                         </div>
                         <h2 id={`module-heading-${module.id}`} className="guide-module-title">

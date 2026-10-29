@@ -9,12 +9,13 @@ export function authOptions(pool: Pool, settings: { baseURL: string; secret: str
   if (!['http:', 'https:'].includes(url.protocol) || (!local && url.protocol !== 'https:') || url.username || url.password || url.pathname !== '/' || url.search || url.hash) {
     throw new Error('BETTER_AUTH_URL must be an HTTPS origin (HTTP is allowed on loopback only)');
   }
+  const trustedOrigins = [url.origin];
   return {
     appName: 'TICKET',
     baseURL: url.origin,
     secret: settings.secret,
     database: pool,
-    trustedOrigins: [url.origin],
+    trustedOrigins,
     emailAndPassword: {
       enabled: true,
       disableSignUp: true,

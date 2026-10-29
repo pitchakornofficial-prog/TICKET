@@ -333,7 +333,7 @@ export function OwnerPoliciesView() {
 
   return (
     <div className="policies-management-container" data-testid="owner-policies-view">
-      {/* 1. Header Toolbar */}
+      {/* 1. Header Toolbar (D-122: Clean Baseline) */}
       <header className="policies-management-header">
         <div className="policies-management-title-wrap">
           <h1 className="policies-management-title">นโยบายและกฎบัตรการกำกับดูแลแพลตฟอร์ม</h1>
@@ -341,17 +341,6 @@ export function OwnerPoliciesView() {
             ข้อกำหนด กฎบัตรการกำกับดูแล มาตรการความปลอดภัยทางการเงิน และนโยบายการให้บริการของแพลตฟอร์ม TICKET
           </p>
         </div>
-        <button
-          type="button"
-          className="policies-print-btn"
-          onClick={() => window.print()}
-          data-testid="owner-policies-print-btn"
-          title="พิมพ์หรือบันทึกเป็นเอกสาร PDF"
-          aria-label="พิมพ์หรือบันทึกเป็นเอกสาร PDF"
-        >
-          <PrinterIcon width={16} height={16} />
-          <span>พิมพ์ / บันทึก PDF ข้อตกลง</span>
-        </button>
       </header>
 
       {/* 2. Category Tabs & Search Bar */}
@@ -413,27 +402,41 @@ export function OwnerPoliciesView() {
           </button>
         </nav>
 
-        <div className="policies-search-wrap">
-          <SearchIcon width={16} height={16} className="policies-search-icon" />
-          <input
-            type="search"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="ค้นหานโยบายการกำกับดูแล..."
-            className="policies-search-input"
-            data-testid="owner-policies-search-input"
-            aria-label="ค้นหานโยบายการกำกับดูแล"
-          />
-          {searchQuery && (
-            <button
-              type="button"
-              className="policies-search-clear-btn"
-              onClick={() => setSearchQuery('')}
-              aria-label="ล้างคำค้นหา"
-            >
-              <XIcon width={14} height={14} />
-            </button>
-          )}
+        <div className="policies-filter-actions">
+          <div className="policies-search-wrap">
+            <SearchIcon width={16} height={16} className="policies-search-icon" />
+            <input
+              type="search"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="ค้นหานโยบายการกำกับดูแล..."
+              className="policies-search-input"
+              data-testid="owner-policies-search-input"
+              aria-label="ค้นหานโยบายการกำกับดูแล"
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                className="policies-search-clear-btn"
+                onClick={() => setSearchQuery('')}
+                aria-label="ล้างคำค้นหา"
+              >
+                <XIcon width={14} height={14} />
+              </button>
+            )}
+          </div>
+
+          <button
+            type="button"
+            className="policies-print-btn"
+            onClick={() => window.print()}
+            data-testid="owner-policies-print-btn"
+            title="พิมพ์หรือบันทึกเป็นเอกสาร PDF"
+            aria-label="พิมพ์หรือบันทึกเป็นเอกสาร PDF"
+          >
+            <PrinterIcon width={16} height={16} />
+            <span>พิมพ์ / บันทึก PDF ข้อตกลง</span>
+          </button>
         </div>
       </div>
 

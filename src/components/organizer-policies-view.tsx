@@ -13,6 +13,7 @@ import {
   ChevronDownIcon,
   ChevronUpIcon,
 } from '@/components/icons';
+import { Button, Badge } from '@/components/ui';
 
 export type PolicyCategory = 'all' | 'finance' | 'amendment' | 'scanning' | 'legal';
 
@@ -281,7 +282,7 @@ export function OrganizerPoliciesView() {
 
   return (
     <div className="policies-management-container" data-testid="organizer-policies-view">
-      {/* 1. Header Toolbar */}
+      {/* 1. Header Toolbar (D-122: Clean Baseline) */}
       <header className="policies-management-header">
         <div className="policies-management-title-wrap">
           <h1 className="policies-management-title">ข้อตกลงและเงื่อนไขการให้บริการสำหรับผู้จัดงาน</h1>
@@ -289,17 +290,6 @@ export function OrganizerPoliciesView() {
             ข้อกำหนดความร่วมมือ มาตรการทางการเงิน กติกาการสแกน และความรับผิดชอบร่วมกันระหว่างผู้จัดงานและแพลตฟอร์ม TICKET
           </p>
         </div>
-        <button
-          type="button"
-          className="policies-print-btn"
-          onClick={() => window.print()}
-          data-testid="policies-print-btn"
-          title="พิมพ์หรือบันทึกเป็นเอกสาร PDF"
-          aria-label="พิมพ์หรือบันทึกเป็นเอกสาร PDF"
-        >
-          <PrinterIcon width={16} height={16} />
-          <span>พิมพ์ / บันทึก PDF ข้อตกลง</span>
-        </button>
       </header>
 
       {/* 2. Category Tabs & Search Bar */}
@@ -352,27 +342,42 @@ export function OrganizerPoliciesView() {
           </button>
         </nav>
 
-        <div className="policies-search-wrap">
-          <SearchIcon width={16} height={16} className="policies-search-icon" />
-          <input
-            type="text"
-            className="policies-search-input"
-            placeholder="ค้นหาข้อตกลง เช่น ค่าบริการ, คืนเงิน, โควตาสแกน, PDPA..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            aria-label="ค้นหาข้อตกลงและเงื่อนไข"
-            data-testid="policies-search-input"
-          />
-          {searchQuery && (
-            <button
-              type="button"
-              className="policies-search-clear-btn"
-              onClick={() => setSearchQuery('')}
-              aria-label="ล้างคำค้นหา"
-            >
-              <XIcon width={14} height={14} />
-            </button>
-          )}
+        <div className="policies-filter-actions">
+          <div className="policies-search-wrap">
+            <SearchIcon width={16} height={16} className="policies-search-icon" />
+            <input
+              type="text"
+              className="policies-search-input"
+              placeholder="ค้นหาข้อตกลง เช่น ค่าบริการ, คืนเงิน, โควตาสแกน, PDPA..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              aria-label="ค้นหาข้อตกลงและเงื่อนไข"
+              data-testid="policies-search-input"
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                className="policies-search-clear-btn"
+                onClick={() => setSearchQuery('')}
+                aria-label="ล้างคำค้นหา"
+              >
+                <XIcon width={14} height={14} />
+              </button>
+            )}
+          </div>
+
+          <Button
+            variant="outline"
+            size="md"
+            className="policies-print-btn"
+            onClick={() => window.print()}
+            data-testid="policies-print-btn"
+            title="พิมพ์หรือบันทึกเป็นเอกสาร PDF"
+            aria-label="พิมพ์หรือบันทึกเป็นเอกสาร PDF"
+            icon={<PrinterIcon width={16} height={16} />}
+          >
+            พิมพ์ / บันทึก PDF ข้อตกลง
+          </Button>
         </div>
       </div>
 
@@ -422,7 +427,9 @@ export function OrganizerPoliciesView() {
                   </div>
                   <div className="policy-card-title-block">
                     <div className="policy-card-meta-line">
-                      <span className="policy-card-badge">{section.badge}</span>
+                      <Badge variant="brand" size="sm" className="policy-card-badge">
+                        {section.badge}
+                      </Badge>
                     </div>
                     <h2 className="policy-card-title">{section.title}</h2>
                     <p className="policy-card-subtitle">{section.subtitle}</p>

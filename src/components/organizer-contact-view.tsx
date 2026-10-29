@@ -11,6 +11,7 @@ import {
   AlertTriangleIcon,
   CheckIcon,
 } from '@/components/icons';
+import { Button } from '@/components/ui';
 
 const TOPIC_CATEGORIES = [
   'ปัญหาการเงินและการจ่ายเงินรอบสัปดาห์',
@@ -352,10 +353,15 @@ export function OrganizerContactView() {
 
                 {/* Submit Action */}
                 <div className="contact-form-footer">
-                  <button type="submit" className="contact-submit-btn">
-                    <PaperAirplaneIcon width={16} height={16} />
-                    <span>ส่งข้อความถึงเจ้าของระบบ</span>
-                  </button>
+                  <Button
+                    type="submit"
+                    variant="primary"
+                    size="md"
+                    className="contact-submit-btn"
+                    icon={<PaperAirplaneIcon width={16} height={16} />}
+                  >
+                    ส่งข้อความถึงเจ้าของระบบ
+                  </Button>
                 </div>
               </form>
             </div>
