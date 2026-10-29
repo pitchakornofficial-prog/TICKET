@@ -242,7 +242,7 @@ export function OwnerRefundApprovalManager() {
       >
         <div>
           <h2 style={{ fontSize: '18px', fontWeight: 'bold', color: '#0f172a', margin: '0 0 4px 0' }}>
-            จัดการคำขอคืนเงินและการโอนคืน (Owner Refunds — AC-36, AC-37, AC-92, AC-93)
+            จัดการคำขอคืนเงินและการโอนคืน (Owner Refunds & Payouts)
           </h2>
           <p style={{ fontSize: '13px', color: '#64748b', margin: 0 }}>
             อนุมัติคำขอคืนเงิน เพิกถอนสิทธิ์ QR บันทึกการโอนเงินนอกระบบ พร้อมจัดเก็บหลักฐานแบบส่วนตัวเฉพาะผู้ดูแล

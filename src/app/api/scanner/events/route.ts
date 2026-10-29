@@ -7,13 +7,13 @@ export const runtime = 'nodejs';
 export async function GET(request: Request) {
   const auth = getAuth();
   const session = await auth.api.getSession({ headers: request.headers });
-  if (session?.user.role !== 'scanner') {
-    return Response.json({ message: 'ไม่อนุญาต: เฉพาะทีมสแกนเท่านั้น' }, { status: 403 });
+  if (!session?.user || !['scanner', 'organizer', 'owner'].includes(session.user.role)) {
+    return Response.json({ message: 'ไม่อนุญาต: เฉพาะทีมงานที่ได้รับสิทธิ์เท่านั้น' }, { status: 403 });
   }
 
   const pool = auth.options.database as Pool;
   try {
-    const events = await listEventsForScanner(pool, session.user.id);
+    const events = await listEventsForScanner(pool, session.user.id, session.user.role);
     return Response.json(
       {
         events,
@@ -21,6 +21,7 @@ export async function GET(request: Request) {
           id: session.user.id,
           name: session.user.name,
           email: session.user.email,
+          role: session.user.role,
         },
       },
       { status: 200, headers: { 'Cache-Control': 'no-store' } },

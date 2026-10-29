@@ -416,4 +416,232 @@ describe('Organizer Scanner Manager (D-89)', () => {
     expect(cssContent).toContain('.scanner-additional-section');
     expect(cssContent).toContain('.scanner-additional-heading');
   });
+
+  it('implements D-103: aligns edit name button style and dimensions with remove button (neutral slate outline, height 36px, no squished 26px width)', () => {
+    const cssContent = readFileSync(
+      join(rootDir, 'src/app/globals.css'),
+      'utf8',
+    );
+    // .scanner-action-btn.btn-edit-name matches .scanner-action-btn.btn-remove styling
+    expect(cssContent).toContain('.scanner-action-btn.btn-edit-name');
+    expect(cssContent).toContain('Matches btn-remove neutral outline style D-103');
+    // Ensure 26px squish width is removed from .scanner-edit-name-btn
+    expect(cssContent).not.toMatch(/\.scanner-edit-name-btn\s*\{[^}]*width:\s*26px/);
+  });
+
+  it('implements D-104: single-device binding, device status pill, reset device button, and access rejection', () => {
+    const scannerManagerContent = readFileSync(
+      join(rootDir, 'src/components/organizer-scanner-manager.tsx'),
+      'utf8',
+    );
+    expect(scannerManagerContent).toContain('scanner-device-pill');
+    expect(scannerManagerContent).toContain('ผูกเครื่องแล้ว');
+    expect(scannerManagerContent).toContain('ยังไม่ผูกเครื่อง');
+    expect(scannerManagerContent).toContain('btn-reset-device');
+    expect(scannerManagerContent).toContain('handleResetDevice');
+    expect(scannerManagerContent).toContain('scanner-device-binding-box');
+    expect(scannerManagerContent).not.toMatch(/\p{Extended_Pictographic}/u);
+
+    const cssContent = readFileSync(
+      join(rootDir, 'src/app/globals.css'),
+      'utf8',
+    );
+    expect(cssContent).toContain('.scanner-device-pill');
+    expect(cssContent).toContain('.scanner-device-pill.bound');
+    expect(cssContent).toContain('.scanner-device-pill.unbound');
+    expect(cssContent).toContain('.scanner-action-btn.btn-reset-device');
+
+    const accessRouteContent = readFileSync(
+      join(rootDir, 'src/app/scanner/access/route.ts'),
+      'utf8',
+    );
+    expect(accessRouteContent).toContain('scanner_device_id');
+    expect(accessRouteContent).toContain('boundDeviceId');
+    expect(accessRouteContent).toContain('/scanner/access-rejected');
+    expect(accessRouteContent).not.toMatch(/\p{Extended_Pictographic}/u);
+
+    const rejectedPageContent = readFileSync(
+      join(rootDir, 'src/app/scanner/access-rejected/page.tsx'),
+      'utf8',
+    );
+    expect(rejectedPageContent).toContain('ลิงก์นี้ถูกผูกใช้งานกับอุปกรณ์อื่นแล้ว');
+    expect(rejectedPageContent).toContain('รีเซ็ตอุปกรณ์');
+    expect(rejectedPageContent).not.toMatch(/\p{Extended_Pictographic}/u);
+
+    const resetDeviceRouteContent = readFileSync(
+      join(
+        rootDir,
+        'src/app/api/organizer/events/[id]/scanners/[scannerId]/reset-device/route.ts',
+      ),
+      'utf8',
+    );
+    expect(resetDeviceRouteContent).toContain('resetScannerDeviceBinding');
+    expect(resetDeviceRouteContent).not.toMatch(/\p{Extended_Pictographic}/u);
+  });
+
+  it('implements D-105: direct organizer terminal access, session preservation, and seamless role authorization', () => {
+    // 1. Organizer Primary Card direct terminal link with eventId parameter
+    const scannerManagerContent = readFileSync(
+      join(rootDir, 'src/components/organizer-scanner-manager.tsx'),
+      'utf8',
+    );
+    expect(scannerManagerContent).toMatch(
+      /\/back-office\/scanner\?eventId=\$\{selectedEventId\}/,
+    );
+    expect(scannerManagerContent).toContain('btn-open-terminal-primary');
+    expect(scannerManagerContent).not.toMatch(/\p{Extended_Pictographic}/u);
+
+    // 2. Back-office role routing allows organizer/owner into scanner workspace
+    const workspacePageContent = readFileSync(
+      join(rootDir, 'src/app/back-office/[role]/page.tsx'),
+      'utf8',
+    );
+    expect(workspacePageContent).toContain('isScannerWorkspaceAllowed');
+    expect(workspacePageContent).toContain("actor.role === 'organizer'");
+    expect(workspacePageContent).toContain('initialEventId={search?.eventId}');
+    expect(workspacePageContent).not.toMatch(/\p{Extended_Pictographic}/u);
+
+    // 3. Scanner events view auto-selects session for initialEventId
+    const scannerEventsViewContent = readFileSync(
+      join(rootDir, 'src/components/scanner-events-view.tsx'),
+      'utf8',
+    );
+    expect(scannerEventsViewContent).toContain('initialEventId');
+    expect(scannerEventsViewContent).toContain('target.sessions.length > 0');
+    expect(scannerEventsViewContent).toContain('actorRole={actorRole}');
+    expect(scannerEventsViewContent).not.toMatch(/\p{Extended_Pictographic}/u);
+
+    // 4. Scanner terminal contains back to organizer navigation
+    const terminalContent = readFileSync(
+      join(rootDir, 'src/components/scanner-admission-terminal.tsx'),
+      'utf8',
+    );
+    expect(terminalContent).toContain('กลับสู่หลังบ้านผู้จัด');
+    expect(terminalContent).toContain('back-to-organizer-btn');
+    expect(terminalContent).not.toMatch(/\p{Extended_Pictographic}/u);
+
+    // 5. Access route preserves organizer session on direct link / QR scan
+    const accessRouteContent = readFileSync(
+      join(rootDir, 'src/app/scanner/access/route.ts'),
+      'utf8',
+    );
+    expect(accessRouteContent).toContain('currentSession?.user');
+    expect(accessRouteContent).toContain(
+      "currentSession.user.role === 'owner'",
+    );
+    expect(accessRouteContent).toMatch(
+      /\/back-office\/scanner\?eventId=\$\{eventId\}/,
+    );
+    expect(accessRouteContent).not.toMatch(/\p{Extended_Pictographic}/u);
+
+    // 6. Scanner events API permits organizer and owner
+    const scannerEventsApiContent = readFileSync(
+      join(rootDir, 'src/app/api/scanner/events/route.ts'),
+      'utf8',
+    );
+    expect(scannerEventsApiContent).toContain(
+      "['scanner', 'organizer', 'owner'].includes(session.user.role)",
+    );
+    expect(scannerEventsApiContent).not.toMatch(/\p{Extended_Pictographic}/u);
+  });
+
+  it('implements D-106: scanner terminal 3-tab modular layout, monochrome styling, and camera auto-active', () => {
+    const terminalContent = readFileSync(
+      join(rootDir, 'src/components/scanner-admission-terminal.tsx'),
+      'utf8',
+    );
+    // 3 Tabs
+    expect(terminalContent).toContain('terminal-tab-scan');
+    expect(terminalContent).toContain('terminal-tab-logs');
+    expect(terminalContent).toContain('terminal-tab-offline');
+    expect(terminalContent).toContain('จุดสแกนบัตร');
+    expect(terminalContent).toContain('ประวัติการสแกน');
+    expect(terminalContent).toContain('จัดการระบบออฟไลน์');
+
+    // 3 Panels
+    expect(terminalContent).toContain('terminal-panel-scan');
+    expect(terminalContent).toContain('terminal-panel-logs');
+    expect(terminalContent).toContain('terminal-panel-offline');
+
+    // Auto-active camera by default
+    expect(terminalContent).toContain('useState(true)');
+
+    // Preserves essential controls
+    expect(terminalContent).toContain('mode-entry-btn');
+    expect(terminalContent).toContain('mode-exit-btn');
+    expect(terminalContent).toContain('scanner-ticket-input');
+    expect(terminalContent).toContain('scanner-submit-btn');
+    expect(terminalContent).toContain('scan-result-card');
+    expect(terminalContent).toContain('stats-currently-inside');
+    expect(terminalContent).toContain('stats-total-entries');
+    expect(terminalContent).toContain('stats-total-exits');
+    expect(terminalContent).toContain('toggle-offline-mode-btn');
+    expect(terminalContent).toContain('download-offline-dataset-btn');
+    expect(terminalContent).toContain('sync-offline-pending-btn');
+
+    // Zero emojis
+    expect(terminalContent).not.toMatch(/\p{Extended_Pictographic}/u);
+
+    // CSS Styling
+    const cssContent = readFileSync(
+      join(rootDir, 'src/app/globals.css'),
+      'utf8',
+    );
+    expect(cssContent).toContain('.terminal-sub-tabs-bar');
+    expect(cssContent).toContain('.terminal-tab-btn');
+    expect(cssContent).toContain('.scanner-conn-badge');
+    expect(cssContent).toContain('.terminal-quick-stats-grid');
+  });
+
+  it('D-107: scanner admission terminal features uncramped header, external tabs, unified toolbar with camera icon toggle, scan pause modal & unified 4-stat cards', () => {
+    const terminalContent = readFileSync(
+      join(rootDir, 'src/components/scanner-admission-terminal.tsx'),
+      'utf8',
+    );
+    // Header hierarchy
+    expect(terminalContent).toContain('terminal-header-card');
+    expect(terminalContent).toContain('terminal-top-nav');
+    expect(terminalContent).toContain('terminal-top-actions');
+    expect(terminalContent).toContain('terminal-heading-section');
+    expect(terminalContent).toContain('back-to-organizer-btn');
+    expect(terminalContent).toContain('close-terminal-btn');
+
+    // External tabs & content container
+    expect(terminalContent).toContain('terminal-sub-tabs-bar');
+    expect(terminalContent).toContain('admission-terminal-container');
+
+    // Unified mode toolbar with camera icon toggle
+    expect(terminalContent).toContain('terminal-control-toolbar');
+    expect(terminalContent).toContain('camera-icon-toggle-btn');
+    expect(terminalContent).toContain('CameraIcon');
+    expect(terminalContent).toContain('CameraOffIcon');
+    expect(terminalContent).toContain('toggle-camera-view-btn');
+
+    // Unified 4-metric stat cards
+    expect(terminalContent).toContain('stats-tab1-total-tickets');
+    expect(terminalContent).toContain('stats-total-tickets');
+    expect(terminalContent).toContain('stats-currently-inside');
+    expect(terminalContent).toContain('stats-total-entries');
+    expect(terminalContent).toContain('stats-total-exits');
+
+    // Scan result pause modal with scan next button
+    expect(terminalContent).toContain('terminal-modal-overlay');
+    expect(terminalContent).toContain('scan-next-btn');
+    expect(terminalContent).toContain('dismiss-scan-modal-btn');
+    expect(terminalContent).toContain('สแกนคนถัดไป');
+
+    // Zero emojis
+    expect(terminalContent).not.toMatch(/\p{Extended_Pictographic}/u);
+
+    // CSS validation
+    const cssContent = readFileSync(
+      join(rootDir, 'src/app/globals.css'),
+      'utf8',
+    );
+    expect(cssContent).toContain('.terminal-header-card');
+    expect(cssContent).toContain('.terminal-control-toolbar');
+    expect(cssContent).toContain('.camera-icon-toggle-btn');
+    expect(cssContent).toContain('.terminal-modal-overlay');
+    expect(cssContent).toContain('.scan-next-modal-btn');
+  });
 });

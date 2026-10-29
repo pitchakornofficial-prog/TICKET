@@ -538,7 +538,7 @@ export function OwnerSessionApprovalManager() {
       {/* 2. Session Cancellations Waiting Approval (AC-35, AC-91, AC-108) */}
       <div style={{ marginBottom: '2.5rem' }}>
         <h3 style={{ fontSize: '1.1rem', marginBottom: '0.75rem', color: '#dc2626' }}>
-          คำขอยกเลิกรอบการแสดงที่รอการอนุมัติ (Session Cancellations — AC-35, AC-108)
+          คำขอยกเลิกรอบการแสดงที่รอการอนุมัติ (Session Cancellations)
         </h3>
 
         {loading ? (

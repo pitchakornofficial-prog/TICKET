@@ -19,6 +19,9 @@ import { OrganizerContactView } from '@/components/organizer-contact-view';
 import { OrganizerGuideView } from '@/components/organizer-guide-view';
 import { OrganizerScannerManager } from '@/components/organizer-scanner-manager';
 import { OrganizerEventsManager } from '@/components/organizer-events-manager';
+import { OrganizerPoliciesView } from '@/components/organizer-policies-view';
+import { OrganizerFinanceView } from '@/components/organizer-finance-view';
+import { OrganizerOverviewView } from '@/components/organizer-overview-view';
 
 export type OrganizerSectionId =
   | 'overview'
@@ -75,6 +78,7 @@ export function OrganizerWorkspaceView({ initialSection }: OrganizerWorkspaceVie
   });
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [openCreateOnEvents, setOpenCreateOnEvents] = useState(false);
 
   // Sync with URL hash
   useEffect(() => {
@@ -95,9 +99,15 @@ export function OrganizerWorkspaceView({ initialSection }: OrganizerWorkspaceVie
 
   const handleSelectTab = (section: OrganizerSectionId) => {
     setActiveSection(section);
+    if (section !== 'events') {
+      setOpenCreateOnEvents(false);
+    }
     setMobileMenuOpen(false);
     if (window.history?.replaceState) {
       window.history.replaceState(null, '', `#${section}`);
+    }
+    if (typeof window !== 'undefined') {
+      window.scrollTo(0, 0);
     }
   };
 
@@ -231,8 +241,23 @@ export function OrganizerWorkspaceView({ initialSection }: OrganizerWorkspaceVie
           <OrganizerGuideView />
         ) : activeSection === 'scanners' ? (
           <OrganizerScannerManager />
+        ) : activeSection === 'finance' ? (
+          <OrganizerFinanceView />
+        ) : activeSection === 'policies' ? (
+          <OrganizerPoliciesView />
+        ) : activeSection === 'overview' ? (
+          <OrganizerOverviewView
+            onNavigateSection={handleSelectTab}
+            onOpenCreateConcert={() => {
+              setOpenCreateOnEvents(true);
+              handleSelectTab('events');
+            }}
+          />
         ) : activeSection === 'events' ? (
-          <OrganizerEventsManager />
+          <OrganizerEventsManager
+            initialOpenCreate={openCreateOnEvents}
+            onCloseCreate={() => setOpenCreateOnEvents(false)}
+          />
         ) : (
           <div
             className="organizer-blank-canvas"

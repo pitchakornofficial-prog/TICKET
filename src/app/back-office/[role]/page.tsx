@@ -18,14 +18,16 @@ export default async function Workspace({
   searchParams,
 }: {
   params: Promise<{ role: string }>;
-  searchParams?: Promise<{ section?: string }>;
+  searchParams?: Promise<{ section?: string; eventId?: string }>;
 }) {
   const { role } = await params;
   if (!isRole(role)) notFound();
   const actor = await readActor(getAuth(), await headers());
+  if (!actor) redirect('/login');
   const access = roleAccess(actor, role);
-  if (access === 'unauthenticated') redirect('/login');
-  if (access !== 'allowed' || !actor) notFound();
+  const isScannerWorkspaceAllowed =
+    role === 'scanner' && (actor.role === 'organizer' || actor.role === 'owner');
+  if (access !== 'allowed' && !isScannerWorkspaceAllowed) notFound();
   const search = searchParams ? await searchParams : undefined;
 
   return (
@@ -62,7 +64,7 @@ export default async function Workspace({
         {role === 'organizer' && <OrganizerWorkspaceView initialSection={search?.section} />}
         {role === 'scanner' && (
           <div className="scanner-workspace-canvas">
-            <ScannerEventsView />
+            <ScannerEventsView initialEventId={search?.eventId} actorRole={actor.role} />
           </div>
         )}
       </div>

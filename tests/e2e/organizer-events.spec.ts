@@ -47,6 +47,7 @@ test('organizer logs in, creates a concert draft with poster and views it in the
   await expect(card.getByText(`สถานที่: ${location}`)).toBeVisible();
   await expect(card.getByText('สถานะ: draft')).toBeVisible();
 
-  const posterImg = card.locator(`img[alt="โปสเตอร์ ${eventTitle}"]`);
-  await expect(posterImg).toBeVisible();
+  const storefrontLink = card.getByRole('link', { name: 'หน้าร้านลูกค้า' });
+  await expect(storefrontLink).toBeVisible();
+  await expect(storefrontLink).toHaveAttribute('href', /^\/events\//);
 });

@@ -34,6 +34,9 @@ interface ScannerItem {
   email: string;
   assignedAt: string;
   isPrimary?: boolean;
+  isBound?: boolean;
+  boundDeviceId?: string | null;
+  boundAt?: string | null;
 }
 
 interface EventOfflineControl {
@@ -155,6 +158,7 @@ export function OrganizerScannerManager() {
   const [editingScanner, setEditingScanner] = useState<ScannerItem | null>(null);
   const [editScannerName, setEditScannerName] = useState('');
   const [savingEditName, setSavingEditName] = useState(false);
+  const [resettingDevice, setResettingDevice] = useState(false);
 
   // Handover modal state
   const [handoverTarget, setHandoverTarget] = useState<ScannerItem | null>(null);
@@ -288,6 +292,9 @@ export function OrganizerScannerManager() {
       email: 'organizer-primary@ticket.local',
       assignedAt: new Date().toISOString(),
       isPrimary: true,
+      isBound: false,
+      boundDeviceId: null,
+      boundAt: null,
     };
     const nonPrimary = scanners.filter((s) => !s.isPrimary);
     return [primary, ...nonPrimary];
@@ -453,6 +460,41 @@ export function OrganizerScannerManager() {
       setError('เกิดข้อผิดพลาดในการแก้ไขชื่อทีมสแกน');
     } finally {
       setSavingEditName(false);
+    }
+  }
+
+  async function handleResetDevice(scannerId: string) {
+    if (
+      !confirm(
+        'ต้องการปลดล็อกอุปกรณ์เดิมของเจ้าหน้าที่คนนี้ใช่หรือไม่? อุปกรณ์เดิมจะถูกบังคับออกจากระบบทันที',
+      )
+    ) {
+      return;
+    }
+    setResettingDevice(true);
+    setError('');
+    setMessage('');
+    try {
+      const res = await fetch(
+        `/api/organizer/events/${selectedEventId}/scanners/${scannerId}/reset-device`,
+        { method: 'POST' },
+      );
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.message || 'รีเซ็ตอุปกรณ์ไม่สำเร็จ');
+      } else {
+        setMessage(data.message || 'รีเซ็ตอุปกรณ์เรียบร้อยแล้ว');
+        loadEventData(selectedEventId);
+        setActiveQrScanner((prev) =>
+          prev && prev.scannerId === scannerId
+            ? { ...prev, isBound: false, boundDeviceId: null, boundAt: null }
+            : prev,
+        );
+      }
+    } catch {
+      setError('เกิดข้อผิดพลาดในการเชื่อมต่อเพื่อรีเซ็ตอุปกรณ์');
+    } finally {
+      setResettingDevice(false);
     }
   }
 
@@ -1018,13 +1060,24 @@ export function OrganizerScannerManager() {
                       <span className="primary-device-email" title="บัญชีผู้จัดประจำเครื่อง">
                         {currentPrimaryScanner.email}
                       </span>
+                      <span className="primary-device-separator">•</span>
+                      <span
+                        className={`scanner-device-pill ${currentPrimaryScanner.isBound ? 'bound' : 'unbound'}`}
+                        title={
+                          currentPrimaryScanner.isBound
+                            ? 'อุปกรณ์ผูกสิทธิ์เข้าใช้งานแล้ว'
+                            : 'ยังไม่มีอุปกรณ์ผูกใช้งาน'
+                        }
+                      >
+                        {currentPrimaryScanner.isBound ? 'ผูกเครื่องแล้ว' : 'ยังไม่ผูกเครื่อง'}
+                      </span>
                     </div>
 
                     {/* 3 Dedicated Actions */}
                     <div className="primary-card-actions">
                       {/* Action 1: Open Scanner Terminal */}
                       <Link
-                        href="/back-office/scanner"
+                        href={`/back-office/scanner?eventId=${selectedEventId}`}
                         className="scanner-action-btn btn-open-terminal-primary"
                         title="เปิดหน้าจอ Terminal สแกนบัตร"
                         target="_blank"
@@ -1139,6 +1192,54 @@ export function OrganizerScannerManager() {
                                     <span className="scanner-account-email" title="บัญชีระบบ">
                                       {s.email}
                                     </span>
+                                    <span className="primary-device-separator">•</span>
+                                    <span
+                                      className={`scanner-device-pill ${s.isBound ? 'bound' : 'unbound'}`}
+                                      title={
+                                        s.isBound
+                                          ? 'อุปกรณ์ผูกสิทธิ์เข้าใช้งานแล้ว'
+                                          : 'ยังไม่มีอุปกรณ์ผูกใช้งาน'
+                                      }
+                                    >
+                                      {s.isBound ? 'ผูกเครื่องแล้ว' : 'ยังไม่ผูกเครื่อง'}
+                                    </span>
+                                    {/* Hidden test-compat button for Playwright E2E AC-97 Handover */}
+                                    {currentPrimaryScanner ? (
+                                      <button
+                                        type="button"
+                                        className="scanner-handover-test-compat"
+                                        id={`handover-primary-scanner-${s.scannerId}`}
+                                        data-testid={`handover-primary-scanner-${s.scannerId}`}
+                                        onClick={() => {
+                                          if (isHalted || settingPrimaryId === s.scannerId) return;
+                                          setHandoverTarget(s);
+                                          setDeclaredOldPending(0);
+                                          setHandoverReason('');
+                                          setReadinessResult(null);
+                                        }}
+                                        disabled={isHalted || settingPrimaryId === s.scannerId}
+                                        aria-disabled={isHalted || settingPrimaryId === s.scannerId}
+                                        title="สลับบทบาทเป็นเครื่องหลักออฟไลน์ของงานนี้"
+                                      >
+                                        สลับเครื่องหลัก
+                                      </button>
+                                    ) : (
+                                      <button
+                                        type="button"
+                                        className="scanner-handover-test-compat"
+                                        id={`set-primary-scanner-${s.scannerId}`}
+                                        data-testid={`set-primary-scanner-${s.scannerId}`}
+                                        onClick={() => {
+                                          if (isHalted || settingPrimaryId === s.scannerId) return;
+                                          handleSetPrimary(s.scannerId);
+                                        }}
+                                        disabled={isHalted || settingPrimaryId === s.scannerId}
+                                        aria-disabled={isHalted || settingPrimaryId === s.scannerId}
+                                        title="กำหนดเป็นเครื่องหลักออฟไลน์"
+                                      >
+                                        ตั้งเป็นเครื่องหลัก
+                                      </button>
+                                    )}
                                   </div>
                                 </div>
                               </div>
@@ -1201,44 +1302,6 @@ export function OrganizerScannerManager() {
                                   <TrashIcon width={14} height={14} />
                                   <span>นำออก</span>
                                 </button>
-
-                                {/* Hidden test-compat button for Playwright E2E AC-97 Handover */}
-                                {currentPrimaryScanner ? (
-                                  <button
-                                    type="button"
-                                    className="scanner-handover-test-compat"
-                                    id={`handover-primary-scanner-${s.scannerId}`}
-                                    data-testid={`handover-primary-scanner-${s.scannerId}`}
-                                    onClick={() => {
-                                      if (isHalted || settingPrimaryId === s.scannerId) return;
-                                      setHandoverTarget(s);
-                                      setDeclaredOldPending(0);
-                                      setHandoverReason('');
-                                      setReadinessResult(null);
-                                    }}
-                                    disabled={isHalted || settingPrimaryId === s.scannerId}
-                                    aria-disabled={isHalted || settingPrimaryId === s.scannerId}
-                                    title="สลับบทบาทเป็นเครื่องหลักออฟไลน์ของงานนี้"
-                                  >
-                                    สลับเครื่องหลัก
-                                  </button>
-                                ) : (
-                                  <button
-                                    type="button"
-                                    className="scanner-handover-test-compat"
-                                    id={`set-primary-scanner-${s.scannerId}`}
-                                    data-testid={`set-primary-scanner-${s.scannerId}`}
-                                    onClick={() => {
-                                      if (isHalted || settingPrimaryId === s.scannerId) return;
-                                      handleSetPrimary(s.scannerId);
-                                    }}
-                                    disabled={isHalted || settingPrimaryId === s.scannerId}
-                                    aria-disabled={isHalted || settingPrimaryId === s.scannerId}
-                                    title="กำหนดเป็นเครื่องหลักออฟไลน์"
-                                  >
-                                    ตั้งเป็นเครื่องหลัก
-                                  </button>
-                                )}
                               </div>
                             </div>
                           </td>
@@ -1712,6 +1775,92 @@ export function OrganizerScannerManager() {
                   </div>
                 </div>
 
+                {/* D-104: Device Binding Status & Reset Option */}
+                <div
+                  className="scanner-device-binding-box"
+                  style={{
+                    background: '#f8fafc',
+                    padding: '0.9rem',
+                    borderRadius: '10px',
+                    border: '1px solid #cbd5e1',
+                    fontSize: '0.82rem',
+                    color: '#334155',
+                    textAlign: 'left',
+                    marginBottom: '1.25rem',
+                  }}
+                >
+                  <div
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      marginBottom: '0.4rem',
+                    }}
+                  >
+                    <span
+                      style={{
+                        fontWeight: 700,
+                        color: '#0f172a',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.4rem',
+                      }}
+                    >
+                      <ShieldCheckIcon
+                        width={16}
+                        height={16}
+                        style={{ color: activeQrScanner.isBound ? '#059669' : '#64748b' }}
+                      />
+                      <span>สถานะการผูกอุปกรณ์:</span>
+                    </span>
+                    <span
+                      className={`scanner-device-pill ${activeQrScanner.isBound ? 'bound' : 'unbound'}`}
+                      data-testid="qr-modal-device-status-pill"
+                    >
+                      {activeQrScanner.isBound ? 'ผูกเครื่องแล้ว' : 'ยังไม่ผูกเครื่อง'}
+                    </span>
+                  </div>
+
+                  <p
+                    style={{
+                      margin: '0 0 0.6rem',
+                      fontSize: '0.78rem',
+                      color: '#64748b',
+                      lineHeight: 1.45,
+                    }}
+                  >
+                    {activeQrScanner.isBound
+                      ? 'ลิงก์นี้ถูกเปิดใช้งานบนอุปกรณ์หนึ่งไปแล้ว สิทธิ์จำกัด 1 เครื่อง หากต้องการเปลี่ยนเครื่องสแกน ให้กดปลดล็อกอุปกรณ์เดิมก่อน'
+                      : 'ยังไม่มีอุปกรณ์ใดเข้าใช้งาน ลิงก์นี้จะผูกกับอุปกรณ์เครื่องแรกที่เปิดลิงก์ทันที (จำกัด 1 ลิงก์ต่อ 1 อุปกรณ์)'}
+                  </p>
+
+                  {activeQrScanner.isBound && (
+                    <div
+                      style={{
+                        display: 'flex',
+                        justifyContent: 'flex-end',
+                        marginTop: '0.5rem',
+                      }}
+                    >
+                      <button
+                        type="button"
+                        id={`reset-scanner-device-${activeQrScanner.scannerId}`}
+                        data-testid={`reset-scanner-device-${activeQrScanner.scannerId}`}
+                        className="scanner-action-btn btn-reset-device"
+                        onClick={() => handleResetDevice(activeQrScanner.scannerId)}
+                        disabled={resettingDevice}
+                        aria-disabled={resettingDevice}
+                        title="ปลดล็อกให้อุปกรณ์อื่นสามารถเข้าใช้งานลิงก์นี้แทนได้"
+                      >
+                        <TrashIcon width={13} height={13} />
+                        <span>
+                          {resettingDevice ? 'กำลังรีเซ็ต...' : 'ปลดล็อก / รีเซ็ตอุปกรณ์'}
+                        </span>
+                      </button>
+                    </div>
+                  )}
+                </div>
+
                 {/* D-92: Session Isolation & Testing Guidance Box */}
                 <div
                   className="scanner-session-tip-box"
@@ -1750,10 +1899,13 @@ export function OrganizerScannerManager() {
                     }}
                   >
                     <li>
-                      <strong>การใช้งานจริงหน้างาน:</strong> ให้เจ้าหน้าที่ใช้กล้องมือถือหรือ iPad สแกน QR Code เพื่อเปิดใช้งานบนอุปกรณ์จริงได้ทันที โดยไม่กระทบต่อบัญชีผู้จัดงาน
+                      <strong>การใช้งานจริงหน้างาน:</strong> ให้เจ้าหน้าที่ใช้กล้องมือถือหรือแท็บเล็ตสแกน QR Code เพื่อเปิดใช้งานบนอุปกรณ์จริงได้ทันที (จำกัด 1 ลิงก์ต่อ 1 อุปกรณ์)
                     </li>
                     <li>
-                      <strong>หากทดสอบบนคอมพิวเตอร์เครื่องเดียวกัน:</strong> กรุณาคัดลอกลิงก์แล้วเปิดใน <em>&quot;หน้าต่างไม่ระบุตัวตน (Incognito / InPrivate Window)&quot;</em> หรือเปิดในอีกเบราว์เซอร์ เพื่อป้องกันไม่ให้เซสชันทีมสแกนไปเขียนทับและล็อกเอาต์บัญชีผู้จัดงาน
+                      <strong>สำหรับผู้จัดงานเอง:</strong> สามารถกดปุ่ม <strong>[เปิด Terminal สแกน]</strong> บนการ์ดเครื่องหลักได้ทันทีโดยไม่ต้องสแกน QR และจะไม่หลุดออกจากระบบ
+                    </li>
+                    <li>
+                      <strong>หากทดสอบสแกนเนอร์ของทีมงานบนคอมพิวเตอร์เครื่องเดียวกัน:</strong> กรุณาคัดลอกลิงก์แล้วเปิดใน <em>&quot;หน้าต่างไม่ระบุตัวตน (Incognito / InPrivate Window)&quot;</em> หรือเปิดในอีกเบราว์เซอร์ เพื่อจำลองเป็นอุปกรณ์ของทีมงาน
                     </li>
                   </ul>
                 </div>
