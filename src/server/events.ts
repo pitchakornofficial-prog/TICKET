@@ -15,6 +15,10 @@ export interface EventDraftInput {
   location: string;
   posterUrl?: string;
   ticketTemplateUrl?: string;
+  coverBannerUrl?: string;
+  googleMapsUrl?: string;
+  salesStartTime?: string;
+  salesEndTime?: string;
   limitPerOrder?: number;
 }
 
@@ -61,12 +65,20 @@ export async function ensureEventSchema(pool: Pool): Promise<void> {
       location TEXT NOT NULL,
       "posterUrl" TEXT,
       "ticketTemplateUrl" TEXT,
+      "coverBannerUrl" TEXT,
+      "googleMapsUrl" TEXT,
+      "salesStartTime" TIMESTAMPTZ,
+      "salesEndTime" TIMESTAMPTZ,
       "limitPerOrder" INTEGER NOT NULL DEFAULT 4,
       status TEXT NOT NULL DEFAULT 'draft',
       "createdAt" TIMESTAMPTZ NOT NULL DEFAULT now(),
       "updatedAt" TIMESTAMPTZ NOT NULL DEFAULT now()
     );
     ALTER TABLE events ADD COLUMN IF NOT EXISTS "ticketTemplateUrl" TEXT;
+    ALTER TABLE events ADD COLUMN IF NOT EXISTS "coverBannerUrl" TEXT;
+    ALTER TABLE events ADD COLUMN IF NOT EXISTS "googleMapsUrl" TEXT;
+    ALTER TABLE events ADD COLUMN IF NOT EXISTS "salesStartTime" TIMESTAMPTZ;
+    ALTER TABLE events ADD COLUMN IF NOT EXISTS "salesEndTime" TIMESTAMPTZ;
     CREATE INDEX IF NOT EXISTS idx_events_organizerId ON events("organizerId");
 
     CREATE TABLE IF NOT EXISTS event_sessions (
@@ -180,8 +192,8 @@ export async function createEventDraft(
   return inTransaction(pool, async client => {
     const eventId = randomUUID();
     await client.query(
-      `INSERT INTO events (id, "organizerId", title, description, location, "posterUrl", "ticketTemplateUrl", "limitPerOrder", status, "createdAt", "updatedAt")
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'draft', now(), now())`,
+      `INSERT INTO events (id, "organizerId", title, description, location, "posterUrl", "ticketTemplateUrl", "coverBannerUrl", "googleMapsUrl", "salesStartTime", "salesEndTime", "limitPerOrder", status, "createdAt", "updatedAt")
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'draft', now(), now())`,
       [
         eventId,
         organizerId,
@@ -190,6 +202,10 @@ export async function createEventDraft(
         eventInput.location.trim(),
         eventInput.posterUrl || null,
         eventInput.ticketTemplateUrl || null,
+        eventInput.coverBannerUrl || null,
+        eventInput.googleMapsUrl || null,
+        eventInput.salesStartTime ? new Date(eventInput.salesStartTime) : null,
+        eventInput.salesEndTime ? new Date(eventInput.salesEndTime) : null,
         limit,
       ],
     );
@@ -255,6 +271,18 @@ export async function updateEventDraft(
     }
     if (eventInput.ticketTemplateUrl !== undefined) {
       await client.query('UPDATE events SET "ticketTemplateUrl" = $1, "updatedAt" = now() WHERE id = $2', [eventInput.ticketTemplateUrl, eventId]);
+    }
+    if (eventInput.coverBannerUrl !== undefined) {
+      await client.query('UPDATE events SET "coverBannerUrl" = $1, "updatedAt" = now() WHERE id = $2', [eventInput.coverBannerUrl, eventId]);
+    }
+    if (eventInput.googleMapsUrl !== undefined) {
+      await client.query('UPDATE events SET "googleMapsUrl" = $1, "updatedAt" = now() WHERE id = $2', [eventInput.googleMapsUrl, eventId]);
+    }
+    if (eventInput.salesStartTime !== undefined) {
+      await client.query('UPDATE events SET "salesStartTime" = $1, "updatedAt" = now() WHERE id = $2', [eventInput.salesStartTime ? new Date(eventInput.salesStartTime) : null, eventId]);
+    }
+    if (eventInput.salesEndTime !== undefined) {
+      await client.query('UPDATE events SET "salesEndTime" = $1, "updatedAt" = now() WHERE id = $2', [eventInput.salesEndTime ? new Date(eventInput.salesEndTime) : null, eventId]);
     }
     if (eventInput.limitPerOrder !== undefined) {
       await client.query('UPDATE events SET "limitPerOrder" = $1, "updatedAt" = now() WHERE id = $2', [eventInput.limitPerOrder, eventId]);

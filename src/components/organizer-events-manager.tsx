@@ -96,7 +96,7 @@ export function OrganizerEventsManager({
     onCloseCreate?.();
   };
   const [showPreview, setShowPreview] = useState(false);
-  const [wizardStep, setWizardStep] = useState<1 | 2 | 3 | 4>(1);
+  const [wizardStep, setWizardStep] = useState<1 | 2 | 3>(1);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -105,29 +105,32 @@ export function OrganizerEventsManager({
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'draft' | 'pending_approval' | 'approved' | 'cancelled'>('all');
 
-  // Form state
+  // Form state (D-128)
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
-  const [artists, setArtists] = useState('THE NEON BAND, ELECTRIC DREAMS, SPECIAL GUEST DJ');
+  const [artists, setArtists] = useState('');
   const [location, setLocation] = useState('');
   const [googleMapsUrl, setGoogleMapsUrl] = useState('');
+  const [salesStartTime, setSalesStartTime] = useState('');
+  const [salesEndTime, setSalesEndTime] = useState('');
   const [limitPerOrder, setLimitPerOrder] = useState(4);
   const [posterFile, setPosterFile] = useState<File | null>(null);
   const [posterPreviewUrl, setPosterPreviewUrl] = useState<string | null>(null);
+  const [coverBannerFile, setCoverBannerFile] = useState<File | null>(null);
+  const [coverBannerPreviewUrl, setCoverBannerPreviewUrl] = useState<string | null>(null);
   const [ticketTemplateFile, setTicketTemplateFile] = useState<File | null>(null);
   const [ticketTemplatePreviewUrl, setTicketTemplatePreviewUrl] = useState<string | null>(null);
 
-  // Default rich sessions with zones
+  // Clean initial session state (D-133: No mock data)
   const [sessions, setSessions] = useState<SessionDraft[]>([
     {
       id: 'sess-1',
-      startTime: '2026-11-01T18:00',
-      endTime: '2026-11-01T21:00',
-      admissionStartTime: '2026-11-01T16:30',
-      admissionEndTime: '2026-11-01T19:00',
+      startTime: '',
+      endTime: '',
+      admissionStartTime: '',
+      admissionEndTime: '',
       ticketTypes: [
-        { id: 'tt-1', name: 'VIP Zone (บัตรนั่งพิเศษ)', price: 3500, quota: 50, description: 'บัตรนั่งโซนหน้าเวที พร้อมของที่ระลึกพิเศษ' },
-        { id: 'tt-2', name: 'บัตรยืนทั่วไป (Standing)', price: 1500, quota: 200, description: 'บัตรยืนรอบเวที เข้าชมการแสดงสด' },
+        { id: 'tt-1', name: '', price: 0, quota: 0, description: '' },
       ],
     },
   ]);
@@ -184,6 +187,17 @@ export function OrganizerEventsManager({
     }
   }
 
+  // Handle local cover banner file preview
+  function handleCoverBannerChange(file: File | null) {
+    setCoverBannerFile(file);
+    if (file) {
+      const url = URL.createObjectURL(file);
+      setCoverBannerPreviewUrl(url);
+    } else {
+      setCoverBannerPreviewUrl(null);
+    }
+  }
+
   // Handle local ticket template preview
   function handleTemplateChange(file: File | null) {
     setTicketTemplateFile(file);
@@ -197,19 +211,36 @@ export function OrganizerEventsManager({
 
   // Session draft helpers
   function handleAddSession() {
-    const nextIdx = sessions.length + 1;
     const newSession: SessionDraft = {
       id: `sess-${Date.now()}`,
-      startTime: `2026-11-0${Math.min(nextIdx, 9)}T18:00`,
-      endTime: `2026-11-0${Math.min(nextIdx, 9)}T21:00`,
-      admissionStartTime: `2026-11-0${Math.min(nextIdx, 9)}T16:30`,
-      admissionEndTime: `2026-11-0${Math.min(nextIdx, 9)}T19:00`,
+      startTime: '',
+      endTime: '',
+      admissionStartTime: '',
+      admissionEndTime: '',
       ticketTypes: [
-        { id: `tt-${Date.now()}-1`, name: 'VIP Zone (บัตรนั่งพิเศษ)', price: 3500, quota: 50, description: 'บัตรนั่งโซนหน้าเวที' },
-        { id: `tt-${Date.now()}-2`, name: 'บัตรยืนทั่วไป (Standing)', price: 1500, quota: 200, description: 'บัตรยืนรอบเวที' },
+        { id: `tt-${Date.now()}-1`, name: '', price: 0, quota: 0, description: '' },
       ],
     };
     setSessions(prev => [...prev, newSession]);
+  }
+
+  function handleDuplicateSession(sourceIdx: number) {
+    const source = sessions[sourceIdx];
+    if (!source) return;
+    const nextIdx = sessions.length + 1;
+    const newSessionId = `sess-${Date.now()}`;
+    const duplicated: SessionDraft = {
+      id: newSessionId,
+      startTime: source.startTime,
+      endTime: source.endTime,
+      admissionStartTime: source.admissionStartTime,
+      admissionEndTime: source.admissionEndTime,
+      ticketTypes: source.ticketTypes.map((t, tIdx) => ({
+        ...t,
+        id: `tt-${Date.now()}-${nextIdx}-${tIdx + 1}`,
+      })),
+    };
+    setSessions(prev => [...prev, duplicated]);
   }
 
   function handleRemoveSession(sessionId: string) {
@@ -232,7 +263,7 @@ export function OrganizerEventsManager({
           ...s,
           ticketTypes: [
             ...s.ticketTypes,
-            { id: `tt-${Date.now()}`, name: 'โซนบัตรใหม่', price: 1800, quota: 100, description: '' },
+            { id: `tt-${Date.now()}`, name: '', price: 0, quota: 0, description: '' },
           ],
         };
       }),
@@ -278,6 +309,28 @@ export function OrganizerEventsManager({
     if (e) e.preventDefault();
     setError('');
     setSuccess('');
+
+    if (!title.trim() || !location.trim()) {
+      setError('กรุณากรอกชื่อคอนเสิร์ตและสถานที่จัดงาน');
+      return;
+    }
+
+    const invalidSession = sessions.find(
+      s => !s.startTime || !s.endTime || Number.isNaN(new Date(s.startTime).getTime()) || Number.isNaN(new Date(s.endTime).getTime())
+    );
+    if (invalidSession) {
+      setError('กรุณาระบุวันเวลาเริ่มและสิ้นสุดการแสดงของทุกรอบให้ครบถ้วน');
+      return;
+    }
+
+    const invalidTicket = sessions.some(s =>
+      s.ticketTypes.some(t => !t.name.trim() || t.price < 0 || t.quota <= 0)
+    );
+    if (invalidTicket) {
+      setError('กรุณากรอกชื่อ ราคา และจำนวนโควตาของบัตรทุกประเภทให้ถูกต้อง (โควตาต้องมากกว่า 0)');
+      return;
+    }
+
     setSubmitting(true);
 
     let posterUrl: string | undefined;
@@ -288,6 +341,17 @@ export function OrganizerEventsManager({
       if (upRes.ok) {
         const upData = await upRes.json();
         posterUrl = upData.url;
+      }
+    }
+
+    let coverBannerUrl: string | undefined;
+    if (coverBannerFile) {
+      const fd = new FormData();
+      fd.append('file', coverBannerFile);
+      const upRes = await fetch('/api/upload', { method: 'POST', body: fd });
+      if (upRes.ok) {
+        const upData = await upRes.json();
+        coverBannerUrl = upData.url;
       }
     }
 
@@ -324,8 +388,12 @@ export function OrganizerEventsManager({
           title,
           description,
           location,
+          googleMapsUrl: googleMapsUrl.trim() || undefined,
+          salesStartTime: salesStartTime ? new Date(salesStartTime).toISOString() : undefined,
+          salesEndTime: salesEndTime ? new Date(salesEndTime).toISOString() : undefined,
           limitPerOrder,
           posterUrl,
+          coverBannerUrl,
           ticketTemplateUrl,
           sessions: formattedSessions,
         }),
@@ -359,11 +427,30 @@ export function OrganizerEventsManager({
       setWizardStep(1);
       setTitle('');
       setDescription('');
+      setArtists('');
       setLocation('');
+      setGoogleMapsUrl('');
+      setSalesStartTime('');
+      setSalesEndTime('');
+      setLimitPerOrder(4);
       setPosterFile(null);
       setPosterPreviewUrl(null);
+      setCoverBannerFile(null);
+      setCoverBannerPreviewUrl(null);
       setTicketTemplateFile(null);
       setTicketTemplatePreviewUrl(null);
+      setSessions([
+        {
+          id: `sess-${Date.now()}`,
+          startTime: '',
+          endTime: '',
+          admissionStartTime: '',
+          admissionEndTime: '',
+          ticketTypes: [
+            { id: `tt-${Date.now()}-1`, name: '', price: 0, quota: 0, description: '' },
+          ],
+        },
+      ]);
       await loadEvents();
       if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('events-updated'));
     } catch {
@@ -680,11 +767,10 @@ export function OrganizerEventsManager({
                   สร้างงานคอนเสิร์ตใหม่
                 </h2>
                 <p className="editor-modal-subtitle">
-                  ขั้นตอนที่ {wizardStep} จาก 4: {
-                    wizardStep === 1 ? 'ข้อมูลงาน & สื่อ' :
-                    wizardStep === 2 ? 'ศิลปิน & เงื่อนไข' :
-                    wizardStep === 3 ? 'รอบการแสดง & เวลาประตูเปิด' :
-                    'โซนที่นั่งและราคาบัตร'
+                  ขั้นตอนที่ {wizardStep} จาก 3: {
+                    wizardStep === 1 ? 'ข้อมูลงาน & กำหนดการ' :
+                    wizardStep === 2 ? 'กติกา & รอบการแสดง' :
+                    'รูปภาพ & สื่อประชาสัมพันธ์'
                   }
                 </p>
               </div>
@@ -700,39 +786,32 @@ export function OrganizerEventsManager({
             </div>
 
             <div className="editor-modal-body">
-                {/* Wizard Step Progress Indicator */}
+                {/* Wizard Step Progress Indicator (D-128) */}
                 <div className="events-step-tabs-bar">
                   <button
                     type="button"
                     onClick={() => setWizardStep(1)}
                     className={`events-step-tab-btn ${wizardStep === 1 ? 'active' : ''}`}
                   >
-                    1. ข้อมูลงาน & สื่อ
+                    1. ข้อมูลงาน & กำหนดการ
                   </button>
                   <button
                     type="button"
                     onClick={() => setWizardStep(2)}
                     className={`events-step-tab-btn ${wizardStep === 2 ? 'active' : ''}`}
                   >
-                    2. ศิลปิน & เงื่อนไข
+                    2. กติกา & รอบการแสดง
                   </button>
                   <button
                     type="button"
                     onClick={() => setWizardStep(3)}
                     className={`events-step-tab-btn ${wizardStep === 3 ? 'active' : ''}`}
                   >
-                    3. รอบการแสดง
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setWizardStep(4)}
-                    className={`events-step-tab-btn ${wizardStep === 4 ? 'active' : ''}`}
-                  >
-                    4. โซนและราคาบัตร
+                    3. รูปภาพ & สื่อประชาสัมพันธ์
                   </button>
                 </div>
 
-                {/* STEP 1: ข้อมูลงาน & สื่อ */}
+                {/* STEP 1: ข้อมูลงาน & กำหนดการ */}
                 {wizardStep === 1 && (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                     <div className="form-group">
@@ -766,64 +845,53 @@ export function OrganizerEventsManager({
                     </div>
 
                     <div className="form-group">
-                      <label htmlFor="event-description" style={{ fontWeight: 700, fontSize: '0.9rem', display: 'block', marginBottom: '0.35rem' }}>
-                        รายละเอียดคอนเสิร์ตและจุดเด่น (เป็นข้อย่อย ๆ หรือย่อหน้า)
+                      <label htmlFor="event-map-link" style={{ fontWeight: 700, fontSize: '0.9rem', display: 'block', marginBottom: '0.35rem' }}>
+                        ลิงก์แผนที่ Google Maps (ทางเลือก)
                       </label>
-                      <textarea
-                        id="event-description"
-                        value={description}
-                        onChange={e => setDescription(e.target.value)}
-                        placeholder="• ระบบเสียงระดับสเตอริโอรอบทิศทาง&#10;• เต็มอิ่มกับการแสดงสดกว่า 3 ชั่วโมงเต็ม&#10;• สิทธิพิเศษสำหรับผู้ถือบัตรทุกโซน"
-                        rows={4}
-                        className="form-textarea-control"
+                      <input
+                        id="event-map-link"
+                        type="url"
+                        value={googleMapsUrl}
+                        onChange={e => setGoogleMapsUrl(e.target.value)}
+                        placeholder="https://maps.app.goo.gl/... (หากเว้นว่าง ระบบจะสร้างจากชื่อสถานที่ให้อัตโนมัติ)"
+                        className="form-input-text"
                       />
                     </div>
 
                     <div className="form-row-two-col">
                       <div className="form-group">
-                        <label htmlFor="event-poster" style={{ fontWeight: 700, fontSize: '0.9rem', display: 'block', marginBottom: '0.35rem' }}>
-                          โปสเตอร์งานคอนเสิร์ต
+                        <label htmlFor="event-sales-start" style={{ fontWeight: 700, fontSize: '0.9rem', display: 'block', marginBottom: '0.35rem' }}>
+                          วันและเวลาเริ่มต้นเปิดขายบัตร
                         </label>
                         <input
-                          id="event-poster"
-                          type="file"
-                          accept="image/*"
-                          onChange={e => handlePosterChange(e.target.files?.[0] || null)}
-                          style={{ width: '100%', fontSize: '0.85rem' }}
+                          id="event-sales-start"
+                          type="datetime-local"
+                          value={salesStartTime}
+                          onChange={e => setSalesStartTime(e.target.value)}
+                          className="form-input-text"
                         />
-                        {posterPreviewUrl && (
-                          <div style={{ marginTop: '0.5rem', width: '100%', height: '90px', borderRadius: '8px', overflow: 'hidden', background: '#0f172a' }}>
-                            {/* biome-ignore lint/performance/noImgElement: local file preview */}
-                            <img src={posterPreviewUrl} alt="ตัวอย่างโปสเตอร์" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                          </div>
-                        )}
+                        <small className="form-field-helper">
+                          * หากเว้นว่าง บัตรจะเริ่มจำหน่ายทันทีหลังได้รับการอนุมัติ
+                        </small>
                       </div>
 
                       <div className="form-group">
-                        <label htmlFor="event-ticket-template" style={{ fontWeight: 700, fontSize: '0.9rem', display: 'block', marginBottom: '0.35rem' }}>
-                          ภาพพื้นหลังบัตรดิจิทัล (1200 x 500 px)
+                        <label htmlFor="event-sales-end" style={{ fontWeight: 700, fontSize: '0.9rem', display: 'block', marginBottom: '0.35rem' }}>
+                          วันและเวลาสิ้นสุดการขายบัตร
                         </label>
                         <input
-                          id="event-ticket-template"
-                          type="file"
-                          accept="image/*"
-                          onChange={e => handleTemplateChange(e.target.files?.[0] || null)}
-                          style={{ width: '100%', fontSize: '0.85rem' }}
+                          id="event-sales-end"
+                          type="datetime-local"
+                          value={salesEndTime}
+                          onChange={e => setSalesEndTime(e.target.value)}
+                          className="form-input-text"
                         />
-                        {ticketTemplatePreviewUrl && (
-                          <div style={{ marginTop: '0.5rem', width: '100%', height: '90px', borderRadius: '8px', overflow: 'hidden', background: '#0f172a' }}>
-                            {/* biome-ignore lint/performance/noImgElement: local template preview */}
-                            <img src={ticketTemplatePreviewUrl} alt="ตัวอย่างภาพพื้นหลังบัตร" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                          </div>
-                        )}
+                        <small className="form-field-helper">
+                          * หากเว้นว่าง การขายจะปิดตามเวลาเริ่มการแสดงของแต่ละรอบ
+                        </small>
                       </div>
                     </div>
-                  </div>
-                )}
 
-                {/* STEP 2: ศิลปิน & เงื่อนไข */}
-                {wizardStep === 2 && (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                     <div className="form-group">
                       <label htmlFor="event-artists" style={{ fontWeight: 700, fontSize: '0.9rem', display: 'block', marginBottom: '0.35rem' }}>
                         ศิลปินผู้ร่วมสร้างสรรค์ / ไลน์อัปการแสดง
@@ -842,77 +910,171 @@ export function OrganizerEventsManager({
                     </div>
 
                     <div className="form-group">
-                      <label htmlFor="event-map-link" style={{ fontWeight: 700, fontSize: '0.9rem', display: 'block', marginBottom: '0.35rem' }}>
-                        ลิงก์แผนที่ Google Maps (ทางเลือก)
+                      <label htmlFor="event-description" style={{ fontWeight: 700, fontSize: '0.9rem', display: 'block', marginBottom: '0.35rem' }}>
+                        เกี่ยวกับคอนเสิร์ตนี้ / รายละเอียดและจุดเด่น
                       </label>
-                      <input
-                        id="event-map-link"
-                        type="url"
-                        value={googleMapsUrl}
-                        onChange={e => setGoogleMapsUrl(e.target.value)}
-                        placeholder="https://maps.app.goo.gl/... (หากเว้นว่าง ระบบจะสร้างจากชื่อสถานที่ให้อัตโนมัติ)"
-                        className="form-input-text"
+                      <textarea
+                        id="event-description"
+                        value={description}
+                        onChange={e => setDescription(e.target.value)}
+                        placeholder="• ระบบเสียงระดับสเตอริโอรอบทิศทาง&#10;• เต็มอิ่มกับการแสดงสดกว่า 3 ชั่วโมงเต็ม&#10;• สิทธิพิเศษสำหรับผู้ถือบัตรทุกโซน"
+                        rows={4}
+                        className="form-textarea-control"
                       />
-                    </div>
-
-                    <div className="form-group">
-                      <label htmlFor="event-limit" style={{ fontWeight: 700, fontSize: '0.9rem', display: 'block', marginBottom: '0.35rem' }}>
-                        จำกัดจำนวนการซื้อสูงสุดต่อคำสั่งซื้อ (ใบ)
-                      </label>
-                      <input
-                        id="event-limit"
-                        type="number"
-                        min={1}
-                        max={10}
-                        value={limitPerOrder}
-                        onChange={e => setLimitPerOrder(Number(e.target.value))}
-                        className="form-input-text"
-                      />
-                      <small className="form-field-helper">
-                        * มาตรฐานจำกัด 4 ใบต่อคำสั่งซื้อ เพื่อป้องกันการกักตุนบัตร
-                      </small>
                     </div>
                   </div>
                 )}
 
-                {/* STEP 3: รอบการแสดง (Sessions & Schedule) */}
-                {wizardStep === 3 && (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                {/* STEP 2: กติกา & รอบการแสดง (Sessions & Ticket Types) */}
+                {wizardStep === 2 && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                    {/* Order limit rule (D-130 Slim Inline Stepper & Quick Presets) */}
+                    <div className="limit-per-order-bar">
+                      <div className="limit-bar-left">
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                          <label htmlFor="event-limit" className="limit-bar-title">
+                            จำกัดการซื้อสูงสุดต่อคำสั่งซื้อ *
+                          </label>
+                          <span className="aspect-ratio-badge">1 - 10 ใบ</span>
+                        </div>
+                        <p className="limit-bar-helper">
+                          มาตรฐานกำหนด 4 ใบต่อคำสั่งซื้อ เพื่อป้องกันการกักตุนบัตร
+                        </p>
+                      </div>
+
+                      <div className="limit-bar-right">
+                        {/* Quick Presets */}
+                        <div className="limit-preset-group">
+                          <button
+                            type="button"
+                            className={`limit-preset-btn ${limitPerOrder === 2 ? 'active' : ''}`}
+                            onClick={() => setLimitPerOrder(2)}
+                            title="จำกัด 2 ใบ"
+                          >
+                            2 ใบ
+                          </button>
+                          <button
+                            type="button"
+                            className={`limit-preset-btn ${limitPerOrder === 4 ? 'active' : ''}`}
+                            onClick={() => setLimitPerOrder(4)}
+                            title="จำกัด 4 ใบ (ค่าเริ่มต้นมาตรฐาน)"
+                          >
+                            4 ใบ (แนะนำ)
+                          </button>
+                          <button
+                            type="button"
+                            className={`limit-preset-btn ${limitPerOrder === 6 ? 'active' : ''}`}
+                            onClick={() => setLimitPerOrder(6)}
+                            title="จำกัด 6 ใบ"
+                          >
+                            6 ใบ
+                          </button>
+                        </div>
+
+                        {/* Interactive Stepper */}
+                        <div className="limit-stepper-wrap">
+                          <button
+                            type="button"
+                            className="limit-stepper-btn"
+                            disabled={limitPerOrder <= 1}
+                            onClick={() => setLimitPerOrder(prev => Math.max(1, prev - 1))}
+                            aria-label="ลดจำนวนบัตร"
+                            title="ลดจำนวน"
+                          >
+                            -
+                          </button>
+                          <div className="limit-stepper-display">
+                            <input
+                              id="event-limit"
+                              type="number"
+                              min={1}
+                              max={10}
+                              value={limitPerOrder}
+                              onChange={e => {
+                                const val = Number(e.target.value);
+                                if (!Number.isNaN(val)) {
+                                  setLimitPerOrder(Math.min(10, Math.max(1, val)));
+                                }
+                              }}
+                              className="limit-stepper-input"
+                              aria-label="จำนวนบัตรสูงสุดต่อคำสั่งซื้อ"
+                            />
+                            <span className="limit-stepper-unit">ใบ</span>
+                          </div>
+                          <button
+                            type="button"
+                            className="limit-stepper-btn"
+                            disabled={limitPerOrder >= 10}
+                            onClick={() => setLimitPerOrder(prev => Math.min(10, prev + 1))}
+                            aria-label="เพิ่มจำนวนบัตร"
+                            title="เพิ่มจำนวน"
+                          >
+                            +
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Sessions & Ticket Types Manager */}
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <p style={{ margin: 0, fontSize: '0.85rem', color: '#64748b' }}>
-                        กำหนดวันเวลาการแสดง และเวลาเปิดประตูรับเข้างานสำหรับแต่ละรอบ:
-                      </p>
+                      <div>
+                        <strong style={{ fontSize: '0.92rem', color: '#0f172a', display: 'block' }}>
+                          กำหนดรอบการแสดงและประเภทบัตร ({sessions.length} รอบ)
+                        </strong>
+                        <p style={{ margin: 0, fontSize: '0.8rem', color: '#64748b' }}>
+                          ปรับแต่งได้อย่างอิสระ แต่ละรอบสามารถมีประเภทบัตร โควตา และราคาที่แตกต่างกันได้
+                        </p>
+                      </div>
                       <button
                         type="button"
-                        className="events-action-btn btn-storefront"
+                        className="btn-form-preview"
                         onClick={handleAddSession}
-                        style={{ width: 'auto', padding: '0.4rem 0.8rem' }}
+                        style={{ padding: '0.4rem 0.85rem', fontSize: '0.82rem' }}
                       >
                         <PlusIcon width={14} height={14} />
-                        <span>+ เพิ่มรอบการแสดง</span>
+                        <span>+ เพิ่มรอบการแสดงใหม่</span>
                       </button>
                     </div>
 
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                       {sessions.map((sess, idx) => (
                         <div
                           key={sess.id}
-                          style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '1rem' }}
+                          style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '12px', padding: '1.15rem' }}
                         >
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
-                            <strong style={{ fontSize: '0.9rem', color: '#0f172a' }}>
-                              รอบที่ {idx + 1}
-                            </strong>
-                            {sessions.length > 1 && (
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.85rem', paddingBottom: '0.65rem', borderBottom: '1px solid #e2e8f0' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                              <span className="aspect-ratio-badge">
+                                รอบที่ {idx + 1}
+                              </span>
+                              <strong style={{ fontSize: '0.88rem', color: '#0f172a' }}>
+                                กำหนดการแสดงรอบที่ {idx + 1}
+                              </strong>
+                            </div>
+                            <div style={{ display: 'flex', gap: '0.4rem' }}>
                               <button
                                 type="button"
-                                onClick={() => handleRemoveSession(sess.id)}
-                                style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', fontSize: '0.78rem', display: 'flex', alignItems: 'center', gap: '3px' }}
+                                className="btn-form-preview"
+                                onClick={() => handleDuplicateSession(idx)}
+                                style={{ padding: '0.3rem 0.65rem', fontSize: '0.78rem' }}
+                                title="คัดลอกข้อมูลรอบนี้เพื่อสร้างรอบใหม่ที่แก้ไขต่อได้ง่าย"
                               >
-                                <TrashIcon width={14} height={14} />
-                                <span>ลบรอบนี้</span>
+                                <PlusIcon width={13} height={13} />
+                                <span>คัดลอกรอบนี้</span>
                               </button>
-                            )}
+                              {sessions.length > 1 && (
+                                <button
+                                  type="button"
+                                  className="btn-form-cancel"
+                                  onClick={() => handleRemoveSession(sess.id)}
+                                  style={{ padding: '0.3rem 0.65rem', fontSize: '0.78rem' }}
+                                  title="ลบรอบการแสดงนี้"
+                                >
+                                  <TrashIcon width={13} height={13} />
+                                  <span>ลบรอบนี้</span>
+                                </button>
+                              )}
+                            </div>
                           </div>
 
                           <div className="form-row-two-col" style={{ marginBottom: '0.75rem' }}>
@@ -946,7 +1108,7 @@ export function OrganizerEventsManager({
                             </div>
                           </div>
 
-                          <div className="form-row-two-col">
+                          <div className="form-row-two-col" style={{ marginBottom: '1rem' }}>
                             <div>
                               <label htmlFor={`sess-adm-start-${sess.id}`} style={{ display: 'block', fontSize: '0.78rem', fontWeight: 600, color: '#475569', marginBottom: '2px' }}>
                                 เวลาประตูเปิด / รับเข้างาน (Doors Open)
@@ -974,107 +1136,293 @@ export function OrganizerEventsManager({
                               />
                             </div>
                           </div>
+
+                          {/* Ticket types per session (D-132 De-nested Clean Layout) */}
+                          <div style={{ marginTop: '0.75rem' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
+                              <span style={{ fontSize: '0.82rem', fontWeight: 700, color: '#0f172a' }}>
+                                โซนและประเภทบัตรของรอบนี้ ({sess.ticketTypes.length} ประเภท)
+                              </span>
+                              <button
+                                type="button"
+                                className="btn-form-preview"
+                                onClick={() => handleAddTicketType(sess.id)}
+                                style={{ padding: '0.25rem 0.55rem', fontSize: '0.75rem' }}
+                              >
+                                + เพิ่มโซนบัตร
+                              </button>
+                            </div>
+
+                            {/* Column Headers (D-131: Name, Price, Quota) */}
+                            <div
+                              style={{
+                                display: 'grid',
+                                gridTemplateColumns: '2fr 1fr 1fr auto',
+                                gap: '0.5rem',
+                                padding: '0.15rem 0.65rem 0.4rem 0.65rem',
+                                fontSize: '0.75rem',
+                                fontWeight: 700,
+                                color: '#475569',
+                                borderBottom: '1px solid #e2e8f0',
+                                marginBottom: '0.35rem',
+                              }}
+                            >
+                              <span>ชื่อประเภทบัตร / โซน *</span>
+                              <span>ราคา (บาท) *</span>
+                              <span>จำนวนโควตา (ใบ) *</span>
+                              <span style={{ width: '28px' }} aria-hidden="true" />
+                            </div>
+
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                              {sess.ticketTypes.map((tt) => (
+                                <div
+                                  key={tt.id}
+                                  style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr auto', gap: '0.5rem', alignItems: 'center', background: '#ffffff', padding: '0.55rem 0.65rem', borderRadius: '8px', border: '1px solid #e2e8f0' }}
+                                >
+                                  <div>
+                                    <label htmlFor={`tt-name-${tt.id}`} className="sr-only">ชื่อประเภทบัตรหรือโซน</label>
+                                    <input
+                                      id={`tt-name-${tt.id}`}
+                                      type="text"
+                                      required
+                                      value={tt.name}
+                                      onChange={e => handleUpdateTicketType(sess.id, tt.id, { name: e.target.value })}
+                                      placeholder="ชื่อโซน เช่น VIP Zone"
+                                      className="form-input-text"
+                                      style={{ padding: '0.45rem 0.65rem', fontSize: '0.82rem' }}
+                                    />
+                                  </div>
+                                  <div>
+                                    <label htmlFor={`tt-price-${tt.id}`} className="sr-only">ราคาบัตร (บาท)</label>
+                                    <input
+                                      id={`tt-price-${tt.id}`}
+                                      type="number"
+                                      required
+                                      min={0}
+                                      value={tt.price === 0 ? '' : tt.price}
+                                      onChange={e => {
+                                        const raw = e.target.value;
+                                        handleUpdateTicketType(sess.id, tt.id, {
+                                          price: raw === '' ? 0 : Math.max(0, Number(raw)),
+                                        });
+                                      }}
+                                      placeholder="0"
+                                      className="form-input-text"
+                                      style={{ padding: '0.45rem 0.65rem', fontSize: '0.82rem' }}
+                                    />
+                                  </div>
+                                  <div>
+                                    <label htmlFor={`tt-quota-${tt.id}`} className="sr-only">จำนวนโควตาบัตร (ใบ)</label>
+                                    <input
+                                      id={`tt-quota-${tt.id}`}
+                                      type="number"
+                                      required
+                                      min={1}
+                                      value={tt.quota === 0 ? '' : tt.quota}
+                                      onChange={e => {
+                                        const raw = e.target.value;
+                                        handleUpdateTicketType(sess.id, tt.id, {
+                                          quota: raw === '' ? 0 : Math.max(0, Number(raw)),
+                                        });
+                                      }}
+                                      placeholder="0"
+                                      className="form-input-text"
+                                      style={{ padding: '0.45rem 0.65rem', fontSize: '0.82rem' }}
+                                    />
+                                  </div>
+                                  {sess.ticketTypes.length > 1 && (
+                                    <button
+                                      type="button"
+                                      onClick={() => handleRemoveTicketType(sess.id, tt.id)}
+                                      className="btn-form-cancel"
+                                      style={{ padding: '0.4rem 0.5rem', background: '#ffffff', border: '1px solid #cbd5e1' }}
+                                      title="ลบโซนนี้"
+                                    >
+                                      <TrashIcon width={14} height={14} />
+                                    </button>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
                         </div>
                       ))}
                     </div>
                   </div>
                 )}
 
-                {/* STEP 4: โซนและราคาบัตร (Zones & Ticket Types) */}
-                {wizardStep === 4 && (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                    <p style={{ margin: 0, fontSize: '0.85rem', color: '#64748b' }}>
-                      กำหนดโซนที่นั่ง ราคาบัตร และโควตาจำนวนบัตรที่เปิดขายในแต่ละรอบการแสดง:
-                    </p>
+                {/* STEP 3: รูปภาพ & สื่อประชาสัมพันธ์ (D-128: Aspect Ratio Previews) */}
+                {wizardStep === 3 && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                    {/* Optional banner note */}
+                    <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '0.85rem 1rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                      <span className="aspect-ratio-badge">ทางเลือก (Optional)</span>
+                      <p style={{ margin: 0, fontSize: '0.82rem', color: '#475569', lineHeight: 1.45 }}>
+                        คุณสามารถเพิ่มรูปภาพหรือไม่ใส่ก็ได้ หากยังไม่มีรูป ระบบจะใช้กราฟิกจำลองมาตรฐานที่สวยงามให้อัตโนมัติ
+                      </p>
+                    </div>
 
-                    {sessions.map((sess, sIdx) => (
-                      <div
-                        key={sess.id}
-                        style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '10px', padding: '1rem', marginBottom: '0.5rem' }}
-                      >
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
-                          <span style={{ fontSize: '0.88rem', fontWeight: 700, color: '#0f172a' }}>
-                            รอบที่ {sIdx + 1} ({new Date(sess.startTime).toLocaleDateString('th-TH')})
-                          </span>
-                          <button
-                            type="button"
-                            className="events-action-btn btn-storefront"
-                            onClick={() => handleAddTicketType(sess.id)}
-                            style={{ width: 'auto', padding: '0.35rem 0.65rem', fontSize: '0.75rem' }}
-                          >
-                            + เพิ่มโซนบัตร
-                          </button>
+                    <div className="aspect-ratio-preview-grid">
+                      {/* 1. Vertical Poster (4:5) */}
+                      <div className="aspect-preview-card">
+                        <div className="aspect-preview-header">
+                          <strong className="aspect-preview-title">1. รูปโปสเตอร์แนวตั้ง</strong>
+                          <span className="aspect-ratio-badge">4:5</span>
                         </div>
+                        <p className="aspect-preview-desc">
+                          ใช้สำหรับการ์ดแสดงรายการคอนเสิร์ตในหน้าแรกและหน้าค้นหา (แนะนำ 800 x 1000 px)
+                        </p>
 
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
-                          {sess.ticketTypes.map((tt) => (
-                            <div
-                              key={tt.id}
-                              style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr auto', gap: '0.5rem', alignItems: 'center', background: '#ffffff', padding: '0.6rem 0.75rem', borderRadius: '8px', border: '1px solid #e2e8f0' }}
-                            >
-                              <div>
-                                <label htmlFor={`tt-name-${tt.id}`} className="sr-only">ชื่อประเภทบัตรหรือโซน</label>
-                                <input
-                                  id={`tt-name-${tt.id}`}
-                                  type="text"
-                                  required
-                                  value={tt.name}
-                                  onChange={e => handleUpdateTicketType(sess.id, tt.id, { name: e.target.value })}
-                                  placeholder="ชื่อโซน เช่น VIP Zone"
-                                  className="form-input-text"
-                                  style={{ padding: '0.45rem 0.65rem', fontSize: '0.82rem' }}
-                                />
-                              </div>
-                              <div>
-                                <label htmlFor={`tt-price-${tt.id}`} className="sr-only">ราคาบัตร (บาท)</label>
-                                <input
-                                  id={`tt-price-${tt.id}`}
-                                  type="number"
-                                  required
-                                  min={0}
-                                  value={tt.price}
-                                  onChange={e => handleUpdateTicketType(sess.id, tt.id, { price: Number(e.target.value) })}
-                                  placeholder="ราคา (บาท)"
-                                  className="form-input-text"
-                                  style={{ padding: '0.45rem 0.65rem', fontSize: '0.82rem' }}
-                                />
-                              </div>
-                              <div>
-                                <label htmlFor={`tt-quota-${tt.id}`} className="sr-only">จำนวนโควตาบัตร (ใบ)</label>
-                                <input
-                                  id={`tt-quota-${tt.id}`}
-                                  type="number"
-                                  required
-                                  min={1}
-                                  value={tt.quota}
-                                  onChange={e => handleUpdateTicketType(sess.id, tt.id, { quota: Number(e.target.value) })}
-                                  placeholder="โควตา (ใบ)"
-                                  className="form-input-text"
-                                  style={{ padding: '0.45rem 0.65rem', fontSize: '0.82rem' }}
-                                />
-                              </div>
-                              {sess.ticketTypes.length > 1 && (
+                        <div className="aspect-ratio-frame aspect-frame-poster">
+                          {posterPreviewUrl ? (
+                            <>
+                              {/* biome-ignore lint/performance/noImgElement: aspect preview */}
+                              <img src={posterPreviewUrl} alt="ตัวอย่างโปสเตอร์แนวตั้ง" className="aspect-image-img" />
+                              <div className="aspect-overlay-actions">
+                                <label className="aspect-action-btn">
+                                  <span>เปลี่ยนรูป</span>
+                                  <input
+                                    type="file"
+                                    accept="image/*"
+                                    onChange={e => handlePosterChange(e.target.files?.[0] || null)}
+                                    style={{ display: 'none' }}
+                                  />
+                                </label>
                                 <button
                                   type="button"
-                                  onClick={() => handleRemoveTicketType(sess.id, tt.id)}
-                                  style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', padding: '4px' }}
-                                  title="ลบโซนนี้"
+                                  className="aspect-action-btn btn-remove"
+                                  onClick={() => handlePosterChange(null)}
                                 >
-                                  <TrashIcon width={16} height={16} />
+                                  ลบ
                                 </button>
-                              )}
-                            </div>
-                          ))}
+                              </div>
+                            </>
+                          ) : (
+                            <label className="aspect-dropzone-label">
+                              <TicketIcon />
+                              <span className="aspect-dropzone-text">คลิกเพื่อเลือกไฟล์รูปภาพแนวตั้ง</span>
+                              <span className="aspect-dropzone-hint">สัดส่วน 4:5 · JPG, PNG, WEBP</span>
+                              <input
+                                id="event-poster"
+                                type="file"
+                                accept="image/*"
+                                onChange={e => handlePosterChange(e.target.files?.[0] || null)}
+                                style={{ display: 'none' }}
+                              />
+                            </label>
+                          )}
                         </div>
                       </div>
-                    ))}
+
+                      {/* 2. Horizontal Cover Banner (16:9) */}
+                      <div className="aspect-preview-card">
+                        <div className="aspect-preview-header">
+                          <strong className="aspect-preview-title">2. รูปแบนเนอร์แนวยาว</strong>
+                          <span className="aspect-ratio-badge">16:9</span>
+                        </div>
+                        <p className="aspect-preview-desc">
+                          ใช้สำหรับภาพพื้นหลังส่วนหัวของหน้ารายละเอียดคอนเสิร์ต (แนะนำ 1920 x 1080 px)
+                        </p>
+
+                        <div className="aspect-ratio-frame aspect-frame-banner">
+                          {coverBannerPreviewUrl ? (
+                            <>
+                              {/* biome-ignore lint/performance/noImgElement: aspect preview */}
+                              <img src={coverBannerPreviewUrl} alt="ตัวอย่างแบนเนอร์แนวยาว" className="aspect-image-img" />
+                              <div className="aspect-overlay-actions">
+                                <label className="aspect-action-btn">
+                                  <span>เปลี่ยนรูป</span>
+                                  <input
+                                    type="file"
+                                    accept="image/*"
+                                    onChange={e => handleCoverBannerChange(e.target.files?.[0] || null)}
+                                    style={{ display: 'none' }}
+                                  />
+                                </label>
+                                <button
+                                  type="button"
+                                  className="aspect-action-btn btn-remove"
+                                  onClick={() => handleCoverBannerChange(null)}
+                                >
+                                  ลบ
+                                </button>
+                              </div>
+                            </>
+                          ) : (
+                            <label className="aspect-dropzone-label">
+                              <TicketIcon />
+                              <span className="aspect-dropzone-text">คลิกเพื่อเลือกไฟล์รูปภาพแนวยาว</span>
+                              <span className="aspect-dropzone-hint">สัดส่วน 16:9 · JPG, PNG, WEBP</span>
+                              <input
+                                id="event-cover-banner"
+                                type="file"
+                                accept="image/*"
+                                onChange={e => handleCoverBannerChange(e.target.files?.[0] || null)}
+                                style={{ display: 'none' }}
+                              />
+                            </label>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* 3. Digital Ticket Template (2.4:1) */}
+                      <div className="aspect-preview-card full-width">
+                        <div className="aspect-preview-header">
+                          <strong className="aspect-preview-title">3. ภาพพื้นหลังตั๋วดิจิทัล</strong>
+                          <span className="aspect-ratio-badge">2.4:1 (1200 x 500 px)</span>
+                        </div>
+                        <p className="aspect-preview-desc">
+                          ใช้เป็นภาพพื้นหลังตั๋วเข้าชมและ QR Code สำหรับผู้ซื้อ (แนะนำ 1200 x 500 px หรือสัดส่วน 2.4:1)
+                        </p>
+
+                        <div className="aspect-ratio-frame aspect-frame-ticket">
+                          {ticketTemplatePreviewUrl ? (
+                            <>
+                              {/* biome-ignore lint/performance/noImgElement: aspect preview */}
+                              <img src={ticketTemplatePreviewUrl} alt="ตัวอย่างภาพพื้นหลังบัตรดิจิทัล" className="aspect-image-img" />
+                              <div className="aspect-overlay-actions">
+                                <label className="aspect-action-btn">
+                                  <span>เปลี่ยนรูป</span>
+                                  <input
+                                    type="file"
+                                    accept="image/*"
+                                    onChange={e => handleTemplateChange(e.target.files?.[0] || null)}
+                                    style={{ display: 'none' }}
+                                  />
+                                </label>
+                                <button
+                                  type="button"
+                                  className="aspect-action-btn btn-remove"
+                                  onClick={() => handleTemplateChange(null)}
+                                >
+                                  ลบ
+                                </button>
+                              </div>
+                            </>
+                          ) : (
+                            <label className="aspect-dropzone-label">
+                              <TicketIcon />
+                              <span className="aspect-dropzone-text">คลิกเพื่อเลือกภาพพื้นหลังตั๋ว</span>
+                              <span className="aspect-dropzone-hint">ขนาด 1200 x 500 px · JPG, PNG, WEBP</span>
+                              <input
+                                id="event-ticket-template"
+                                type="file"
+                                accept="image/*"
+                                onChange={e => handleTemplateChange(e.target.files?.[0] || null)}
+                                style={{ display: 'none' }}
+                              />
+                            </label>
+                          )}
+                        </div>
+                      </div>
+                    </div>
                   </div>
                 )}
               </div>
 
-              {/* Modal Footer */}
+              {/* Modal Footer (D-129 Single-Row Layout) */}
               <div className="editor-modal-footer">
-                <div className="editor-footer-left" style={{ display: 'flex', gap: '0.5rem' }}>
+                <div className="editor-footer-left">
                   <button
                     type="button"
                     className="btn-form-cancel"
@@ -1088,8 +1436,8 @@ export function OrganizerEventsManager({
                     onClick={() => setShowPreview(true)}
                     title="เปิดดูหน้าเว็บตัวอย่างแบบที่ลูกค้าจะเห็นจริง"
                   >
-                    <EyeIcon width={16} height={16} />
-                    <span>ดูตัวอย่างหน้าเว็บลูกค้า (Preview)</span>
+                    <EyeIcon width={15} height={15} />
+                    <span>ดูตัวอย่าง (Preview)</span>
                   </button>
                 </div>
 
@@ -1098,7 +1446,7 @@ export function OrganizerEventsManager({
                     <button
                       type="button"
                       className="btn-form-draft"
-                      onClick={() => setWizardStep(prev => (prev - 1) as 1 | 2 | 3 | 4)}
+                      onClick={() => setWizardStep(prev => (prev - 1) as 1 | 2 | 3)}
                       style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}
                     >
                       <ChevronLeftIcon width={14} height={14} />
@@ -1106,11 +1454,11 @@ export function OrganizerEventsManager({
                     </button>
                   )}
 
-                  {wizardStep < 4 && (
+                  {wizardStep < 3 && (
                     <button
                       type="button"
                       className="btn-form-submit"
-                      onClick={() => setWizardStep(prev => (prev + 1) as 1 | 2 | 3 | 4)}
+                      onClick={() => setWizardStep(prev => (prev + 1) as 1 | 2 | 3)}
                       style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}
                     >
                       <span>ถัดไป</span>
@@ -1124,7 +1472,7 @@ export function OrganizerEventsManager({
                     disabled={submitting}
                     name="save-draft"
                   >
-                    {submitting ? 'กำลังบันทึก...' : 'บันทึกข้อมูลร่าง (Draft)'}
+                    {submitting ? 'กำลังบันทึก...' : 'บันทึกแบบร่าง'}
                   </button>
 
                   <button
@@ -1134,7 +1482,7 @@ export function OrganizerEventsManager({
                     onClick={() => handleCreateEvent(undefined, true)}
                     title="บันทึกและส่งให้เจ้าของระบบตรวจสอบเพื่อเปิดจำหน่ายทันที"
                   >
-                    {submitting ? 'กำลังส่ง...' : 'บันทึกและส่งขออนุมัติทันที'}
+                    {submitting ? 'กำลังส่ง...' : 'ส่งขออนุมัติทันที'}
                   </button>
                 </div>
               </div>
@@ -1169,9 +1517,9 @@ export function OrganizerEventsManager({
             <div className="event-detail-page simulated-preview" style={{ pointerEvents: 'none' }}>
               {/* Banner */}
               <div className="event-cover-banner-wrapper" style={{ height: '220px', borderRadius: '12px', overflow: 'hidden', background: '#0f172a', marginBottom: '1rem' }}>
-                {posterPreviewUrl ? (
+                {coverBannerPreviewUrl || posterPreviewUrl ? (
                   /* biome-ignore lint/performance/noImgElement: live preview */
-                  <img src={posterPreviewUrl} alt="แบนเนอร์คอนเสิร์ต" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  <img src={coverBannerPreviewUrl || posterPreviewUrl || ''} alt="แบนเนอร์คอนเสิร์ต" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                 ) : (
                   <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#94a3b8', gap: '0.5rem' }}>
                     <TicketIcon />
