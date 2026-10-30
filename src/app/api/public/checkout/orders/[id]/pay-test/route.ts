@@ -1,5 +1,6 @@
 import { getDatabasePool } from '@/server/database';
 import { getPaymentChargeForOrder, verifyAndProcessPayment } from '@/server/payment';
+import { isStripeLiveMode } from '@/server/stripe';
 
 export const runtime = 'nodejs';
 
@@ -10,17 +11,34 @@ export async function POST(
   const { id: orderId } = await params;
   const pool = getDatabasePool();
 
+  if (isStripeLiveMode()) {
+    return Response.json(
+      { message: 'ไม่อนุญาตให้ใช้เส้นทางทดสอบการชำระเงินใน Live Mode (AC-123)' },
+      { status: 403 },
+    );
+  }
+
   try {
     const body = await request.json().catch(() => ({}));
 
     // Find active charge if not explicitly supplied
     let chargeId = body.chargeId;
+    let activeCharge: Awaited<ReturnType<typeof getPaymentChargeForOrder>> = null;
     if (!chargeId) {
-      const activeCharge = await getPaymentChargeForOrder(pool, orderId);
+      activeCharge = await getPaymentChargeForOrder(pool, orderId);
       if (!activeCharge) {
         return Response.json({ message: 'ยังไม่มีรายการชำระเงินสำหรับคำสั่งซื้อนี้' }, { status: 404 });
       }
       chargeId = activeCharge.id;
+    } else {
+      activeCharge = await getPaymentChargeForOrder(pool, orderId);
+    }
+
+    if (activeCharge?.livemode) {
+      return Response.json(
+        { message: 'ไม่อนุญาตให้ใช้เส้นทางทดสอบการชำระเงินสำหรับรายการ Live (AC-123)' },
+        { status: 403 },
+      );
     }
 
     const providerPaidAt = body.providerPaidAt ? new Date(body.providerPaidAt) : undefined;

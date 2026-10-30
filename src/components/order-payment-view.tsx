@@ -96,7 +96,13 @@ export function OrderPaymentView({ orderId }: OrderPaymentViewProps) {
           if (data.reservation.status === 'expired') {
             setIsTimeoutModalOpen(true);
           } else {
-            fetch(`/api/public/checkout/orders/${orderId}/payment-qr`)
+            const guestToken =
+              typeof window !== 'undefined'
+                ? sessionStorage.getItem('ticket_guest_otp_token') || ''
+                : '';
+            fetch(`/api/public/checkout/orders/${orderId}/payment-qr`, {
+              headers: guestToken ? { 'x-guest-token': guestToken } : {},
+            })
               .then(qrRes => (qrRes.ok ? qrRes.json() : null))
               .then(qrData => {
                 if (qrData?.charge) {
@@ -518,18 +524,20 @@ export function OrderPaymentView({ orderId }: OrderPaymentViewProps) {
                     <span>กรุณาสแกนชำระให้เสร็จสิ้นก่อนเวลาหมด 15 นาที</span>
                   </div>
 
-                  {/* Test Simulation Button */}
-                  <button
-                    id="simulate-payment-button"
-                    type="button"
-                    onClick={handleSimulatePaymentSuccess}
-                    disabled={isVerifyingPayment}
-                    className="primary-button payment-simulate-btn"
-                  >
-                    {isVerifyingPayment
-                      ? 'กำลังตรวจสอบการชำระเงิน...'
-                      : 'ยืนยันการชำระเงินสำเร็จ (ทดสอบ / Test Payment)'}
-                  </button>
+                  {/* Test Simulation Button (Test mode only, hidden in live mode AC-123) */}
+                  {!charge.livemode && (
+                    <button
+                      id="simulate-payment-button"
+                      type="button"
+                      onClick={handleSimulatePaymentSuccess}
+                      disabled={isVerifyingPayment}
+                      className="primary-button payment-simulate-btn"
+                    >
+                      {isVerifyingPayment
+                        ? 'กำลังตรวจสอบการชำระเงิน...'
+                        : 'ยืนยันการชำระเงินสำเร็จ (ทดสอบ / Test Payment)'}
+                    </button>
+                  )}
 
                   {/* Button fallback for tests if needed */}
                   <button

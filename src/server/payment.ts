@@ -6,6 +6,10 @@ import { ensureReservationSchema } from './reservation.ts';
 import { ensureTicketSchema, issueTicketsForOrder, type TicketDetail } from './tickets.ts';
 import { ensureRefundSchema } from './refunds.ts';
 import { sendOrderTicketsEmail } from './ticket-delivery.ts';
+import {
+  generatePromptPaySvg,
+  getStripeClient,
+} from './stripe.ts';
 
 export interface PaymentChargeDetail {
   id: string;
@@ -14,8 +18,10 @@ export interface PaymentChargeDetail {
   currency: 'thb';
   status: 'pending' | 'successful' | 'failed' | 'expired';
   qrCodeUrl: string;
+  promptpayData?: string;
   expiresAt: string;
   createdAt: string;
+  livemode?: boolean;
 }
 
 export interface PaymentRecoveryCaseDetail {
@@ -50,10 +56,17 @@ export async function ensurePaymentSchema(pool: Pool): Promise<void> {
       "expiresAt" TIMESTAMPTZ NOT NULL,
       "paidAt" TIMESTAMPTZ,
       "createdAt" TIMESTAMPTZ NOT NULL DEFAULT now(),
-      "updatedAt" TIMESTAMPTZ NOT NULL DEFAULT now()
+      "updatedAt" TIMESTAMPTZ NOT NULL DEFAULT now(),
+      "promptpayData" TEXT,
+      "livemode" BOOLEAN NOT NULL DEFAULT false,
+      "idempotencyKey" TEXT
     );
+    ALTER TABLE payment_charges ADD COLUMN IF NOT EXISTS "promptpayData" TEXT;
+    ALTER TABLE payment_charges ADD COLUMN IF NOT EXISTS "livemode" BOOLEAN NOT NULL DEFAULT false;
+    ALTER TABLE payment_charges ADD COLUMN IF NOT EXISTS "idempotencyKey" TEXT;
     CREATE INDEX IF NOT EXISTS idx_payment_charges_order ON payment_charges("orderId");
     CREATE INDEX IF NOT EXISTS idx_payment_charges_status ON payment_charges(status);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_payment_charges_order_active ON payment_charges("orderId") WHERE status = 'pending';
 
     CREATE TABLE IF NOT EXISTS payment_recovery_cases (
       id TEXT PRIMARY KEY,
@@ -79,40 +92,6 @@ export async function ensurePaymentSchema(pool: Pool): Promise<void> {
   `);
 }
 
-/**
- * Generates an SVG QR placeholder for PromptPay with embedded payload for local/test double.
- */
-function generatePromptPaySvg(chargeId: string, amountSatang: number): string {
-  const amountBaht = (amountSatang / 100).toFixed(2);
-  // Valid SVG representing PromptPay QR box (no emojis, clean vector lines)
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" width="240" height="240" style="background:#ffffff;border-radius:8px">
-    <rect width="240" height="240" fill="#ffffff"/>
-    <rect x="20" y="20" width="60" height="60" fill="#1848ed" rx="4"/>
-    <rect x="30" y="30" width="40" height="40" fill="#ffffff" rx="2"/>
-    <rect x="40" y="40" width="20" height="20" fill="#1848ed"/>
-    <rect x="160" y="20" width="60" height="60" fill="#1848ed" rx="4"/>
-    <rect x="170" y="30" width="40" height="40" fill="#ffffff" rx="2"/>
-    <rect x="180" y="40" width="20" height="20" fill="#1848ed"/>
-    <rect x="20" y="160" width="60" height="60" fill="#1848ed" rx="4"/>
-    <rect x="30" y="170" width="40" height="40" fill="#ffffff" rx="2"/>
-    <rect x="40" y="180" width="20" height="20" fill="#1848ed"/>
-    <rect x="100" y="25" width="40" height="15" fill="#0f172a"/>
-    <rect x="95" y="55" width="20" height="25" fill="#0f172a"/>
-    <rect x="125" y="50" width="25" height="30" fill="#0f172a"/>
-    <rect x="90" y="90" width="60" height="60" fill="#1848ed" rx="4"/>
-    <circle cx="120" cy="120" r="16" fill="#ffffff"/>
-    <rect x="114" y="110" width="12" height="20" fill="#1848ed"/>
-    <rect x="25" y="95" width="55" height="20" fill="#0f172a"/>
-    <rect x="30" y="125" width="50" height="25" fill="#0f172a"/>
-    <rect x="160" y="95" width="55" height="25" fill="#0f172a"/>
-    <rect x="165" y="130" width="50" height="20" fill="#0f172a"/>
-    <rect x="95" y="160" width="30" height="55" fill="#0f172a"/>
-    <rect x="135" y="160" width="25" height="55" fill="#0f172a"/>
-    <rect x="170" y="165" width="50" height="50" fill="#0f172a"/>
-    <text x="120" y="232" font-family="sans-serif" font-size="9" fill="#64748b" text-anchor="middle">PromptPay • ${amountBaht} THB • ${chargeId.slice(0, 12)}</text>
-  </svg>`;
-  return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
-}
 
 export async function createPaymentQr(
   pool: Pool,
@@ -168,19 +147,21 @@ export async function createPaymentQr(
     // AC-13, AC-71: Order must be active reserved and not expired
     const expiresAt = new Date(order.expiresAt);
     if (order.status !== 'reserved' || expiresAt.getTime() <= now.getTime()) {
-      // Auto-expire if past deadline
+      // Auto-expire if past deadline: commit update before throwing so it persists
       if (order.status === 'reserved' && expiresAt.getTime() <= now.getTime()) {
         await client.query(
           `UPDATE orders SET status = 'expired', "updatedAt" = $2 WHERE id = $1`,
           [order.id, now],
         );
+        await client.query('COMMIT');
       }
       throw new Error('คำสั่งซื้อนี้หมดเวลาการกันบัตรหรือถูกยกเลิกแล้ว (AC-71)');
     }
 
     // AC-70: Repeated payment request returns existing charge and retains original deadline
     const existingRes = await client.query(
-      `SELECT id, "orderId", amount, currency, status, "qrCodeUrl", "expiresAt", "createdAt"
+      `SELECT id, "orderId", amount, currency, status, "qrCodeUrl", "expiresAt", "createdAt",
+              "promptpayData", "livemode"
        FROM payment_charges
        WHERE "orderId" = $1 AND status = 'pending'
        ORDER BY "createdAt" DESC
@@ -197,38 +178,75 @@ export async function createPaymentQr(
         currency: row.currency as 'thb',
         status: row.status as 'pending',
         qrCodeUrl: row.qrCodeUrl,
+        promptpayData: row.promptpayData || undefined,
         expiresAt: new Date(row.expiresAt).toISOString(),
         createdAt: new Date(row.createdAt).toISOString(),
+        livemode: Boolean(row.livemode),
       };
     }
 
-    // 2. Convert total to exact satang (integer) conforming to AC-26 and Omise PromptPay spec
+    // 2. Convert total to exact satang (integer) conforming to AC-26 and Stripe PromptPay spec
     const amountSatang = Math.round(Number(order.total) * 100);
     if (amountSatang <= 0) {
       throw new Error('ยอดชำระเงินต้องมากกว่า 0 บาท');
     }
 
-    // 3. Create charge ID and QR code URL
-    const chargeId = `chrg_test_${randomUUID().replace(/-/g, '').slice(0, 16)}`;
-    const qrCodeUrl = generatePromptPaySvg(chargeId, amountSatang);
+    // 3. Create Stripe PromptPay PaymentIntent
+    const stripe = getStripeClient();
+    const isLive = stripe.isLiveMode();
+    const idempotencyKey = `order_qr_${order.id}`;
+
+    const intent = await stripe.createPromptPayIntent({
+      orderId: order.id,
+      amountSatang,
+      buyerEmail: order.buyerEmail,
+      idempotencyKey,
+    });
+
+    // Reference & mode guards (AC-119, AC-123)
+    if (intent.metadata?.order_id !== order.id) {
+      throw new Error(
+        `Stripe intent reference mismatch: expected order ${order.id}, got ${intent.metadata?.order_id} (AC-119)`,
+      );
+    }
+    if (intent.amount !== amountSatang || intent.currency !== 'thb') {
+      throw new Error(
+        `Stripe intent amount/currency mismatch: expected ${amountSatang} thb, got ${intent.amount} ${intent.currency} (AC-119)`,
+      );
+    }
+    if (intent.livemode !== isLive) {
+      throw new Error(
+        `Stripe intent mode mismatch: expected livemode ${isLive}, got ${intent.livemode} (AC-123)`,
+      );
+    }
+
+    const qrCodeUrl =
+      intent.next_action?.promptpay_display_qr_code?.image_url_svg ||
+      intent.next_action?.promptpay_display_qr_code?.image_url_png ||
+      generatePromptPaySvg(intent.id, amountSatang);
+    const promptpayData = intent.next_action?.promptpay_display_qr_code?.data || '';
 
     await client.query(
       `INSERT INTO payment_charges (
-         id, "orderId", amount, currency, status, "qrCodeUrl", "expiresAt", "createdAt", "updatedAt"
+         id, "orderId", amount, currency, status, "qrCodeUrl", "expiresAt", "createdAt", "updatedAt",
+         "promptpayData", "livemode", "idempotencyKey"
        )
-       VALUES ($1, $2, $3, 'thb', 'pending', $4, $5, $6, $6)`,
-      [chargeId, order.id, amountSatang, qrCodeUrl, expiresAt, now],
+       VALUES ($1, $2, $3, 'thb', 'pending', $4, $5, $6, $6, $7, $8, $9)
+       ON CONFLICT (id) DO UPDATE SET "updatedAt" = $6`,
+      [intent.id, order.id, amountSatang, qrCodeUrl, expiresAt, now, promptpayData, intent.livemode, idempotencyKey],
     );
 
     return {
-      id: chargeId,
+      id: intent.id,
       orderId: order.id,
       amount: amountSatang,
       currency: 'thb',
       status: 'pending',
       qrCodeUrl,
+      promptpayData,
       expiresAt: expiresAt.toISOString(),
       createdAt: now.toISOString(),
+      livemode: intent.livemode,
     };
   });
 }
@@ -236,10 +254,29 @@ export async function createPaymentQr(
 export async function getPaymentChargeForOrder(
   pool: Pool,
   orderId: string,
+  verifiedToken?: string,
+  now = new Date(),
 ): Promise<PaymentChargeDetail | null> {
   await ensurePaymentSchema(pool);
+
+  if (verifiedToken) {
+    const verifiedSession = await getVerifiedGuestSession(pool, verifiedToken, now);
+    if (!verifiedSession) {
+      throw new Error('กรุณายืนยันตัวตนผ่าน OTP ก่อนเข้าถึงข้อมูลการชำระเงิน (AC-12)');
+    }
+    const orderRes = await pool.query<{ buyerEmail: string }>(
+      `SELECT "buyerEmail" FROM orders WHERE id = $1`,
+      [orderId],
+    );
+    if (orderRes.rowCount === 0) return null;
+    if (orderRes.rows[0].buyerEmail.toLowerCase() !== verifiedSession.email.toLowerCase()) {
+      throw new Error('ท่านไม่มีสิทธิ์ในการเข้าถึงข้อมูลการชำระเงินสำหรับคำสั่งซื้อนี้');
+    }
+  }
+
   const res = await pool.query(
-    `SELECT id, "orderId", amount, currency, status, "qrCodeUrl", "expiresAt", "createdAt"
+    `SELECT id, "orderId", amount, currency, status, "qrCodeUrl", "expiresAt", "createdAt",
+            "promptpayData", "livemode"
      FROM payment_charges
      WHERE "orderId" = $1
      ORDER BY "createdAt" DESC
@@ -256,8 +293,10 @@ export async function getPaymentChargeForOrder(
     currency: row.currency as 'thb',
     status: row.status as 'pending' | 'successful' | 'failed' | 'expired',
     qrCodeUrl: row.qrCodeUrl,
+    promptpayData: row.promptpayData || undefined,
     expiresAt: new Date(row.expiresAt).toISOString(),
     createdAt: new Date(row.createdAt).toISOString(),
+    livemode: Boolean(row.livemode),
   };
 }
 
