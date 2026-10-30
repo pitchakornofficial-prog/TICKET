@@ -71,6 +71,7 @@ export interface CreatePromptPayIntentParams {
 export interface StripeClient {
   createPromptPayIntent(params: CreatePromptPayIntentParams): Promise<StripePaymentIntent>;
   retrievePaymentIntent(intentId: string): Promise<StripePaymentIntent>;
+  cancelPaymentIntent(intentId: string): Promise<StripePaymentIntent>;
   isLiveMode(): boolean;
 }
 
@@ -221,6 +222,7 @@ export class StripeContractDouble implements StripeClient {
   private livemode = false;
   private failureError: Error | null = null;
   private simulateTimeoutAfterCreate = false;
+  private simulateTimeoutAfterCancel = false;
   private createdCount = 0;
 
   isLiveMode(): boolean {
@@ -239,6 +241,10 @@ export class StripeContractDouble implements StripeClient {
     this.simulateTimeoutAfterCreate = true;
   }
 
+  simulateTimeoutAfterCancelNext(): void {
+    this.simulateTimeoutAfterCancel = true;
+  }
+
   getCreatedIntentsCount(): number {
     return this.createdCount;
   }
@@ -253,6 +259,7 @@ export class StripeContractDouble implements StripeClient {
     this.livemode = false;
     this.failureError = null;
     this.simulateTimeoutAfterCreate = false;
+    this.simulateTimeoutAfterCancel = false;
     this.createdCount = 0;
   }
 
@@ -316,6 +323,27 @@ export class StripeContractDouble implements StripeClient {
     if (!intent) {
       throw new Error(`No such payment_intent: '${intentId}'`);
     }
+    return intent;
+  }
+
+  async cancelPaymentIntent(intentId: string): Promise<StripePaymentIntent> {
+    if (this.failureError) {
+      throw this.failureError;
+    }
+    if (this.simulateTimeoutAfterCancel) {
+      this.simulateTimeoutAfterCancel = false;
+      throw new Error('Stripe API request timed out (simulated ambiguous cancel timeout)');
+    }
+    const intent = this.intents.get(intentId);
+    if (!intent) {
+      throw new Error(`No such payment_intent: '${intentId}'`);
+    }
+    // Per TASK-041 probe: Stripe cancels only non-succeeded intents.
+    // If intent is already succeeded, Stripe returns invalid_request_error / payment_intent_unexpected_state.
+    if (intent.status === 'succeeded') {
+      throw new Error('You cannot cancel a PaymentIntent with status succeeded');
+    }
+    intent.status = 'canceled';
     return intent;
   }
 
@@ -386,7 +414,12 @@ export class HttpStripeClient implements StripeClient {
     const body = new URLSearchParams();
     body.set('amount', params.amountSatang.toString());
     body.set('currency', 'thb');
-    body.set('payment_method_types[0]', 'promptpay');
+    // Stripe API 2026-10-28 removed `payment_method_types`; payment methods are
+    // managed in Dashboard settings. PromptPay is selected via payment_method_data.
+    // PromptPay shows a QR in-page (no redirect), so disallow redirect methods
+    // instead of supplying a return_url.
+    body.set('automatic_payment_methods[enabled]', 'true');
+    body.set('automatic_payment_methods[allow_redirects]', 'never');
     body.set('metadata[order_id]', params.orderId);
     body.set('confirm', 'true');
     body.set('payment_method_data[type]', 'promptpay');
@@ -448,6 +481,33 @@ export class HttpStripeClient implements StripeClient {
         // use default errorMsg
       }
       throw new Error(`Stripe retrievePaymentIntent failed: ${errorMsg}`);
+    }
+
+    return (await response.json()) as StripePaymentIntent;
+  }
+
+  async cancelPaymentIntent(intentId: string): Promise<StripePaymentIntent> {
+    const url = `https://api.stripe.com/v1/payment_intents/${encodeURIComponent(intentId)}/cancel`;
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${this.secretKey}`,
+        'Stripe-Version': STRIPE_API_VERSION,
+      },
+    });
+
+    if (!response.ok) {
+      const errText = await response.text();
+      let errorMsg = `Stripe error ${response.status}`;
+      try {
+        const parsed = JSON.parse(errText);
+        if (parsed.error?.message) {
+          errorMsg = parsed.error.message;
+        }
+      } catch {
+        // use default errorMsg
+      }
+      throw new Error(`Stripe cancelPaymentIntent failed: ${errorMsg}`);
     }
 
     return (await response.json()) as StripePaymentIntent;

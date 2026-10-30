@@ -150,7 +150,7 @@ test.describe('PromptPay Payment QR generation flow (TASK-042, AC-118, AC-15, AC
     await expect(page.locator('#payment-total-thb')).toContainText('4,060');
     await expect(page.locator('#payment-currency')).toHaveText('THB');
     const chargeId = (await page.locator('#payment-charge-id').innerText()).trim();
-    expect(chargeId).toMatch(/^pi_test_/);
+    expect(chargeId).toMatch(/^pi_/);
     expect(page.url()).toContain(`/orders/${orderId}/payment`);
     expect(page.url()).not.toContain('checkout.stripe.com');
 

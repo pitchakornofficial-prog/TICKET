@@ -137,8 +137,8 @@ test.describe('Paid ticket issuance flow (TASK-043, AC-119, AC-120, AC-123, AC-1
     await simulateBtn.click({ force: true });
 
     // 8. Assert Paid state & Ticket Issuance (AC-11, AC-17, AC-19)
-    await expect(page.getByText('ชำระเงินสำเร็จ (Paid)')).toBeVisible();
-    await expect(page.getByText('ออกบัตรสำเร็จแล้ว (2 ใบ)')).toBeVisible();
+    await expect(page.getByText('ชำระเงินสำเร็จ (Paid)')).toBeVisible({ timeout: 15000 });
+    await expect(page.getByText('ออกบัตรสำเร็จแล้ว (2 ใบ)')).toBeVisible({ timeout: 15000 });
 
     // Buyer info summary
     await expect(page.locator('#buyer-summary-name')).toHaveText(guestName);

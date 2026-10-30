@@ -540,6 +540,15 @@ export async function processStripeSuccessEvent(
       };
     }
 
+    // 6. G-53 / P5 / AC-124: Decision time T = eventCreated * 1000 (ms)
+    const T_ms = eventCreated * 1000;
+    const paidAt = new Date(T_ms);
+    const D_ms = new Date(order.expiresAt).getTime();
+    const isCancelledSession = order.sessionStatus === 'cancelled' || Boolean(order.cancellationApprovedAt);
+    const C_ms = order.cancellationApprovedAt
+      ? new Date(order.cancellationApprovedAt).getTime()
+      : (order.sessionUpdatedAt ? new Date(order.sessionUpdatedAt).getTime() : now.getTime());
+
     // Idempotency: Event ID already processed (AC-18, AC-120)
     const existingEvtRes = await client.query(
       `SELECT id FROM stripe_webhook_events WHERE id = $1`,
@@ -547,8 +556,66 @@ export async function processStripeSuccessEvent(
     );
     const isEventAlreadyRecorded = (existingEvtRes.rowCount ?? 0) > 0;
 
+    // Idempotency: Check if refund request already exists for this order (AC-18, AC-120, G-51, G-52)
+    const existingRefundRes = await client.query<{
+      id: string;
+      requestedAmount: number;
+      reason: string;
+      status: string;
+    }>(
+      `SELECT id, "requestedAmount", reason, status
+       FROM refund_requests
+       WHERE "orderId" = $1
+       LIMIT 1`,
+      [order.id],
+    );
+
+    if (existingRefundRes.rowCount && existingRefundRes.rowCount > 0) {
+      const ex = existingRefundRes.rows[0];
+      const isG51FaceValue = ex.reason?.includes('G-51');
+      const isG52Full = ex.reason?.includes('G-52');
+      const isFullRefund = isG52Full || (!isG51FaceValue && Math.round(Number(ex.requestedAmount) * 100) === Math.round(Number(order.total) * 100));
+
+      const existingCaseForRefund = await client.query<{ id: string }>(
+        `SELECT id FROM payment_recovery_cases WHERE "orderId" = $1 LIMIT 1`,
+        [order.id],
+      );
+      const caseId = existingCaseForRefund.rows[0]?.id;
+
+      if (!isEventAlreadyRecorded) {
+        await client.query(
+          `INSERT INTO stripe_webhook_events (
+             id, "eventType", "intentId", "orderId", "apiVersion", "livemode", "eventCreated"
+           ) VALUES ($1, $2, $3, $4, $5, $6, $7)
+           ON CONFLICT (id) DO NOTHING`,
+          [
+            event.id,
+            event.type,
+            retrievedIntent.id,
+            order.id,
+            event.api_version || null,
+            event.livemode,
+            paidAt,
+          ],
+        );
+      }
+      return {
+        success: false,
+        status: isFullRefund ? 'cancelled_session_refund_full' : 'cancelled_session_refund_face_value',
+        orderId: order.id,
+        intentId: retrievedIntent.id,
+        eventId: event.id,
+        duplicate: true,
+        message: 'รายการชำระเงินนี้ได้รับการประมวลผลการคืนเงินสำหรับรอบที่ยกเลิกแล้ว (Idempotent replay)',
+        refundRequestId: ex.id,
+        refundAmount: Number(ex.requestedAmount),
+        caseId,
+      };
+    }
+
     // Idempotency: Order already paid with issued tickets (AC-18, AC-120)
-    if (order.status === 'paid') {
+    // Only issue/return tickets if session is active (not cancelled)
+    if (order.status === 'paid' && !isCancelledSession) {
       const tickets = await issueTicketsForOrder(client, order.id, now);
       if (!isEventAlreadyRecorded) {
         await client.query(
@@ -563,7 +630,7 @@ export async function processStripeSuccessEvent(
             order.id,
             event.api_version || null,
             event.livemode,
-            new Date(eventCreated * 1000),
+            paidAt,
           ],
         );
       }
@@ -622,7 +689,7 @@ export async function processStripeSuccessEvent(
             order.id,
             event.api_version || null,
             event.livemode,
-            new Date(eventCreated * 1000),
+            paidAt,
           ],
         );
       }
@@ -638,15 +705,6 @@ export async function processStripeSuccessEvent(
         recoveryCase,
       };
     }
-
-    // 6. G-53 / P5 / AC-124: Decision time T = eventCreated * 1000 (ms)
-    const T_ms = eventCreated * 1000;
-    const paidAt = new Date(T_ms);
-    const D_ms = new Date(order.expiresAt).getTime();
-    const isCancelledSession = order.sessionStatus === 'cancelled' || Boolean(order.cancellationApprovedAt);
-    const C_ms = order.cancellationApprovedAt
-      ? new Date(order.cancellationApprovedAt).getTime()
-      : (order.sessionUpdatedAt ? new Date(order.sessionUpdatedAt).getTime() : now.getTime());
 
     // Record the event in stripe_webhook_events
     await client.query(

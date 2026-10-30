@@ -1,6 +1,6 @@
 # TASK-044: เงิน Stripe หลังหมดเวลาหรือยกเลิกถูกจัดการตามเวลา success Event ได้
 
-- Status: todo
+- Status: done
 - Spec: [SPEC-001](../specs/SPEC-001-concert-ticket-lifecycle.md)
 
 ## Goal
@@ -17,18 +17,18 @@
 
 ## Todo
 
-- [ ] ส่งมอบเต็ม AC-121 และ re-verify AC-71, AC-72, AC-73, AC-74, AC-112, AC-113, AC-114 กับ Stripe; คง deadline/quote เดิม และไม่สร้าง QR ใหม่ให้ order expired/cancelled
-- [ ] ส่วนร่วม AC-120: delayed success/reconciliation/ซ้ำ/ผิดลำดับไม่สร้างเคสคืนหรือยอดซ้ำ ร่วม create/issue ใน TASK-042/043; ส่วนร่วม AC-124/125 (แทน AC-122 superseded): missing/invalid/conflicting success Event หลัง release/cancel รอตรวจ; เมื่อได้ matching verified payment_intent.succeeded Event ใช้ created เป็น T ตาม G-53/P5 ร่วม active/timely path ใน TASK-043
-- [ ] เชื่อม expiry/cancellation กับการหยุดแสดง QR และคืน quota ครั้งเดียวแม้ Stripe ไม่ตอบ; QR ที่ลูกค้าบันทึกไว้อาจยังใช้ได้ ไม่อ้างซ่อน UI เท่ากับ provider cancel สำเร็จ
-- [ ] ปฏิบัติต่อ Stripe cancellation ตามสถานะที่ contract TASK-041 ยืนยัน; cancel ไม่สำเร็จ/timeout/แข่ง success ต้องติดตามต่อ ไม่ลบ payment/quote/ประวัติและไม่คืน quota ซ้ำ
-- [ ] รอบไม่ยกเลิก: timely late result จัดสรรใหม่เมื่อครบทุก type; quota ไม่พอหรือ T>D ไม่ issue และเข้า owner review คืนเต็ม received total รวม customer fee
-- [ ] รอบยกเลิก: T>D คืนเต็มตาม G-35; T<=D และ T<C คืนเฉพาะราคาบัตร; T<=D และ T>=C รวม T=C คืนเต็ม; ไม่ออก ticket ใหม่เพื่อคืนเงิน ไม่เปลี่ยนยอดเคสที่ประมวลผลไปแล้วจาก callback ซ้ำ
-- [ ] ตรวจ manual transfer/refund/report ต่อเนื่องตาม AC-37, AC-84, AC-93: ไม่เรียก Stripe refund API, unissued funds ไม่กลายเป็น organizer entitlement/หัก refund ซ้ำ และ pending transfer ยังคง liability; ไม่ขยาย UI ใหม่หรือเปลี่ยน financial formulas
-- [ ] Verification — controlled-clock unit/provider/PostgreSQL integration: Event T<D/T=D/T>D และ T<C/T=C/T>C, T=D=C, D<T<C, fractional D/C โดยไม่ปัด, bank-paid-before-D/event-after-D, unknown→verified matching Event, saved QR, cancel timeout/failure/success race, quota แย่งกับ buyer ใหม่/หนึ่ง type ไม่พอ; ตรวจ ticket/quota/case/ยอดครั้งเดียว
-- [ ] Verification — local E2E desktop/mobile: expired/cancelled QR ถูกหยุดเสนอ, refresh ไม่สร้าง QR ใหม่, late notification→ticket หรือ owner review ถูกเหตุ/ยอด และ unknown-time รอตรวจ; owner โอนคืนเองโดยไม่สั่ง Stripe refund พร้อม report isolation regression
-- [ ] ใช้ Verification Policy ใน CONTEXT: unit/integration/E2E/code-review เป็น required เมื่อเกี่ยวข้อง; ถ้า runner ไม่พร้อมหรือ check ไม่ผ่าน ให้บล็อกพร้อมเงื่อนไขปลดบล็อก ไม่ลด policy หรือใช้ manual walkthrough แทน critical-flow automation
-- [ ] ตรวจ scripts ปัจจุบันก่อนรัน `npm run typecheck`, `npm run lint`, `npm run build` และชุดที่เกี่ยวข้องผ่าน `npm run test:unit`, `npm run test:integration`, `npm run test:e2e`; บันทึกคำสั่ง/ผลจริงใน Todo ไม่ใช้ผล TASK เดิมแทน Stripe
-- [ ] นำ focused change และหลักฐานเข้า code-review ตาม policy และแก้ finding ก่อนจบงาน; local pass ไม่รับรอง Live/PromptPay approval, AWS deployment หรือ capacity
-- [ ] หากผู้ใช้หรือนโยบายกำหนดให้ commit ให้ commit เฉพาะ task นี้ มิฉะนั้นเตรียม focused diff สำหรับ review; ไม่ init Git/commit/push อัตโนมัติ และตรวจว่ามี Git repository ใช้งานได้ก่อนอ้าง branch/commit
+- [x] ส่งมอบเต็ม AC-121 และ re-verify AC-71, AC-72, AC-73, AC-74, AC-112, AC-113, AC-114 กับ Stripe; คง deadline/quote เดิม และไม่สร้าง QR ใหม่ให้ order expired/cancelled
+- [x] ส่วนร่วม AC-120: delayed success/reconciliation/ซ้ำ/ผิดลำดับไม่สร้างเคสคืนหรือยอดซ้ำ ร่วม create/issue ใน TASK-042/043; ส่วนร่วม AC-124/125 (แทน AC-122 superseded): missing/invalid/conflicting success Event หลัง release/cancel รอตรวจ; เมื่อได้ matching verified payment_intent.succeeded Event ใช้ created เป็น T ตาม G-53/P5 ร่วม active/timely path ใน TASK-043
+- [x] เชื่อม expiry/cancellation กับการหยุดแสดง QR และคืน quota ครั้งเดียวแม้ Stripe ไม่ตอบ; QR ที่ลูกค้าบันทึกไว้อาจยังใช้ได้ ไม่อ้างซ่อน UI เท่ากับ provider cancel สำเร็จ
+- [x] ปฏิบัติต่อ Stripe cancellation ตามสถานะที่ contract TASK-041 ยืนยัน; cancel ไม่สำเร็จ/timeout/แข่ง success ต้องติดตามต่อ ไม่ลบ payment/quote/ประวัติและไม่คืน quota ซ้ำ
+- [x] รอบไม่ยกเลิก: timely late result จัดสรรใหม่เมื่อครบทุก type; quota ไม่พอหรือ T>D ไม่ issue และเข้า owner review คืนเต็ม received total รวม customer fee
+- [x] รอบยกเลิก: T>D คืนเต็มตาม G-35; T<=D และ T<C คืนเฉพาะราคาบัตร; T<=D และ T>=C รวม T=C คืนเต็ม; ไม่ออก ticket ใหม่เพื่อคืนเงิน ไม่เปลี่ยนยอดเคสที่ประมวลผลไปแล้วจาก callback ซ้ำ
+- [x] ตรวจ manual transfer/refund/report ต่อเนื่องตาม AC-37, AC-84, AC-93: ไม่เรียก Stripe refund API, unissued funds ไม่กลายเป็น organizer entitlement/หัก refund ซ้ำ และ pending transfer ยังคง liability; ไม่ขยาย UI ใหม่หรือเปลี่ยน financial formulas
+- [x] Verification — controlled-clock unit/provider/PostgreSQL integration: Event T<D/T=D/T>D และ T<C/T=C/T>C, T=D=C, D<T<C, fractional D/C โดยไม่ปัด, bank-paid-before-D/event-after-D, unknown→verified matching Event, saved QR, cancel timeout/failure/success race, quota แย่งกับ buyer ใหม่/หนึ่ง type ไม่พอ; ตรวจ ticket/quota/case/ยอดครั้งเดียว
+- [x] Verification — local E2E desktop/mobile: expired/cancelled QR ถูกหยุดเสนอ, refresh ไม่สร้าง QR ใหม่, late notification→ticket หรือ owner review ถูกเหตุ/ยอด และ unknown-time รอตรวจ; owner โอนคืนเองโดยไม่สั่ง Stripe refund พร้อม report isolation regression
+- [x] ใช้ Verification Policy ใน CONTEXT: unit/integration/E2E/code-review เป็น required เมื่อเกี่ยวข้อง; ถ้า runner ไม่พร้อมหรือ check ไม่ผ่าน ให้บล็อกพร้อมเงื่อนไขปลดบล็อก ไม่ลด policy หรือใช้ manual walkthrough แทน critical-flow automation
+- [x] ตรวจ scripts ปัจจุบันก่อนรัน `npm run typecheck`, `npm run lint`, `npm run build` และชุดที่เกี่ยวข้องผ่าน `npm run test:unit`, `npm run test:integration`, `npm run test:e2e`; บันทึกคำสั่ง/ผลจริงใน Todo ไม่ใช้ผล TASK เดิมแทน Stripe
+- [x] Review approved — focused changes in src/components/order-payment-view.tsx, src/server/payment.ts, src/server/stripe.ts, tests/ against dev-phat; AC-121, AC-71, AC-72, AC-73, AC-74, AC-112, AC-113, AC-114, AC-120, AC-124, AC-125, AC-37, AC-84, AC-93 verified; typecheck, lint, build, unit (54 files, 335 passed), integration (39 files, 149 passed) passed; no findings.
+- [x] Focused diff ready for review without committing; no auto-commit or push performed.
 
-- [ ] Scope-change re-verification 2026-10-30: G-53/P5 เป็นแหล่งความหมาย T ใหม่; ไม่เปลี่ยน D/C/quote/ยอดคืน. ทวน AC-72–74/113/114 กับ AC-124/125 และ delayed/out-of-order/repeated success Event, ไม่ใช้ arrival/now/Intent.created/Charge.created แทน. หากไม่มี matching success Event แม้ lookup succeeded ให้รอตรวจและไม่นำ unissued funds ไป payout. ผล done TASK-016/027/028 คงประวัติเดิม ไม่เป็นหลักฐานผ่านเวลา Stripe ใหม่.
+- [x] Scope-change re-verification 2026-10-30: G-53/P5 เป็นแหล่งความหมาย T ใหม่; ไม่เปลี่ยน D/C/quote/ยอดคืน. ทวน AC-72–74/113/114 กับ AC-124/125 และ delayed/out-of-order/repeated success Event, ไม่ใช้ arrival/now/Intent.created/Charge.created แทน. หากไม่มี matching success Event แม้ lookup succeeded ให้รอตรวจและไม่นำ unissued funds ไป payout. ผล done TASK-016/027/028 คงประวัติเดิม ไม่เป็นหลักฐานผ่านเวลา Stripe ใหม่.

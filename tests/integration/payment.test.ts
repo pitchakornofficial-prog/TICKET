@@ -472,6 +472,7 @@ describe('Payment QR creation and quotation consistency (TASK-042, AC-118, AC-15
         created: Math.floor(Date.now() / 1000),
       }),
       retrievePaymentIntent: async () => { throw new Error('Not implemented'); },
+      cancelPaymentIntent: async () => { throw new Error('Not implemented'); },
     };
 
     setStripeClient(badRefClient);
@@ -496,6 +497,7 @@ describe('Payment QR creation and quotation consistency (TASK-042, AC-118, AC-15
         created: Math.floor(Date.now() / 1000),
       }),
       retrievePaymentIntent: async () => { throw new Error('Not implemented'); },
+      cancelPaymentIntent: async () => { throw new Error('Not implemented'); },
     };
 
     setStripeClient(badModeClient);

@@ -24,21 +24,11 @@ test.describe('Reservation expiry, refresh idempotency and quota release (TASK-0
     await page.getByRole('button', { name: 'เข้าสู่ระบบ', exact: true }).click();
     await expect(page).toHaveURL('/back-office/organizer');
 
-    await page.getByRole('button', { name: '+ สร้างงานคอนเสิร์ตใหม่' }).click();
-    await page.getByLabel('ชื่องานคอนเสิร์ต').fill(eventTitle);
-    await page.getByLabel('สถานที่จัดงาน').fill('เซ็นทรัลเวิลด์ ไลฟ์');
-    await page.getByRole('button', { name: 'บันทึกข้อมูลร่าง (Draft)' }).click();
-    await expect(page.getByText('บันทึกงานคอนเสิร์ตสำเร็จ')).toBeVisible();
-
-    // Get event ID
-    const eventsRes = await page.request.get('/api/events');
-    const { events } = await eventsRes.json();
-    const createdEvent = events.find((e: { title: string; id: string }) => e.title === eventTitle);
-    expect(createdEvent).toBeDefined();
-
-    // Add session with ticket quota = 2
-    const updateRes = await page.request.put(`/api/events/${createdEvent.id}`, {
+    const createEventRes = await page.request.post('/api/events', {
       data: {
+        title: eventTitle,
+        description: 'คอนเสิร์ตทดสอบ Expiry',
+        location: 'เซ็นทรัลเวิลด์ ไลฟ์',
         limitPerOrder: 4,
         sessions: [
           {
@@ -49,9 +39,9 @@ test.describe('Reservation expiry, refresh idempotency and quota release (TASK-0
         ],
       },
     });
-    expect(updateRes.status()).toBe(200);
-    const updatedData = await updateRes.json();
-    const sessionId = updatedData.event.sessions[0].id;
+    expect(createEventRes.status()).toBe(201);
+    const createdEvent = (await createEventRes.json()).event;
+    const sessionId = createdEvent.sessions[0].id;
 
     // Submit session for approval
     await page.request.post(`/api/events/${createdEvent.id}?action=submit-session`, {
@@ -75,11 +65,28 @@ test.describe('Reservation expiry, refresh idempotency and quota release (TASK-0
     await page.getByRole('button', { name: 'ออกจากระบบ', exact: true }).click();
     await expect(page).toHaveURL('/login');
 
-    // 3. Guest opens the concert detail page
+    // 3. Guest opens the concert detail page and navigates to checkout
     await page.goto(`/events/${createdEvent.id}`);
     await expect(page.getByRole('heading', { name: eventTitle })).toBeVisible();
 
-    // 4. Guest completes OTP verification
+    const enterQueueBtn = page.getByTestId('enter-queue-cta-btn').filter({ visible: true });
+    if (await enterQueueBtn.isVisible()) {
+      await enterQueueBtn.click();
+      const proceedBtn = page.locator('#proceed-to-checkout-btn');
+      await expect(proceedBtn).toBeVisible({ timeout: 10000 });
+      await proceedBtn.click();
+    } else {
+      await page.goto(`/events/${createdEvent.id}/checkout`);
+    }
+    await expect(page).toHaveURL(new RegExp(`/events/${createdEvent.id}/checkout`));
+
+    // 4. Select 2 tickets (consuming all quota)
+    const addBtn = page.getByRole('button', { name: 'เพิ่มจำนวน บัตรนั่งมาตรฐาน' });
+    await addBtn.click();
+    await addBtn.click();
+    await expect(page.getByText('รวมราคาบัตร (2 ใบ)')).toBeVisible();
+
+    // Complete OTP verification
     await page.getByLabel('ชื่อ-นามสกุล *').fill(guestName);
     await page.getByLabel('อีเมล *').fill(guestEmail);
     await page.getByLabel('เบอร์โทรศัพท์มือถือ *').fill(guestPhone);
@@ -96,15 +103,21 @@ test.describe('Reservation expiry, refresh idempotency and quota release (TASK-0
 
     await page.getByLabel('รหัส OTP 6 หลัก *').fill(code);
     await page.getByRole('button', { name: 'ยืนยันรหัส OTP' }).click();
+
+    const confirmModalBtn = page.getByRole('button', { name: 'ยืนยันและดำเนินการต่อ' });
+    if (await confirmModalBtn.isVisible()) {
+      await confirmModalBtn.click();
+    }
     await expect(page.getByRole('heading', { name: 'ยืนยันอีเมลสำเร็จ (Guest Verified)' })).toBeVisible();
 
-    // 5. Select 2 tickets (consuming all quota) and confirm reservation
-    const addBtn = page.getByRole('button', { name: 'เพิ่มจำนวน บัตรนั่งมาตรฐาน' });
-    await addBtn.click();
-    await addBtn.click();
-    await page.getByRole('button', { name: 'ยืนยันการเลือกบัตร (2 ใบ)' }).click();
+    // 5. Confirm reservation -> navigates to Payment page
+    const confirmReserveBtn = page.locator('#confirm-reservation-btn');
+    await expect(confirmReserveBtn).toBeEnabled();
+    await confirmReserveBtn.scrollIntoViewIfNeeded();
+    await confirmReserveBtn.click({ force: true });
 
     // 6. Active reservation confirmed
+    await expect(page).toHaveURL(/\/orders\/ORD-[A-Z0-9-]+\/payment$/);
     await expect(page.getByText('กันบัตรสำเร็จ (Reserved)')).toBeVisible();
     const orderId = (await page.locator('#reservation-order-id').innerText()).trim();
     expect(orderId).toMatch(/^ORD-/);
@@ -133,13 +146,30 @@ test.describe('Reservation expiry, refresh idempotency and quota release (TASK-0
     await expect(page.locator('#reservation-countdown')).toContainText('0:00 นาที (หมดเวลา)');
 
     // 9. Reset and start fresh order with released quota
-    const resetBtn = page.getByRole('button', { name: 'เริ่มทำรายการใหม่' });
-    await expect(resetBtn).toBeVisible();
-    await resetBtn.click();
+    const modalBtn = page.locator('#timeout-modal-redirect-btn');
+    if (await modalBtn.isVisible()) {
+      await modalBtn.click();
+    } else {
+      const resetBtn = page.getByRole('button', { name: /(กลับไปเลือกบัตรใหม่|เริ่มทำรายการใหม่|กลับไปหน้ารายละเอียดคอนเสิร์ต)/ }).first();
+      await resetBtn.click({ force: true });
+    }
+
+    if (!page.url().includes('/checkout')) {
+      const enterQueueBtn = page.getByTestId('enter-queue-cta-btn').filter({ visible: true });
+      if (await enterQueueBtn.isVisible()) {
+        await enterQueueBtn.click();
+        const proceedBtn = page.locator('#proceed-to-checkout-btn');
+        await expect(proceedBtn).toBeVisible({ timeout: 10000 });
+        await proceedBtn.click();
+      } else {
+        await page.goto(`/events/${createdEvent.id}/checkout`);
+      }
+    }
+    await expect(page).toHaveURL(new RegExp(`/events/${createdEvent.id}/checkout`));
 
     // Quantity selector is restored and shows released quota
-    await expect(page.getByRole('heading', { name: 'เลือกประเภทและจำนวนบัตร' })).toBeVisible();
-    await expect(page.getByText('2 ใบ', { exact: true })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'เลือกรอบการแสดงและจำนวนบัตร' })).toBeVisible();
+    await expect(page.getByText(/คงเหลือ 2 ใบ/)).toBeVisible();
 
     // 10. Design rules: zero emojis (D-14), responsive layout
     expect(await page.locator('body').innerText()).not.toMatch(/\p{Extended_Pictographic}/u);

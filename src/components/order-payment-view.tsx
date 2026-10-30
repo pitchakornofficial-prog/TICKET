@@ -95,7 +95,7 @@ export function OrderPaymentView({ orderId }: OrderPaymentViewProps) {
           }
           if (data.reservation.status === 'expired') {
             setIsTimeoutModalOpen(true);
-          } else {
+          } else if (data.reservation.status === 'reserved') {
             const guestToken =
               typeof window !== 'undefined'
                 ? sessionStorage.getItem('ticket_guest_otp_token') || ''
@@ -135,6 +135,34 @@ export function OrderPaymentView({ orderId }: OrderPaymentViewProps) {
       })
       .catch(() => {});
   }, [reservation?.id, reservation?.status]);
+
+  // Poll order status while reserved to detect payment completion via webhook in real time
+  useEffect(() => {
+    if (!orderId || reservation?.status !== 'reserved') return;
+
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/public/checkout/orders/${orderId}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data?.reservation) {
+          if (data.reservation.status === 'paid') {
+            setReservation(data.reservation);
+            router.replace(`/orders/${orderId}/success`);
+          } else if (data.reservation.status === 'payment_exception') {
+            setReservation(data.reservation);
+          } else if (data.reservation.status === 'expired') {
+            setReservation(data.reservation);
+            setIsTimeoutModalOpen(true);
+          }
+        }
+      } catch {
+        // Ignore network polling errors
+      }
+    }, 2000);
+
+    return () => clearInterval(interval);
+  }, [orderId, reservation?.status, router]);
 
   // Countdown timer
   useEffect(() => {
@@ -267,7 +295,9 @@ export function OrderPaymentView({ orderId }: OrderPaymentViewProps) {
                     ? 'badge-exception'
                     : isExpired
                       ? 'badge-expired'
-                      : 'badge-reserved'
+                      : reservation.status === 'cancelled'
+                        ? 'badge-cancelled'
+                        : 'badge-reserved'
               }`}
             >
               {isPaid
@@ -276,7 +306,9 @@ export function OrderPaymentView({ orderId }: OrderPaymentViewProps) {
                   ? 'รอตรวจสอบเพื่อคืนเงิน (Under Review)'
                   : isExpired
                     ? 'หมดเวลาการกันบัตร (Expired)'
-                    : 'กันบัตรสำเร็จ (Reserved)'}
+                    : reservation.status === 'cancelled'
+                      ? 'รอบการแสดงถูกยกเลิก (Cancelled)'
+                      : 'กันบัตรสำเร็จ (Reserved)'}
             </span>
             {hasUbuPrivilege && (
               <span className="ubu-active-pill">
@@ -460,6 +492,31 @@ export function OrderPaymentView({ orderId }: OrderPaymentViewProps) {
                 className="primary-button"
               >
                 กลับไปเลือกบัตรใหม่
+              </button>
+            </section>
+          )}
+
+          {reservation.status === 'cancelled' && (
+            <section
+              id="reservation-cancelled-alert"
+              role="alert"
+              className="payment-alert-card payment-alert-cancelled"
+            >
+              <div className="payment-alert-header">
+                <AlertIcon />
+                <strong className="payment-alert-title">
+                  รอบการแสดงนี้ถูกยกเลิกแล้ว (AC-35, AC-112)
+                </strong>
+              </div>
+              <p className="payment-alert-desc">
+                รอบการแสดงนี้ถูกยกเลิก ระบบได้ทำการยุติรายการกันบัตร คืนโควตาสู่ระบบ และปิดการรับชำระเงินสำหรับรอบนี้แล้ว หากมีรายการชำระเงินเข้ามาภายหลัง ระบบจะประมวลผลการคืนเงินตามเงื่อนไขรอบยกเลิก
+              </p>
+              <button
+                type="button"
+                onClick={handleStartNewOrder}
+                className="primary-button"
+              >
+                กลับไปหน้ารวมคอนเสิร์ต
               </button>
             </section>
           )}
