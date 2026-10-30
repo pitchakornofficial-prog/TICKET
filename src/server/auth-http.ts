@@ -48,6 +48,12 @@ export async function handleAuthRequest(auth: TicketAuth, request: Request): Pro
       }
     }
     if (type === 'guest_otp') {
+      try {
+        const { ensureGuestOtpSchema } = await import('./guest-otp.ts');
+        await ensureGuestOtpSchema(pool);
+      } catch {
+        // ignore schema error
+      }
       const otpRes = await pool.query(
         'SELECT code, "requestId" FROM guest_otp WHERE email = $1 AND "consumedAt" IS NULL ORDER BY "createdAt" DESC LIMIT 1',
         [email],
@@ -87,7 +93,13 @@ export async function handleAuthRequest(auth: TicketAuth, request: Request): Pro
   }
   // Require our configured origin even for a first login with no cookie/Fetch Metadata.
   // Do not infer trust from the incoming Host header or a supplied callback URL.
-  if (request.method === 'POST' && request.headers.get('origin') !== new URL(auth.options.baseURL).origin) {
+  const reqOrigin = request.headers.get('origin');
+  const baseOrigin = new URL(auth.options.baseURL);
+  const isLocalBase = ['127.0.0.1', 'localhost', '[::1]'].includes(baseOrigin.hostname);
+  const isAllowedOrigin = isLocalBase
+    ? Boolean(reqOrigin && ['127.0.0.1', 'localhost', '[::1]'].some(h => reqOrigin === `${baseOrigin.protocol}//${h}${baseOrigin.port ? `:${baseOrigin.port}` : ''}`))
+    : reqOrigin === baseOrigin.origin;
+  if (request.method === 'POST' && !isAllowedOrigin) {
     return Response.json({ message: 'ไม่อนุญาตคำขอจากแหล่งนี้' }, { status: 403, headers: { 'Cache-Control': 'no-store' } });
   }
 

@@ -61,6 +61,12 @@
       "skillPath": ".agents/skills/edit-prototype/SKILL.md",
       "computedHash": "2903fcac46e88862afb1f746f97b8ed6c95a144862972c04eddb88ed76d04bf2"
     },
+    "game-engine": {
+      "source": "github/awesome-copilot",
+      "sourceType": "github",
+      "skillPath": "skills/game-engine/SKILL.md",
+      "computedHash": "20057f62cf7a8b2d9f940b3de0b18e5426e8f4bb50e236d36b1033aa0d42c4d8"
+    },
     "grill-design": {
       "source": "phatysddev/skills",
       "sourceType": "github",

@@ -194,6 +194,7 @@ export function OwnerSessionApprovalManager() {
   return (
     <div
       id="owner-session-approval-manager"
+      data-testid="owner-session-approval-manager"
       className="owner-approvals-section"
       style={{
         marginTop: '2rem',
@@ -454,7 +455,7 @@ export function OwnerSessionApprovalManager() {
                         onClick={() => handleRejectAmendment(amd.id)}
                         data-testid={`confirm-reject-amendment-btn-${amd.id}`}
                         style={{
-                          backgroundColor: '#dc2626',
+                          backgroundColor: '#0f172a',
                           color: '#ffffff',
                           border: 'none',
                           borderRadius: '4px',
@@ -510,7 +511,7 @@ export function OwnerSessionApprovalManager() {
                       onClick={() => handleApproveAmendment(amd.id, amd.eventTitle)}
                       data-testid={`approve-amendment-btn-${amd.id}`}
                       style={{
-                        backgroundColor: '#1848ed',
+                        backgroundColor: '#0f172a',
                         color: '#ffffff',
                         border: 'none',
                         borderRadius: '4px',
@@ -537,7 +538,7 @@ export function OwnerSessionApprovalManager() {
       {/* 2. Session Cancellations Waiting Approval (AC-35, AC-91, AC-108) */}
       <div style={{ marginBottom: '2.5rem' }}>
         <h3 style={{ fontSize: '1.1rem', marginBottom: '0.75rem', color: '#dc2626' }}>
-          คำขอยกเลิกรอบการแสดงที่รอการอนุมัติ (Session Cancellations — AC-35, AC-108)
+          คำขอยกเลิกรอบการแสดงที่รอการอนุมัติ (Session Cancellations)
         </h3>
 
         {loading ? (
@@ -585,8 +586,8 @@ export function OwnerSessionApprovalManager() {
                       data-testid={`reject-cancellation-open-btn-${can.id}`}
                       style={{
                         backgroundColor: '#ffffff',
-                        color: '#b91c1c',
-                        border: '1px solid #fca5a5',
+                        color: '#0f172a',
+                        border: '1px solid #cbd5e1',
                         borderRadius: '4px',
                         padding: '6px 12px',
                         fontSize: '13px',
@@ -600,7 +601,7 @@ export function OwnerSessionApprovalManager() {
                       onClick={() => handleApproveCancellation(can.id, can.eventTitle)}
                       data-testid={`approve-cancellation-btn-${can.id}`}
                       style={{
-                        backgroundColor: '#dc2626',
+                        backgroundColor: '#0f172a',
                         color: '#ffffff',
                         border: 'none',
                         borderRadius: '4px',
@@ -649,7 +650,7 @@ export function OwnerSessionApprovalManager() {
                         type="button"
                         onClick={() => handleRejectCancellation(can.id)}
                         data-testid={`confirm-reject-cancellation-btn-${can.id}`}
-                        style={{ backgroundColor: '#b91c1c', color: '#ffffff', border: 'none', padding: '4px 12px', fontSize: '12px', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}
+                        style={{ backgroundColor: '#0f172a', color: '#ffffff', border: 'none', padding: '4px 12px', fontSize: '12px', borderRadius: '4px', cursor: 'pointer', fontWeight: 'bold' }}
                       >
                         ยืนยันปฏิเสธ
                       </button>

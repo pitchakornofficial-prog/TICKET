@@ -129,7 +129,7 @@ export function OwnerFeeSettingsManager() {
         <h2 style={{ margin: 0, fontSize: '1.25rem' }}>ตั้งค่าบริการและเงินสำรองรายงาน</h2>
       </div>
       <p style={{ color: 'var(--muted)', fontSize: '0.95rem', margin: '0 0 1.5rem' }}>
-        กำหนดรูปแบบและอัตราค่าบริการผู้จัดงาน ลูกค้า และเปอร์เซ็นต์เงินสำรองรายงานแยกแต่ละงาน (AC-23, AC-24, AC-25, AC-29)
+        กำหนดรูปแบบและอัตราค่าบริการผู้จัดงาน ลูกค้า และเปอร์เซ็นต์เงินสำรองรายงานแยกแต่ละงาน
       </p>
 
       {message && (
@@ -214,7 +214,7 @@ export function OwnerFeeSettingsManager() {
               {/* Organizer Fee Settings (AC-23) */}
               <div style={{ marginBottom: '1.5rem', background: 'var(--white)', border: '1px solid var(--line)', borderRadius: '6px', padding: '1.2rem' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.6rem' }}>
-                  <h4 style={{ margin: 0, fontSize: '1rem', fontWeight: 600 }}>1. ค่าบริการฝั่งผู้จัดงาน (AC-23)</h4>
+                  <h4 style={{ margin: 0, fontSize: '1rem', fontWeight: 600 }}>1. ค่าบริการฝั่งผู้จัดงาน (Organizer Platform Fee)</h4>
                   {organizerFeeLocked ? (
                     <span style={{ fontSize: '0.8rem', background: '#fee2e2', color: '#991b1b', padding: '0.2rem 0.6rem', borderRadius: '4px', fontWeight: 500 }}>
                       ล็อกแล้ว (มีคำสั่งซื้อหรือกันบัตรแล้ว)
@@ -282,7 +282,7 @@ export function OwnerFeeSettingsManager() {
               {/* Customer Fee Settings (AC-24) */}
               <div style={{ marginBottom: '1.5rem', background: 'var(--white)', border: '1px solid var(--line)', borderRadius: '6px', padding: '1.2rem' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.6rem' }}>
-                  <h4 style={{ margin: 0, fontSize: '1rem', fontWeight: 600 }}>2. ค่าบริการฝั่งลูกค้า (AC-24)</h4>
+                  <h4 style={{ margin: 0, fontSize: '1rem', fontWeight: 600 }}>2. ค่าบริการฝั่งลูกค้า (Customer Service Fee)</h4>
                   <span style={{ fontSize: '0.8rem', background: '#e0e7ff', color: 'var(--blue)', padding: '0.2rem 0.6rem', borderRadius: '4px', fontWeight: 500 }}>
                     แก้ไขได้
                   </span>
@@ -341,7 +341,7 @@ export function OwnerFeeSettingsManager() {
 
               {/* Reserve Percentage Settings (AC-29) */}
               <div style={{ marginBottom: '1.5rem', background: 'var(--white)', border: '1px solid var(--line)', borderRadius: '6px', padding: '1.2rem' }}>
-                <h4 style={{ margin: '0 0 0.6rem', fontSize: '1rem', fontWeight: 600 }}>3. เปอร์เซ็นต์เงินสำรองรายงาน (AC-29)</h4>
+                <h4 style={{ margin: '0 0 0.6rem', fontSize: '1rem', fontWeight: 600 }}>3. เปอร์เซ็นต์เงินสำรองรายงาน (Reserve Fund Rate)</h4>
                 <p style={{ margin: '0 0 1rem', fontSize: '0.85rem', color: 'var(--muted)' }}>
                   กันไว้จากรายได้สุทธิเพื่อรองรับการคืนเงินหลังหักค่าบริการผู้จัดงาน (0 ถึง 100%)
                 </p>
@@ -382,7 +382,7 @@ export function OwnerFeeSettingsManager() {
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
                   <InfoIcon style={{ width: '18px', height: '18px', color: 'var(--blue)' }} />
-                  <span style={{ fontWeight: 600, fontSize: '0.95rem' }}>สรุปค่าตั้งที่มีผลสำหรับงานนี้ (AC-25)</span>
+                  <span style={{ fontWeight: 600, fontSize: '0.95rem' }}>สรุปค่าตั้งที่มีผลสำหรับงานนี้</span>
                 </div>
                 <ul style={{ margin: '0 0 0.5rem', paddingLeft: '1.4rem', fontSize: '0.9rem', lineHeight: 1.6 }}>
                   <li>

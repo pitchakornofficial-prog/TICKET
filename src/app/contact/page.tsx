@@ -63,9 +63,6 @@ export default function ContactPage() {
               <dd>รายละเอียดงานคอนเสิร์ต วันเวลา สถานที่จัด และประมาณการจำนวนบัตร</dd>
             </div>
           </dl>
-          <p className="card-action">
-            ผู้จัดงานที่มีบัญชีแล้ว สามารถ <Link href="/login" className="text-link">เข้าสู่ระบบหลังบ้านที่นี่</Link>
-          </p>
         </section>
       </div>
 

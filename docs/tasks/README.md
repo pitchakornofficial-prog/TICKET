@@ -1,8 +1,8 @@
 # SPEC-001 — Task plan
 
-- Source: [SPEC-001 ready](../specs/SPEC-001-concert-ticket-lifecycle.md), G-01–G-52, 114 active ACs
-- Planned at: 2026-10-20 (Asia/Bangkok)
-- Result: สร้าง TASK-001–TASK-037 ใหม่ 37 งาน; งานเดิมที่แก้ไข 0 / คงเดิม 0 เพราะก่อนวางแผนยังไม่มี task
+- Source: [SPEC-001 ready](../specs/SPEC-001-concert-ticket-lifecycle.md), G-01–G-52, 117 active ACs
+- Planned at: 2026-10-20 (Asia/Bangkok); updated 2026-10-22 (change-scope เพิ่ม TASK-038 และ TASK-039); updated 2026-10-23 (change-scope เพิ่ม TASK-040)
+- Result: สร้าง TASK-001–TASK-037 เดิม 37 งาน และเพิ่ม TASK-038–TASK-040 รวม 40 งาน
 - Initial state: ทุก task เริ่ม `todo` และ Todo ทุกข้อยังไม่ตรวจสำเร็จ; สถานะ/evidence ปัจจุบันดูในไฟล์ task โดยตรง
 - Ownership: ดัชนีนี้เป็นแผนและ acceptance mapping ไม่ใช่ implementation หรือ test/code-coverage report
 
@@ -58,10 +58,13 @@ TASK-037 เป็น late cross-instance functional contract ตาม AC-105; 
 | [TASK-035](TASK-035-primary-handover-recovery.md) | สลับเครื่องหลักเมื่อซิงก์ครบและหยุดออฟไลน์เมื่อข้อมูลหายได้ | [TASK-034](TASK-034-offline-sync-conflicts.md) | เต็ม: AC-97, AC-98 |
 | [TASK-036](TASK-036-responsive-role-interfaces.md) | ทุกบทบาทใช้หน้าจอตามธีม ภาษา และอุปกรณ์ที่ตกลงได้ | [TASK-008](TASK-008-public-news.md), [TASK-019](TASK-019-owner-contact-correction.md), [TASK-025](TASK-025-reschedule-refund-window.md), [TASK-027](TASK-027-cancel-pending-payments.md), [TASK-030](TASK-030-reserve-release.md), [TASK-031](TASK-031-event-debt-repayment.md), [TASK-035](TASK-035-primary-handover-recovery.md) | เต็ม: AC-43, AC-44, AC-45, AC-46, AC-47, AC-48, AC-104 |
 | [TASK-037](TASK-037-shared-instance-contract.md) | เพิ่ม web instance แล้วสิทธิ์ ยอด และผลซ้ำยังคงถูกต้อง | [TASK-036](TASK-036-responsive-role-interfaces.md) | ร่วม: AC-105 |
+| [TASK-038](TASK-038-owner-workspace-navigation.md) | เจ้าของเว็บใช้งานหลังบ้านผ่านเมนูกลุ่ม 4 หมวดและเลื่อนตารางแนวนอนได้ | [TASK-036](TASK-036-responsive-role-interfaces.md) | เต็ม: AC-116 |
+| [TASK-039](TASK-039-owner-overview-counts.md) | เจ้าของเว็บติดตามตัวเลขสรุปงานค้างและคลิกนำทางไปยังส่วนงานได้ | [TASK-038](TASK-038-owner-workspace-navigation.md) | เต็ม: AC-115 |
+| [TASK-040](TASK-040-multi-step-purchase-journey.md) | ลูกค้าซื้อบัตรผ่าน 4 หน้าพร้อมห้องรอคิวและ Step Indicator | [TASK-015](TASK-015-paid-ticket-issuance.md), [TASK-036](TASK-036-responsive-role-interfaces.md) | เต็ม: AC-117 |
 
 ## Acceptance coverage
 
-ครอบคลุมแผน 114/114 AC ไม่มี criteria ที่ถือว่า implement แล้วหรือยกเว้นจากงาน
+ครอบคลุมแผน 117/117 AC ไม่มี criteria ที่ถือว่า implement แล้วหรือยกเว้นจากงาน
 `เต็ม` = task นั้นรับผิดชอบ outcome ของ AC ครบโดยอาศัย prerequisites ที่ระบุ; `ร่วม` = ทุก task ในแถวต้องส่งมอบส่วนของตนจึงถือว่า AC ครบ
 ทุก joint contribution เขียนขอบเขตไว้ใน Todo ของ task ทั้งสองด้าน ไม่ใช้ผลทดสอบของส่วนหนึ่งอ้างว่าผลงานอีกส่วนเสร็จแล้ว
 ข้อความ AC และ verification target ฉบับหลักอยู่ใน [SPEC-001](../specs/SPEC-001-concert-ticket-lifecycle.md#acceptance-criteria) ไม่มี AC ใหม่จากการวางแผน
@@ -182,6 +185,9 @@ TASK-037 เป็น late cross-instance functional contract ตาม AC-105; 
 | AC-112 | [TASK-027](TASK-027-cancel-pending-payments.md) | เต็มใน [TASK-027](TASK-027-cancel-pending-payments.md) |
 | AC-113 | [TASK-027](TASK-027-cancel-pending-payments.md) | เต็มใน [TASK-027](TASK-027-cancel-pending-payments.md) |
 | AC-114 | [TASK-027](TASK-027-cancel-pending-payments.md) | เต็มใน [TASK-027](TASK-027-cancel-pending-payments.md) |
+| AC-115 | [TASK-039](TASK-039-owner-overview-counts.md) | เต็มใน [TASK-039](TASK-039-owner-overview-counts.md) |
+| AC-116 | [TASK-038](TASK-038-owner-workspace-navigation.md) | เต็มใน [TASK-038](TASK-038-owner-workspace-navigation.md) |
+| AC-117 | [TASK-040](TASK-040-multi-step-purchase-journey.md) | เต็มใน [TASK-040](TASK-040-multi-step-purchase-journey.md) |
 
 ## Dependency order and parallel work
 
@@ -211,7 +217,9 @@ TASK-037 เป็น late cross-instance functional contract ตาม AC-105; 
 | 19 | [TASK-029](TASK-029-weekly-manual-payout.md), [TASK-030](TASK-030-reserve-release.md) |
 | 20 | [TASK-031](TASK-031-event-debt-repayment.md) |
 | 21 | [TASK-036](TASK-036-responsive-role-interfaces.md) |
-| 22 | [TASK-037](TASK-037-shared-instance-contract.md) |
+| 22 | [TASK-037](TASK-037-shared-instance-contract.md), [TASK-038](TASK-038-owner-workspace-navigation.md) |
+| 23 | [TASK-039](TASK-039-owner-overview-counts.md) |
+| 24 | [TASK-040](TASK-040-multi-step-purchase-journey.md) |
 
 ## First runnable task
 
@@ -220,7 +228,7 @@ TASK-037 เป็น late cross-instance functional contract ตาม AC-105; 
 
 ## Local-first and deferred production work
 
-TASK-001–TASK-036 พัฒนาและตรวจฟังก์ชัน/หน้าจอบน local; TASK-037 อยู่ท้ายเพื่อทวน functional state ด้วยหลาย local web processes ไม่ใช่ load benchmark
+TASK-001–TASK-039 พัฒนาและตรวจฟังก์ชัน/หน้าจอบน local; TASK-037 อยู่เพื่อทวน functional state ด้วยหลาย local web processes ไม่ใช่ load benchmark
 ยังไม่สร้างงาน provision/deploy AWS หรือทดสอบ capacity ที่ต้องเดา scope/metrics ซึ่ง SPEC-001/NQ-04 ยังไม่กำหนด
 หลัง local slices จบ จึงตกลงขอบเขต production งานปลายทางตาม [ADR-0002](../adr/0002-local-first-and-aws-production.md): AWS Singapore, ECS Fargate/ALB, RDS และขนาด/เพดาน scaling/งบ/workload/latency ที่ต้องยืนยันก่อนลงมือ
 Merchant/PromptPay approval, verified email domain, production R2 และ verified success-time mapping เป็นเงื่อนไขตาม NQ-05; local doubles ไม่ใช่หลักฐานพร้อม production

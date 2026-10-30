@@ -37,6 +37,10 @@ export interface OrderReservationDetail {
   id: string;
   eventId: string;
   sessionId: string;
+  eventTitle?: string;
+  eventLocation?: string;
+  sessionStartTime?: string;
+  sessionAdmissionStartTime?: string;
   buyerEmail: string;
   buyerName: string;
   buyerPhone: string;
@@ -109,6 +113,42 @@ export async function ensureReservationSchema(pool: Pool): Promise<void> {
   `);
 }
 
+export async function getBuyerTicketCountForEvent(
+  pool: Pool | PoolClient,
+  eventId: string,
+  buyerEmail: string,
+  _buyerPhone?: string,
+  now = new Date(),
+): Promise<number> {
+  const emailNorm = (buyerEmail || '').trim().toLowerCase();
+
+  if (!emailNorm) {
+    return 0;
+  }
+
+  const res = await pool.query(
+    `SELECT GREATEST(0,
+       COALESCE(SUM(oi.quantity), 0)::int -
+       COALESCE((
+         SELECT count(*)::int
+         FROM tickets t
+         JOIN orders o2 ON t."orderId" = o2.id
+         WHERE o2."eventId" = $1
+           AND LOWER(TRIM(o2."buyerEmail")) = $2
+           AND t.status = 'refunded'
+       ), 0)
+     )::int as total
+     FROM orders o
+     JOIN order_items oi ON o.id = oi."orderId"
+     WHERE o."eventId" = $1
+       AND LOWER(TRIM(o."buyerEmail")) = $2
+       AND (o.status = 'paid' OR (o.status = 'reserved' AND o."expiresAt" > $3))`,
+    [eventId, emailNorm, now],
+  );
+
+  return Number(res.rows[0]?.total) || 0;
+}
+
 export async function createReservation(
   pool: Pool,
   input: CreateReservationInput,
@@ -152,6 +192,28 @@ export async function createReservation(
     const limitPerOrder = Number(event.limitPerOrder) || 4;
     if (totalTickets > limitPerOrder) {
       throw new Error(`จำนวนบัตรรวมทุกประเภท (${totalTickets} ใบ) เกินจำกัดต่อคำสั่งซื้อ (${limitPerOrder} ใบ)`);
+    }
+
+    // D-59: Anti-Scalping Cumulative Buyer Limit check across all orders for this event
+    const alreadyPurchased = await getBuyerTicketCountForEvent(
+      client,
+      input.eventId,
+      verifiedSession.email,
+      verifiedSession.phone,
+      now,
+    );
+
+    if (alreadyPurchased >= limitPerOrder) {
+      throw new Error(
+        `ท่านได้สั่งซื้อบัตรคอนเสิร์ตนี้ครบตามจำนวนจำกัดแล้ว (${alreadyPurchased} / ${limitPerOrder} ใบ สำหรับอีเมลนี้) เพื่อกระจายสิทธิ์ให้แก่ผู้ชมท่านอื่น`,
+      );
+    }
+
+    if (alreadyPurchased + totalTickets > limitPerOrder) {
+      const remainingQuota = Math.max(0, limitPerOrder - alreadyPurchased);
+      throw new Error(
+        `ท่านได้สั่งซื้อหรือมีรายการจองบัตรคอนเสิร์ตนี้ไปแล้ว ${alreadyPurchased} ใบ ไม่สามารถซื้อเพิ่มอีก ${totalTickets} ใบได้ (สามารถซื้อเพิ่มได้อีกไม่เกิน ${remainingQuota} ใบ เพื่อไม่ให้เกินเพดานจำกัด ${limitPerOrder} ใบ ต่อหนึ่งท่านในคอนเสิร์ตนี้)`,
+      );
     }
 
     // 2. Verify Session belongs to this event and is approved
@@ -400,11 +462,15 @@ export async function getOrderReservation(
   );
 
   const orderRes = await pool.query(
-    `SELECT id, "eventId", "sessionId", "buyerEmail", "buyerName", "buyerPhone",
-            status, subtotal, "customerFee", total, "customerFeeMode", "customerFeeRate",
-            "reservedAt", "expiresAt"
-     FROM orders
-     WHERE id = $1`,
+    `SELECT o.id, o."eventId", o."sessionId", o."buyerEmail", o."buyerName", o."buyerPhone",
+            o.status, o.subtotal, o."customerFee", o.total, o."customerFeeMode", o."customerFeeRate",
+            o."reservedAt", o."expiresAt",
+            e.title as "eventTitle", e.location as "eventLocation",
+            s."startTime" as "sessionStartTime", s."admissionStartTime" as "sessionAdmissionStartTime"
+     FROM orders o
+     JOIN events e ON o."eventId" = e.id
+     JOIN event_sessions s ON o."sessionId" = s.id
+     WHERE o.id = $1`,
     [orderId],
   );
 
@@ -430,6 +496,10 @@ export async function getOrderReservation(
     id: o.id,
     eventId: o.eventId,
     sessionId: o.sessionId,
+    eventTitle: o.eventTitle || undefined,
+    eventLocation: o.eventLocation || undefined,
+    sessionStartTime: o.sessionStartTime ? new Date(o.sessionStartTime).toISOString() : undefined,
+    sessionAdmissionStartTime: o.sessionAdmissionStartTime ? new Date(o.sessionAdmissionStartTime).toISOString() : undefined,
     buyerEmail: o.buyerEmail,
     buyerName: o.buyerName,
     buyerPhone: o.buyerPhone,

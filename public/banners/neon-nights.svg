@@ -1,0 +1,69 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1400 600" width="100%" height="100%">
+  <defs>
+    <linearGradient id="bg-gradient-neon" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0b0f19" />
+      <stop offset="50%" stop-color="#111827" />
+      <stop offset="100%" stop-color="#030712" />
+    </linearGradient>
+    <radialGradient id="laser-glow-blue" cx="30%" cy="40%" r="50%">
+      <stop offset="0%" stop-color="#3b82f6" stop-opacity="0.8" />
+      <stop offset="40%" stop-color="#1d4ed8" stop-opacity="0.3" />
+      <stop offset="100%" stop-color="#1e1b4b" stop-opacity="0" />
+    </radialGradient>
+    <radialGradient id="laser-glow-pink" cx="70%" cy="30%" r="50%">
+      <stop offset="0%" stop-color="#ec4899" stop-opacity="0.75" />
+      <stop offset="40%" stop-color="#a855f7" stop-opacity="0.3" />
+      <stop offset="100%" stop-color="#312e81" stop-opacity="0" />
+    </radialGradient>
+    <radialGradient id="stage-center" cx="50%" cy="85%" r="60%">
+      <stop offset="0%" stop-color="#60a5fa" stop-opacity="0.9" />
+      <stop offset="30%" stop-color="#2563eb" stop-opacity="0.4" />
+      <stop offset="70%" stop-color="#0f172a" stop-opacity="0.1" />
+      <stop offset="100%" stop-color="#000000" stop-opacity="0" />
+    </radialGradient>
+  </defs>
+
+  <!-- Deep Stage Background -->
+  <rect width="1400" height="600" fill="url(#bg-gradient-neon)" />
+
+  <!-- Atmospheric Glows -->
+  <rect width="1400" height="600" fill="url(#laser-glow-blue)" />
+  <rect width="1400" height="600" fill="url(#laser-glow-pink)" />
+  <rect width="1400" height="600" fill="url(#stage-center)" />
+
+  <!-- Spectacular Concert Stage Laser Beams -->
+  <g opacity="0.65" stroke-width="2">
+    <!-- Left Fan Lasers -->
+    <line x1="150" y1="580" x2="300" y2="0" stroke="#00f2fe" stroke-width="3" />
+    <line x1="150" y1="580" x2="480" y2="0" stroke="#4facfe" stroke-width="2" />
+    <line x1="150" y1="580" x2="700" y2="0" stroke="#00c6ff" stroke-width="2.5" />
+    <line x1="150" y1="580" x2="950" y2="0" stroke="#38ef7d" stroke-width="1.5" />
+
+    <!-- Center Stage Light Pillars -->
+    <polygon points="680,600 720,600 850,0 750,0" fill="#60a5fa" opacity="0.25" />
+    <polygon points="690,600 710,600 550,0 650,0" fill="#a855f7" opacity="0.25" />
+
+    <!-- Right Fan Lasers -->
+    <line x1="1250" y1="580" x2="1100" y2="0" stroke="#f43f5e" stroke-width="3" />
+    <line x1="1250" y1="580" x2="920" y2="0" stroke="#d946ef" stroke-width="2.5" />
+    <line x1="1250" y1="580" x2="700" y2="0" stroke="#ec4899" stroke-width="2" />
+    <line x1="1250" y1="580" x2="450" y2="0" stroke="#a855f7" stroke-width="1.5" />
+  </g>
+
+  <!-- Glowing Sound & Light Waves -->
+  <path d="M 0,380 Q 350,220 700,340 T 1400,300" fill="none" stroke="#38bdf8" stroke-width="3" opacity="0.4" />
+  <path d="M 0,390 Q 350,290 700,400 T 1400,330" fill="none" stroke="#f43f5e" stroke-width="2.5" opacity="0.35" />
+  <path d="M 0,420 Q 350,340 700,430 T 1400,380" fill="none" stroke="#c084fc" stroke-width="2" opacity="0.3" />
+
+  <!-- Concert Crowd Silhouette with Cheering Hands -->
+  <path d="M 0,600 L 0,550
+    Q 30,530 50,555 Q 80,520 100,560 Q 130,510 160,555
+    Q 200,535 230,550 Q 250,480 270,555 Q 300,530 330,560
+    Q 360,500 380,550 Q 420,530 450,560 Q 480,470 510,555
+    Q 550,530 580,565 Q 610,490 640,550 Q 670,520 700,560
+    Q 730,480 760,550 Q 800,530 830,560 Q 860,495 890,555
+    Q 920,525 950,565 Q 980,485 1010,550 Q 1050,530 1080,560
+    Q 1120,490 1150,555 Q 1180,520 1210,565 Q 1240,475 1270,550
+    Q 1300,530 1330,560 Q 1360,510 1400,545 L 1400,600 Z"
+    fill="#050811" />
+</svg>

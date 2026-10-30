@@ -35,6 +35,8 @@ export function OwnerPaymentRecoveryManager() {
   return (
     <section
       className="account-card"
+      id="owner-payment-recovery-manager"
+      data-testid="owner-payment-recovery-manager"
       style={{
         marginTop: '2rem',
         background: 'var(--white)',

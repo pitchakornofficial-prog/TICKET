@@ -114,6 +114,7 @@ export async function requestGuestOtp(
   requestId?: string;
   cooldownSeconds?: number;
   expiresInSeconds?: number;
+  devOtpCode?: string;
   error?: string;
   code?: 'MISSING_FIELDS' | 'COOLDOWN' | 'RATE_LIMITED' | 'BLOCKED';
 }> {
@@ -231,6 +232,10 @@ export async function requestGuestOtp(
     const actionTitle = isLookup ? 'ค้นหาและเปิดดูบัตร TICKET' : 'ยืนยันตัวตนสำหรับการซื้อบัตร TICKET';
     const actionDesc = isLookup ? 'ค้นหาบัตรคอนเสิร์ต' : 'ยืนยันการซื้อบัตร';
 
+    if (process.env.NODE_ENV !== 'production') {
+      console.log(`[LOCAL DEV OTP] Email: ${email} | Code: ${otpCode} | Purpose: ${purpose}`);
+    }
+
     await emailTransport.send({
       from: 'TICKET <no-reply@ticket.local>',
       to: email,
@@ -254,6 +259,7 @@ export async function requestGuestOtp(
       requestId,
       cooldownSeconds: OTP_RESEND_COOLDOWN_SECONDS,
       expiresInSeconds: OTP_EXPIRATION_SECONDS,
+      ...(process.env.NODE_ENV !== 'production' ? { devOtpCode: otpCode } : {}),
     };
   });
 }

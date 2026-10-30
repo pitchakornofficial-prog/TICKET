@@ -24,7 +24,10 @@
     "db:check": "node --env-file=.env.local scripts/db-check.ts",
     "auth:local": "node scripts/init-local-auth.mjs",
     "db:migrate": "node --env-file=.env.local scripts/migrate-auth.ts",
-    "owner:bootstrap": "node --env-file=.env.local scripts/bootstrap-owner.ts"
+    "owner:bootstrap": "node --env-file=.env.local scripts/bootstrap-owner.ts",
+    "invite:link": "node --env-file=.env.local scripts/get-invite-link.ts",
+    "organizer:create": "node --env-file=.env.local scripts/create-test-organizer.ts",
+    "concert:seed": "node --env-file=.env.local scripts/seed-sample-concert.ts"
   },
   "dependencies": {
     "@fontsource/kanit": "5.3.0",

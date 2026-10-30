@@ -1,7 +1,17 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { CheckCircleIcon, CrossCircleIcon, RefreshIcon, ClockIcon } from './icons';
+import Link from 'next/link';
+import {
+  CheckCircleIcon,
+  CrossCircleIcon,
+  RefreshIcon,
+  ClockIcon,
+  QrCodeIcon,
+  ShieldCheckIcon,
+  CameraIcon,
+  CameraOffIcon,
+} from './icons';
 import { formatTime } from '@/lib/locale';
 import {
   performOfflineAdmissionScan,
@@ -66,6 +76,7 @@ interface ScannerAdmissionTerminalProps {
   primaryScannerName?: string | null;
   scannerId?: string;
   scannerName?: string;
+  actorRole?: string;
   onClose?: () => void;
 }
 
@@ -81,6 +92,7 @@ export function ScannerAdmissionTerminal({
   primaryScannerName = null,
   scannerId,
   scannerName,
+  actorRole,
   onClose,
 }: ScannerAdmissionTerminalProps) {
   const [action, setAction] = useState<'entry' | 'exit'>('entry');
@@ -90,7 +102,8 @@ export function ScannerAdmissionTerminal({
   const [stats, setStats] = useState<AdmissionStats | null>(null);
   const [recentLogs, setRecentLogs] = useState<AdmissionLogItem[]>([]);
   const [loadingStats, setLoadingStats] = useState(false);
-  const [cameraActive, setCameraActive] = useState(false);
+  const [cameraActive, setCameraActive] = useState(true);
+  const [activeTerminalTab, setActiveTerminalTab] = useState<'scan' | 'logs' | 'offline'>('scan');
 
   // Connectivity & Offline mode state (AC-40, AC-42, AC-96, AC-103)
   const [isOfflineMode, setIsOfflineMode] = useState(false);
@@ -358,417 +371,602 @@ export function ScannerAdmissionTerminal({
   }
 
   return (
-    <div className="terminal-container" id="admission-terminal-container">
-      <header className="terminal-header">
-        <div className="terminal-title-area">
-          <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap', marginBottom: '4px' }}>
-            <span
-              className={`badge ${isOfflineMode ? 'badge-warning' : 'badge-primary'}`}
-              data-testid="connectivity-status-badge"
-            >
-              {isOfflineMode ? 'ออฟไลน์ (Offline Mode — AC-40)' : 'ออนไลน์ (Online Central)'}
-            </span>
-            {isPrimary ? (
-              <span className="badge badge-success" data-testid="terminal-primary-badge">
-                เครื่องหลักประจำงาน (Primary Device — AC-94)
-              </span>
-            ) : (
+    <div className="terminal-centered-wrapper">
+      <div className="terminal-wrapper" id="admission-terminal-root">
+        {/* Terminal Header Card (D-107) */}
+        <header className="terminal-header-card" id="admission-terminal-header">
+          <div className="terminal-top-nav">
+            <div className="terminal-meta-row">
               <span
-                className="badge"
-                style={{ backgroundColor: '#e2e8f0', color: '#334155' }}
-                data-testid="terminal-secondary-badge"
+                data-testid="connectivity-status-badge"
+                className={`scanner-conn-badge ${isOfflineMode ? 'offline' : 'online'}`}
+                title={isOfflineMode ? 'โหมดออฟไลน์' : 'โหมดออนไลน์'}
               >
-                เครื่องรอง (เครื่องหลัก: {primaryScannerName || 'ยังไม่กำหนด'})
+                <span className={`online-pulse-dot ${isOfflineMode ? 'offline' : 'online'}`} />
+                <span>{isOfflineMode ? 'ออฟไลน์ (Offline)' : 'ออนไลน์ (Online)'}</span>
               </span>
-            )}
-            <button
-              type="button"
-              id="toggle-offline-mode-btn"
-              data-testid="toggle-offline-mode-btn"
-              className="secondary-button mini-btn"
-              onClick={handleToggleOfflineMode}
-              style={{ fontSize: '12px', padding: '2px 10px', height: '28px' }}
-            >
-              {isOfflineMode ? 'สลับเป็นโหมดออนไลน์ (Switch to Online)' : 'สลับเป็นโหมดออฟไลน์ (Offline Mode — AC-40)'}
-            </button>
-          </div>
-          <h2 className="terminal-heading">เครื่องตรวจบัตรเข้างาน: {eventTitle}</h2>
-          <p className="terminal-sub">
-            รอบการแสดง: {formatTime(new Date(startTime))} – {formatTime(new Date(endTime))}
-            {admissionStartTime && admissionEndTime && (
-              <span>
-                {' '}| ช่วงรับเข้า: {formatTime(new Date(admissionStartTime))} – {formatTime(new Date(admissionEndTime))}
-              </span>
-            )}
-          </p>
-        </div>
-        {onClose && (
-          <button
-            type="button"
-            className="secondary-button mini-btn"
-            onClick={onClose}
-            id="close-terminal-btn"
-          >
-            ปิดเครื่องสแกน
-          </button>
-        )}
-      </header>
 
-      {/* Offline Dataset Readiness & Sync Panel (AC-94, AC-65, NQ-06) */}
-      <section
-        className="offline-dataset-panel"
-        data-testid="offline-dataset-panel"
-        style={{
-          backgroundColor: '#f8fafc',
-          border: '1px solid #e2e8f0',
-          borderRadius: '8px',
-          padding: '14px 18px',
-          marginBottom: '20px',
-        }}
-        aria-label="การเตรียมชุดข้อมูลออฟไลน์"
-      >
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px' }}>
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-              <strong style={{ fontSize: '14px', color: '#1e293b' }}>ชุดข้อมูลออฟไลน์ประจำงาน (Offline Dataset — AC-94):</strong>
-              <span
-                data-testid="offline-dataset-status-badge"
-                className={`status-badge ${offlineDataset ? 'approved' : 'pending'}`}
-                style={{ fontSize: '12px' }}
-              >
-                {offlineDataset ? `พร้อมใช้งาน (${offlineDataset.totalTickets ?? 0} ใบ)` : 'ยังไม่มีข้อมูลในเครื่อง'}
-              </span>
+              {isPrimary ? (
+                <span className="scanner-badge badge-primary-offline" data-testid="terminal-primary-badge">
+                  <ShieldCheckIcon width={12} height={12} />
+                  <span>เครื่องหลักออฟไลน์</span>
+                  <span className="sr-only"> เครื่องหลักประจำงาน (Primary Device — AC-94)</span>
+                </span>
+              ) : (
+                <span
+                  className="scanner-badge badge-standard-online"
+                  data-testid="terminal-secondary-badge"
+                >
+                  <span>เครื่องรอง (เครื่องหลัก: {primaryScannerName || 'ยังไม่กำหนด'})</span>
+                </span>
+              )}
+
+              {pendingSyncCount > 0 && (
+                <span className="scanner-pending-pill" data-testid="pending-sync-indicator">
+                  รอซิงก์ <strong data-testid="pending-sync-count">{pendingSyncCount}</strong> รายการ
+                </span>
+              )}
             </div>
-            <div style={{ fontSize: '12px', color: '#64748b', display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
-              <span>
-                สถานะการเชื่อมต่อ:{' '}
-                <strong data-testid="connectivity-status-text">
-                  {isOfflineMode ? 'ออฟไลน์ (Offline Mode — AC-40)' : 'ออนไลน์ (Online Central)'}
-                </strong>
-              </span>
-              <span>
-                ซิงก์สำเร็จล่าสุด:{' '}
-                <strong data-testid="last-successful-sync-time">
-                  {offlineDataset?.lastSuccessfulSync
-                    ? new Date(offlineDataset.lastSuccessfulSync).toLocaleString('th-TH', { timeZone: 'Asia/Bangkok' })
-                    : 'ยังไม่เคยซิงก์'}
-                </strong>
-              </span>
-              <span>
-                จำนวนบัตรที่เก็บในเครื่อง:{' '}
-                <strong data-testid="cached-tickets-count">
-                  {offlineDataset?.totalTickets ?? 0} ใบ
-                </strong>
-              </span>
-              <span data-testid="pending-sync-indicator">
-                รายการรอซิงก์สู่ระบบกลาง:{' '}
-                <strong data-testid="pending-sync-count">
-                  {pendingSyncCount}
-                </strong>{' '}
-                รายการ
-              </span>
+
+            <div className="terminal-top-actions">
+              {(actorRole === 'organizer' || actorRole === 'owner') && (
+                <Link
+                  href="/back-office/organizer?section=scanners"
+                  className="secondary-button mini-btn"
+                  id="back-to-organizer-btn"
+                  data-testid="back-to-organizer-btn"
+                  title="กลับสู่หน้าจัดการหลังบ้านผู้จัดงาน"
+                >
+                  กลับสู่หลังบ้านผู้จัด
+                </Link>
+              )}
+              {onClose && (
+                <button
+                  type="button"
+                  className="secondary-button mini-btn"
+                  onClick={onClose}
+                  id="close-terminal-btn"
+                >
+                  ปิดเครื่องสแกน
+                </button>
+              )}
             </div>
-            <p
-              data-testid="offline-privacy-guarantee"
-              style={{ margin: '4px 0 0', fontSize: '11px', color: '#059669' }}
-            >
-              * ข้อมูลออฟไลน์ได้รับการคัดกรองข้อมูลระบุตัวตนผู้ซื้อ (Buyer PII) ออกทั้งหมดตาม AC-65
+          </div>
+
+          <div className="terminal-heading-section">
+            <h2 className="terminal-heading">
+              <span className="sr-only">เครื่องตรวจบัตรเข้างาน: </span>
+              {eventTitle}
+            </h2>
+            <p className="terminal-sub">
+              <span>รอบการแสดง: {formatTime(new Date(startTime))} – {formatTime(new Date(endTime))}</span>
+              {admissionStartTime && admissionEndTime && (
+                <span> | ช่วงรับเข้า: {formatTime(new Date(admissionStartTime))} – {formatTime(new Date(admissionEndTime))}</span>
+              )}
             </p>
           </div>
+        </header>
 
-          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-            <button
-              type="button"
-              id="download-offline-dataset-btn"
-              data-testid="download-offline-dataset-btn"
-              className="secondary-button"
-              onClick={handleDownloadOfflineDataset}
-              disabled={syncingDataset || isSyncingPending}
-              style={{ minHeight: '38px', padding: '0 14px', fontSize: '13px' }}
-            >
-              {syncingDataset ? 'กำลังดาวน์โหลด...' : 'ดาวน์โหลดชุดข้อมูลออฟไลน์ (Download Offline Dataset — AC-94)'}
-            </button>
-
-            <button
-              type="button"
-              id="sync-offline-pending-btn"
-              data-testid="sync-offline-pending-btn"
-              className="button button-primary"
-              onClick={handleSyncPendingScans}
-              disabled={isSyncingPending || pendingSyncCount === 0 || isOfflineMode}
-              style={{ minHeight: '38px', padding: '0 14px', fontSize: '13px' }}
-            >
-              {isSyncingPending
-                ? 'กำลังซิงก์...'
-                : `ซิงก์ข้อมูลค้าง (${pendingSyncCount} รายการ — AC-102)`}
-            </button>
-          </div>
-        </div>
-
-        {isOfflineMode && isPrimary && (
-          <div
-            data-testid="primary-offline-operational-notice"
-            className="status-banner warning"
-            style={{ marginTop: '10px', fontSize: '13px' }}
-            role="note"
-          >
-            <strong>ข้อปฏิบัติการทำงานออฟไลน์ (O1):</strong> เครื่องนี้ทำงานเป็นเครื่องหลักเพียงเครื่องเดียวของทั้งงาน กรุณาหยุดการใช้งานเครื่องสแกนอื่นทั้งหมดเพื่อป้องกันข้อมูลไม่ตรงกัน
-          </div>
-        )}
-
-        {nonPrimaryOfflineWarning && (
-          <div
-            data-testid="non-primary-offline-warning"
-            className="status-banner error"
-            style={{ marginTop: '10px', fontSize: '13px' }}
-            role="alert"
-          >
-            <span>{nonPrimaryOfflineWarning}</span>
-          </div>
-        )}
-
-        {syncFeedback && (
-          <div
-            className={`status-banner ${syncFeedback.type}`}
-            style={{ marginTop: '10px', fontSize: '13px' }}
-            role="status"
-          >
-            <span>{syncFeedback.message}</span>
-          </div>
-        )}
-      </section>
-
-      {/* Mode Switcher */}
-      <div className="terminal-mode-selector">
-        <button
-          type="button"
-          id="mode-entry-btn"
-          className={`mode-btn ${action === 'entry' ? 'active entry' : ''}`}
-          onClick={() => {
-            setAction('entry');
-            setScanResult(null);
-          }}
-        >
-          <span className="mode-indicator" />
-          <span className="mode-label">สแกนเข้างาน (Entry)</span>
-        </button>
-        <button
-          type="button"
-          id="mode-exit-btn"
-          className={`mode-btn ${action === 'exit' ? 'active exit' : ''}`}
-          onClick={() => {
-            setAction('exit');
-            setScanResult(null);
-          }}
-        >
-          <span className="mode-indicator" />
-          <span className="mode-label">สแกนออกนอกงาน (Exit)</span>
-        </button>
-      </div>
-
-      {/* Input / Scanner Section */}
-      <div className="terminal-scan-section">
-        <form onSubmit={handleScanSubmit} className="scan-input-form">
-          <label htmlFor="scanner-ticket-input" className="form-label">
-            {action === 'entry' ? 'สแกน QR Code หรือพิมพ์รหัสบัตรเพื่อเข้างาน' : 'สแกน QR Code หรือพิมพ์รหัสบัตรเพื่อบันทึกออก'}
-          </label>
-          <div className="scan-input-group">
-            <input
-              id="scanner-ticket-input"
-              type="text"
-              className="text-input font-mono"
-              placeholder="สแกน QR Code หรือวางรหัสบัตร เช่น TK-..., TKT-..."
-              value={ticketInput}
-              onChange={e => setTicketInput(e.target.value)}
-              autoComplete="off"
-            />
-            <button
-              type="submit"
-              id="scanner-submit-btn"
-              className={`button ${action === 'entry' ? 'button-primary' : 'secondary-button'}`}
-              disabled={loading || !ticketInput.trim()}
-            >
-              {loading ? 'กำลังตรวจ...' : action === 'entry' ? 'บันทึกเข้างาน' : 'บันทึกออก'}
-            </button>
-          </div>
-        </form>
-
-        <div className="terminal-camera-bar">
+        {/* 3-Tab Modular Sub-Navigation Bar OUTSIDE the card (D-107) */}
+        <div className="terminal-sub-tabs-bar" role="tablist" aria-label="แท็บเมนูเครื่องตรวจบัตร">
           <button
             type="button"
-            className="secondary-button text-sm"
-            onClick={() => setCameraActive(prev => !prev)}
-            id="toggle-camera-view-btn"
+            role="tab"
+            id="terminal-tab-scan"
+            data-testid="terminal-tab-scan"
+            aria-selected={activeTerminalTab === 'scan'}
+            aria-controls="terminal-panel-scan"
+            className={`terminal-tab-btn ${activeTerminalTab === 'scan' ? 'active' : ''}`}
+            onClick={() => setActiveTerminalTab('scan')}
           >
-            {cameraActive ? 'ปิดช่องมองภาพกล้อง' : 'เปิดช่องมองภาพสแกนกล้อง'}
+            <QrCodeIcon width={16} height={16} />
+            <span>จุดสแกนบัตร</span>
           </button>
-        </div>
 
-        {cameraActive && (
-          <div className="camera-viewfinder" id="camera-viewfinder">
-            <div className="viewfinder-frame">
-              <div className="viewfinder-laser" />
-              <p className="viewfinder-hint">นำ QR Code บัตรมาส่องในกรอบเพื่อสแกนอัตโนมัติ</p>
-            </div>
-          </div>
-        )}
-      </div>
+          <button
+            type="button"
+            role="tab"
+            id="terminal-tab-logs"
+            data-testid="terminal-tab-logs"
+            aria-selected={activeTerminalTab === 'logs'}
+            aria-controls="terminal-panel-logs"
+            className={`terminal-tab-btn ${activeTerminalTab === 'logs' ? 'active' : ''}`}
+            onClick={() => setActiveTerminalTab('logs')}
+          >
+            <ClockIcon width={16} height={16} />
+            <span>ประวัติการสแกน</span>
+            <span className="terminal-tab-badge">{recentLogs.length}</span>
+          </button>
 
-      {/* Scan Result Card (Text + Icon per AC-39) */}
-      {scanResult && (
-        <div
-          id="scan-result-card"
-          className={`scan-result-card ${scanResult.status === 'success' ? (scanResult.action === 'entry' ? 'result-success-entry' : 'result-success-exit') : 'result-rejected'}`}
-          role="alert"
-        >
-          <div className="result-header">
-            {scanResult.status === 'success' ? (
-              <CheckCircleIcon className="result-icon-success" />
-            ) : (
-              <CrossCircleIcon className="result-icon-rejected" />
+          <button
+            type="button"
+            role="tab"
+            id="terminal-tab-offline"
+            data-testid="terminal-tab-offline"
+            aria-selected={activeTerminalTab === 'offline'}
+            aria-controls="terminal-panel-offline"
+            className={`terminal-tab-btn ${activeTerminalTab === 'offline' ? 'active' : ''}`}
+            onClick={() => setActiveTerminalTab('offline')}
+            style={!isPrimary ? { display: 'none' } : undefined}
+          >
+            <ShieldCheckIcon width={16} height={16} />
+            <span>จัดการระบบออฟไลน์</span>
+            {pendingSyncCount > 0 && (
+              <span className="terminal-tab-badge warning">{pendingSyncCount}</span>
             )}
-            <div className="result-headline">
-              <span className="result-badge-text">
-                {scanResult.status === 'success' ? (scanResult.action === 'entry' ? 'ผ่าน / บันทึกเข้างาน' : 'ผ่าน / บันทึกออกนอกงาน') : 'ไม่ผ่าน / ปฏิเสธการสแกน'}
-              </span>
-              <h3 id="scan-result-message" className="result-message">
-                {scanResult.message}
-              </h3>
-            </div>
-          </div>
-
-          {/* Non-PII Ticket Details (AC-65) */}
-          {scanResult.ticket && (
-            <div className="result-details" id="scanned-ticket-details">
-              <dl className="details-grid">
-                <div>
-                  <dt>รหัสบัตร</dt>
-                  <dd id="scanned-ticket-code" className="font-mono font-bold">
-                    {scanResult.ticket.ticketCode}
-                  </dd>
-                </div>
-                <div>
-                  <dt>ประเภทบัตร</dt>
-                  <dd id="scanned-ticket-type">{scanResult.ticket.ticketTypeName}</dd>
-                </div>
-                <div>
-                  <dt>สถานะในพื้นที่จัดงาน</dt>
-                  <dd
-                    id="scanned-ticket-admission-status"
-                    className={`status-pill ${scanResult.ticket.admissionStatus === 'inside' ? 'pill-inside' : 'pill-outside'}`}
-                  >
-                    {scanResult.ticket.admissionStatus === 'inside' ? 'อยู่ในพื้นที่จัดงาน' : 'อยู่นอกพื้นที่จัดงาน'}
-                  </dd>
-                </div>
-                <div>
-                  <dt>เวลาที่สแกน</dt>
-                  <dd className="font-mono text-sm">{formatTime(new Date(scanResult.ticket.scannedAt))}</dd>
-                </div>
-              </dl>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Live Admission Statistics */}
-      <section className="terminal-stats-section" aria-labelledby="stats-heading">
-        <div className="stats-header">
-          <h3 id="stats-heading" className="text-sm font-semibold">
-            สถิติการรับเข้างานของรอบนี้
-          </h3>
-          <button
-            type="button"
-            className="refresh-icon-btn"
-            onClick={fetchStats}
-            title="รีเฟรชสถิติ"
-            disabled={loadingStats}
-          >
-            <RefreshIcon className={loadingStats ? 'spinning' : ''} />
           </button>
         </div>
 
-        <div className="stats-grid">
-          <div className="stat-card stat-inside">
-            <span className="stat-label">อยู่ในงานขณะนี้</span>
-            <span className="stat-value" id="stats-currently-inside">
-              {stats?.currentlyInside ?? 0}
-            </span>
-            <span className="stat-unit">คน</span>
+        {/* Content Container Card (D-107) */}
+        <div className="terminal-container" id="admission-terminal-container">
+          {/* TAB 1: จุดสแกนบัตร (Hero / Primary Focus - D-107) */}
+          <div
+            id="terminal-panel-scan"
+            role="tabpanel"
+            aria-labelledby="terminal-tab-scan"
+            className={`terminal-tab-panel ${activeTerminalTab === 'scan' ? 'tab-panel-active' : 'tab-panel-inactive'}`}
+          >
+            {/* Unified Mode and Camera Toolbar (D-107) */}
+            <div className="terminal-control-toolbar">
+              <div className="terminal-mode-selector">
+                <button
+                  type="button"
+                  id="mode-entry-btn"
+                  className={`mode-btn ${action === 'entry' ? 'active entry' : ''}`}
+                  onClick={() => {
+                    setAction('entry');
+                    setScanResult(null);
+                  }}
+                >
+                  <span className="mode-indicator" />
+                  <span className="mode-label">บันทึกเข้างาน</span>
+                </button>
+                <button
+                  type="button"
+                  id="mode-exit-btn"
+                  className={`mode-btn ${action === 'exit' ? 'active exit' : ''}`}
+                  onClick={() => {
+                    setAction('exit');
+                    setScanResult(null);
+                  }}
+                >
+                  <span className="mode-indicator" />
+                  <span className="mode-label">บันทึกออก</span>
+                </button>
+              </div>
+
+              {/* Camera Icon Toggle Button (D-107) */}
+              <button
+                type="button"
+                id="toggle-camera-view-btn"
+                className={`camera-icon-toggle-btn ${cameraActive ? 'active' : ''}`}
+                onClick={() => setCameraActive(prev => !prev)}
+                title={cameraActive ? 'ปิดช่องมองภาพกล้อง' : 'เปิดช่องมองภาพสแกนกล้อง'}
+                aria-label={cameraActive ? 'ปิดช่องมองภาพกล้อง' : 'เปิดช่องมองภาพสแกนกล้อง'}
+              >
+                {cameraActive ? (
+                  <CameraIcon width={22} height={22} />
+                ) : (
+                  <CameraOffIcon width={22} height={22} />
+                )}
+                <span className="sr-only">{cameraActive ? 'ปิดช่องมองภาพกล้อง' : 'เปิดช่องมองภาพสแกนกล้อง'}</span>
+              </button>
+            </div>
+
+            {/* Camera Viewfinder (Auto-Active by Default) */}
+            {cameraActive && (
+              <div className="camera-viewfinder" id="camera-viewfinder">
+                <div className="viewfinder-frame">
+                  <div className="viewfinder-laser" />
+                  <p className="viewfinder-hint">นำ QR Code บัตรมาส่องในกรอบเพื่อสแกนอัตโนมัติ</p>
+                </div>
+              </div>
+            )}
+
+            {/* Manual Input Section */}
+            <div className="terminal-scan-section">
+              <form onSubmit={handleScanSubmit} className="scan-input-form">
+                <label htmlFor="scanner-ticket-input" className="form-label">
+                  {action === 'entry' ? 'หรือพิมพ์/วางรหัสบัตรเพื่อบันทึกเข้างาน:' : 'หรือพิมพ์/วางรหัสบัตรเพื่อบันทึกออกนอกงาน:'}
+                </label>
+                <div className="scan-input-group">
+                  <input
+                    id="scanner-ticket-input"
+                    type="text"
+                    className="text-input font-mono"
+                    placeholder="วางรหัสบัตร เช่น TK-..., TKT-..."
+                    value={ticketInput}
+                    onChange={e => setTicketInput(e.target.value)}
+                    autoComplete="off"
+                  />
+                  <button
+                    type="submit"
+                    id="scanner-submit-btn"
+                    className="button button-primary terminal-submit-btn"
+                    disabled={loading || !ticketInput.trim()}
+                  >
+                    {loading ? 'กำลังตรวจ...' : action === 'entry' ? 'บันทึกเข้างาน' : 'บันทึกออก'}
+                  </button>
+                </div>
+              </form>
+            </div>
+
+            {/* Unified 4-Metric Quick Stats in Tab 1 (D-107) */}
+            <div className="terminal-quick-stats-grid">
+              <div className="terminal-quick-stat-card">
+                <span className="terminal-quick-stat-label">บัตรที่ขายได้</span>
+                <span className="terminal-quick-stat-val" id="stats-tab1-total-tickets">
+                  {stats?.totalTickets ?? (offlineDataset?.totalTickets ?? 0)}
+                </span>
+                <span className="stat-unit" style={{ fontSize: '0.75rem', color: '#64748b', marginLeft: '3px' }}>ใบ</span>
+              </div>
+              <div className="terminal-quick-stat-card">
+                <span className="terminal-quick-stat-label">อยู่ในงานขณะนี้</span>
+                <span className="terminal-quick-stat-val" id="stats-currently-inside">
+                  {stats?.currentlyInside ?? 0}
+                </span>
+                <span className="stat-unit" style={{ fontSize: '0.75rem', color: '#64748b', marginLeft: '3px' }}>คน</span>
+              </div>
+              <div className="terminal-quick-stat-card">
+                <span className="terminal-quick-stat-label">สแกนเข้าแล้ว</span>
+                <span className="terminal-quick-stat-val" id="stats-total-entries">
+                  {stats?.totalEntries ?? 0}
+                </span>
+                <span className="stat-unit" style={{ fontSize: '0.75rem', color: '#64748b', marginLeft: '3px' }}>ครั้ง</span>
+              </div>
+              <div className="terminal-quick-stat-card">
+                <span className="terminal-quick-stat-label">สแกนออกแล้ว</span>
+                <span className="terminal-quick-stat-val" id="stats-total-exits">
+                  {stats?.totalExits ?? 0}
+                </span>
+                <span className="stat-unit" style={{ fontSize: '0.75rem', color: '#64748b', marginLeft: '3px' }}>ครั้ง</span>
+              </div>
+            </div>
           </div>
 
-          <div className="stat-card stat-entries">
-            <span className="stat-label">สแกนเข้าทั้งหมด</span>
-            <span className="stat-value" id="stats-total-entries">
-              {stats?.totalEntries ?? 0}
-            </span>
-            <span className="stat-unit">ครั้ง</span>
-          </div>
+          {/* TAB 2: ประวัติการสแกน (Full Stats & Logs - D-107) */}
+          <div
+            id="terminal-panel-logs"
+            role="tabpanel"
+            aria-labelledby="terminal-tab-logs"
+            className={`terminal-tab-panel ${activeTerminalTab === 'logs' ? 'tab-panel-active' : 'tab-panel-inactive'}`}
+          >
+            {/* Full Statistics Grid (Unified 4-Metric) */}
+            <section className="terminal-stats-section" aria-labelledby="stats-heading">
+              <div className="stats-header">
+                <h3 id="stats-heading" className="text-sm font-semibold">
+                  สถิติการรับเข้างานของรอบนี้
+                </h3>
+                <button
+                  type="button"
+                  className="refresh-icon-btn"
+                  onClick={fetchStats}
+                  title="รีเฟรชสถิติ"
+                  disabled={loadingStats}
+                >
+                  <RefreshIcon className={loadingStats ? 'spinning' : ''} />
+                </button>
+              </div>
 
-          <div className="stat-card stat-exits">
-            <span className="stat-label">สแกนออกทั้งหมด</span>
-            <span className="stat-value" id="stats-total-exits">
-              {stats?.totalExits ?? 0}
-            </span>
-            <span className="stat-unit">ครั้ง</span>
-          </div>
+              <div className="stats-grid">
+                <div className="stat-card stat-total">
+                  <span className="stat-label">บัตรที่จำหน่ายได้</span>
+                  <span className="stat-value" id="stats-total-tickets">
+                    {stats?.totalTickets ?? (offlineDataset?.totalTickets ?? 0)}
+                  </span>
+                  <span className="stat-unit">ใบ</span>
+                </div>
 
-          <div className="stat-card stat-total">
-            <span className="stat-label">บัตรที่จำหน่ายได้</span>
-            <span className="stat-value" id="stats-total-tickets">
-              {stats?.totalTickets ?? 0}
-            </span>
-            <span className="stat-unit">ใบ</span>
-          </div>
+                <div className="stat-card stat-inside">
+                  <span className="stat-label">อยู่ในงานขณะนี้</span>
+                  <span className="stat-value">{stats?.currentlyInside ?? 0}</span>
+                  <span className="stat-unit">คน</span>
+                </div>
+
+                <div className="stat-card stat-entries">
+                  <span className="stat-label">สแกนเข้าแล้ว</span>
+                  <span className="stat-value">{stats?.totalEntries ?? 0}</span>
+                  <span className="stat-unit">ครั้ง</span>
+                </div>
+
+                <div className="stat-card stat-exits">
+                  <span className="stat-label">สแกนออกแล้ว</span>
+                  <span className="stat-value">{stats?.totalExits ?? 0}</span>
+                  <span className="stat-unit">ครั้ง</span>
+                </div>
+              </div>
+            </section>
+
+          {/* Recent Scan Activity Log */}
+          <section className="terminal-logs-section" aria-labelledby="logs-heading">
+            <h3 id="logs-heading" className="text-sm font-semibold mb-2">
+              ประวัติการสแกนล่าสุดในรอบนี้ (AC-65: ไม่มีข้อมูลส่วนตัวผู้ซื้อ)
+            </h3>
+            {recentLogs.length === 0 ? (
+              <p className="text-sm text-slate-500 py-4 text-center">ยังไม่มีประวัติการสแกนในรอบนี้</p>
+            ) : (
+              <div className="table-responsive">
+                <table className="logs-table" id="admission-logs-table">
+                  <thead>
+                    <tr>
+                      <th>เวลา</th>
+                      <th>รหัสบัตร</th>
+                      <th>การดำเนินการ</th>
+                      <th>ผลการสแกน</th>
+                      <th>สาเหตุ / หมายเหตุ</th>
+                      <th>ผู้สแกน</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {recentLogs.map(log => (
+                      <tr key={log.id} className={log.status === 'success' ? 'log-success' : 'log-rejected'}>
+                        <td className="font-mono text-xs whitespace-nowrap">
+                          <ClockIcon className="inline-icon" />
+                          {formatTime(new Date(log.createdAt))}
+                        </td>
+                        <td className="font-mono text-xs font-semibold">{log.ticketCode}</td>
+                        <td>
+                          <span className={`mini-badge ${log.action === 'entry' ? 'badge-entry' : 'badge-exit'}`}>
+                            {log.action === 'entry' ? 'เข้า' : 'ออก'}
+                          </span>
+                        </td>
+                        <td>
+                          <span className={`mini-badge ${log.status === 'success' ? 'badge-success' : 'badge-danger'}`}>
+                            {log.status === 'success' ? 'สำเร็จ' : 'ปฏิเสธ'}
+                          </span>
+                        </td>
+                        <td className="text-xs text-slate-600">{log.reason || '-'}</td>
+                        <td className="text-xs text-slate-600">{log.scannerName}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </section>
         </div>
-      </section>
 
-      {/* Recent Scan Activity Log (AC-65: Zero buyer PII) */}
-      <section className="terminal-logs-section" aria-labelledby="logs-heading">
-        <h3 id="logs-heading" className="text-sm font-semibold mb-2">
-          ประวัติการสแกนล่าสุดในรอบนี้ (AC-65: ไม่มีข้อมูลส่วนตัวผู้ซื้อ)
-        </h3>
-        {recentLogs.length === 0 ? (
-          <p className="text-sm text-slate-500 py-4 text-center">ยังไม่มีประวัติการสแกนในรอบนี้</p>
-        ) : (
-          <div className="table-responsive">
-            <table className="logs-table" id="admission-logs-table">
-              <thead>
-                <tr>
-                  <th>เวลา</th>
-                  <th>รหัสบัตร</th>
-                  <th>การดำเนินการ</th>
-                  <th>ผลการสแกน</th>
-                  <th>สาเหตุ / หมายเหตุ</th>
-                  <th>ผู้สแกน</th>
-                </tr>
-              </thead>
-              <tbody>
-                {recentLogs.map(log => (
-                  <tr key={log.id} className={log.status === 'success' ? 'log-success' : 'log-rejected'}>
-                    <td className="font-mono text-xs whitespace-nowrap">
-                      <ClockIcon className="inline-icon" />
-                      {formatTime(new Date(log.createdAt))}
-                    </td>
-                    <td className="font-mono text-xs font-semibold">{log.ticketCode}</td>
-                    <td>
-                      <span className={`mini-badge ${log.action === 'entry' ? 'badge-entry' : 'badge-exit'}`}>
-                        {log.action === 'entry' ? 'เข้า' : 'ออก'}
-                      </span>
-                    </td>
-                    <td>
-                      <span className={`mini-badge ${log.status === 'success' ? 'badge-success' : 'badge-danger'}`}>
-                        {log.status === 'success' ? 'สำเร็จ' : 'ปฏิเสธ'}
-                      </span>
-                    </td>
-                    <td className="text-xs text-slate-600">{log.reason || '-'}</td>
-                    <td className="text-xs text-slate-600">{log.scannerName}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+        {/* TAB 3: จัดการระบบออฟไลน์ (Offline Mode & Dataset - D-106) */}
+        <div
+          id="terminal-panel-offline"
+          role="tabpanel"
+          aria-labelledby="terminal-tab-offline"
+          className={`terminal-tab-panel ${activeTerminalTab === 'offline' ? 'tab-panel-active' : 'tab-panel-inactive'}`}
+        >
+          <section
+            className="offline-dataset-panel"
+            data-testid="offline-dataset-panel"
+            style={{
+              backgroundColor: '#f8fafc',
+              border: '1px solid #cbd5e1',
+              borderRadius: '12px',
+              padding: '16px 20px',
+              marginBottom: '20px',
+            }}
+            aria-label="การเตรียมชุดข้อมูลออฟไลน์"
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px', marginBottom: '1rem' }}>
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+                  <strong style={{ fontSize: '15px', color: '#0f172a' }}>ชุดข้อมูลออฟไลน์ประจำงาน:</strong>
+                  <span
+                    data-testid="offline-dataset-status-badge"
+                    className={`status-badge ${offlineDataset ? 'approved' : 'pending'}`}
+                    style={{ fontSize: '12px' }}
+                  >
+                    {offlineDataset ? `พร้อมใช้งาน (${offlineDataset.totalTickets ?? 0} ใบ)` : 'ยังไม่มีข้อมูลในเครื่อง'}
+                  </span>
+                </div>
+                <div style={{ fontSize: '12px', color: '#64748b', display: 'flex', gap: '16px', flexWrap: 'wrap' }}>
+                  <span>
+                    สถานะการเชื่อมต่อ:{' '}
+                    <strong data-testid="connectivity-status-text">
+                      {isOfflineMode ? 'ออฟไลน์ (Offline Mode — AC-40)' : 'ออนไลน์ (Online Central)'}
+                    </strong>
+                  </span>
+                  <span>
+                    ซิงก์สำเร็จล่าสุด:{' '}
+                    <strong data-testid="last-successful-sync-time">
+                      {offlineDataset?.lastSuccessfulSync
+                        ? new Date(offlineDataset.lastSuccessfulSync).toLocaleString('th-TH', { timeZone: 'Asia/Bangkok' })
+                        : 'ยังไม่เคยซิงก์'}
+                    </strong>
+                  </span>
+                  <span>
+                    จำนวนบัตรที่เก็บในเครื่อง:{' '}
+                    <strong data-testid="cached-tickets-count">
+                      {offlineDataset?.totalTickets ?? 0} ใบ
+                    </strong>
+                  </span>
+                  <span data-testid="pending-sync-indicator">
+                    รายการรอซิงก์สู่ระบบกลาง:{' '}
+                    <strong data-testid="pending-sync-count">
+                      {pendingSyncCount}
+                    </strong>{' '}
+                    รายการ
+                  </span>
+                </div>
+                <p
+                  data-testid="offline-privacy-guarantee"
+                  style={{ margin: '6px 0 0', fontSize: '11px', color: '#059669' }}
+                >
+                  * ข้อมูลออฟไลน์ได้รับการคัดกรองข้อมูลระบุตัวตนผู้ซื้อ (Buyer PII) ออกทั้งหมดตาม AC-65
+                </p>
+              </div>
+
+              <div className="offline-actions-row">
+                <button
+                  type="button"
+                  id="toggle-offline-mode-btn"
+                  data-testid="toggle-offline-mode-btn"
+                  className="secondary-button terminal-action-btn"
+                  onClick={handleToggleOfflineMode}
+                >
+                  {isOfflineMode ? 'สลับเป็นโหมดออนไลน์ (Switch to Online)' : 'สลับเป็นโหมดออฟไลน์ (Offline Mode — AC-40)'}
+                </button>
+
+                <button
+                  type="button"
+                  id="download-offline-dataset-btn"
+                  data-testid="download-offline-dataset-btn"
+                  className="secondary-button terminal-action-btn"
+                  onClick={handleDownloadOfflineDataset}
+                  disabled={syncingDataset || isSyncingPending}
+                >
+                  {syncingDataset ? 'กำลังดาวน์โหลด...' : 'ดาวน์โหลดชุดข้อมูลออฟไลน์ (Download Offline Dataset — AC-94)'}
+                </button>
+
+                <button
+                  type="button"
+                  id="sync-offline-pending-btn"
+                  data-testid="sync-offline-pending-btn"
+                  className="button button-primary terminal-action-btn"
+                  onClick={handleSyncPendingScans}
+                  disabled={isSyncingPending || pendingSyncCount === 0 || isOfflineMode}
+                >
+                  {isSyncingPending
+                    ? 'กำลังซิงก์...'
+                    : `ซิงก์ข้อมูลค้าง (${pendingSyncCount} รายการ — AC-102)`}
+                </button>
+              </div>
+            </div>
+
+            {isOfflineMode && isPrimary && (
+              <div
+                data-testid="primary-offline-operational-notice"
+                className="status-banner warning"
+                style={{ marginTop: '10px', fontSize: '13px' }}
+                role="note"
+              >
+                <strong>ข้อปฏิบัติการทำงานออฟไลน์ (O1):</strong> เครื่องนี้ทำงานเป็นเครื่องหลักเพียงเครื่องเดียวของทั้งงาน กรุณาหยุดการใช้งานเครื่องสแกนอื่นทั้งหมดเพื่อป้องกันข้อมูลไม่ตรงกัน
+              </div>
+            )}
+
+            {nonPrimaryOfflineWarning && (
+              <div
+                data-testid="non-primary-offline-warning"
+                className="status-banner error"
+                style={{ marginTop: '10px', fontSize: '13px' }}
+                role="alert"
+              >
+                <span>{nonPrimaryOfflineWarning}</span>
+              </div>
+            )}
+
+            {syncFeedback && (
+              <div
+                className={`status-banner ${syncFeedback.type}`}
+                style={{ marginTop: '10px', fontSize: '13px' }}
+                role="status"
+              >
+                <span>{syncFeedback.message}</span>
+              </div>
+            )}
+          </section>
+        </div>
+
+        {/* Scan Result Modal with Pause & "สแกนคนถัดไป" (D-107) */}
+        {scanResult && (
+          <div
+            className="terminal-modal-overlay"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="scan-result-message"
+            tabIndex={-1}
+            onKeyDown={e => {
+              if (e.key === 'Escape') setScanResult(null);
+            }}
+            onClick={e => {
+              if (e.target === e.currentTarget) setScanResult(null);
+            }}
+          >
+            <div
+              id="scan-result-card"
+              className={`terminal-modal-content scan-result-card ${
+                scanResult.status === 'success'
+                  ? (scanResult.action === 'entry' ? 'result-success-entry' : 'result-success-exit')
+                  : 'result-rejected'
+              }`}
+            >
+              <div className="result-header">
+                {scanResult.status === 'success' ? (
+                  <CheckCircleIcon className="result-icon-success" width={44} height={44} />
+                ) : (
+                  <CrossCircleIcon className="result-icon-rejected" width={44} height={44} />
+                )}
+                <div className="result-headline">
+                  <span className="result-badge-text">
+                    {scanResult.status === 'success'
+                      ? (scanResult.action === 'entry' ? 'ผ่าน / บันทึกเข้างาน' : 'ผ่าน / บันทึกออกนอกงาน')
+                      : 'ไม่ผ่าน / ปฏิเสธการสแกน'}
+                  </span>
+                  <h3 id="scan-result-message" className="result-message">
+                    {scanResult.message}
+                  </h3>
+                </div>
+              </div>
+
+              {/* Non-PII Ticket Details (AC-65) */}
+              {scanResult.ticket && (
+                <div className="result-details" id="scanned-ticket-details">
+                  <dl className="details-grid">
+                    <div>
+                      <dt>รหัสบัตร</dt>
+                      <dd id="scanned-ticket-code" className="font-mono font-bold">
+                        {scanResult.ticket.ticketCode}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt>ประเภทบัตร</dt>
+                      <dd id="scanned-ticket-type">{scanResult.ticket.ticketTypeName}</dd>
+                    </div>
+                    <div>
+                      <dt>สถานะในพื้นที่จัดงาน</dt>
+                      <dd
+                        id="scanned-ticket-admission-status"
+                        className={`status-pill ${scanResult.ticket.admissionStatus === 'inside' ? 'pill-inside' : 'pill-outside'}`}
+                      >
+                        {scanResult.ticket.admissionStatus === 'inside' ? 'อยู่ในพื้นที่จัดงาน' : 'อยู่นอกพื้นที่จัดงาน'}
+                      </dd>
+                    </div>
+                    <div>
+                      <dt>เวลาที่สแกน</dt>
+                      <dd className="font-mono text-sm">{formatTime(new Date(scanResult.ticket.scannedAt))}</dd>
+                    </div>
+                  </dl>
+                </div>
+              )}
+
+              {/* Modal Action Controls */}
+              <div className="terminal-modal-actions">
+                <button
+                  type="button"
+                  id="scan-next-btn"
+                  data-testid="scan-next-btn"
+                  className="button button-primary scan-next-modal-btn"
+                  onClick={() => {
+                    setScanResult(null);
+                    setCameraActive(true);
+                  }}
+                >
+                  <QrCodeIcon width={18} height={18} />
+                  <span>สแกนคนถัดไป</span>
+                </button>
+                <button
+                  type="button"
+                  id="dismiss-scan-modal-btn"
+                  data-testid="dismiss-scan-modal-btn"
+                  className="secondary-button"
+                  onClick={() => setScanResult(null)}
+                >
+                  ปิด / ยกเลิก
+                </button>
+              </div>
+            </div>
           </div>
         )}
-      </section>
+      </div>
     </div>
-  );
+  </div>
+);
 }

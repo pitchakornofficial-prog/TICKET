@@ -55,6 +55,7 @@ export async function PUT(
         description: typeof body.description === 'string' ? body.description : undefined,
         location: typeof body.location === 'string' ? body.location : undefined,
         posterUrl: typeof body.posterUrl === 'string' ? body.posterUrl : undefined,
+        ticketTemplateUrl: typeof body.ticketTemplateUrl === 'string' ? body.ticketTemplateUrl : undefined,
         limitPerOrder: typeof body.limitPerOrder === 'number' ? body.limitPerOrder : undefined,
       },
       Array.isArray(body.sessions) ? (body.sessions as SessionDraftInput[]) : undefined,

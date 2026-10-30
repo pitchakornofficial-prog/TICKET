@@ -3,7 +3,11 @@ import { authFixture } from '../support/auth-fixture';
 import { createEventDraft, approveSession } from '../../src/server/events';
 import { saveEventFeeSettings, getEventFeeSettings } from '../../src/server/fees';
 import { requestGuestOtp, verifyGuestOtp } from '../../src/server/guest-otp';
-import { createReservation, getOrderReservation } from '../../src/server/reservation';
+import {
+  createReservation,
+  getOrderReservation,
+  getBuyerTicketCountForEvent,
+} from '../../src/server/reservation';
 import { getCapturedEmails, clearCapturedEmails } from '../../src/server/email';
 
 describe('Reservation, concurrency, quota isolation and fee lock integration (TASK-012, AC-10, AC-14, AC-61, AC-69, AC-106, AC-111, AC-06, AC-12, AC-13)', () => {
@@ -103,6 +107,126 @@ describe('Reservation, concurrency, quota isolation and fee lock integration (TA
     expect(reservation.status).toBe('reserved');
     expect(reservation.items.length).toBe(2);
     expect(reservation.subtotal).toBe(6000); // 2*2000 + 2*1000 = 6000
+  });
+
+  it('enforces anti-scalping cumulative buyer limit per event across multiple orders (D-59)', async () => {
+    const ownerId = fixture.ids.owner;
+    const orgId = fixture.ids.organizer;
+
+    // Create event with limitPerOrder = 4
+    const event = await createEventDraft(
+      fixture.pool,
+      orgId,
+      { title: 'คอนเสิร์ตทดสอบ Cumulative Buyer Limit D-59', location: 'อิมแพ็ค อารีน่า', limitPerOrder: 4 },
+      [
+        {
+          startTime: '2026-11-20T19:00:00.000Z',
+          endTime: '2026-11-20T22:00:00.000Z',
+          ticketTypes: [{ name: 'โซน A', price: 1000, quota: 100 }],
+        },
+      ],
+    );
+
+    await approveSession(fixture.pool, event.sessions[0].id, ownerId);
+    const ttId = event.sessions[0].ticketTypes[0].id;
+    const buyerEmail = 'scalper-test@ticket.invalid';
+    const buyerPhone = '0891234567';
+
+    let clockOffset = 0;
+    async function getTokenForBuyer(name: string) {
+      clearCapturedEmails();
+      const now = new Date(Date.now() + clockOffset);
+      clockOffset += 70 * 1000;
+      const buyer = { name, email: buyerEmail, phone: buyerPhone };
+      const reqRes = await requestGuestOtp(fixture.pool, { buyer, purpose: 'checkout', now });
+      const match = getCapturedEmails().at(-1)?.text?.match(/\b(\d{6})\b/);
+      const code = match ? match[1] : '';
+      const verifyRes = await verifyGuestOtp(fixture.pool, {
+        email: buyerEmail,
+        code,
+        requestId: reqRes.requestId ?? '',
+        purpose: 'checkout',
+        buyer,
+        now,
+      });
+      return verifyRes.verifiedToken ?? '';
+    }
+
+    const token1 = await getTokenForBuyer('ผู้ซื้อรอบแรก');
+
+    // Order 1: Buyer reserves 2 tickets -> success
+    const res1 = await createReservation(fixture.pool, {
+      verifiedToken: token1,
+      eventId: event.id,
+      sessionId: event.sessions[0].id,
+      items: [{ ticketTypeId: ttId, quantity: 2 }],
+    });
+    expect(res1.id).toBeDefined();
+
+    const countAfter1 = await getBuyerTicketCountForEvent(fixture.pool, event.id, buyerEmail, buyerPhone);
+    expect(countAfter1).toBe(2);
+
+    // Order 2: Same buyer tries to reserve 3 tickets (2 + 3 = 5 > 4) -> rejected
+    const token2 = await getTokenForBuyer('ผู้ซื้อรอบสอง');
+    await expect(
+      createReservation(fixture.pool, {
+        verifiedToken: token2,
+        eventId: event.id,
+        sessionId: event.sessions[0].id,
+        items: [{ ticketTypeId: ttId, quantity: 3 }],
+      }),
+    ).rejects.toThrow('ท่านได้สั่งซื้อหรือมีรายการจองบัตรคอนเสิร์ตนี้ไปแล้ว 2 ใบ ไม่สามารถซื้อเพิ่มอีก 3 ใบได้');
+
+    // Order 2: Same buyer reserves 2 tickets (2 + 2 = 4 <= 4) -> success
+    const res2 = await createReservation(fixture.pool, {
+      verifiedToken: token2,
+      eventId: event.id,
+      sessionId: event.sessions[0].id,
+      items: [{ ticketTypeId: ttId, quantity: 2 }],
+    });
+    expect(res2.id).toBeDefined();
+
+    const countAfter2 = await getBuyerTicketCountForEvent(fixture.pool, event.id, buyerEmail, buyerPhone);
+    expect(countAfter2).toBe(4);
+
+    // Order 3: Same buyer tries to buy even 1 ticket (4 / 4 full) -> rejected
+    const token3 = await getTokenForBuyer('ผู้ซื้อรอบสาม');
+    await expect(
+      createReservation(fixture.pool, {
+        verifiedToken: token3,
+        eventId: event.id,
+        sessionId: event.sessions[0].id,
+        items: [{ ticketTypeId: ttId, quantity: 1 }],
+      }),
+    ).rejects.toThrow('ท่านได้สั่งซื้อบัตรคอนเสิร์ตนี้ครบตามจำนวนจำกัดแล้ว (4 / 4 ใบ');
+
+    // D-60: Same phone number with a different email CAN buy tickets (Email-anchored)
+    clearCapturedEmails();
+    const friendBuyer = { name: 'เพื่อนผู้ซื้อ', email: 'friend-buyer@ticket.invalid', phone: buyerPhone };
+    const friendOtpReq = await requestGuestOtp(fixture.pool, {
+      buyer: friendBuyer,
+      purpose: 'checkout',
+      now: new Date(Date.now() + 300 * 1000),
+    });
+    const friendMatch = getCapturedEmails().at(-1)?.text?.match(/\b(\d{6})\b/);
+    const friendCode = friendMatch ? friendMatch[1] : '';
+    const friendVerify = await verifyGuestOtp(fixture.pool, {
+      email: friendBuyer.email,
+      code: friendCode,
+      requestId: friendOtpReq.requestId ?? '',
+      purpose: 'checkout',
+      buyer: friendBuyer,
+      now: new Date(Date.now() + 300 * 1000),
+    });
+
+    const friendRes = await createReservation(fixture.pool, {
+      verifiedToken: friendVerify.verifiedToken ?? '',
+      eventId: event.id,
+      sessionId: event.sessions[0].id,
+      items: [{ ticketTypeId: ttId, quantity: 4 }],
+    });
+    expect(friendRes.id).toBeDefined();
+    expect(friendRes.items[0].quantity).toBe(4);
   });
 
   it('all-or-nothing: does not create partial hold if any ticket type has insufficient quota (AC-61)', async () => {

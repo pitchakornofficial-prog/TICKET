@@ -28,7 +28,13 @@ interface ScannerEvent {
   sessions: ScannerSession[];
 }
 
-export function ScannerEventsView() {
+export function ScannerEventsView({
+  initialEventId,
+  actorRole,
+}: {
+  initialEventId?: string;
+  actorRole?: string;
+} = {}) {
   const [events, setEvents] = useState<ScannerEvent[]>([]);
   const [currentScanner, setCurrentScanner] = useState<{ id: string; name: string } | null>(null);
   const [loading, setLoading] = useState(true);
@@ -46,9 +52,22 @@ export function ScannerEventsView() {
       const res = await fetch('/api/scanner/events');
       if (res.ok) {
         const data = await res.json();
-        setEvents(data.events || []);
+        const fetchedEvents: ScannerEvent[] = data.events || [];
+        setEvents(fetchedEvents);
         if (data.currentScanner) {
           setCurrentScanner(data.currentScanner);
+        }
+        if (initialEventId) {
+          const target = fetchedEvents.find((e) => e.id === initialEventId) || fetchedEvents[0];
+          if (target && target.sessions.length > 0) {
+            setActiveSession({
+              eventId: target.id,
+              eventTitle: target.title,
+              isPrimary: target.isPrimary,
+              primaryScannerName: target.primaryScannerName,
+              session: target.sessions[0],
+            });
+          }
         }
       } else {
         setError('ไม่สามารถโหลดข้อมูลงานที่ได้รับมอบหมายได้');
@@ -58,7 +77,7 @@ export function ScannerEventsView() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [initialEventId]);
 
   useEffect(() => {
     loadEvents();
@@ -78,6 +97,7 @@ export function ScannerEventsView() {
         primaryScannerName={activeSession.primaryScannerName}
         scannerId={currentScanner?.id}
         scannerName={currentScanner?.name}
+        actorRole={actorRole}
         onClose={() => setActiveSession(null)}
       />
     );

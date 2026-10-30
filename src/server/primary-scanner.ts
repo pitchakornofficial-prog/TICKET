@@ -365,7 +365,10 @@ export async function getOfflineDataset(
 
   // 2. Fetch primary scanner
   const primaryRecord = await getEventPrimaryScanner(pool, eventId);
-  const isCurrentScannerPrimary = primaryRecord?.scannerId === actor.id;
+  const isCurrentScannerPrimary =
+    primaryRecord?.scannerId === actor.id ||
+    (actor.role === 'organizer' && event.organizerId === actor.id) ||
+    actor.role === 'owner';
 
   // 3. Fetch sessions with ticket types and admission windows
   const sessRes = await pool.query<{

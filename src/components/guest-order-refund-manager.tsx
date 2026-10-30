@@ -338,9 +338,10 @@ export function GuestOrderRefundManager({
           style={{
             marginTop: '16px',
             backgroundColor: '#ffffff',
-            border: '1px solid #cbd5e1',
-            borderRadius: '8px',
+            border: '1px solid #e2e8f0',
+            borderRadius: '12px',
             padding: '18px',
+            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.03)',
           }}
         >
           <h4 style={{ fontSize: '16px', fontWeight: 'bold', color: '#0f172a', margin: '0 0 8px 0' }}>

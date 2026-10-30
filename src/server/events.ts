@@ -14,6 +14,11 @@ export interface EventDraftInput {
   description?: string;
   location: string;
   posterUrl?: string;
+  ticketTemplateUrl?: string;
+  coverBannerUrl?: string;
+  googleMapsUrl?: string;
+  salesStartTime?: string;
+  salesEndTime?: string;
   limitPerOrder?: number;
 }
 
@@ -59,11 +64,21 @@ export async function ensureEventSchema(pool: Pool): Promise<void> {
       description TEXT NOT NULL DEFAULT '',
       location TEXT NOT NULL,
       "posterUrl" TEXT,
+      "ticketTemplateUrl" TEXT,
+      "coverBannerUrl" TEXT,
+      "googleMapsUrl" TEXT,
+      "salesStartTime" TIMESTAMPTZ,
+      "salesEndTime" TIMESTAMPTZ,
       "limitPerOrder" INTEGER NOT NULL DEFAULT 4,
       status TEXT NOT NULL DEFAULT 'draft',
       "createdAt" TIMESTAMPTZ NOT NULL DEFAULT now(),
       "updatedAt" TIMESTAMPTZ NOT NULL DEFAULT now()
     );
+    ALTER TABLE events ADD COLUMN IF NOT EXISTS "ticketTemplateUrl" TEXT;
+    ALTER TABLE events ADD COLUMN IF NOT EXISTS "coverBannerUrl" TEXT;
+    ALTER TABLE events ADD COLUMN IF NOT EXISTS "googleMapsUrl" TEXT;
+    ALTER TABLE events ADD COLUMN IF NOT EXISTS "salesStartTime" TIMESTAMPTZ;
+    ALTER TABLE events ADD COLUMN IF NOT EXISTS "salesEndTime" TIMESTAMPTZ;
     CREATE INDEX IF NOT EXISTS idx_events_organizerId ON events("organizerId");
 
     CREATE TABLE IF NOT EXISTS event_sessions (
@@ -154,6 +169,8 @@ export async function ensureEventSchema(pool: Pool): Promise<void> {
     ALTER TABLE event_sessions ADD COLUMN IF NOT EXISTS "rescheduledFromEndTime" TIMESTAMPTZ;
     ALTER TABLE session_amendments ADD COLUMN IF NOT EXISTS "specialRefundWindowStart" TIMESTAMPTZ;
     ALTER TABLE session_amendments ADD COLUMN IF NOT EXISTS "specialRefundWindowEnd" TIMESTAMPTZ;
+    ALTER TABLE event_scanners ADD COLUMN IF NOT EXISTS "boundDeviceId" TEXT;
+    ALTER TABLE event_scanners ADD COLUMN IF NOT EXISTS "boundAt" TIMESTAMPTZ;
   `);
   await ensureFeeSchema(pool);
   eventSchemaInitialized.add(pool);
@@ -175,8 +192,8 @@ export async function createEventDraft(
   return inTransaction(pool, async client => {
     const eventId = randomUUID();
     await client.query(
-      `INSERT INTO events (id, "organizerId", title, description, location, "posterUrl", "limitPerOrder", status, "createdAt", "updatedAt")
-       VALUES ($1, $2, $3, $4, $5, $6, $7, 'draft', now(), now())`,
+      `INSERT INTO events (id, "organizerId", title, description, location, "posterUrl", "ticketTemplateUrl", "coverBannerUrl", "googleMapsUrl", "salesStartTime", "salesEndTime", "limitPerOrder", status, "createdAt", "updatedAt")
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'draft', now(), now())`,
       [
         eventId,
         organizerId,
@@ -184,6 +201,11 @@ export async function createEventDraft(
         eventInput.description?.trim() || '',
         eventInput.location.trim(),
         eventInput.posterUrl || null,
+        eventInput.ticketTemplateUrl || null,
+        eventInput.coverBannerUrl || null,
+        eventInput.googleMapsUrl || null,
+        eventInput.salesStartTime ? new Date(eventInput.salesStartTime) : null,
+        eventInput.salesEndTime ? new Date(eventInput.salesEndTime) : null,
         limit,
       ],
     );
@@ -246,6 +268,21 @@ export async function updateEventDraft(
     }
     if (eventInput.posterUrl !== undefined) {
       await client.query('UPDATE events SET "posterUrl" = $1, "updatedAt" = now() WHERE id = $2', [eventInput.posterUrl, eventId]);
+    }
+    if (eventInput.ticketTemplateUrl !== undefined) {
+      await client.query('UPDATE events SET "ticketTemplateUrl" = $1, "updatedAt" = now() WHERE id = $2', [eventInput.ticketTemplateUrl, eventId]);
+    }
+    if (eventInput.coverBannerUrl !== undefined) {
+      await client.query('UPDATE events SET "coverBannerUrl" = $1, "updatedAt" = now() WHERE id = $2', [eventInput.coverBannerUrl, eventId]);
+    }
+    if (eventInput.googleMapsUrl !== undefined) {
+      await client.query('UPDATE events SET "googleMapsUrl" = $1, "updatedAt" = now() WHERE id = $2', [eventInput.googleMapsUrl, eventId]);
+    }
+    if (eventInput.salesStartTime !== undefined) {
+      await client.query('UPDATE events SET "salesStartTime" = $1, "updatedAt" = now() WHERE id = $2', [eventInput.salesStartTime ? new Date(eventInput.salesStartTime) : null, eventId]);
+    }
+    if (eventInput.salesEndTime !== undefined) {
+      await client.query('UPDATE events SET "salesEndTime" = $1, "updatedAt" = now() WHERE id = $2', [eventInput.salesEndTime ? new Date(eventInput.salesEndTime) : null, eventId]);
     }
     if (eventInput.limitPerOrder !== undefined) {
       await client.query('UPDATE events SET "limitPerOrder" = $1, "updatedAt" = now() WHERE id = $2', [eventInput.limitPerOrder, eventId]);
@@ -365,9 +402,15 @@ export async function listOrganizerEvents(pool: Pool, organizerId: string) {
   await ensureEventSchema(pool);
   const res = await pool.query(
     `SELECT e.*, 
-            COUNT(s.id) AS "sessionCount"
+            COUNT(DISTINCT s.id) AS "sessionCount",
+            COALESCE(SUM(tt.quota), 0) AS "totalQuota",
+            MIN(tt.price) AS "minPrice",
+            MAX(tt.price) AS "maxPrice",
+            MIN(s."startTime") AS "firstSessionStartTime",
+            MAX(s."endTime") AS "lastSessionEndTime"
      FROM events e
      LEFT JOIN event_sessions s ON s."eventId" = e.id
+     LEFT JOIN ticket_types tt ON tt."sessionId" = s.id
      WHERE e."organizerId" = $1
      GROUP BY e.id
      ORDER BY e."createdAt" DESC`,
@@ -452,9 +495,11 @@ export async function getPublicEventWithApprovedSessions(pool: Pool, eventId: st
   try {
     await ensureEventSchema(pool);
     const evRes = await pool.query(
-      `SELECT id, title, description, location, "posterUrl", "limitPerOrder", status 
-       FROM events 
-       WHERE id = $1 AND status = 'approved'`,
+      `SELECT e.id, e.title, e.description, e.location, e."posterUrl", e."ticketTemplateUrl", e."limitPerOrder", e.status,
+              u.name as "organizerName", u.email as "organizerEmail"
+       FROM events e
+       LEFT JOIN auth_user u ON e."organizerId" = u.id
+       WHERE e.id = $1 AND e.status = 'approved'`,
       [eventId],
     );
     if (evRes.rowCount === 0) return null;
@@ -529,6 +574,9 @@ export interface EventScannerItem {
   email: string;
   assignedAt: string;
   isPrimary?: boolean;
+  isBound?: boolean;
+  boundDeviceId?: string | null;
+  boundAt?: string | null;
 }
 
 export interface ScannerAssignedEvent {
@@ -641,9 +689,12 @@ export async function listScannersForEvent(
     email: string;
     assignedAt: Date;
     isPrimary: boolean | null;
+    boundDeviceId: string | null;
+    boundAt: Date | null;
   }>(
     `SELECT es.id, es."scannerId", u.name, u.email, es."assignedAt",
-            (ps."scannerId" IS NOT NULL) as "isPrimary"
+            (ps."scannerId" IS NOT NULL) as "isPrimary",
+            es."boundDeviceId", es."boundAt"
      FROM event_scanners es
      JOIN auth_user u ON u.id = es."scannerId"
      LEFT JOIN event_primary_scanners ps ON ps."eventId" = es."eventId" AND ps."scannerId" = es."scannerId"
@@ -659,6 +710,9 @@ export async function listScannersForEvent(
     email: r.email,
     assignedAt: r.assignedAt instanceof Date ? r.assignedAt.toISOString() : String(r.assignedAt),
     isPrimary: Boolean(r.isPrimary),
+    isBound: Boolean(r.boundDeviceId),
+    boundDeviceId: r.boundDeviceId,
+    boundAt: r.boundAt ? (r.boundAt instanceof Date ? r.boundAt.toISOString() : String(r.boundAt)) : null,
   }));
 }
 
@@ -684,31 +738,135 @@ export async function removeScannerFromEvent(
   return (result.rowCount ?? 0) > 0;
 }
 
+export async function updateScannerName(
+  pool: Pool,
+  organizerId: string,
+  eventId: string,
+  scannerId: string,
+  newName: string,
+): Promise<{ id: string; name: string }> {
+  await ensureEventSchema(pool);
+
+  const evRes = await pool.query<{ organizerId: string }>('SELECT "organizerId" FROM events WHERE id = $1', [eventId]);
+  if (evRes.rowCount === 0) throw new Error('ไม่พบงานคอนเสิร์ต');
+  if (evRes.rows[0].organizerId !== organizerId) {
+    throw new Error('คุณไม่มีสิทธิ์จัดการทีมสแกนของงานนี้');
+  }
+
+  const trimmedName = newName.trim();
+  if (!trimmedName) {
+    throw new Error('กรุณาระบุชื่อเจ้าหน้าที่หรือจุดตรวจ');
+  }
+
+  const scRes = await pool.query('SELECT id FROM event_scanners WHERE "eventId" = $1 AND "scannerId" = $2', [eventId, scannerId]);
+  if ((scRes.rowCount ?? 0) === 0) {
+    throw new Error('ไม่พบข้อมูลทีมสแกนในงานนี้');
+  }
+
+  await inTransaction(pool, async client => {
+    await client.query('UPDATE auth_user SET name = $1, "updatedAt" = now() WHERE id = $2', [trimmedName, scannerId]);
+    await client.query('UPDATE event_primary_scanners SET "scannerName" = $1 WHERE "eventId" = $2 AND "scannerId" = $3', [trimmedName, eventId, scannerId]);
+  });
+
+  return { id: scannerId, name: trimmedName };
+}
+
+export async function resetScannerDeviceBinding(
+  pool: Pool,
+  organizerId: string,
+  eventId: string,
+  scannerId: string,
+): Promise<{ success: boolean; message: string }> {
+  await ensureEventSchema(pool);
+  const evRes = await pool.query<{ organizerId: string }>(
+    'SELECT "organizerId" FROM events WHERE id = $1',
+    [eventId],
+  );
+  if (evRes.rowCount === 0) throw new Error('ไม่พบงานคอนเสิร์ต');
+  if (evRes.rows[0].organizerId !== organizerId) {
+    throw new Error('คุณไม่มีสิทธิ์จัดการงานคอนเสิร์ตนี้');
+  }
+
+  const scRes = await pool.query(
+    'SELECT id FROM event_scanners WHERE "eventId" = $1 AND "scannerId" = $2',
+    [eventId, scannerId],
+  );
+  if ((scRes.rowCount ?? 0) === 0) {
+    throw new Error('ไม่พบทีมสแกนในงานนี้');
+  }
+
+  await inTransaction(pool, async (client) => {
+    // 1. Clear bound device on event_scanners
+    await client.query(
+      `UPDATE event_scanners
+       SET "boundDeviceId" = NULL, "boundAt" = NULL
+       WHERE "eventId" = $1 AND "scannerId" = $2`,
+      [eventId, scannerId],
+    );
+
+    // 2. Invalidate all active sessions for this scanner
+    await client.query(
+      `DELETE FROM auth_session WHERE "userId" = $1`,
+      [scannerId],
+    );
+  });
+
+  return {
+    success: true,
+    message: 'รีเซ็ตอุปกรณ์เรียบร้อยแล้ว สามารถนำลิงก์ไปเปิดบนอุปกรณ์ใหม่ได้ทันที',
+  };
+}
+
 export async function listEventsForScanner(
   pool: Pool,
   scannerId: string,
+  role: string = 'scanner',
 ): Promise<ScannerAssignedEvent[]> {
   await ensureEventSchema(pool);
 
-  const evRes = await pool.query<{
-    id: string;
-    title: string;
-    location: string;
-    posterUrl: string | null;
-    status: string;
-    assignedAt: Date;
-    primaryScannerId: string | null;
-    primaryScannerName: string | null;
-  }>(
-    `SELECT e.id, e.title, e.location, e."posterUrl", e.status, es."assignedAt",
-            ps."scannerId" as "primaryScannerId", ps."scannerName" as "primaryScannerName"
-     FROM events e
-     JOIN event_scanners es ON es."eventId" = e.id
-     LEFT JOIN event_primary_scanners ps ON ps."eventId" = e.id
-     WHERE es."scannerId" = $1
-     ORDER BY es."assignedAt" DESC`,
-    [scannerId],
-  );
+  let evRes: {
+    rows: Array<{
+      id: string;
+      title: string;
+      location: string;
+      posterUrl: string | null;
+      status: string;
+      assignedAt: Date;
+      primaryScannerId: string | null;
+      primaryScannerName: string | null;
+    }>;
+  };
+
+  if (role === 'organizer') {
+    evRes = await pool.query(
+      `SELECT e.id, e.title, e.location, e."posterUrl", e.status, e."createdAt" as "assignedAt",
+              e."organizerId" as "primaryScannerId", u.name as "primaryScannerName"
+       FROM events e
+       JOIN auth_user u ON u.id = e."organizerId"
+       WHERE e."organizerId" = $1
+       ORDER BY e."createdAt" DESC`,
+      [scannerId],
+    );
+  } else if (role === 'owner') {
+    evRes = await pool.query(
+      `SELECT e.id, e.title, e.location, e."posterUrl", e.status, e."createdAt" as "assignedAt",
+              e."organizerId" as "primaryScannerId", u.name as "primaryScannerName"
+       FROM events e
+       JOIN auth_user u ON u.id = e."organizerId"
+       ORDER BY e."createdAt" DESC`,
+    );
+  } else {
+    evRes = await pool.query(
+      `SELECT e.id, e.title, e.location, e."posterUrl", e.status, es."assignedAt",
+              ps."scannerId" as "primaryScannerId", ps."scannerName" as "primaryScannerName"
+       FROM events e
+       JOIN event_scanners es ON es."eventId" = e.id
+       LEFT JOIN event_primary_scanners ps ON ps."eventId" = e.id
+       WHERE es."scannerId" = $1
+       ORDER BY es."assignedAt" DESC`,
+      [scannerId],
+    );
+  }
 
   const events: ScannerAssignedEvent[] = [];
   for (const ev of evRes.rows) {
@@ -734,7 +892,7 @@ export async function listEventsForScanner(
       posterUrl: ev.posterUrl,
       status: ev.status,
       assignedAt: ev.assignedAt instanceof Date ? ev.assignedAt.toISOString() : String(ev.assignedAt),
-      isPrimary: ev.primaryScannerId === scannerId,
+      isPrimary: role === 'organizer' || role === 'owner' || ev.primaryScannerId === scannerId,
       primaryScannerId: ev.primaryScannerId,
       primaryScannerName: ev.primaryScannerName,
       sessions: sessRes.rows.map(s => ({

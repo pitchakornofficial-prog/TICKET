@@ -147,6 +147,7 @@ test.describe('Weekly manual payout: calculation, recording, history, and privat
 
     // 5. Owner navigates to payout manager on /back-office/owner (AC-27, AC-30, AC-79)
     await ownerPage.goto('/back-office/owner');
+    await ownerPage.locator('[data-testid="owner-nav-finance"]').click();
     const payoutManager = ownerPage.locator('[data-testid="owner-weekly-payout-manager"]');
     await expect(payoutManager).toBeVisible();
 

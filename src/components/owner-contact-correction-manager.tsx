@@ -216,7 +216,7 @@ export function OwnerContactCorrectionManager() {
           onClick={() => fetchOrders(searchTerm)}
           disabled={isLoading}
           style={{
-            backgroundColor: '#1848ed',
+            backgroundColor: '#0f172a',
             color: '#ffffff',
             border: 'none',
             borderRadius: '6px',
@@ -366,7 +366,7 @@ export function OwnerContactCorrectionManager() {
                 type="submit"
                 disabled={isSubmitting}
                 style={{
-                  backgroundColor: '#1848ed',
+                  backgroundColor: '#0f172a',
                   color: '#ffffff',
                   border: 'none',
                   borderRadius: '6px',

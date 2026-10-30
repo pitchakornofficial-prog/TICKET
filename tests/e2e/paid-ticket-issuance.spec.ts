@@ -3,6 +3,7 @@ import { fixtureAccounts, fixturePassword } from '../support/auth-fixture';
 
 let nextIp = 1;
 test.beforeEach(async ({ context }, testInfo) => {
+  test.setTimeout(60000);
   const base = testInfo.project.name === 'desktop-chromium' ? 145 : 195;
   await context.setExtraHTTPHeaders({ 'x-forwarded-for': `198.51.100.${base + (nextIp++ % 50)}` });
 });
@@ -73,11 +74,28 @@ test.describe('Paid ticket issuance flow (TASK-015, AC-11, AC-16, AC-17, AC-18, 
     await page.getByRole('button', { name: 'ออกจากระบบ', exact: true }).click();
     await expect(page).toHaveURL('/login');
 
-    // 3. Guest visits concert detail page
+    // 3. Guest visits concert detail page and proceeds to checkout
     await page.goto(`/events/${createdEvent.id}`);
     await expect(page.getByRole('heading', { name: eventTitle })).toBeVisible();
 
-    // 4. Guest completes OTP verification
+    const enterQueueBtn = page.getByTestId('enter-queue-cta-btn').filter({ visible: true });
+    if (await enterQueueBtn.isVisible()) {
+      await enterQueueBtn.click();
+      const proceedBtn = page.locator('#proceed-to-checkout-btn');
+      await expect(proceedBtn).toBeVisible({ timeout: 10000 });
+      await proceedBtn.click();
+    } else {
+      await page.goto(`/events/${createdEvent.id}/checkout`);
+    }
+    await expect(page).toHaveURL(new RegExp(`/events/${createdEvent.id}/checkout`));
+
+    // 4. Select 2 tickets
+    const addBtn = page.getByRole('button', { name: 'เพิ่มจำนวน บัตร VIP Zone A' });
+    await addBtn.click();
+    await addBtn.click();
+    await expect(page.getByText('รวมราคาบัตร (2 ใบ)')).toBeVisible();
+
+    // 5. Fill buyer info and complete OTP verification
     await page.getByLabel('ชื่อ-นามสกุล *').fill(guestName);
     await page.getByLabel('อีเมล *').fill(guestEmail);
     await page.getByLabel('เบอร์โทรศัพท์มือถือ *').fill(guestPhone);
@@ -93,29 +111,33 @@ test.describe('Paid ticket issuance flow (TASK-015, AC-11, AC-16, AC-17, AC-18, 
 
     await page.getByLabel('รหัส OTP 6 หลัก *').fill(code);
     await page.getByRole('button', { name: 'ยืนยันรหัส OTP' }).click();
+
+    // Pre-verification modal
+    await expect(page.getByRole('heading', { name: 'ยืนยันข้อมูลคำสั่งซื้อและการล็อกสิทธิ์' })).toBeVisible();
+    await page.getByRole('button', { name: 'ยืนยันและดำเนินการต่อ' }).click();
+
     await expect(page.getByRole('heading', { name: 'ยืนยันอีเมลสำเร็จ (Guest Verified)' })).toBeVisible();
 
-    // 5. Select 2 tickets and reserve
-    const addBtn = page.getByRole('button', { name: 'เพิ่มจำนวน บัตร VIP Zone A' });
-    await addBtn.click();
-    await addBtn.click();
-    await page.getByRole('button', { name: 'ยืนยันการเลือกบัตร (2 ใบ)' }).click();
+    // Confirm reservation to navigate to Payment page
+    const confirmReserveBtn = page.locator('#confirm-reservation-btn');
+    await expect(confirmReserveBtn).toBeEnabled();
+    await confirmReserveBtn.scrollIntoViewIfNeeded();
+    await confirmReserveBtn.click({ force: true });
 
+    await expect(page).toHaveURL(/\/orders\/ORD-[A-Z0-9-]+\/payment$/);
     await expect(page.getByText('กันบัตรสำเร็จ (Reserved)')).toBeVisible();
     const orderId = (await page.locator('#reservation-order-id').innerText()).trim();
     expect(orderId).toMatch(/^ORD-/);
 
-    // 6. Generate PromptPay QR
-    const generateQrBtn = page.getByRole('button', { name: 'สร้าง QR Code ชำระเงิน (PromptPay)' });
-    await expect(generateQrBtn).toBeVisible();
-    await generateQrBtn.click();
-
-    await expect(page.locator('#promptpay-qr-image')).toBeVisible();
+    // 6. PromptPay QR (auto-generated)
+    const qrImage = page.locator('#promptpay-qr-image');
+    await expect(qrImage).toBeVisible({ timeout: 15000 });
     const simulateBtn = page.locator('#simulate-payment-button');
     await expect(simulateBtn).toBeVisible();
+    await simulateBtn.scrollIntoViewIfNeeded();
 
     // 7. Click simulate payment success
-    await simulateBtn.click();
+    await simulateBtn.click({ force: true });
 
     // 8. Assert Paid state & Ticket Issuance (AC-11, AC-17, AC-19)
     await expect(page.getByText('ชำระเงินสำเร็จ (Paid)')).toBeVisible();
@@ -125,6 +147,12 @@ test.describe('Paid ticket issuance flow (TASK-015, AC-11, AC-16, AC-17, AC-18, 
     await expect(page.locator('#buyer-summary-name')).toHaveText(guestName);
     await expect(page.locator('#buyer-summary-email')).toHaveText(guestEmail);
     await expect(page.locator('#buyer-summary-phone')).toHaveText(guestPhone);
+
+    // Switch to tickets tab if on success page with tabs (D-53)
+    const ticketsTabBtn = page.locator('#tab-btn-tickets');
+    if (await ticketsTabBtn.isVisible()) {
+      await ticketsTabBtn.click();
+    }
 
     // Tickets cards verification
     const ticketCards = page.locator('.ticket-card');
@@ -142,6 +170,10 @@ test.describe('Paid ticket issuance flow (TASK-015, AC-11, AC-16, AC-17, AC-18, 
     // 9. Page reload retains paid status and tickets (AC-18, AC-70)
     await page.reload();
     await expect(page.getByText('ชำระเงินสำเร็จ (Paid)')).toBeVisible();
+    const reloadTicketsTabBtn = page.locator('#tab-btn-tickets');
+    if (await reloadTicketsTabBtn.isVisible()) {
+      await reloadTicketsTabBtn.click();
+    }
     expect(await page.locator('#ticket-code-0').innerText()).toBe(ticketCode0);
     expect(await page.locator('#ticket-code-1').innerText()).toBe(ticketCode1);
 

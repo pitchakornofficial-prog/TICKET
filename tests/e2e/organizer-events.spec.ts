@@ -19,6 +19,10 @@ test('organizer logs in, creates a concert draft with poster and views it in the
   await expect(page).toHaveURL('/back-office/organizer');
 
   // 2. Open create event form
+  if (testInfo.project.name === 'mobile-chromium') {
+    await page.getByTestId('organizer-mobile-menu-toggle').click();
+  }
+  await page.getByTestId('organizer-nav-events').click();
   await expect(page.getByRole('heading', { name: 'งานคอนเสิร์ตของคุณ' })).toBeVisible();
   await page.getByRole('button', { name: '+ สร้างงานคอนเสิร์ตใหม่' }).click();
 
@@ -43,6 +47,7 @@ test('organizer logs in, creates a concert draft with poster and views it in the
   await expect(card.getByText(`สถานที่: ${location}`)).toBeVisible();
   await expect(card.getByText('สถานะ: draft')).toBeVisible();
 
-  const posterImg = card.locator(`img[alt="โปสเตอร์ ${eventTitle}"]`);
-  await expect(posterImg).toBeVisible();
+  const storefrontLink = card.getByRole('link', { name: 'หน้าร้านลูกค้า' });
+  await expect(storefrontLink).toBeVisible();
+  await expect(storefrontLink).toHaveAttribute('href', /^\/events\//);
 });

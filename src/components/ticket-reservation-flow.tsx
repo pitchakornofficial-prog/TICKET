@@ -275,9 +275,10 @@ export function TicketReservationFlow({
           className="account-card"
           style={{
             marginTop: '2rem',
-            background: buyer ? 'var(--white)' : '#fafafb',
+            background: buyer ? 'var(--white)' : '#f8fafc',
             border: `1px solid ${buyer ? 'var(--blue)' : 'var(--line)'}`,
-            borderRadius: '8px',
+            borderRadius: 'var(--radius-card)',
+            boxShadow: 'var(--shadow-floating)',
             padding: '1.8rem',
             opacity: buyer ? 1 : 0.85,
           }}
@@ -476,7 +477,8 @@ export function TicketReservationFlow({
             marginTop: '2rem',
             background: 'var(--white)',
             border: `2px solid ${isPaid ? '#16a34a' : isPaymentException ? '#ea580c' : isExpired ? '#dc2626' : '#2563eb'}`,
-            borderRadius: '8px',
+            borderRadius: 'var(--radius-card)',
+            boxShadow: 'var(--shadow-floating)',
             padding: '2rem',
           }}
           aria-labelledby="reservation-confirmed-title"
@@ -792,9 +794,9 @@ export function TicketReservationFlow({
                       style={{
                         background: '#ffffff',
                         border: '1px solid var(--line)',
-                        borderRadius: '8px',
+                        borderRadius: 'var(--radius-card)',
                         padding: '1.5rem',
-                        boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+                        boxShadow: 'var(--shadow-floating)',
                         display: 'flex',
                         flexDirection: 'column',
                         alignItems: 'center',

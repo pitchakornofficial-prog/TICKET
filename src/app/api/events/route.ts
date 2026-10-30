@@ -28,6 +28,11 @@ export async function POST(request: Request) {
     description?: string;
     location?: string;
     posterUrl?: string;
+    ticketTemplateUrl?: string;
+    coverBannerUrl?: string;
+    googleMapsUrl?: string;
+    salesStartTime?: string;
+    salesEndTime?: string;
     limitPerOrder?: number;
     sessions?: {
       startTime: string;
@@ -63,6 +68,11 @@ export async function POST(request: Request) {
         description: body.description,
         location: body.location,
         posterUrl: body.posterUrl,
+        ticketTemplateUrl: body.ticketTemplateUrl,
+        coverBannerUrl: body.coverBannerUrl,
+        googleMapsUrl: body.googleMapsUrl,
+        salesStartTime: body.salesStartTime,
+        salesEndTime: body.salesEndTime,
         limitPerOrder: body.limitPerOrder ?? 4,
       },
       body.sessions || [],

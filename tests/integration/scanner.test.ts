@@ -8,6 +8,7 @@ import {
   listScannersForEvent,
   removeScannerFromEvent,
   listEventsForScanner,
+  resetScannerDeviceBinding,
 } from '../../src/server/events';
 
 describe('Scanner account assignment and event-scoping integration (TASK-009, AC-09)', () => {
@@ -112,5 +113,94 @@ describe('Scanner account assignment and event-scoping integration (TASK-009, AC
 
     const afterRemove = await listEventsForScanner(fixture.pool, scannerResult.scannerId);
     expect(afterRemove.length).toBe(0);
+  });
+
+  it('implements D-104: tracks device binding on event_scanners and allows organizer to reset bound device', async () => {
+    const orgA = fixture.ids.organizer;
+    const orgB = secondOrganizerId;
+
+    const event = await createEventDraft(
+      fixture.pool,
+      orgA,
+      { title: 'คอนเสิร์ตทดสอบอุปกรณ์เดี่ยว', location: 'อิมแพ็ค อารีน่า' },
+      [
+        {
+          startTime: '2026-11-20T19:00:00.000Z',
+          endTime: '2026-11-20T22:00:00.000Z',
+          ticketTypes: [{ name: 'VIP', price: 3500, quota: 100 }],
+        },
+      ],
+    );
+
+    const scanner = await addScannerToEvent(fixture.pool, orgA, event.id, {
+      name: 'เจ้าหน้าที่ทดสอบเครื่อง',
+      email: 'scanner-binding-test@ticket.invalid',
+      password: 'Scanner-Secure-Password!001',
+    });
+
+    // 1. Initial state: unbound
+    let scanners = await listScannersForEvent(fixture.pool, orgA, event.id);
+    const targetScanner = scanners.find((s) => s.scannerId === scanner.scannerId);
+    expect(targetScanner).toBeDefined();
+    expect(targetScanner?.isBound).toBe(false);
+    expect(targetScanner?.boundDeviceId).toBeNull();
+
+    // 2. Simulate device binding (as done on /scanner/access)
+    await fixture.pool.query(
+      `UPDATE event_scanners
+       SET "boundDeviceId" = $1, "boundAt" = now()
+       WHERE "eventId" = $2 AND "scannerId" = $3`,
+      ['mock-device-uuid-1', event.id, scanner.scannerId],
+    );
+
+    // 3. Verify binding in listScannersForEvent
+    scanners = await listScannersForEvent(fixture.pool, orgA, event.id);
+    const boundScanner = scanners.find((s) => s.scannerId === scanner.scannerId);
+    expect(boundScanner?.isBound).toBe(true);
+    expect(boundScanner?.boundDeviceId).toBe('mock-device-uuid-1');
+    expect(boundScanner?.boundAt).toBeDefined();
+
+    // 4. Unauthorized organizer B cannot reset device for Event A
+    await expect(
+      resetScannerDeviceBinding(fixture.pool, orgB, event.id, scanner.scannerId),
+    ).rejects.toThrow('คุณไม่มีสิทธิ์จัดการงานคอนเสิร์ตนี้');
+
+    // 5. Authorized organizer A resets device
+    const resetResult = await resetScannerDeviceBinding(
+      fixture.pool,
+      orgA,
+      event.id,
+      scanner.scannerId,
+    );
+    expect(resetResult.success).toBe(true);
+    expect(resetResult.message).toContain('รีเซ็ตอุปกรณ์เรียบร้อยแล้ว');
+
+    // 6. Verify unbound state
+    scanners = await listScannersForEvent(fixture.pool, orgA, event.id);
+    const resetScanner = scanners.find((s) => s.scannerId === scanner.scannerId);
+    expect(resetScanner?.isBound).toBe(false);
+    expect(resetScanner?.boundDeviceId).toBeNull();
+    expect(resetScanner?.boundAt).toBeNull();
+  });
+
+  it('implements D-105: organizer can query their own events for scanner terminal access with isPrimary=true', async () => {
+    const orgA = fixture.ids.organizer;
+    const orgB = secondOrganizerId;
+
+    // Org A queries events for scanner terminal
+    const orgAEvents = await listEventsForScanner(fixture.pool, orgA, 'organizer');
+    expect(orgAEvents.length).toBeGreaterThanOrEqual(1);
+    for (const ev of orgAEvents) {
+      expect(ev.isPrimary).toBe(true);
+      expect(ev.sessions).toBeDefined();
+    }
+
+    // Org B queries events for scanner terminal
+    const orgBEvents = await listEventsForScanner(fixture.pool, orgB, 'organizer');
+    // None of Org B's events should be Org A's events
+    const orgAIds = new Set(orgAEvents.map((e) => e.id));
+    for (const ev of orgBEvents) {
+      expect(orgAIds.has(ev.id)).toBe(false);
+    }
   });
 });

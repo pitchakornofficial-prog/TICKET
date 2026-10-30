@@ -79,7 +79,24 @@ test.describe('Guest Order Lookup flow (TASK-018, AC-21, AC-22, AC-62, AC-63, AC
     await page.goto(`/events/${createdEvent.id}`);
     await expect(page.getByRole('heading', { name: eventTitle })).toBeVisible();
 
-    // Fill guest details
+    const enterQueueBtn = page.getByTestId('enter-queue-cta-btn').filter({ visible: true });
+    if (await enterQueueBtn.isVisible()) {
+      await enterQueueBtn.click();
+      const proceedBtn = page.locator('#proceed-to-checkout-btn');
+      await expect(proceedBtn).toBeVisible({ timeout: 10000 });
+      await proceedBtn.click();
+    } else {
+      await page.goto(`/events/${createdEvent.id}/checkout`);
+    }
+    await expect(page).toHaveURL(new RegExp(`/events/${createdEvent.id}/checkout`));
+
+    // Select 2 tickets
+    const addBtn = page.getByRole('button', { name: 'เพิ่มจำนวน บัตร โซน A' });
+    await addBtn.click();
+    await addBtn.click();
+    await expect(page.getByText('รวมราคาบัตร (2 ใบ)')).toBeVisible();
+
+    // Fill guest details and request OTP
     await page.getByLabel('ชื่อ-นามสกุล *').fill(guestName);
     await page.getByLabel('อีเมล *').fill(guestEmail);
     await page.getByLabel('เบอร์โทรศัพท์มือถือ *').fill(guestPhone);
@@ -95,32 +112,32 @@ test.describe('Guest Order Lookup flow (TASK-018, AC-21, AC-22, AC-62, AC-63, AC
 
     await page.getByLabel('รหัส OTP 6 หลัก *').fill(code);
     await page.getByRole('button', { name: 'ยืนยันรหัส OTP' }).click();
+
+    // Pre-verification modal
+    await expect(page.getByRole('heading', { name: 'ยืนยันข้อมูลคำสั่งซื้อและการล็อกสิทธิ์' })).toBeVisible();
+    await page.getByRole('button', { name: 'ยืนยันและดำเนินการต่อ' }).click();
     await expect(page.getByRole('heading', { name: 'ยืนยันอีเมลสำเร็จ (Guest Verified)' })).toBeVisible();
 
-    // Select 2 tickets
-    const addBtn = page.getByRole('button', { name: 'เพิ่มจำนวน บัตร โซน A' });
-    await addBtn.click();
-    await addBtn.click();
+    // Confirm reservation to navigate to Payment page
+    const confirmReserveBtn = page.locator('#confirm-reservation-btn');
+    await expect(confirmReserveBtn).toBeEnabled();
+    await confirmReserveBtn.scrollIntoViewIfNeeded();
+    await confirmReserveBtn.click({ force: true });
 
-    await page.getByRole('button', { name: 'ยืนยันการเลือกบัตร (2 ใบ)' }).click();
-    await expect(page.getByText('กันบัตรสำเร็จ (Reserved)')).toBeVisible();
-
-    // Get order ID
+    await expect(page).toHaveURL(/\/orders\/ORD-[A-Z0-9-]+\/payment$/);
     const orderId = (await page.locator('#reservation-order-id').innerText()).trim();
     expect(orderId).toMatch(/^ORD-/);
 
-    // Create PromptPay QR
-    const generateQrBtn = page.getByRole('button', { name: 'สร้าง QR Code ชำระเงิน (PromptPay)' });
-    await expect(generateQrBtn).toBeVisible();
-    await generateQrBtn.click();
-    await expect(page.locator('#promptpay-qr-image')).toBeVisible();
-
-    // Simulate timely payment confirmation
+    // PromptPay QR (auto-generated) and simulate payment
+    const qrImage = page.locator('#promptpay-qr-image');
+    await expect(qrImage).toBeVisible({ timeout: 15000 });
     const simulateBtn = page.locator('#simulate-payment-button');
     await expect(simulateBtn).toBeVisible();
-    await simulateBtn.click();
-    await expect(page.getByText('ชำระเงินสำเร็จ (Paid)')).toBeVisible();
-    await expect(page.getByText('ออกบัตรสำเร็จแล้ว (2 ใบ)')).toBeVisible();
+    await simulateBtn.scrollIntoViewIfNeeded();
+    await simulateBtn.click({ force: true });
+
+    // Success page redirect or success notice
+    await expect(page).toHaveURL(new RegExp(`/orders/${orderId}/success`));
 
     // 4. Test AC-62: Lookup purchased tickets at /my-tickets
     await page.goto('/my-tickets');

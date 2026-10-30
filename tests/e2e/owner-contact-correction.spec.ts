@@ -131,6 +131,9 @@ test.describe('Owner Contact Correction Flow (TASK-019, AC-76, G-24)', () => {
     await page.getByRole('button', { name: 'เข้าสู่ระบบ', exact: true }).click();
     await expect(page).toHaveURL('/back-office/owner');
 
+    // Switch to Customer section (TASK-038, AC-116)
+    await page.locator('[data-testid="owner-nav-customer"]').click();
+
     await expect(
       page.getByRole('heading', { name: 'แก้ไขข้อมูลติดต่อคำสั่งซื้อที่ชำระแล้ว (AC-76, G-24)' }),
     ).toBeVisible();
