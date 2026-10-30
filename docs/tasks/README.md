@@ -229,8 +229,9 @@ TASK-037 เป็น late cross-instance functional contract ตาม AC-105; 
 ## Local-first and deferred production work
 
 TASK-001–TASK-039 พัฒนาและตรวจฟังก์ชัน/หน้าจอบน local; TASK-037 อยู่เพื่อทวน functional state ด้วยหลาย local web processes ไม่ใช่ load benchmark
-ยังไม่สร้างงาน provision/deploy AWS หรือทดสอบ capacity ที่ต้องเดา scope/metrics ซึ่ง SPEC-001/NQ-04 ยังไม่กำหนด
-หลัง local slices จบ จึงตกลงขอบเขต production งานปลายทางตาม [ADR-0002](../adr/0002-local-first-and-aws-production.md): AWS Singapore, ECS Fargate/ALB, RDS และขนาด/เพดาน scaling/งบ/workload/latency ที่ต้องยืนยันก่อนลงมือ
+Production reconciliation 2026-10-30: baseline ขนาด/topology/scaling/backup/retention ยืนยันแล้วใน [ADR-0002](../adr/0002-local-first-and-aws-production.md); คง ECS Fargate ARM64 + ALB และ private RDS ไม่เลือก App Runner
+ยังไม่สร้างงาน provision/deploy AWS หรือ capacity test เพราะงบ cloud/estimate จริง, workload/latency/error/duration targets, rollout connection budget และ recovery details ใน NQ-04 ยังเปิด; ไม่อ้างว่าผล local รองรับ 200 คน
+TASK-037 และงาน done เดิมคงสถานะ/หลักฐานเดิม ไม่ถูก reopen หรือถือว่าครอบคลุม ARM64/cloud/scaling จากการปรับเอกสารนี้
 Merchant/PromptPay approval, verified email domain, production R2 และ verified success-time mapping เป็นเงื่อนไขตาม NQ-05; local doubles ไม่ใช่หลักฐานพร้อม production
 เป้าหมาย 200 simultaneous users ยังไม่ใช่ผลทดสอบและไม่เดา RPS/latency/duration แทนผู้ใช้
 
@@ -241,7 +242,7 @@ Merchant/PromptPay approval, verified email domain, production R2 และ veri
 | NQ-01 event rates/limits/windows/weekly weekday จริง | TASK-005/010/025/029 รับ configuration และ fixture; ค่าจริงต้องพร้อมก่อนเปิดงานจริง ไม่บล็อก local ด้วย fixture |
 | NQ-02 tokens/icon set/browser baseline | ใช้ constraints เดิมทุก UI task; TASK-001 วาง shell และ TASK-036 ทวนทุกหน้าจริง ไม่เปิด design discovery ซ้ำ |
 | NQ-03 runtime/PM/ORM/auth/runners/commands | TASK-001 สร้าง toolchain/runners/คำสั่งจริง TASK-002 เลือก auth/bootstrap ภายใน ADR; ทุก task ตรวจ command ใหม่ก่อนรัน |
-| NQ-04 AWS sizes/topology/scaling/budget/load targets | อยู่นอก 37 งาน local นี้ ต้องตกลงก่อนสร้างงาน production/deployment/scaling จริงช่วงท้าย |
+| NQ-04 AWS production readiness | Baseline ยืนยันใน ADR-0002 ฉบับ 2026-10-30 แล้ว; ส่วนงบ/estimate/โหลด/rollout/recovery ที่ยังเปิดอยู่นอกงาน local ต้องปิดก่อนสร้างงาน production/deployment/scaling จริง |
 | NQ-05 provider integration/readiness | TASK-003/005/014/017/023 ตรวจ contract และแยก local doubles; ถ้าพิสูจน์ paid-time contract ไม่ได้ TASK-014 ต้องบล็อก boundary นั้นและแจ้งเงื่อนไข ไม่เปลี่ยนกติกาเอง; production readiness ไม่บล็อก TASK-001 |
 | NQ-06 internal session/retry/local retention/operational steps | TASK-011/018/019/032–035 เลือก/บันทึกภายในขอบเขตสเปก หากต้องเปลี่ยน product/สิทธิ์/ยอดเงินให้กลับ workflow ที่เป็นเจ้าของ |
 

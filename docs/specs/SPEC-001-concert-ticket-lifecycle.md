@@ -3,6 +3,7 @@
 - Status: ready
 - Created: 2026-10-19 (Asia/Bangkok)
 - Updated: 2026-10-20 (Asia/Bangkok), write-spec reconciliation ครบ G-01–G-52; change-scope 2026-10-22 เพิ่ม AC-115–AC-116; change-scope 2026-10-23 เพิ่ม AC-117 (multi-step purchase journey: events -> queue -> checkout -> payment ตาม D-27)
+- Production planning reconciliation: 2026-10-30 — อ้าง baseline ลดต้นทุนใน ADR-0002/0003; คง AC และผลส่งมอบ local เดิม ไม่เพิ่ม AWS deployment เข้า feature scope
 - Clarification follow-up: G-48–G-52 นำมาปรับสูตร พฤติกรรม และ AC/verification แล้ว; รักษาแหล่งหลักใน CONTEXT
 - Requirement: [Product scope และ D-01–D-27](../requirement.md)
 - Context: [Domain rules และ Verification Policy](../../CONTEXT.md)
@@ -659,8 +660,8 @@ ADR-0003 → AC-15–AC-20/37/75 และ integration boundaries; ADR-0004 → 
 | NQ-01 | Fee/reserve rates จริง วันจ่ายในสัปดาห์ ticket prices/quotas/limits และช่วงคืนพิเศษจริง | เป็น event/business configuration ไม่เลือกตัวเลขในสเปก; ต้องมีค่าที่ใช้ได้ก่อนเปิดงานจริง |
 | NQ-02 | โลโก้จริง blue/token values/icon set/type scale/spacing/radius/shadow/motion และ browser versions สำหรับ visual checks | เลือกภายใน constraints/preferences ตอนออกแบบ/implementation ไม่เริ่ม design interview ใหม่โดยอัตโนมัติ |
 | NQ-03 | Package manager/runtime/framework versions, ORM, auth library, schema/API names, local runner และวิธี bootstrap | เลือกใน task planning/implementation ภายใน ADRs; runner ที่เกี่ยวข้องต้องพร้อม/ผ่านตาม policy ก่อนจบงาน |
-| NQ-04 | AWS resource sizes/topology, scaling thresholds/ceiling, งบ, workload/duration/latency target สำหรับ 200 simultaneous users | ช่วงท้ายก่อน deployment/scaling verification ไม่ใช้ผล local รับรอง capacity |
-| NQ-05 | Merchant/PromptPay approval, provider field/precision สำหรับ verified payment-success time และ production email/R2 readiness | ตรวจ contract ใน integration work และต้องพร้อมก่อนใช้ production; test double ไม่ใช่หลักฐาน provider readiness |
+| NQ-04 | Baseline sizes/topology/scaling/backup/retention ยืนยันใน ADR-0002 ฉบับ 2026-10-30 แล้ว; ยังเปิดงบ cloud/estimate รวม IPv4, workload/duration/latency/error targets สำหรับ 200 simultaneous users, cooldown, connection budget ระหว่าง rollout และ RTO/RPO/retention | ต้องพร้อมก่อน production/deployment/scaling work; คงเป็นงานแยก ไม่ใช้ผล local รับรอง capacity หรือบันทึก estimate เป็นราคายืนยัน |
+| NQ-05 | Merchant/PromptPay approval, provider field/precision สำหรับ verified payment-success time, production email domain/peak sending quota และ R2 readiness/pricing ตาม ADR-0003 ฉบับ 2026-10-30 | ตรวจ contract ใน integration work และต้องพร้อมก่อนใช้ production; test double ไม่ใช่หลักฐาน provider readiness; 5–10 วันทำการเป็นระยะเผื่อ ไม่ใช่ approval SLA |
 | NQ-06 | Verified-session TTL, data/local retention, retry schedule, local storage mechanism และขั้นตอน owner ตรวจ contact correction/กระทบยอดเมื่อข้อมูลสูญหาย | กำหนดภายในสิทธิ์ วิธี login/OTP กติกาเงิน และ offline constraints ที่ยืนยัน หากต้องเปลี่ยน product contract ให้ถามก่อน; ไม่เดาว่าเป็นค่าที่ผู้ใช้เลือกแล้ว |
 
 ## Specification quality gate

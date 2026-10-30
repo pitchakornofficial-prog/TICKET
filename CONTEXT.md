@@ -31,6 +31,8 @@ Implementation foundation (2026-10-20): ผู้ใช้เรียก implem
 ข้อความ Setup/Specification/Task planning ด้านบนเป็นหลักฐานตามช่วงเวลานั้น ไม่ใช่สถานะของ implementation ล่าสุด
 ยังไม่มีผล domain หลาย instance/benchmark/deployment และไม่ใช้ foundation ปิด AC-105 ทั้งข้อ
 
+Production planning update (2026-10-30): ผู้ใช้ยืนยัน baseline ลดต้นทุนใน [ADR-0002](docs/adr/0002-local-first-and-aws-production.md) และ provider readiness/cost assumptions ใน [ADR-0003](docs/adr/0003-external-integrations.md); supersedes เฉพาะข้อความเก่าที่ว่ายังไม่มี baseline ขนาด/topology/scaling/backup ทั้งหมด คง NQ-04/NQ-05 ส่วนที่ยังเปิด และไม่ใช่หลักฐาน deployment/capacity หรือการเปลี่ยนสถานะ task ที่ส่งมอบแล้ว
+
 ## Verification Policy
 
 - Status: confirmed
