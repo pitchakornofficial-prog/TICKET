@@ -43,6 +43,12 @@
 หรือเป็นหลักฐานว่า Stripe merchant/PromptPay ได้รับอนุมัติแล้ว
 ยังไม่ได้แก้ spec, task หรือ implementation เพื่อรองรับการเปลี่ยนนี้
 
+## Stripe success Event time — 2026-10-30
+
+- P5 (Agreed, ผู้ใช้ยืนยัน “ยืนยัน” หลังอธิบายผลของการใช้ success Event time): ใช้ `created` ของ matching authenticated `payment_intent.succeeded` Event เป็นเกณฑ์ตัดสินตาม [G-53](../../CONTEXT.md#stripe-payment-decision-time-2026-10-30). เปลี่ยนเฉพาะความหมายของเวลาในข้อตกลง Stripe เดิม; ไม่อ้างว่า field นี้เป็นเวลาจ่ายธนาคารจริง.
+- Supersedes: ข้อกำหนดเดิมใน ADR นี้/NQ-05 ที่ต้องพิสูจน์ actual bank-payment time จึงเชื่อม Stripe ได้. ยังต้องตรวจความแท้จริงของ Event, matching intent/order/amount/currency/mode, timestamp และ recovery/idempotency ตาม SPEC-001; ไม่เปลี่ยน manual refund หรือ readiness gates อื่น.
+- ผลทดสอบ sandbox เดิมใน [TASK-041](../tasks/TASK-041-stripe-promptpay-contract.md) เป็นหลักฐาน provider เฉพาะที่สังเกตได้ ไม่ได้ผ่าน acceptance/Live readiness และไม่ทำให้ historical done tasks ผ่านเกณฑ์ใหม่ย้อนหลัง.
+
 ## Provider evidence and readiness
 
 เอกสาร Omise ที่ตรวจใน grill-workflow รองรับ `expires_at` และ `charge.complete`;
@@ -59,7 +65,7 @@ PromptPay refund ผ่าน Omise ไม่ได้ จึงสอดคล�
 - ใช้ Stripe PromptPay แทน Omise ตามข้อตกลงด้านบน; คง Resend และ Cloudflare R2; secret storage/network/DNS baseline อ้างอิง [ADR-0002](0002-local-first-and-aws-production.md) ไม่เปลี่ยน R2 เป็น S3 หรือ Resend เป็น SES
 - ยื่น merchant/KYC และขอเปิด PromptPay พร้อม verify sending domain ของ Resend ล่วงหน้าก่อนเปิดขาย
   ใช้ 5–10 วันทำการจากข้อเสนอเป็นระยะเผื่อวางแผนเท่านั้น ไม่ใช่ SLA การอนุมัติจาก Omise; ต้องให้ผู้ให้บริการยืนยันวันและประเภทธุรกิจฝากขายบัตรจริง
-- ก่อน production ต้องมี Live Mode/PromptPay ที่อนุมัติแล้ว, verified payment-success time ตาม NQ-05, webhook HTTPS ที่ทดสอบจริง, production Resend domain และ private R2 bucket/สิทธิ์ไฟล์ตาม G-40
+- ก่อน production ต้องมี Live Mode/PromptPay ที่อนุมัติแล้ว, verified success Event time ตาม P5/G-53 (แทนข้อกำหนด actual paid time เดิมใน NQ-05), webhook HTTPS ที่ทดสอบจริง, production Resend domain และ private R2 bucket/สิทธิ์ไฟล์ตาม G-40
 - ค่าธรรมเนียม PromptPay 1.65% จากข้อเสนอใช้เป็นสมมติฐานประกอบ estimate เท่านั้น ต้องยืนยัน merchant pricing/ภาษี/ค่าบริการอื่นกับ Omise จริง; ไม่เปลี่ยนกติกาที่ owner รับภาระค่าธรรมเนียมตาม F9
 - ไม่ถือว่า Resend ฟรีเพียงเพราะส่งอีเมลต่อเดือนไม่มาก: Free plan มี daily limit (เอกสารปัจจุบัน 100 ฉบับ/วัน) ต้องนับ OTP, retry, บัตรและ lookup emails ตามยอด **orders/emails** จริง ไม่ใช่จำนวนบัตร 4,500 ใบอย่างเดียว
 - ตรวจแผนส่งอีเมลที่รองรับ peak เปิดขายและงบจริงก่อนใช้งาน; ช่วง $0–$20/เดือนจากข้อเสนอไม่ใช่ราคาหรือ quota ที่รับรอง

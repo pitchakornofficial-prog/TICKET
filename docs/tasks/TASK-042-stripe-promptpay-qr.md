@@ -9,7 +9,7 @@ Order ที่มีสิทธิ์/OTP/reservation ยังใช้ได
 
 ใช้ [TASK-014](TASK-014-payment-qr.md) เป็นประวัติและตรวจ source ปัจจุบัน `src/server/payment.ts`, payment-qr route และ `src/components/order-payment-view.tsx`; คง D-27/D-48/D-50
 
-อ้างอิง [SPEC-001](../specs/SPEC-001-concert-ticket-lifecycle.md#stripe-promptpay-contract-2026-10-30), [ข้อตกลง provider P1–P4](../adr/0003-external-integrations.md#payment-provider-change--2026-10-30), [requirements](../requirement.md#payment-provider-change-2026-10-30), [domain/policy](../../CONTEXT.md), [AGENTS/commands](../../AGENTS.md) และ [coverage](README.md#stripe-follow-up-2026-10-30)
+อ้างอิง [SPEC-001](../specs/SPEC-001-concert-ticket-lifecycle.md#stripe-promptpay-contract-2026-10-30), [ข้อตกลง provider P1–P5](../adr/0003-external-integrations.md#payment-provider-change--2026-10-30), [requirements](../requirement.md#payment-provider-change-2026-10-30), [domain/policy](../../CONTEXT.md), [AGENTS/commands](../../AGENTS.md) และ [coverage](README.md#stripe-follow-up-2026-10-30)
 
 ## Blocked by
 
@@ -28,3 +28,5 @@ Order ที่มีสิทธิ์/OTP/reservation ยังใช้ได
 - [ ] ตรวจ scripts ปัจจุบันก่อนรัน `npm run typecheck`, `npm run lint`, `npm run build` และชุดที่เกี่ยวข้องผ่าน `npm run test:unit`, `npm run test:integration`, `npm run test:e2e`; บันทึกคำสั่ง/ผลจริงใน Todo ไม่ใช้ผล TASK เดิมแทน Stripe
 - [ ] นำ focused change และหลักฐานเข้า code-review ตาม policy และแก้ finding ก่อนจบงาน; local pass ไม่รับรอง Live/PromptPay approval, AWS deployment หรือ capacity
 - [ ] หากผู้ใช้หรือนโยบายกำหนดให้ commit ให้ commit เฉพาะ task นี้ มิฉะนั้นเตรียม focused diff สำหรับ review; ไม่ init Git/commit/push อัตโนมัติ และตรวจว่ามี Git repository ใช้งานได้ก่อนอ้าง branch/commit
+
+- [ ] Scope-change 2026-10-30: อ้าง G-53/P5 และ AC-124/125 ใน SPEC-001 สำหรับผลชำระ; งานนี้ยังเป็นเจ้าของ QR/create/config เดิม ไม่เลือก paidAt จาก created ของ PaymentIntent และไม่ส่งเวลา browser เป็นหลักฐาน. หลักฐาน QR/replay ใน TASK-041 ใช้ตามขอบเขตที่ทดสอบจริง ไม่ใช่ผลผ่าน runtime ของ TASK-042 หรือ time policy ใหม่.

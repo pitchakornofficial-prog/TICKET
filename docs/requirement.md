@@ -66,6 +66,9 @@
 บัญชีทดสอบมีแล้ว แต่ Live/PromptPay ยังไม่ยืนยัน; คง reservation 15 นาทีและกฎเงินจริงเดิม
 พฤติกรรมและ verification อยู่ใน [SPEC-001](specs/SPEC-001-concert-ticket-lifecycle.md)
 
+ผู้ใช้ยืนยันเปลี่ยนเกณฑ์เวลาวันที่ 2026-10-30: ใช้เวลาที่ Stripe สร้าง `payment_intent.succeeded` Event ที่ตรวจสอบแล้ว ตัดสินบัตร/ยอดคืน; Event เกิดหลังเส้นตายถือว่าช้า แม้ลูกค้าอาจจ่ายก่อนหน้า ไม่ใช้เวลาที่เว็บรับ webhook. ความหมายเวลา/เส้นตายอยู่ใน [G-53](../CONTEXT.md#stripe-payment-decision-time-2026-10-30) และ [ADR-0003/P5](adr/0003-external-integrations.md#stripe-success-event-time--2026-10-30); supersedes เฉพาะเกณฑ์เวลาจ่ายจริงเดิม ไม่เปลี่ยนยอดคืน/ระยะจอง/flow หน้าชำระ.
+
+
 ## Boundaries
 
 - ไม่เลือกเลขที่นั่ง และไม่บังคับระบุชื่อผู้เข้างานแยกทุกใบ
