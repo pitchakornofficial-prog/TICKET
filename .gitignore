@@ -1,6 +1,12 @@
-node_modules/
-.next/
+# Next.js E2E cache
 .next-e2e/
+
+# Next.js build
+.next/
+
+# Dependencies
+node_modules/
+
 out/
 .cache/
 .env*
