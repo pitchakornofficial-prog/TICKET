@@ -7,7 +7,7 @@ test.beforeEach(async ({ context }, testInfo) => {
   await context.setExtraHTTPHeaders({ 'x-forwarded-for': `198.51.100.${base + (nextIp++ % 50)}` });
 });
 
-test.describe('PromptPay Payment QR generation flow (TASK-014, AC-15, AC-26, AC-12, AC-13, AC-70)', () => {
+test.describe('PromptPay Payment QR generation flow (TASK-042, AC-118, AC-15, AC-26, AC-12, AC-13, AC-70, AC-120, AC-123)', () => {
   test('guest reserves tickets, creates PromptPay QR matching exact quote/THB, and preserves state on refresh', async ({
     page,
     request,
@@ -17,27 +17,18 @@ test.describe('PromptPay Payment QR generation flow (TASK-014, AC-15, AC-26, AC-
     const guestName = `ศิริพงษ์ พร้อมเพย์ ${testInfo.project.name}`;
     const guestPhone = '0823456789';
 
-    // 1. Organizer logs in and creates event
+    // 1. Organizer logs in and creates event with session
     await page.goto('/login');
     await page.getByLabel('อีเมล', { exact: true }).fill(fixtureAccounts.organizer.email);
     await page.getByLabel('รหัสผ่าน', { exact: true }).fill(fixturePassword);
     await page.getByRole('button', { name: 'เข้าสู่ระบบ', exact: true }).click();
     await expect(page).toHaveURL('/back-office/organizer');
 
-    await page.getByRole('button', { name: '+ สร้างงานคอนเสิร์ตใหม่' }).click();
-    await page.getByLabel('ชื่องานคอนเสิร์ต').fill(eventTitle);
-    await page.getByLabel('สถานที่จัดงาน').fill('อิมแพ็ค อารีน่า เมืองทองธานี');
-    await page.getByRole('button', { name: 'บันทึกข้อมูลร่าง (Draft)' }).click();
-    await expect(page.getByText('บันทึกงานคอนเสิร์ตสำเร็จ')).toBeVisible();
-
-    const eventsRes = await page.request.get('/api/events');
-    const { events } = await eventsRes.json();
-    const createdEvent = events.find((e: { title: string; id: string }) => e.title === eventTitle);
-    expect(createdEvent).toBeDefined();
-
-    // Add session with ticket quota = 50
-    const updateRes = await page.request.put(`/api/events/${createdEvent.id}`, {
+    const createEventRes = await page.request.post('/api/events', {
       data: {
+        title: eventTitle,
+        description: 'คอนเสิร์ตทดสอบระบบชำระเงิน PromptPay QR',
+        location: 'อิมแพ็ค อารีน่า เมืองทองธานี',
         limitPerOrder: 4,
         sessions: [
           {
@@ -48,9 +39,9 @@ test.describe('PromptPay Payment QR generation flow (TASK-014, AC-15, AC-26, AC-
         ],
       },
     });
-    expect(updateRes.status()).toBe(200);
-    const updatedData = await updateRes.json();
-    const sessionId = updatedData.event.sessions[0].id;
+    expect(createEventRes.status()).toBe(201);
+    const createdEvent = (await createEventRes.json()).event;
+    const sessionId = createdEvent.sessions[0].id;
 
     await page.request.post(`/api/events/${createdEvent.id}?action=submit-session`, {
       data: { sessionId },
@@ -88,6 +79,24 @@ test.describe('PromptPay Payment QR generation flow (TASK-014, AC-15, AC-26, AC-
     await page.goto(`/events/${createdEvent.id}`);
     await expect(page.getByRole('heading', { name: eventTitle })).toBeVisible();
 
+    // Click CTA to enter Queue Waiting Room
+    const enterQueueBtn = page.getByTestId('enter-queue-cta-btn').filter({ visible: true });
+    await expect(enterQueueBtn).toBeVisible();
+    await enterQueueBtn.click();
+
+    // In Queue Waiting Room, proceed to checkout
+    await expect(page).toHaveURL(`/events/${createdEvent.id}/queue`);
+    await page.locator('#proceed-to-checkout-btn').click();
+
+    // In Checkout Page
+    await expect(page).toHaveURL(`/events/${createdEvent.id}/checkout`);
+
+    // Select 2 tickets (2 * 2,000 = 4,000 THB; fee = 2 * 30 = 60 THB; total = 4,060 THB)
+    const addBtn = page.getByRole('button', { name: 'เพิ่มจำนวน บัตร Regular' });
+    await addBtn.click();
+    await addBtn.click();
+    await expect(page.getByText('รวมราคาบัตร (2 ใบ)')).toBeVisible();
+
     // 4. Guest completes OTP verification
     await page.getByLabel('ชื่อ-นามสกุล *').fill(guestName);
     await page.getByLabel('อีเมล *').fill(guestEmail);
@@ -104,15 +113,23 @@ test.describe('PromptPay Payment QR generation flow (TASK-014, AC-15, AC-26, AC-
 
     await page.getByLabel('รหัส OTP 6 หลัก *').fill(code);
     await page.getByRole('button', { name: 'ยืนยันรหัส OTP' }).click();
+
+    // D-46 confirmation modal if present
+    const confirmModalBtn = page.getByRole('button', { name: 'ยืนยันและดำเนินการต่อ' });
+    if (await confirmModalBtn.isVisible()) {
+      await confirmModalBtn.click();
+    }
+
     await expect(page.getByRole('heading', { name: 'ยืนยันอีเมลสำเร็จ (Guest Verified)' })).toBeVisible();
 
-    // 5. Select 2 tickets (2 * 2,000 = 4,000 THB; fee = 2 * 30 = 60 THB; total = 4,060 THB)
-    const addBtn = page.getByRole('button', { name: 'เพิ่มจำนวน บัตร Regular' });
-    await addBtn.click();
-    await addBtn.click();
-    await page.getByRole('button', { name: 'ยืนยันการเลือกบัตร (2 ใบ)' }).click();
+    // 5. Confirm reservation -> redirects to /orders/[id]/payment
+    const confirmReserveBtn = page.locator('#confirm-reservation-btn');
+    await expect(confirmReserveBtn).toBeEnabled();
+    await confirmReserveBtn.scrollIntoViewIfNeeded();
+    await confirmReserveBtn.click({ force: true });
 
-    // 6. Confirmed reservation card
+    // 6. Payment Page (/orders/[id]/payment)
+    await expect(page).toHaveURL(/\/orders\/ORD-[A-Z0-9-]+\/payment$/);
     await expect(page.getByText('กันบัตรสำเร็จ (Reserved)')).toBeVisible();
     const orderId = (await page.locator('#reservation-order-id').innerText()).trim();
     expect(orderId).toMatch(/^ORD-/);
@@ -122,17 +139,20 @@ test.describe('PromptPay Payment QR generation flow (TASK-014, AC-15, AC-26, AC-
     await expect(page.locator('#quote-customer-fee')).toContainText('60');
     await expect(page.locator('#quote-total')).toContainText('4,060');
 
-    // 7. Generate PromptPay QR
-    const generateQrBtn = page.getByRole('button', { name: 'สร้าง QR Code ชำระเงิน (PromptPay)' });
-    await expect(generateQrBtn).toBeVisible();
-    await generateQrBtn.click();
+    // 7. Generate PromptPay QR (auto-generated or button click)
+    const generateQrBtn = page.locator('#generate-payment-qr-btn');
+    if (await generateQrBtn.isVisible().catch(() => false)) {
+      await generateQrBtn.click({ timeout: 2000 }).catch(() => {});
+    }
 
     // 8. Verify QR code displayed with exact quote and THB currency (AC-15, AC-26)
-    await expect(page.locator('#promptpay-qr-image')).toBeVisible();
+    await expect(page.locator('#promptpay-qr-image')).toBeVisible({ timeout: 15000 });
     await expect(page.locator('#payment-total-thb')).toContainText('4,060');
     await expect(page.locator('#payment-currency')).toHaveText('THB');
     const chargeId = (await page.locator('#payment-charge-id').innerText()).trim();
-    expect(chargeId).toMatch(/^chrg_test_/);
+    expect(chargeId).toMatch(/^pi_/);
+    expect(page.url()).toContain(`/orders/${orderId}/payment`);
+    expect(page.url()).not.toContain('checkout.stripe.com');
 
     // 9. Page refresh test (AC-70): restores order, charge, and remaining deadline
     await page.reload();

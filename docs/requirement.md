@@ -59,6 +59,16 @@
 - การเข้าถึงข้อมูลของผู้จัดงาน/ทีมสแกนต้องอยู่ในขอบเขตงานของตนตาม domain context
 - G-47=ยืนยัน (Agreed, ผู้ใช้ 2026-10-20): รุ่นแรกใช้ภาษาไทย สกุลเงินบาท (THB) และแสดงวันเวลาตามประเทศไทย `Asia/Bangkok`
 
+## Payment provider change (2026-10-30)
+
+ใช้ Stripe PromptPay QR แทน Omise ตาม [ADR-0003/P1–P4](adr/0003-external-integrations.md#payment-provider-change--2026-10-30)
+แสดงในหน้าชำระเงินเดิม คง owner โอนคืนเอง และไม่มีรายการรับเงินจริง Omise เดิมที่ต้องย้าย
+บัญชีทดสอบมีแล้ว แต่ Live/PromptPay ยังไม่ยืนยัน; คง reservation 15 นาทีและกฎเงินจริงเดิม
+พฤติกรรมและ verification อยู่ใน [SPEC-001](specs/SPEC-001-concert-ticket-lifecycle.md)
+
+ผู้ใช้ยืนยันเปลี่ยนเกณฑ์เวลาวันที่ 2026-10-30: ใช้เวลาที่ Stripe สร้าง `payment_intent.succeeded` Event ที่ตรวจสอบแล้ว ตัดสินบัตร/ยอดคืน; Event เกิดหลังเส้นตายถือว่าช้า แม้ลูกค้าอาจจ่ายก่อนหน้า ไม่ใช้เวลาที่เว็บรับ webhook. ความหมายเวลา/เส้นตายอยู่ใน [G-53](../CONTEXT.md#stripe-payment-decision-time-2026-10-30) และ [ADR-0003/P5](adr/0003-external-integrations.md#stripe-success-event-time--2026-10-30); supersedes เฉพาะเกณฑ์เวลาจ่ายจริงเดิม ไม่เปลี่ยนยอดคืน/ระยะจอง/flow หน้าชำระ.
+
+
 ## Boundaries
 
 - ไม่เลือกเลขที่นั่ง และไม่บังคับระบุชื่อผู้เข้างานแยกทุกใบ

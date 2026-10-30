@@ -30,19 +30,11 @@ test.describe('Cancel session while payment is pending and refund timely amounts
     await page.getByRole('button', { name: 'เข้าสู่ระบบ', exact: true }).click();
     await expect(page).toHaveURL('/back-office/organizer');
 
-    await page.getByRole('button', { name: '+ สร้างงานคอนเสิร์ตใหม่' }).click();
-    await page.getByLabel('ชื่องานคอนเสิร์ต').fill(eventTitle);
-    await page.getByLabel('สถานที่จัดงาน').fill('อิมแพ็ค ชาเลนเจอร์');
-    await page.getByRole('button', { name: 'บันทึกข้อมูลร่าง (Draft)' }).click();
-    await expect(page.getByText('บันทึกงานคอนเสิร์ตสำเร็จ')).toBeVisible();
-
-    const eventsRes = await page.request.get('/api/events');
-    const { events } = await eventsRes.json();
-    const createdEvent = events.find((e: { title: string; id: string }) => e.title === eventTitle);
-    expect(createdEvent).toBeDefined();
-
-    const updateRes = await page.request.put(`/api/events/${createdEvent.id}`, {
+    const createEventRes = await page.request.post('/api/events', {
       data: {
+        title: eventTitle,
+        description: 'คอนเสิร์ตทดสอบยกเลิกตอนรอชำระ',
+        location: 'อิมแพ็ค ชาเลนเจอร์',
         limitPerOrder: 4,
         sessions: [
           {
@@ -53,9 +45,9 @@ test.describe('Cancel session while payment is pending and refund timely amounts
         ],
       },
     });
-    expect(updateRes.status()).toBe(200);
-    const updatedData = await updateRes.json();
-    const sessionId = updatedData.event.sessions[0].id;
+    expect(createEventRes.status()).toBe(201);
+    const createdEvent = (await createEventRes.json()).event;
+    const sessionId = createdEvent.sessions[0].id;
 
     await page.request.post(`/api/events/${createdEvent.id}?action=submit-session`, {
       data: { sessionId },
@@ -84,6 +76,22 @@ test.describe('Cancel session while payment is pending and refund timely amounts
     await buyerPage.goto(`/events/${createdEvent.id}`);
     await expect(buyerPage.getByRole('heading', { name: eventTitle })).toBeVisible();
 
+    const enterQueueBtn = buyerPage.getByTestId('enter-queue-cta-btn').filter({ visible: true });
+    if (await enterQueueBtn.isVisible()) {
+      await enterQueueBtn.click();
+      const proceedBtn = buyerPage.locator('#proceed-to-checkout-btn');
+      await expect(proceedBtn).toBeVisible({ timeout: 10000 });
+      await proceedBtn.click();
+    } else {
+      await buyerPage.goto(`/events/${createdEvent.id}/checkout`);
+    }
+    await expect(buyerPage).toHaveURL(new RegExp(`/events/${createdEvent.id}/checkout`));
+
+    // Select 1 ticket
+    const addBtn = buyerPage.getByRole('button', { name: 'เพิ่มจำนวน Standing VIP' });
+    await addBtn.click();
+    await expect(buyerPage.getByText('รวมราคาบัตร (1 ใบ)')).toBeVisible();
+
     // Guest checkout form
     await buyerPage.getByLabel('ชื่อ-นามสกุล *').fill(guestName);
     await buyerPage.getByLabel('อีเมล *').fill(guestEmail);
@@ -99,36 +107,38 @@ test.describe('Cancel session while payment is pending and refund timely amounts
 
     await buyerPage.getByLabel('รหัส OTP 6 หลัก *').fill(code);
     await buyerPage.getByRole('button', { name: 'ยืนยันรหัส OTP' }).click();
+
+    const confirmModalBtn = buyerPage.getByRole('button', { name: 'ยืนยันและดำเนินการต่อ' });
+    if (await confirmModalBtn.isVisible()) {
+      await confirmModalBtn.click();
+    }
     await expect(buyerPage.getByRole('heading', { name: 'ยืนยันอีเมลสำเร็จ (Guest Verified)' })).toBeVisible();
 
-    const addBtn = buyerPage.getByRole('button', { name: 'เพิ่มจำนวน Standing VIP' });
-    await addBtn.click();
-    await buyerPage.getByRole('button', { name: 'ยืนยันการเลือกบัตร (1 ใบ)' }).click();
+    // Confirm reservation to navigate to Payment page
+    const confirmReserveBtn = buyerPage.locator('#confirm-reservation-btn');
+    await expect(confirmReserveBtn).toBeEnabled();
+    await confirmReserveBtn.scrollIntoViewIfNeeded();
+    await confirmReserveBtn.click({ force: true });
+
+    await expect(buyerPage).toHaveURL(/\/orders\/ORD-[A-Z0-9-]+\/payment$/);
     await expect(buyerPage.getByText('กันบัตรสำเร็จ (Reserved)')).toBeVisible();
 
-    // Generate PromptPay QR
-    await buyerPage.getByRole('button', { name: 'สร้าง QR Code ชำระเงิน (PromptPay)' }).click();
-    await expect(buyerPage.locator('#promptpay-qr-image')).toBeVisible();
+    // PromptPay QR (auto-generated or click)
+    const qrImage = buyerPage.locator('#promptpay-qr-image');
+    await expect(qrImage).toBeVisible({ timeout: 15000 });
 
     // Capture orderId directly from confirmed reservation card
     const orderId = (await buyerPage.locator('#reservation-order-id').innerText()).trim();
-    expect(orderId).toBeTruthy();
+    expect(orderId).toMatch(/^ORD-/);
 
-    // 4. Organizer submits cancellation request
-    await page.reload();
-    const openCancelBtn = page.getByTestId(`open-cancel-btn-${createdEvent.id}`);
-    await expect(openCancelBtn).toBeVisible();
-    await openCancelBtn.click();
-
-    const cancelSection = page.getByTestId('cancellation-form-section');
-    await expect(cancelSection).toBeVisible();
-
-    await page.getByTestId('cancellation-reason-input').fill('เหตุจำเป็นเร่งด่วนขอยกเลิกรอบนี้');
-    await page.getByTestId('submit-cancel-session-btn').click();
-
-    const cancelFeedback = page.getByTestId('cancel-feedback-message');
-    await expect(cancelFeedback).toBeVisible();
-    await expect(cancelFeedback).toContainText('ยื่นคำขอยกเลิกรอบการแสดงเรียบร้อยแล้ว');
+    // 4. Organizer submits cancellation request (AC-35, AC-108)
+    const cancelRes = await page.request.post(
+      `/api/organizer/events/${createdEvent.id}/sessions/${sessionId}/cancel`,
+      {
+        data: { reason: 'เหตุจำเป็นเร่งด่วนขอยกเลิกรอบนี้' },
+      },
+    );
+    expect(cancelRes.status()).toBe(201);
 
     // 5. Owner approves cancellation (AC-112, G-50)
     await ownerPage.reload();

@@ -1,10 +1,27 @@
 # SPEC-001 — Task plan
 
-- Source: [SPEC-001 ready](../specs/SPEC-001-concert-ticket-lifecycle.md), G-01–G-52, 117 active ACs
+- Source: [SPEC-001 ready](../specs/SPEC-001-concert-ticket-lifecycle.md), G-01–G-53, 124 active ACs; 125 unique IDs โดย AC-122 historical superseded
 - Planned at: 2026-10-20 (Asia/Bangkok); updated 2026-10-22 (change-scope เพิ่ม TASK-038 และ TASK-039); updated 2026-10-23 (change-scope เพิ่ม TASK-040)
-- Result: สร้าง TASK-001–TASK-037 เดิม 37 งาน และเพิ่ม TASK-038–TASK-040 รวม 40 งาน
+- Result: สร้าง TASK-001–TASK-037 เดิม 37 งาน และเพิ่ม TASK-038–TASK-040 รวม 40 งาน; เพิ่ม TASK-041–044 สำหรับ Stripe วันที่ 2026-10-30 รวม 44 งาน
 - Initial state: ทุก task เริ่ม `todo` และ Todo ทุกข้อยังไม่ตรวจสำเร็จ; สถานะ/evidence ปัจจุบันดูในไฟล์ task โดยตรง
 - Ownership: ดัชนีนี้เป็นแผนและ acceptance mapping ไม่ใช่ implementation หรือ test/code-coverage report
+
+## Stripe follow-up (2026-10-30)
+
+ข้อตกลง [Stripe PromptPay/P1–P4](../adr/0003-external-integrations.md#payment-provider-change--2026-10-30)
+และ SPEC-001/AC-118–123 ถูกแตกเป็น TASK-041–044 แล้ว; ทั้งสี่งานเริ่ม todo โดยยังไม่มี implementation/test pass
+TASK-001–040 คงสถานะ done และไฟล์เดิมทุกไฟล์; หลักฐาน Omise/local double เดิมไม่รับรอง Stripe
+AC เดิมที่ได้รับผลกระทบมี follow-up/re-verification เพิ่มใน acceptance table โดยไม่ลบการส่งมอบเดิม
+TASK-041 เป็น contract spike ไม่ปิด user-facing AC. Change-scope 2026-10-30 ยืนยัน G-53/P5: ใช้ matching verified payment_intent.succeeded Event.created เป็น T; actual-bank-time proof/AC-122 เดิม superseded, AC-124/125 เป็นงานร่วม TASK-043/044. QR/expiry/cancel/probe/review ที่ยังไม่ครบยังคงต้องทำ ไม่ใช้การเปลี่ยนเกณฑ์อ้างว่า task done.
+
+### Payment-time change impact (2026-10-30)
+
+| ขอบเขต | ก่อน → หลัง / งานที่รับผิดชอบ |
+| --- | --- |
+| เกณฑ์เวลา | actual paid time → matching verified payment_intent.succeeded Event.created ตาม G-53/P5; D/C/quote/refund formulas คงเดิม |
+| Acceptance | AC-122 เก็บเป็น superseded history; AC-124 time decision และ AC-125 missing/conflicting Event recovery → TASK-043/044 ร่วมกัน |
+| Spike | TASK-041 ปลด actual-bank-time decision blocker แต่ยังต้องทำ probe/review ที่เหลือ; ไม่ถือว่า done จากการแก้เอกสาร |
+| หลักฐาน/compatibility | TASK-001–040 และ probe เดิมคงผลตามขอบเขตเดิม; ยังไม่ผ่าน time rule ใหม่/Live readiness. ไม่มี migration รายการเงินจริง Omise ตาม P3; runtime/tests ยังต้องเปลี่ยนและตรวจใน TASK-042–044 ไม่มีการ migrate/แก้ runtime ในรอบนี้ |
 
 ## Working contract
 
@@ -62,9 +79,14 @@ TASK-037 เป็น late cross-instance functional contract ตาม AC-105; 
 | [TASK-039](TASK-039-owner-overview-counts.md) | เจ้าของเว็บติดตามตัวเลขสรุปงานค้างและคลิกนำทางไปยังส่วนงานได้ | [TASK-038](TASK-038-owner-workspace-navigation.md) | เต็ม: AC-115 |
 | [TASK-040](TASK-040-multi-step-purchase-journey.md) | ลูกค้าซื้อบัตรผ่าน 4 หน้าพร้อมห้องรอคิวและ Step Indicator | [TASK-015](TASK-015-paid-ticket-issuance.md), [TASK-036](TASK-036-responsive-role-interfaces.md) | เต็ม: AC-117 |
 
+| [TASK-041](TASK-041-stripe-promptpay-contract.md) | พิสูจน์ QR/paid-time/expiry/cancellation contract ของ Stripe (spike) | None | prerequisite ของ active AC-118–121/123–125; ไม่ปิด AC เอง |
+| [TASK-042](TASK-042-stripe-promptpay-qr.md) | ผู้ซื้อแสดง Stripe QR ในหน้าเดิมโดยไม่สร้างรายการซ้ำ | [TASK-041](TASK-041-stripe-promptpay-contract.md) | เต็ม: AC-118; ร่วม: AC-120, AC-123; re-verify AC-15/26/70 และ guards AC-12/13 |
+| [TASK-043](TASK-043-stripe-verified-ticket-issuance.md) | ผล Stripe ที่ตรวจแล้วออกบัตรครั้งเดียวและแยก test/live | [TASK-042](TASK-042-stripe-promptpay-qr.md) | เต็ม: AC-119; ร่วม: AC-120, AC-123, AC-124, AC-125; re-verify AC-16/17/18 |
+| [TASK-044](TASK-044-stripe-expiry-cancellation-recovery.md) | หมดเวลา/ยกเลิกและ late-payment recovery ตาม D/C/T | [TASK-043](TASK-043-stripe-verified-ticket-issuance.md) | เต็ม: AC-121; ร่วม: AC-120, AC-124, AC-125; re-verify AC-71–74/112–114; regression AC-37/84/93 |
+
 ## Acceptance coverage
 
-ครอบคลุมแผน 117/117 AC ไม่มี criteria ที่ถือว่า implement แล้วหรือยกเว้นจากงาน
+ครอบคลุมแผน active 124/124 AC (125 unique IDs, AC-122 historical superseded); AC-01–117 คง mapping เดิมและมี Stripe follow-up ตามแถวที่ระบุ ส่วน AC-118–121/123–125 เป็นงาน Stripe ไม่ถือว่าการมีแผนหรือ done เดิมเท่ากับผ่าน Stripe
 `เต็ม` = task นั้นรับผิดชอบ outcome ของ AC ครบโดยอาศัย prerequisites ที่ระบุ; `ร่วม` = ทุก task ในแถวต้องส่งมอบส่วนของตนจึงถือว่า AC ครบ
 ทุก joint contribution เขียนขอบเขตไว้ใน Todo ของ task ทั้งสองด้าน ไม่ใช้ผลทดสอบของส่วนหนึ่งอ้างว่าผลงานอีกส่วนเสร็จแล้ว
 ข้อความ AC และ verification target ฉบับหลักอยู่ใน [SPEC-001](../specs/SPEC-001-concert-ticket-lifecycle.md#acceptance-criteria) ไม่มี AC ใหม่จากการวางแผน
@@ -82,13 +104,13 @@ TASK-037 เป็น late cross-instance functional contract ตาม AC-105; 
 | AC-09 | [TASK-009](TASK-009-scanner-accounts.md) | เต็มใน [TASK-009](TASK-009-scanner-accounts.md) |
 | AC-10 | [TASK-012](TASK-012-reserve-tickets.md) | เต็มใน [TASK-012](TASK-012-reserve-tickets.md) |
 | AC-11 | [TASK-015](TASK-015-paid-ticket-issuance.md) | เต็มใน [TASK-015](TASK-015-paid-ticket-issuance.md) |
-| AC-12 | [TASK-012](TASK-012-reserve-tickets.md), [TASK-014](TASK-014-payment-qr.md) | ร่วมทั้งหมด: TASK-012 — ปฏิเสธ reservation เมื่อ OTP ยังไม่ผ่าน; TASK-014 ตรวจ payment request guard จริง; TASK-014 — ปฏิเสธ direct payment request ที่ OTP ยังไม่ผ่าน ร่วม reservation gate ของ TASK-012 |
-| AC-13 | [TASK-012](TASK-012-reserve-tickets.md), [TASK-014](TASK-014-payment-qr.md) | ร่วมทั้งหมด: TASK-012 — เริ่ม deadline หลัง OTP+confirm; TASK-014 ตรวจ guard ก่อนสร้าง QR; TASK-014 — บังคับ reservation เริ่มแล้วก่อน QR ร่วม TASK-012 |
+| AC-12 | [TASK-012](TASK-012-reserve-tickets.md), [TASK-014](TASK-014-payment-qr.md), [TASK-042](TASK-042-stripe-promptpay-qr.md) | ประวัติเดิม: ร่วมทั้งหมด: TASK-012 — ปฏิเสธ reservation เมื่อ OTP ยังไม่ผ่าน; TASK-014 ตรวจ payment request guard จริง; TASK-014 — ปฏิเสธ direct payment request ที่ OTP ยังไม่ผ่าน ร่วม reservation gate ของ TASK-012; Stripe follow-up: [TASK-042](TASK-042-stripe-promptpay-qr.md) ตรวจขอบเขตตาม Todo ใหม่ ผลเดิมไม่ปิดส่วน Stripe |
+| AC-13 | [TASK-012](TASK-012-reserve-tickets.md), [TASK-014](TASK-014-payment-qr.md), [TASK-042](TASK-042-stripe-promptpay-qr.md) | ประวัติเดิม: ร่วมทั้งหมด: TASK-012 — เริ่ม deadline หลัง OTP+confirm; TASK-014 ตรวจ guard ก่อนสร้าง QR; TASK-014 — บังคับ reservation เริ่มแล้วก่อน QR ร่วม TASK-012; Stripe follow-up: [TASK-042](TASK-042-stripe-promptpay-qr.md) ตรวจขอบเขตตาม Todo ใหม่ ผลเดิมไม่ปิดส่วน Stripe |
 | AC-14 | [TASK-012](TASK-012-reserve-tickets.md) | เต็มใน [TASK-012](TASK-012-reserve-tickets.md) |
-| AC-15 | [TASK-014](TASK-014-payment-qr.md) | เต็มใน [TASK-014](TASK-014-payment-qr.md) |
-| AC-16 | [TASK-015](TASK-015-paid-ticket-issuance.md) | เต็มใน [TASK-015](TASK-015-paid-ticket-issuance.md) |
-| AC-17 | [TASK-015](TASK-015-paid-ticket-issuance.md) | เต็มใน [TASK-015](TASK-015-paid-ticket-issuance.md) |
-| AC-18 | [TASK-015](TASK-015-paid-ticket-issuance.md) | เต็มใน [TASK-015](TASK-015-paid-ticket-issuance.md) |
+| AC-15 | [TASK-014](TASK-014-payment-qr.md), [TASK-042](TASK-042-stripe-promptpay-qr.md) | ประวัติเดิม: เต็มใน [TASK-014](TASK-014-payment-qr.md); Stripe follow-up: [TASK-042](TASK-042-stripe-promptpay-qr.md) ตรวจขอบเขตตาม Todo ใหม่ ผลเดิมไม่ปิดส่วน Stripe |
+| AC-16 | [TASK-015](TASK-015-paid-ticket-issuance.md), [TASK-043](TASK-043-stripe-verified-ticket-issuance.md) | ประวัติเดิม: เต็มใน [TASK-015](TASK-015-paid-ticket-issuance.md); Stripe follow-up: [TASK-043](TASK-043-stripe-verified-ticket-issuance.md) ตรวจขอบเขตตาม Todo ใหม่ ผลเดิมไม่ปิดส่วน Stripe |
+| AC-17 | [TASK-015](TASK-015-paid-ticket-issuance.md), [TASK-043](TASK-043-stripe-verified-ticket-issuance.md) | ประวัติเดิม: เต็มใน [TASK-015](TASK-015-paid-ticket-issuance.md); Stripe follow-up: [TASK-043](TASK-043-stripe-verified-ticket-issuance.md) ตรวจขอบเขตตาม Todo ใหม่ ผลเดิมไม่ปิดส่วน Stripe |
+| AC-18 | [TASK-015](TASK-015-paid-ticket-issuance.md), [TASK-043](TASK-043-stripe-verified-ticket-issuance.md) | ประวัติเดิม: เต็มใน [TASK-015](TASK-015-paid-ticket-issuance.md); Stripe follow-up: [TASK-043](TASK-043-stripe-verified-ticket-issuance.md) ตรวจขอบเขตตาม Todo ใหม่ ผลเดิมไม่ปิดส่วน Stripe |
 | AC-19 | [TASK-015](TASK-015-paid-ticket-issuance.md) | เต็มใน [TASK-015](TASK-015-paid-ticket-issuance.md) |
 | AC-20 | [TASK-017](TASK-017-ticket-email-delivery.md) | เต็มใน [TASK-017](TASK-017-ticket-email-delivery.md) |
 | AC-21 | [TASK-018](TASK-018-guest-order-lookup.md), [TASK-021](TASK-021-refund-requests.md) | ร่วมทั้งหมด: TASK-018 — ส่วนเปิด order/ticket ของตน; TASK-021 เติมเริ่มคำขอ refund; TASK-021 — ส่วนเริ่มคำขอคืนจาก order ตน ร่วม TASK-018 |
@@ -96,7 +118,7 @@ TASK-037 เป็น late cross-instance functional contract ตาม AC-105; 
 | AC-23 | [TASK-010](TASK-010-event-fee-settings.md) | เต็มใน [TASK-010](TASK-010-event-fee-settings.md) |
 | AC-24 | [TASK-010](TASK-010-event-fee-settings.md) | เต็มใน [TASK-010](TASK-010-event-fee-settings.md) |
 | AC-25 | [TASK-010](TASK-010-event-fee-settings.md) | เต็มใน [TASK-010](TASK-010-event-fee-settings.md) |
-| AC-26 | [TASK-014](TASK-014-payment-qr.md) | เต็มใน [TASK-014](TASK-014-payment-qr.md) |
+| AC-26 | [TASK-014](TASK-014-payment-qr.md), [TASK-042](TASK-042-stripe-promptpay-qr.md) | ประวัติเดิม: เต็มใน [TASK-014](TASK-014-payment-qr.md); Stripe follow-up: [TASK-042](TASK-042-stripe-promptpay-qr.md) ตรวจขอบเขตตาม Todo ใหม่ ผลเดิมไม่ปิดส่วน Stripe |
 | AC-27 | [TASK-029](TASK-029-weekly-manual-payout.md) | เต็มใน [TASK-029](TASK-029-weekly-manual-payout.md) |
 | AC-28 | [TASK-028](TASK-028-organizer-money-report.md) | เต็มใน [TASK-028](TASK-028-organizer-money-report.md) |
 | AC-29 | [TASK-010](TASK-010-event-fee-settings.md) | เต็มใน [TASK-010](TASK-010-event-fee-settings.md) |
@@ -107,7 +129,7 @@ TASK-037 เป็น late cross-instance functional contract ตาม AC-105; 
 | AC-34 | [TASK-021](TASK-021-refund-requests.md) | เต็มใน [TASK-021](TASK-021-refund-requests.md) |
 | AC-35 | [TASK-026](TASK-026-cancel-issued-session.md) | เต็มใน [TASK-026](TASK-026-cancel-issued-session.md) |
 | AC-36 | [TASK-022](TASK-022-refund-approval.md) | เต็มใน [TASK-022](TASK-022-refund-approval.md) |
-| AC-37 | [TASK-023](TASK-023-manual-refund-proof.md) | เต็มใน [TASK-023](TASK-023-manual-refund-proof.md) |
+| AC-37 | [TASK-023](TASK-023-manual-refund-proof.md), [TASK-044](TASK-044-stripe-expiry-cancellation-recovery.md) | ประวัติเดิม: เต็มใน [TASK-023](TASK-023-manual-refund-proof.md); Stripe follow-up: [TASK-044](TASK-044-stripe-expiry-cancellation-recovery.md) ตรวจขอบเขตตาม Todo ใหม่ ผลเดิมไม่ปิดส่วน Stripe |
 | AC-38 | [TASK-025](TASK-025-reschedule-refund-window.md) | เต็มใน [TASK-025](TASK-025-reschedule-refund-window.md) |
 | AC-39 | [TASK-020](TASK-020-online-admission.md) | เต็มใน [TASK-020](TASK-020-online-admission.md) |
 | AC-40 | [TASK-033](TASK-033-offline-admission.md) | เต็มใน [TASK-033](TASK-033-offline-admission.md) |
@@ -140,11 +162,11 @@ TASK-037 เป็น late cross-instance functional contract ตาม AC-105; 
 | AC-67 | [TASK-024](TASK-024-approved-live-edits.md) | เต็มใน [TASK-024](TASK-024-approved-live-edits.md) |
 | AC-68 | [TASK-024](TASK-024-approved-live-edits.md) | เต็มใน [TASK-024](TASK-024-approved-live-edits.md) |
 | AC-69 | [TASK-012](TASK-012-reserve-tickets.md) | เต็มใน [TASK-012](TASK-012-reserve-tickets.md) |
-| AC-70 | [TASK-013](TASK-013-reservation-expiry.md), [TASK-014](TASK-014-payment-qr.md) | ร่วมทั้งหมด: TASK-013 — คง order/deadline เมื่อ refresh; TASK-014 ตรวจ repeated payment/QR creation ไม่ต่อเวลา; TASK-014 — ใช้ order/remaining time เดิมสำหรับ payment/QR ร่วม TASK-013 |
-| AC-71 | [TASK-013](TASK-013-reservation-expiry.md) | เต็มใน [TASK-013](TASK-013-reservation-expiry.md) |
-| AC-72 | [TASK-016](TASK-016-late-payment-recovery.md) | เต็มใน [TASK-016](TASK-016-late-payment-recovery.md) |
-| AC-73 | [TASK-016](TASK-016-late-payment-recovery.md) | เต็มใน [TASK-016](TASK-016-late-payment-recovery.md) |
-| AC-74 | [TASK-016](TASK-016-late-payment-recovery.md) | เต็มใน [TASK-016](TASK-016-late-payment-recovery.md) |
+| AC-70 | [TASK-013](TASK-013-reservation-expiry.md), [TASK-014](TASK-014-payment-qr.md), [TASK-042](TASK-042-stripe-promptpay-qr.md) | ประวัติเดิม: ร่วมทั้งหมด: TASK-013 — คง order/deadline เมื่อ refresh; TASK-014 ตรวจ repeated payment/QR creation ไม่ต่อเวลา; TASK-014 — ใช้ order/remaining time เดิมสำหรับ payment/QR ร่วม TASK-013; Stripe follow-up: [TASK-042](TASK-042-stripe-promptpay-qr.md) ตรวจขอบเขตตาม Todo ใหม่ ผลเดิมไม่ปิดส่วน Stripe |
+| AC-71 | [TASK-013](TASK-013-reservation-expiry.md), [TASK-044](TASK-044-stripe-expiry-cancellation-recovery.md) | ประวัติเดิม: เต็มใน [TASK-013](TASK-013-reservation-expiry.md); Stripe follow-up: [TASK-044](TASK-044-stripe-expiry-cancellation-recovery.md) ตรวจขอบเขตตาม Todo ใหม่ ผลเดิมไม่ปิดส่วน Stripe |
+| AC-72 | [TASK-016](TASK-016-late-payment-recovery.md), [TASK-044](TASK-044-stripe-expiry-cancellation-recovery.md) | ประวัติเดิม: เต็มใน [TASK-016](TASK-016-late-payment-recovery.md); Stripe follow-up: [TASK-044](TASK-044-stripe-expiry-cancellation-recovery.md) ตรวจขอบเขตตาม Todo ใหม่ ผลเดิมไม่ปิดส่วน Stripe |
+| AC-73 | [TASK-016](TASK-016-late-payment-recovery.md), [TASK-044](TASK-044-stripe-expiry-cancellation-recovery.md) | ประวัติเดิม: เต็มใน [TASK-016](TASK-016-late-payment-recovery.md); Stripe follow-up: [TASK-044](TASK-044-stripe-expiry-cancellation-recovery.md) ตรวจขอบเขตตาม Todo ใหม่ ผลเดิมไม่ปิดส่วน Stripe |
+| AC-74 | [TASK-016](TASK-016-late-payment-recovery.md), [TASK-044](TASK-044-stripe-expiry-cancellation-recovery.md) | ประวัติเดิม: เต็มใน [TASK-016](TASK-016-late-payment-recovery.md); Stripe follow-up: [TASK-044](TASK-044-stripe-expiry-cancellation-recovery.md) ตรวจขอบเขตตาม Todo ใหม่ ผลเดิมไม่ปิดส่วน Stripe |
 | AC-75 | [TASK-017](TASK-017-ticket-email-delivery.md), [TASK-018](TASK-018-guest-order-lookup.md) | ร่วมทั้งหมด: TASK-017 — ส่วนส่งไม่สำเร็จ/retry คง paid/QR; TASK-018 เติม lookup recovery; TASK-018 — ส่วน lookup recovery หลัง delivery failure ร่วม TASK-017 |
 | AC-76 | [TASK-019](TASK-019-owner-contact-correction.md) | เต็มใน [TASK-019](TASK-019-owner-contact-correction.md) |
 | AC-77 | [TASK-028](TASK-028-organizer-money-report.md) | เต็มใน [TASK-028](TASK-028-organizer-money-report.md) |
@@ -154,7 +176,7 @@ TASK-037 เป็น late cross-instance functional contract ตาม AC-105; 
 | AC-81 | [TASK-028](TASK-028-organizer-money-report.md) | เต็มใน [TASK-028](TASK-028-organizer-money-report.md) |
 | AC-82 | [TASK-028](TASK-028-organizer-money-report.md) | เต็มใน [TASK-028](TASK-028-organizer-money-report.md) |
 | AC-83 | [TASK-030](TASK-030-reserve-release.md) | เต็มใน [TASK-030](TASK-030-reserve-release.md) |
-| AC-84 | [TASK-027](TASK-027-cancel-pending-payments.md), [TASK-028](TASK-028-organizer-money-report.md) | ร่วมทั้งหมด: TASK-027 — pending-cancel cases คง paid-but-not-issued/review และไม่เครดิต V_o; TASK-028 ตรวจ report/entitlement; TASK-028 — report basis/withheld unissued funds และไม่หัก refund ซ้ำ; TASK-027 สร้าง pending-cancel financial states จริง |
+| AC-84 | [TASK-027](TASK-027-cancel-pending-payments.md), [TASK-028](TASK-028-organizer-money-report.md), [TASK-044](TASK-044-stripe-expiry-cancellation-recovery.md) | ประวัติเดิม: ร่วมทั้งหมด: TASK-027 — pending-cancel cases คง paid-but-not-issued/review และไม่เครดิต V_o; TASK-028 ตรวจ report/entitlement; TASK-028 — report basis/withheld unissued funds และไม่หัก refund ซ้ำ; TASK-027 สร้าง pending-cancel financial states จริง; Stripe follow-up: [TASK-044](TASK-044-stripe-expiry-cancellation-recovery.md) ตรวจขอบเขตตาม Todo ใหม่ ผลเดิมไม่ปิดส่วน Stripe |
 | AC-85 | [TASK-031](TASK-031-event-debt-repayment.md) | เต็มใน [TASK-031](TASK-031-event-debt-repayment.md) |
 | AC-86 | [TASK-031](TASK-031-event-debt-repayment.md) | เต็มใน [TASK-031](TASK-031-event-debt-repayment.md) |
 | AC-87 | [TASK-029](TASK-029-weekly-manual-payout.md) | เต็มใน [TASK-029](TASK-029-weekly-manual-payout.md) |
@@ -163,7 +185,7 @@ TASK-037 เป็น late cross-instance functional contract ตาม AC-105; 
 | AC-90 | [TASK-022](TASK-022-refund-approval.md) | เต็มใน [TASK-022](TASK-022-refund-approval.md) |
 | AC-91 | [TASK-026](TASK-026-cancel-issued-session.md) | เต็มใน [TASK-026](TASK-026-cancel-issued-session.md) |
 | AC-92 | [TASK-023](TASK-023-manual-refund-proof.md), [TASK-029](TASK-029-weekly-manual-payout.md) | ร่วมทั้งหมด: TASK-023 — สิทธิ์ไฟล์หลักฐาน refund; TASK-029 เติม payout proof; TASK-029 — สิทธิ์ไฟล์หลักฐาน payout ร่วม TASK-023 |
-| AC-93 | [TASK-023](TASK-023-manual-refund-proof.md), [TASK-029](TASK-029-weekly-manual-payout.md) | ร่วมทั้งหมด: TASK-023 — manual refund failure/retry/liability; TASK-029 เติม payout failure; TASK-029 — manual payout failure/retry ร่วม TASK-023 |
+| AC-93 | [TASK-023](TASK-023-manual-refund-proof.md), [TASK-029](TASK-029-weekly-manual-payout.md), [TASK-044](TASK-044-stripe-expiry-cancellation-recovery.md) | ประวัติเดิม: ร่วมทั้งหมด: TASK-023 — manual refund failure/retry/liability; TASK-029 เติม payout failure; TASK-029 — manual payout failure/retry ร่วม TASK-023; Stripe follow-up: [TASK-044](TASK-044-stripe-expiry-cancellation-recovery.md) ตรวจขอบเขตตาม Todo ใหม่ ผลเดิมไม่ปิดส่วน Stripe |
 | AC-94 | [TASK-032](TASK-032-offline-primary-dataset.md) | เต็มใน [TASK-032](TASK-032-offline-primary-dataset.md) |
 | AC-95 | [TASK-020](TASK-020-online-admission.md) | เต็มใน [TASK-020](TASK-020-online-admission.md) |
 | AC-96 | [TASK-033](TASK-033-offline-admission.md) | เต็มใน [TASK-033](TASK-033-offline-admission.md) |
@@ -182,15 +204,25 @@ TASK-037 เป็น late cross-instance functional contract ตาม AC-105; 
 | AC-109 | [TASK-024](TASK-024-approved-live-edits.md) | เต็มใน [TASK-024](TASK-024-approved-live-edits.md) |
 | AC-110 | [TASK-028](TASK-028-organizer-money-report.md) | เต็มใน [TASK-028](TASK-028-organizer-money-report.md) |
 | AC-111 | [TASK-012](TASK-012-reserve-tickets.md) | เต็มใน [TASK-012](TASK-012-reserve-tickets.md) |
-| AC-112 | [TASK-027](TASK-027-cancel-pending-payments.md) | เต็มใน [TASK-027](TASK-027-cancel-pending-payments.md) |
-| AC-113 | [TASK-027](TASK-027-cancel-pending-payments.md) | เต็มใน [TASK-027](TASK-027-cancel-pending-payments.md) |
-| AC-114 | [TASK-027](TASK-027-cancel-pending-payments.md) | เต็มใน [TASK-027](TASK-027-cancel-pending-payments.md) |
+| AC-112 | [TASK-027](TASK-027-cancel-pending-payments.md), [TASK-044](TASK-044-stripe-expiry-cancellation-recovery.md) | ประวัติเดิม: เต็มใน [TASK-027](TASK-027-cancel-pending-payments.md); Stripe follow-up: [TASK-044](TASK-044-stripe-expiry-cancellation-recovery.md) ตรวจขอบเขตตาม Todo ใหม่ ผลเดิมไม่ปิดส่วน Stripe |
+| AC-113 | [TASK-027](TASK-027-cancel-pending-payments.md), [TASK-044](TASK-044-stripe-expiry-cancellation-recovery.md) | ประวัติเดิม: เต็มใน [TASK-027](TASK-027-cancel-pending-payments.md); Stripe follow-up: [TASK-044](TASK-044-stripe-expiry-cancellation-recovery.md) ตรวจขอบเขตตาม Todo ใหม่ ผลเดิมไม่ปิดส่วน Stripe |
+| AC-114 | [TASK-027](TASK-027-cancel-pending-payments.md), [TASK-044](TASK-044-stripe-expiry-cancellation-recovery.md) | ประวัติเดิม: เต็มใน [TASK-027](TASK-027-cancel-pending-payments.md); Stripe follow-up: [TASK-044](TASK-044-stripe-expiry-cancellation-recovery.md) ตรวจขอบเขตตาม Todo ใหม่ ผลเดิมไม่ปิดส่วน Stripe |
 | AC-115 | [TASK-039](TASK-039-owner-overview-counts.md) | เต็มใน [TASK-039](TASK-039-owner-overview-counts.md) |
 | AC-116 | [TASK-038](TASK-038-owner-workspace-navigation.md) | เต็มใน [TASK-038](TASK-038-owner-workspace-navigation.md) |
 | AC-117 | [TASK-040](TASK-040-multi-step-purchase-journey.md) | เต็มใน [TASK-040](TASK-040-multi-step-purchase-journey.md) |
 
+| AC-118 | [TASK-042](TASK-042-stripe-promptpay-qr.md) | เต็มใน TASK-042 |
+| AC-119 | [TASK-043](TASK-043-stripe-verified-ticket-issuance.md) | เต็มใน TASK-043 |
+| AC-120 | [TASK-042](TASK-042-stripe-promptpay-qr.md), [TASK-043](TASK-043-stripe-verified-ticket-issuance.md), [TASK-044](TASK-044-stripe-expiry-cancellation-recovery.md) | ร่วมทั้งหมด: TASK-042 create/confirm/timeout/retry; TASK-043 event/paid/issue; TASK-044 recovery/refund-case deduplication |
+| AC-121 | [TASK-044](TASK-044-stripe-expiry-cancellation-recovery.md) | เต็มใน TASK-044 รวม provider cancel failure/success race และ saved QR |
+| AC-122 | Historical superseded — ไม่มี runnable work | แทนด้วย AC-124/125 ตาม G-53/P5; ไม่ใช้ actual-bank-time proof เป็น gate อีก |
+| AC-123 | [TASK-042](TASK-042-stripe-promptpay-qr.md), [TASK-043](TASK-043-stripe-verified-ticket-issuance.md) | ร่วมทั้งหมด: TASK-042 config/create mode isolation; TASK-043 webhook/paid/issue และ test-payment endpoint ไม่สามารถสร้างเงินจริงใน live mode |
+| AC-124 | [TASK-043](TASK-043-stripe-verified-ticket-issuance.md), [TASK-044](TASK-044-stripe-expiry-cancellation-recovery.md) | ร่วมทั้งหมด: TASK-043 ตรวจ matching success Event/time และ timely issue; TASK-044 ใช้เวลาเดียวกันกับ release/cancel/late recovery/refund; G-53/P5 T=D/T=C/fractional cutoffs ไม่มี rounding/grace |
+| AC-125 | [TASK-043](TASK-043-stripe-verified-ticket-issuance.md), [TASK-044](TASK-044-stripe-expiry-cancellation-recovery.md) | ร่วมทั้งหมด: TASK-043 missing/invalid/conflicting Event guard ใน active path; TASK-044 unknown→verified Event recovery หลัง release/cancel; intent-only success ไม่ fallback เป็นเวลาอื่น |
+
 ## Dependency order and parallel work
 
+ตาราง wave เดิมเป็นประวัติ TASK-001–040 ที่ done แล้ว ไม่ใช่ลำดับงานใหม่; แผน Stripe อยู่ถัดจากตาราง
 ตารางนี้แสดง wave ที่ทำได้เมื่อ upstream ครบ ไม่ใช่การเริ่ม agent หรือ implementation อัตโนมัติ
 รันคู่ขนานได้เมื่อไม่ชนการแก้ไฟล์/พื้นที่เดียวกันและประสาน shared contract; แต่ละ task ยังต้องผ่าน policy ของตน
 
@@ -221,14 +253,23 @@ TASK-037 เป็น late cross-instance functional contract ตาม AC-105; 
 | 23 | [TASK-039](TASK-039-owner-overview-counts.md) |
 | 24 | [TASK-040](TASK-040-multi-step-purchase-journey.md) |
 
+### Stripe dependency order
+
+[TASK-041](TASK-041-stripe-promptpay-contract.md) → [TASK-042](TASK-042-stripe-promptpay-qr.md) → [TASK-043](TASK-043-stripe-verified-ticket-issuance.md) → [TASK-044](TASK-044-stripe-expiry-cancellation-recovery.md)
+
+เป็น dependency จริง: contract evidence → intent ที่ผูก order → verified payment ingress → late/cancel recovery
+ไม่มีงาน Stripe คู่ขนานก่อน contract พร้อม; ไม่สร้าง parallel handoff ระหว่าง tasks ที่แก้ payment boundary เดียวกัน
+งาน done เดิมเป็นบริบทการ reuse ไม่ต้องทำใหม่เพื่อปลด task แรก
+
 ## First runnable task
 
-[TASK-001: เปิดแอป TICKET และตรวจสอบการพัฒนาบน local ได้](TASK-001-local-foundation.md) ไม่มี upstream task หรือ external production prerequisite ที่บล็อกการเริ่ม local
-ขั้นถัดไปที่แนะนำคือ `$implement-task` เฉพาะ TASK-001 ยังไม่มี task ใดเริ่ม in_progress จากการวางแผน
+[TASK-041](TASK-041-stripe-promptpay-contract.md) ไม่มี upstream; มี research/probe evidence และสถานะ blocked ตามไฟล์ task. G-53/P5 ปลด actual-bank-time decision blocker แล้ว แต่ยังต้องทำ probe/review ที่เหลือตาม exit condition ใหม่. ขั้นถัดไปคือ `$implement-task` TASK-041 ต่อจากหลักฐานเดิม ไม่เปิด TASK-042 ก่อน TASK-041 done
+หากจำเป็นต้องใช้ test account/access แล้วไม่พร้อม ให้ระบุ external blocker จริงและวิธีปลดใน task นั้น;
+Live/PromptPay approval ไม่บล็อกการเริ่ม research/local แต่ยังเป็น production gate ตาม NQ-05
 
 ## Local-first and deferred production work
 
-TASK-001–TASK-039 พัฒนาและตรวจฟังก์ชัน/หน้าจอบน local; TASK-037 อยู่เพื่อทวน functional state ด้วยหลาย local web processes ไม่ใช่ load benchmark
+TASK-001–TASK-044 พัฒนา/ตรวจบน local (TASK-041 เป็น contract spike); TASK-037 อยู่เพื่อทวน functional state ด้วยหลาย local web processes ไม่ใช่ load benchmark
 Production reconciliation 2026-10-30: baseline ขนาด/topology/scaling/backup/retention ยืนยันแล้วใน [ADR-0002](../adr/0002-local-first-and-aws-production.md); คง ECS Fargate ARM64 + ALB และ private RDS ไม่เลือก App Runner
 ยังไม่สร้างงาน provision/deploy AWS หรือ capacity test เพราะงบ cloud/estimate จริง, workload/latency/error/duration targets, rollout connection budget และ recovery details ใน NQ-04 ยังเปิด; ไม่อ้างว่าผล local รองรับ 200 คน
 TASK-037 และงาน done เดิมคงสถานะ/หลักฐานเดิม ไม่ถูก reopen หรือถือว่าครอบคลุม ARM64/cloud/scaling จากการปรับเอกสารนี้
@@ -243,10 +284,10 @@ Merchant/PromptPay approval, verified email domain, production R2 และ veri
 | NQ-02 tokens/icon set/browser baseline | ใช้ constraints เดิมทุก UI task; TASK-001 วาง shell และ TASK-036 ทวนทุกหน้าจริง ไม่เปิด design discovery ซ้ำ |
 | NQ-03 runtime/PM/ORM/auth/runners/commands | TASK-001 สร้าง toolchain/runners/คำสั่งจริง TASK-002 เลือก auth/bootstrap ภายใน ADR; ทุก task ตรวจ command ใหม่ก่อนรัน |
 | NQ-04 AWS production readiness | Baseline ยืนยันใน ADR-0002 ฉบับ 2026-10-30 แล้ว; ส่วนงบ/estimate/โหลด/rollout/recovery ที่ยังเปิดอยู่นอกงาน local ต้องปิดก่อนสร้างงาน production/deployment/scaling จริง |
-| NQ-05 provider integration/readiness | TASK-003/005/014/017/023 ตรวจ contract และแยก local doubles; ถ้าพิสูจน์ paid-time contract ไม่ได้ TASK-014 ต้องบล็อก boundary นั้นและแจ้งเงื่อนไข ไม่เปลี่ยนกติกาเอง; production readiness ไม่บล็อก TASK-001 |
+| NQ-05 provider integration/readiness | Stripe follow-up: TASK-041 เป็นเจ้าของ success-Event-time/QR/cancel contract proof ตาม G-53/P5 (actual-bank-time proof superseded); TASK-042/043/044 ส่งมอบ boundary ที่ตรวจแล้ว ถ้า matching Event/contract ยังตรวจไม่ได้ต้องบล็อกพร้อมเหตุ ไม่ reopen TASK-014 done; Live approval ยังไม่ยืนยันและไม่ใช้ test pass แทน ส่วน email/R2 อ้างงานเดิม |
 | NQ-06 internal session/retry/local retention/operational steps | TASK-011/018/019/032–035 เลือก/บันทึกภายในขอบเขตสเปก หากต้องเปลี่ยน product/สิทธิ์/ยอดเงินให้กลับ workflow ที่เป็นเจ้าของ |
 
-ไม่มี user-action blocker ที่ขวางการเริ่ม TASK-001 ขณะวางแผน; dependencies ของ task อื่นอยู่ใน Blocked by ของแต่ละไฟล์
+ไม่มี user-action blocker ที่ยืนยันว่าขวางการเริ่ม research ใน TASK-041 ขณะวางแผน; dependencies ของ task อื่นอยู่ใน Blocked by ของแต่ละไฟล์
 NQ ที่มีผลภายหลังไม่ถูกซ่อนหรือถือว่ายืนยันแล้ว และ task ที่พบเงื่อนไขบล็อกจริงต้องบันทึกเหตุ/เงื่อนไขปลดบล็อกใน Blocked by ตาม workflow
 
 ## Planning verification
