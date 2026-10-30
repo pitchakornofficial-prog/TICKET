@@ -3,13 +3,14 @@
 - Status: ready
 - Created: 2026-10-19 (Asia/Bangkok)
 - Updated: 2026-10-20 (Asia/Bangkok), write-spec reconciliation ครบ G-01–G-52; change-scope 2026-10-22 เพิ่ม AC-115–AC-116; change-scope 2026-10-23 เพิ่ม AC-117 (multi-step purchase journey: events -> queue -> checkout -> payment ตาม D-27)
+- Payment provider reconciliation: 2026-10-30 — Stripe PromptPay ตาม ADR-0003/P1–P4; เพิ่ม AC-118–AC-123; หลักฐาน tasks เดิมไม่รับรอง Stripe และมี follow-up TASK-041–044 ตามแผนวันที่ 2026-10-30
 - Production planning reconciliation: 2026-10-30 — อ้าง baseline ลดต้นทุนใน ADR-0002/0003; คง AC และผลส่งมอบ local เดิม ไม่เพิ่ม AWS deployment เข้า feature scope
 - Clarification follow-up: G-48–G-52 นำมาปรับสูตร พฤติกรรม และ AC/verification แล้ว; รักษาแหล่งหลักใน CONTEXT
 - Requirement: [Product scope และ D-01–D-27](../requirement.md)
 - Context: [Domain rules และ Verification Policy](../../CONTEXT.md)
 - ADRs: [Application/shared data](../adr/0001-application-and-shared-data.md), [Local-first/AWS](../adr/0002-local-first-and-aws-production.md), [Integrations](../adr/0003-external-integrations.md), [Identity/security parameters](../adr/0004-invitation-and-back-office-login.md)
 - Ownership: SPEC-001 เดิมเป็นเจ้าของวงจรบัตรรุ่นแรกทั้งหมด ไม่มีสเปกแข่งขันหรือ prototype ใหม่
-- Task plan: [TASK-001–TASK-040 และ acceptance coverage](../tasks/README.md), planned 2026-10-20; TASK-001–TASK-039 เป็นผลส่งมอบเดิม ส่วน [TASK-040](../tasks/TASK-040-multi-step-purchase-journey.md) เพิ่มจาก change-scope 2026-10-23
+- Task plan: [TASK-001–TASK-044 และ acceptance coverage](../tasks/README.md), planned 2026-10-20; TASK-001–TASK-039 เป็นผลส่งมอบเดิม ส่วน [TASK-040](../tasks/TASK-040-multi-step-purchase-journey.md) เพิ่มจาก change-scope 2026-10-23
 - Visual evidence: design discovery completed; ยังไม่มี accepted prototype และไม่มีคำขอทำ prototype ในรอบนี้
 
 ข้อตกลง G-01–G-52 ถูกนำมาปรับพฤติกรรม สูตรเงิน สิทธิ์ และ AC/verification แล้ว โดยรักษา AC-01–AC-109 และเพิ่ม AC-110–AC-114
@@ -30,7 +31,7 @@ Change-scope 2026-10-22 เพิ่ม AC-115–AC-116; change-scope 2026-10-23
 - ลูกค้า: หน้าแรก ค้นหางาน ข่าว รายละเอียดงาน/รอบ/ประเภทบัตร ข้อมูลผู้ซื้อ OTP ชำระเงิน เปิด order/ticket และขอคืนเงิน
 - Owner: ข่าว คำเชิญ organizer อนุมัติรอบ/แก้ไข/เลื่อน/ยกเลิก fee/reserve ตรวจ refund และบันทึก manual refund/payout; หน้าภาพรวมงานค้างและเมนูกลุ่มของหลังบ้าน owner (D-15–D-20)
 - Organizer: งาน/รอบ/ประเภทบัตรของตน limit ต่อ order รายงานยอด และเพิ่ม scanner เฉพาะงาน รวมถึงกำหนดเครื่องหลัก/ช่วงรับเข้า
-- Guest checkout, reservation 15 นาที, Omise PromptPay ราย order, Resend และ QR เฉพาะ ticket
+- Guest checkout, reservation 15 นาที, Stripe PromptPay ราย order, Resend และ QR เฉพาะ ticket
 - Refund บางใบ การยกเลิก/เลื่อนรอบ จ่ายผู้จัดงานรายสัปดาห์ระหว่างขาย เงินสำรอง และยอดค้างงานเดิม
 - Scanner online/offline เข้า/ออกและกลับเข้า โดยมีเครื่องหลักออฟไลน์เพียงเครื่องเดียวทั้งงาน
 - Functional contract ที่ยังถูกต้องเมื่อเว็บหลาย instance ใช้ข้อมูลกลาง ตาม ADR-0001
@@ -85,7 +86,7 @@ order/payment เก่ายังติดตามผลล่าช้าไ
 
 ### 4. Payment การออกบัตร และ recovery
 
-ใช้ Omise PromptPay ตาม ADR-0003 แสดง ticket subtotal/customer fee/total ก่อนชำระ
+ใช้ Stripe PromptPay ตาม ADR-0003 แสดง ticket subtotal/customer fee/total ก่อนชำระ
 ผลที่ใช้ต้องตรวจ provider identity, order, ยอด, THB และเวลาสำเร็จที่ provider ยืนยัน
 QR แสดงสำเร็จ redirect หรือ webhook ที่ยังไม่ตรวจผ่าน ไม่ใช่หลักฐานให้บัตร
 เงื่อนไขในตารางแรกใช้กับรอบที่ยังใช้สิทธิ์ได้; หากรอบยกเลิกแล้วใช้ตาราง cancellation ถัดไปตาม G-50–G-52
@@ -98,6 +99,48 @@ QR แสดงสำเร็จ redirect หรือ webhook ที่ยั�
 | จ่ายจริงหลังเส้นตาย | ไม่ออก ticket แม้มี quota; owner ตรวจ/คืนเต็มยอดที่รับ (G-35) |
 | ผลล้มเหลว/ไม่ทราบ/ตรวจยอดหรือ order ไม่ผ่าน | ไม่ออกบัตรว่าได้รับเงินจริงที่ตรวจแล้ว; แสดงรอตรวจ/ไม่สำเร็จตามข้อเท็จจริง; ยังคืน quota เมื่อถึงเส้นตาย |
 | Callback ซ้ำ มาผิดลำดับ หรือ retry หลังบางขั้นสำเร็จ | ผลทางเงิน/สิทธิ์เดิมเกิดครั้งเดียว ไม่สร้าง QR บัตร/ยอดรับ/เคสคืนเพิ่ม ไม่ย้อน paid เป็น unpaid จากผลเก่า |
+
+#### Stripe PromptPay contract (2026-10-30)
+
+อ้างอิง [ADR-0003/P1–P4](../adr/0003-external-integrations.md#payment-provider-change--2026-10-30)
+และ design เดิม D-27/D-48/D-50; แสดง QR ภายใน `/orders/[id]/payment` เดิม
+พร้อม quote/ยอด THB และเวลาจองที่เหลือ ไม่ส่งไป Stripe hosted Checkout
+รับเฉพาะ PromptPay ในขอบเขตนี้ ไม่เพิ่มบัตรเครดิต/Connect split payout หรือ Stripe refund
+ไม่มีรายการเงินจริง Omise เดิมตาม P3 จึงไม่มีขอบเขต migration ธุรกรรมเงินจริงหรือ dual-provider checkout
+
+- QR ต้องมาจาก Stripe PaymentIntent ของ order ที่ผ่านสิทธิ์/OTP/reservation แล้ว
+  ไม่ใช้ QR จำลองหรือ reference ที่ลูกค้าส่งเองเป็นหลักฐานชำระจริง
+- ผูก provider reference, order, amount เป็นสตางค์, THB และ test/live mode ที่คาดหมาย
+  ฝั่งระบบ; ไม่เชื่อ order/amount/paid time ที่ browser ระบุเอง
+- การกดซ้ำ รีเฟรช หรือ timeout ขณะสร้าง/ยืนยัน ต้องตรวจรายการเดิมก่อน retry
+  ไม่สร้างรายการเก็บเงินเพิ่มโดยไม่ทราบผลเดิม และไม่ต่อ deadline ตาม AC-70
+- รับ webhook โดยตรวจลายเซ็นจากเนื้อหาคำขอเดิมและ endpoint ที่ถูกต้อง
+  ตรวจ PaymentIntent กับ Stripe ฝั่งระบบก่อนใช้ผล success; จับคู่ reference/order/ยอด/THB/mode
+  ผลไม่ผ่านหรือยังตรวจไม่ได้ไม่เปลี่ยนเป็น verified paid หรือออกบัตร
+- ผลซ้ำ/ผิดลำดับ/recovery หลังหยุดกลางทางต้อง idempotent ทั้ง event และผลต่อ order
+  หลาย event ของ PaymentIntent เดียวไม่สร้าง ticket หรือยอดเงินเพิ่ม
+- อายุ reservation และอายุ QR ที่ผู้ให้บริการกำหนดเป็นคนละข้อเท็จจริง
+  เมื่อถึง deadline หรือรอบถูกยกเลิก หยุดแสดง QR ให้ชำระต่อ ปฏิเสธการสร้าง QR ใหม่ให้ order นั้น
+  คืน quota ตามเดิม และติดตามเงินจริงต่อ ไม่อ้างว่าซ่อน QR ทำให้ QR ที่บันทึกไว้ใช้ไม่ได้
+  การยกเลิก PaymentIntent ทำได้เฉพาะสถานะที่ Stripe รองรับและเมื่อยืนยันผลแล้ว;
+  cancellation ที่ไม่สำเร็จ/แข่งกับการจ่ายต้องไม่ทำให้ลืมรายการรับเงินจริงหรือคืน quota ซ้ำ
+- ไม่สมมติว่ากำหนด Stripe QR ให้หมดอายุเท่ากับ deadline ได้ หรือว่า `created` ของ
+  PaymentIntent/Charge/Event เป็นเวลาชำระสำเร็จจริง; ต้องพิสูจน์ semantic/precision ตาม NQ-05
+  ถ้ายังพิสูจน์ T เทียบ D/C ไม่ได้ให้รอตรวจโดยคง deadline และไม่ออกบัตรอัตโนมัติ
+  หาก contract สำคัญพิสูจน์ไม่ได้ให้บล็อก integration boundary นั้น ไม่เปลี่ยนกฎ G-15 เอง
+- ใช้ local doubles หรือ Stripe test mode สำหรับ verification; test event/ผลจากเส้นทางจำลอง
+  ต้องไม่ออกบัตรหรือรับรองยอดเงินจริงใน live mode และไม่ถือว่ามี test account แล้วเท่ากับพร้อม live
+- Refund ยังคง owner อนุมัติและโอนเองตาม R4 รวม late-payment recovery;
+  owner รับภาระ provider fee ตาม F9 ไม่ใช้ราคา Omise เป็นราคา Stripe
+
+หลักฐานภายนอกที่ตรวจ 2026-10-30 (ความสามารถ provider ไม่ใช่หลักฐาน merchant readiness):
+[PromptPay](https://docs.stripe.com/payments/promptpay),
+[custom QR display ผ่าน confirmPromptPayPayment](https://docs.stripe.com/js),
+[PaymentIntent cancellation](https://docs.stripe.com/api/payment_intents/cancel),
+[webhook verification/recovery](https://docs.stripe.com/events/manage-webhook-endpoints),
+[Event timestamp semantics](https://docs.stripe.com/api/events/object).
+เอกสารที่ตรวจยังไม่ยืนยัน field/precision ของ actual paid time หรือ configurable PromptPay QR expiry;
+ไม่ใช้ข้อมูล PayNow/Swish แทน PromptPay
 
 #### Cancellation while payment is pending
 
@@ -155,7 +198,7 @@ Owner อนุมัติหรือไม่อนุมัติตาม�
 | จ่ายจริงหลังเส้นตาย | เต็มยอดที่รับ รวม customer service fee (G-35) |
 | เงินเข้าขณะรอบยกเลิกและยังไม่ออกบัตร | ทันเส้นตายเดิมและจ่ายก่อนยกเลิกคืนราคาบัตร (G-51); จ่ายตั้งแต่ยกเลิกคืนเต็มยอด (G-52); จ่ายหลังเส้นตายเดิมใช้ G-35 |
 
-Owner โอนคืนเอง บันทึกยอด/หลักฐานตาม R4 ไม่มี Omise refund API หรือคำสั่งให้ธนาคารโอนจากเว็บ
+Owner โอนคืนเอง บันทึกยอด/หลักฐานตาม R4 ไม่มี Stripe refund API หรือคำสั่งให้ธนาคารโอนจากเว็บ
 ถ้าโอนไม่สำเร็จ/ยังไม่บันทึกการโอนจริง ให้คงเป็นรอโอน ไม่แสดง completed ไม่คืน QR ให้ใช้ และไม่ปล่อยเงินค้างคืนไป payout
 การแก้หลักฐานหรือ retry การบันทึกเดิมไม่เท่ากับโอนเงินเพิ่มหรืออนุมัติคืนซ้ำ
 
@@ -347,7 +390,7 @@ Offline dataset จำกัดตาม scanner scope ไม่ใส่ buyer 
 ## Non-functional requirements
 
 - ADR-0001: Next.js+TypeScript แอปเดียว PostgreSQL กลางสำหรับสิทธิ์/ยอด/สถานะและตัวนับร่วมที่สำคัญ ไม่ตัดสิน inventory จาก memory เฉพาะเว็บ
-- ADR-0003: Omise/Resend/R2 ตามเดิม; ไม่เพิ่ม Redis, microservice, message broker หรือ provider ใหม่โดยไม่มีเหตุจากข้อกำหนด
+- ADR-0003: Stripe PromptPay/Resend/R2 ตามข้อตกลงล่าสุด; ไม่เพิ่ม Redis, microservice, message broker หรือ provider ใหม่โดยไม่มีเหตุจากข้อกำหนด
 - D-05: ลูกค้า mobile หลังบ้าน desktop พร้อม mobile และ scanner มือถือ/แท็บเล็ตมีกล้อง; critical action/ผล/ยอดเข้าถึงได้บนขนาดที่ตรวจ
 - Security/privacy: ผูกสิทธิ์กับ actor/object จริง เก็บรหัส/ลิงก์ลับในรูปที่ไม่เปิดเผย ตรวจ expiry/one-use ฝั่ง server ตาม ADR-0004 ไม่ให้ cache/file/API รั่วข้ามสิทธิ์
 - Local functional verification มาก่อน deployment; หลาย instance/autoscaling/load verification อยู่ช่วงท้ายตาม ADR-0002 ไม่เลื่อนการตรวจ functional concurrency บน local ที่ทำได้
@@ -479,6 +522,13 @@ AC-01–AC-109 รักษา ID เดิมและปรับตามค�
 - AC-116: Given owner เข้าใช้งานหลังบ้าน /back-office/owner เมื่อเปิดใช้งานผ่านเมนูด้านข้าง (Sidebar) หรือเมนูบนมือถือ Then แสดงรายการทั้ง 12 ผู้จัดการแบ่งตาม 4 หมวดหมู่ (อนุมัติ, การเงิน, ลูกค้า, ระบบ) และแสดงเฉพาะเนื้อหาหมวดหมู่ที่เลือก ไม่แสดงหน้ายาวต่อกันทั้งหมด พร้อมตารางแสดงผลข้อมูลแน่นที่เลื่อนแนวนอนได้บนจอมือถือตาม D-15, D-16, D-18, D-19
 - AC-117: Given ลูกค้าเลือกดูคอนเสิร์ตที่หน้า /events/[id] เมื่อเริ่มกระบวนการซื้อบัตร Then ระบบแยกขั้นตอนเป็น 4 หน้าพร้อม Step Indicator ด้านบน (1. รายละเอียดคอนเสิร์ต -> 2. ห้องรอคิว /events/[id]/queue -> 3. เลือกบัตรและกรอกข้อมูลผู้ซื้อ & ยืนยัน OTP /events/[id]/checkout -> 4. ชำระเงิน PromptPay QR และนับถอยหลัง 15 นาที /orders/[id]/payment) ตาม D-27
 
+- AC-118: Given order ที่ผ่าน OTP/reservation และยังไม่หมดอายุ เมื่อขอชำระผ่าน Stripe PromptPay Then แสดง QR จาก PaymentIntent ที่ผูก order/ยอดสตางค์/THB ในหน้าชำระเงิน TICKET เดิมโดยไม่ส่งไป hosted Checkout
+- AC-119: Given webhook ปลอม ลายเซ็นผิด หรือผล Stripe ไม่ตรง reference/order/ยอด/THB/mode เมื่อรับผล Then ไม่ออกบัตรและไม่บันทึก verified paid จากผลนั้น; ผลที่ยังตรวจไม่ได้คงรอตรวจ
+- AC-120: Given การขอ QR ที่ timeout หรือทำพร้อมกันสำหรับ order เดียว เมื่อ retry/refresh Then ไม่สร้างรายการเก็บเงินซ้ำจากการไม่ทราบผลเดิมและไม่ต่อ deadline; success event ซ้ำหรือผิดลำดับไม่เพิ่ม ticket/ยอด/เคสคืนซ้ำ
+- AC-121: Given QR ที่แสดงแล้ว เมื่อ reservation หมดอายุหรือยกเลิกรอบ Then หยุดเสนอ QR และไม่สร้าง QR ใหม่สำหรับ order เดิม คืน quota ครั้งเดียว และยังประมวลผลเงินจริงที่มาภายหลังตาม T/D/C แม้ cancellation กับ Stripe ไม่สำเร็จหรือแข่งกับ success
+- AC-122: Given Stripe success ที่ยังพิสูจน์เวลาชำระจริงหรือความละเอียดเทียบ D/C ไม่ได้ เมื่อประมวลผล Then คงรอตรวจ ไม่ใช้เวลาสร้างรายการหรือเวลารับ callback แทน และไม่ออกบัตรอัตโนมัติ; เมื่อยืนยัน T ได้ใช้ AC-17/72/73/74/113/114 ตามเดิม
+- AC-123: Given ระบบรับผลใน live mode เมื่อได้รับ test-mode payment/event หรือผลชำระจากเส้นทางจำลอง Then ไม่ออกบัตรหรือเพิ่มยอดรับเงินจริง; verification ใน test mode ไม่ถูกใช้เป็นหลักฐาน live readiness
+
 ## Verification plan
 
 ทุกแถวสถานะ **planned** ไม่ได้รันแอปจากการจัดทำสเปก และไม่มีผลทดสอบที่ใช้รับรอง implementation
@@ -606,7 +656,23 @@ Code review ต้องตรวจขอบเขต สิทธิ์ concur
 | AC-116 | requirement owner navigation; D-15, D-16, D-18, D-19 | E2E local desktop/mobile: สลับกลุ่มเมนู 4 หมวด แสดงเฉพาะหมวดที่เลือก และตรวจตารางเลื่อนแนวนอนบนมือถือ |
 | AC-117 | requirement multi-step purchase; D-27 | E2E local desktop/mobile: ตรวจสอบการนำทางแต่ละขั้นตอน รายละเอียด -> รอคิว -> เลือกบัตรและกรอกข้อมูล -> ชำระเงิน พร้อม Step Indicator |
 
+### Stripe provider verification additions
+
+| AC | Source | Verification |
+| --- | --- | --- |
+| AC-118 | ADR-0003/P1; D-27/D-48/D-50 | Stripe test contract ตรวจ PaymentIntent/QR/reference/ยอด/THB + local integration authorization และ E2E desktop/mobile ที่หน้าเดิม ไม่ redirect ไป hosted Checkout |
+| AC-119 | ADR-0003; AC-16/17 | Integration signed/invalid signature fixtures, wrong order/amount/currency/reference/mode และ provider lookup timeout; ตรวจไม่มี paid/issue จากผลที่ไม่ผ่าน |
+| AC-120 | G-14; ADR-0001/0003 | Integration concurrent create/ambiguous timeout/retry และหลาย event ของ intent เดียว; ตรวจจำนวน provider requests ที่เกิดผล/ยอด/ticket/deadline + E2E refresh |
+| AC-121 | G-34/G-35/G-50–G-52 | Controlled-clock integration + E2E expiry/cancel, saved QR, cancellation failure/success race, delayed verified success; ตรวจ quota ครั้งเดียวและ recovery ตาม T/D/C |
+| AC-122 | G-15; NQ-05 | Provider contract evidence ของ timestamp semantics/precision + integration missing/ambiguous time และ T=D/T=C; ตรวจรอตรวจโดยไม่เดา T และ resolved-time recovery; double ไม่ใช้ปิดข้อพิสูจน์ provider |
+| AC-123 | ADR-0003/P4; local-first | Integration แยก test/live configuration และ forged mode/ผลจากเส้นทางจำลอง; ตรวจไม่มี real-payment state/issue จาก test result; readiness checklist ไม่อ้าง live จาก test pass |
+
 ### Verification environment and evidence limits
+
+- Stripe change impact: AC-15–18/26/70–74/112–114 ต้อง re-verify กับ Stripe พร้อม AC-118–123;
+  TASK-014/015/016/027 และ acceptance mapping เดิมเป็น historical delivery/evidence เท่านั้น
+  ไม่ใช่หลักฐานผ่าน Stripe; ไม่เปิด done tasks ใหม่หรือเปลี่ยนผลเดิม
+- Task planning reconciliation (2026-10-30): [TASK-041–044](../tasks/README.md#stripe-follow-up-2026-10-30) ครอบคลุม AC-118–123 และ Stripe re-verification แล้ว; TASK-041 เป็น contract spike ไม่ใช่หลักฐานว่า provider พร้อมหรือ AC ผ่าน; งานใหม่ยังเป็น todo
 
 - Unit/integration/E2E เริ่ม local ด้วยข้อมูลทดสอบ ใช้ PostgreSQL จริงสำหรับ contention/atomicity และ provider test double หรือ sandbox ที่ตรวจ contract แล้วตามความเหมาะสม
 - Test doubles ควบคุม success time, failure, duplicate/out-of-order และ timeout ได้ แต่ไม่ใช้ผลนั้นรับรองว่า provider production รองรับ field/บัญชีจริงแล้ว
@@ -661,14 +727,14 @@ ADR-0003 → AC-15–AC-20/37/75 และ integration boundaries; ADR-0004 → 
 | NQ-02 | โลโก้จริง blue/token values/icon set/type scale/spacing/radius/shadow/motion และ browser versions สำหรับ visual checks | เลือกภายใน constraints/preferences ตอนออกแบบ/implementation ไม่เริ่ม design interview ใหม่โดยอัตโนมัติ |
 | NQ-03 | Package manager/runtime/framework versions, ORM, auth library, schema/API names, local runner และวิธี bootstrap | เลือกใน task planning/implementation ภายใน ADRs; runner ที่เกี่ยวข้องต้องพร้อม/ผ่านตาม policy ก่อนจบงาน |
 | NQ-04 | Baseline sizes/topology/scaling/backup/retention ยืนยันใน ADR-0002 ฉบับ 2026-10-30 แล้ว; ยังเปิดงบ cloud/estimate รวม IPv4, workload/duration/latency/error targets สำหรับ 200 simultaneous users, cooldown, connection budget ระหว่าง rollout และ RTO/RPO/retention | ต้องพร้อมก่อน production/deployment/scaling work; คงเป็นงานแยก ไม่ใช้ผล local รับรอง capacity หรือบันทึก estimate เป็นราคายืนยัน |
-| NQ-05 | Merchant/PromptPay approval, provider field/precision สำหรับ verified payment-success time, production email domain/peak sending quota และ R2 readiness/pricing ตาม ADR-0003 ฉบับ 2026-10-30 | ตรวจ contract ใน integration work และต้องพร้อมก่อนใช้ production; test double ไม่ใช่หลักฐาน provider readiness; 5–10 วันทำการเป็นระยะเผื่อ ไม่ใช่ approval SLA |
+| NQ-05 | Stripe Live/PromptPay approval (มี test account แล้ว แต่ live ยังไม่ยืนยันตาม P4), provider field/precision สำหรับ verified payment-success time และ QR expiry/cancellation contract, production email domain/peak sending quota และ R2 readiness/pricing ตาม ADR-0003 ฉบับ 2026-10-30 | ตรวจ contract ใน integration work และต้องพร้อมก่อนใช้ production; test double ไม่ใช่หลักฐาน provider readiness; ไม่ย้ายสมมติฐานราคา/ระยะอนุมัติ Omise มาเป็นของ Stripe |
 | NQ-06 | Verified-session TTL, data/local retention, retry schedule, local storage mechanism และขั้นตอน owner ตรวจ contact correction/กระทบยอดเมื่อข้อมูลสูญหาย | กำหนดภายในสิทธิ์ วิธี login/OTP กติกาเงิน และ offline constraints ที่ยืนยัน หากต้องเปลี่ยน product contract ให้ถามก่อน; ไม่เดาว่าเป็นค่าที่ผู้ใช้เลือกแล้ว |
 
 ## Specification quality gate
 
 - Existing owner: อัปเดต SPEC-001 เดิม ไม่สร้างสเปกแข่งขันหรือ implementation tasks
 - Scope/source: ใช้ requirement/CONTEXT/ADR ที่มีแล้ว รวม constraints/preferences ตาม Kind เดิม; ข้ออนุมานด้านความถูกต้องระบุที่มาจาก shared state/สิทธิ์/ยอด
-- Acceptance: 116 AC แบบ unique ID (เก็บ AC-01–AC-109 และเพิ่ม AC-110–AC-116) ทุก AC มีแถว source/verification และเป็น planned ทั้งหมด
+- Acceptance: 123 AC แบบ unique ID (AC-01–AC-123) ทุก AC มีแถว source/verification; AC-118–123 และ Stripe re-verification เป็น planned ไม่ใช่ผลทดสอบ
 - Status: **ready** สำหรับ to-tasks เท่านั้น G-48–G-52 reconcile ครบ ไม่มี blocking decision และผ่านการตรวจโครงสร้าง/traceability/verification mapping ของเอกสาร; ไม่ใช่ผลทดสอบแอปหรือการอนุมัติ implementation
 - Verification: ตรวจโครงสร้างเอกสาร/ลิงก์/coverage ในขั้นเขียนสเปก ไม่อ้างว่าได้รัน unit/integration/E2E หรือ code review ของแอป
 - Local-first: functional work/verification บน local; deployment และ scale validation อยู่ช่วงท้ายตามเดิม
