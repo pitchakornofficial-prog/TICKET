@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { createHmac, randomUUID, timingSafeEqual } from 'node:crypto';
 
 export const STRIPE_API_VERSION = '2026-10-28.endive';
 export const STRIPE_EVENT_API_VERSION = '2026-09-30.endive';
@@ -38,6 +38,29 @@ export interface StripePaymentIntent {
   created: number; // Unix seconds
 }
 
+export interface StripeEvent<T = unknown> {
+  id: string;
+  object: 'event';
+  api_version: string;
+  created: number; // Unix seconds (decision time T per G-53 / P5)
+  data: {
+    object: T;
+  };
+  livemode: boolean;
+  type: string;
+  pending_webhooks?: number;
+  request?: {
+    id: string | null;
+    idempotency_key: string | null;
+  } | null;
+}
+
+export interface StripeWebhookVerificationResult {
+  valid: boolean;
+  timestamp?: number;
+  error?: string;
+}
+
 export interface CreatePromptPayIntentParams {
   orderId: string;
   amountSatang: number;
@@ -49,6 +72,110 @@ export interface StripeClient {
   createPromptPayIntent(params: CreatePromptPayIntentParams): Promise<StripePaymentIntent>;
   retrievePaymentIntent(intentId: string): Promise<StripePaymentIntent>;
   isLiveMode(): boolean;
+}
+
+/**
+ * Verifies a Stripe webhook signature using HMAC-SHA256 and tolerance check.
+ */
+export function verifyStripeWebhookSignature(
+  rawBody: string,
+  signatureHeader: string | null | undefined,
+  secret: string,
+  toleranceSeconds = 300,
+  nowSeconds?: number,
+): StripeWebhookVerificationResult {
+  if (!signatureHeader) {
+    return { valid: false, error: 'Missing Stripe-Signature header' };
+  }
+  if (!secret) {
+    return { valid: false, error: 'Missing webhook secret' };
+  }
+
+  const items = signatureHeader.split(',').map(s => s.trim());
+  let timestamp: number | undefined;
+  const signatures: string[] = [];
+
+  for (const item of items) {
+    const [key, val] = item.split('=');
+    if (key === 't') {
+      const parsed = parseInt(val, 10);
+      if (!Number.isNaN(parsed)) {
+        timestamp = parsed;
+      }
+    } else if (key === 'v1' && val) {
+      signatures.push(val);
+    }
+  }
+
+  if (timestamp === undefined || signatures.length === 0) {
+    return { valid: false, error: 'Unable to extract timestamp and signatures from header' };
+  }
+
+  const currentSec = nowSeconds !== undefined ? nowSeconds : Math.floor(Date.now() / 1000);
+  if (Math.abs(currentSec - timestamp) > toleranceSeconds) {
+    return { valid: false, timestamp, error: 'Timestamp outside the tolerance zone' };
+  }
+
+  const payload = `${timestamp}.${rawBody}`;
+  const expectedSig = createHmac('sha256', secret).update(payload, 'utf8').digest('hex');
+  const expectedBuf = Buffer.from(expectedSig, 'hex');
+
+  let matched = false;
+  for (const sig of signatures) {
+    try {
+      const sigBuf = Buffer.from(sig, 'hex');
+      if (expectedBuf.length === sigBuf.length && timingSafeEqual(expectedBuf, sigBuf)) {
+        matched = true;
+        break;
+      }
+    } catch {
+      // ignore malformed hex
+    }
+  }
+
+  if (!matched) {
+    return { valid: false, timestamp, error: 'No matching signature found' };
+  }
+
+  return { valid: true, timestamp };
+}
+
+/**
+ * Generates a standard Stripe-Signature header for testing or webhooks.
+ */
+export function generateStripeSignatureHeader(
+  rawBody: string,
+  secret: string,
+  timestampSeconds?: number,
+): string {
+  const t = timestampSeconds !== undefined ? timestampSeconds : Math.floor(Date.now() / 1000);
+  const payload = `${t}.${rawBody}`;
+  const sig = createHmac('sha256', secret).update(payload, 'utf8').digest('hex');
+  return `t=${t},v1=${sig}`;
+}
+
+/**
+ * Constructs an authenticated payment_intent.succeeded StripeEvent.
+ */
+export function createStripeSuccessEvent(options: {
+  intent: StripePaymentIntent;
+  eventId?: string;
+  created?: number;
+  livemode?: boolean;
+  apiVersion?: string;
+}): StripeEvent<StripePaymentIntent> {
+  const created = options.created !== undefined ? options.created : Math.floor(Date.now() / 1000);
+  return {
+    id: options.eventId || `evt_test_${randomUUID().replace(/-/g, '').slice(0, 16)}`,
+    object: 'event',
+    api_version: options.apiVersion || STRIPE_EVENT_API_VERSION,
+    created,
+    data: {
+      object: options.intent,
+    },
+    livemode: options.livemode !== undefined ? options.livemode : options.intent.livemode,
+    type: 'payment_intent.succeeded',
+  };
 }
 
 /**
@@ -191,6 +318,53 @@ export class StripeContractDouble implements StripeClient {
     }
     return intent;
   }
+
+  setIntentStatus(intentId: string, status: StripePaymentIntent['status']): void {
+    const intent = this.intents.get(intentId);
+    if (intent) {
+      intent.status = status;
+    }
+  }
+
+  setIntentAmount(intentId: string, amountSatang: number): void {
+    const intent = this.intents.get(intentId);
+    if (intent) {
+      intent.amount = amountSatang;
+    }
+  }
+
+  setIntentCurrency(intentId: string, currency: 'thb'): void {
+    const intent = this.intents.get(intentId);
+    if (intent) {
+      intent.currency = currency;
+    }
+  }
+
+  setIntentOrderId(intentId: string, orderId: string): void {
+    const intent = this.intents.get(intentId);
+    if (intent) {
+      intent.metadata.order_id = orderId;
+    }
+  }
+
+  createSuccessEvent(options: {
+    intentId: string;
+    created?: number;
+    eventId?: string;
+  }): StripeEvent<StripePaymentIntent> {
+    const intent = this.intents.get(options.intentId);
+    if (!intent) {
+      throw new Error(`No such payment_intent: '${options.intentId}' in StripeContractDouble`);
+    }
+    intent.status = 'succeeded';
+    intent.amount_received = intent.amount;
+    return createStripeSuccessEvent({
+      intent,
+      eventId: options.eventId,
+      created: options.created,
+      livemode: this.livemode,
+    });
+  }
 }
 
 /**
@@ -287,6 +461,9 @@ let customStripeClient: StripeClient | null = null;
 export function isStripeLiveMode(): boolean {
   if (customStripeClient) {
     return customStripeClient.isLiveMode();
+  }
+  if (defaultContractDouble.isLiveMode()) {
+    return true;
   }
   const key = process.env.STRIPE_SECRET_KEY || '';
   if (key.startsWith('sk_live_') || process.env.STRIPE_LIVE_MODE === 'true') {

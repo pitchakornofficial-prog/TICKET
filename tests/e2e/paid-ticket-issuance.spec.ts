@@ -8,7 +8,7 @@ test.beforeEach(async ({ context }, testInfo) => {
   await context.setExtraHTTPHeaders({ 'x-forwarded-for': `198.51.100.${base + (nextIp++ % 50)}` });
 });
 
-test.describe('Paid ticket issuance flow (TASK-015, AC-11, AC-16, AC-17, AC-18, AC-19, AC-06)', () => {
+test.describe('Paid ticket issuance flow (TASK-043, AC-119, AC-120, AC-123, AC-124, AC-125, AC-11, AC-16, AC-17, AC-18, AC-19, AC-06)', () => {
   test('guest reserves tickets, pays via PromptPay, and receives distinct tickets with unique QR codes without attendee registration', async ({
     page,
     request,
@@ -25,20 +25,11 @@ test.describe('Paid ticket issuance flow (TASK-015, AC-11, AC-16, AC-17, AC-18, 
     await page.getByRole('button', { name: 'เข้าสู่ระบบ', exact: true }).click();
     await expect(page).toHaveURL('/back-office/organizer');
 
-    await page.getByRole('button', { name: '+ สร้างงานคอนเสิร์ตใหม่' }).click();
-    await page.getByLabel('ชื่องานคอนเสิร์ต').fill(eventTitle);
-    await page.getByLabel('สถานที่จัดงาน').fill('ศูนย์การประชุมแห่งชาติสิริกิติ์');
-    await page.getByRole('button', { name: 'บันทึกข้อมูลร่าง (Draft)' }).click();
-    await expect(page.getByText('บันทึกงานคอนเสิร์ตสำเร็จ')).toBeVisible();
-
-    const eventsRes = await page.request.get('/api/events');
-    const { events } = await eventsRes.json();
-    const createdEvent = events.find((e: { title: string; id: string }) => e.title === eventTitle);
-    expect(createdEvent).toBeDefined();
-
-    // Add session with ticket quota = 40
-    const updateRes = await page.request.put(`/api/events/${createdEvent.id}`, {
+    const createEventRes = await page.request.post('/api/events', {
       data: {
+        title: eventTitle,
+        description: 'คอนเสิร์ตทดสอบการออกบัตรหลังชำระเงินสำเร็จ',
+        location: 'ศูนย์การประชุมแห่งชาติสิริกิติ์',
         limitPerOrder: 4,
         sessions: [
           {
@@ -49,9 +40,9 @@ test.describe('Paid ticket issuance flow (TASK-015, AC-11, AC-16, AC-17, AC-18, 
         ],
       },
     });
-    expect(updateRes.status()).toBe(200);
-    const updatedData = await updateRes.json();
-    const sessionId = updatedData.event.sessions[0].id;
+    expect(createEventRes.status()).toBe(201);
+    const createdEvent = (await createEventRes.json()).event;
+    const sessionId = createdEvent.sessions[0].id;
 
     await page.request.post(`/api/events/${createdEvent.id}?action=submit-session`, {
       data: { sessionId },
@@ -132,6 +123,12 @@ test.describe('Paid ticket issuance flow (TASK-015, AC-11, AC-16, AC-17, AC-18, 
     // 6. PromptPay QR (auto-generated)
     const qrImage = page.locator('#promptpay-qr-image');
     await expect(qrImage).toBeVisible({ timeout: 15000 });
+
+    // AC-16: Unverified payment does not show paid or issue tickets
+    await expect(page.getByText('ชำระเงินสำเร็จ (Paid)')).not.toBeVisible();
+    const ticketsBeforePay = await request.get(`/api/public/checkout/orders/${orderId}/tickets`);
+    expect(ticketsBeforePay.status()).toBe(400);
+
     const simulateBtn = page.locator('#simulate-payment-button');
     await expect(simulateBtn).toBeVisible();
     await simulateBtn.scrollIntoViewIfNeeded();

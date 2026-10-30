@@ -1,6 +1,11 @@
 import { getDatabasePool } from '@/server/database';
-import { getPaymentChargeForOrder, verifyAndProcessPayment } from '@/server/payment';
-import { isStripeLiveMode } from '@/server/stripe';
+import { getPaymentChargeForOrder, processStripeSuccessEvent } from '@/server/payment';
+import {
+  getStripeClient,
+  isStripeLiveMode,
+  createStripeSuccessEvent,
+  StripeContractDouble,
+} from '@/server/stripe';
 
 export const runtime = 'nodejs';
 
@@ -41,13 +46,30 @@ export async function POST(
       );
     }
 
+    const stripe = getStripeClient();
+    if (stripe instanceof StripeContractDouble) {
+      stripe.setIntentStatus(chargeId, 'succeeded');
+      if (body.actualAmount !== undefined) {
+        stripe.setIntentAmount(chargeId, body.actualAmount);
+      }
+      if (body.actualCurrency !== undefined) {
+        stripe.setIntentCurrency(chargeId, body.actualCurrency as 'thb');
+      }
+    }
+
+    const intent = await stripe.retrievePaymentIntent(chargeId);
     const providerPaidAt = body.providerPaidAt ? new Date(body.providerPaidAt) : undefined;
-    const result = await verifyAndProcessPayment(pool, {
-      chargeId,
-      providerPaidAt,
-      actualAmount: body.actualAmount,
-      actualCurrency: body.actualCurrency,
+    const createdSeconds = providerPaidAt
+      ? Math.floor(providerPaidAt.getTime() / 1000)
+      : Math.floor(Date.now() / 1000);
+
+    const testEvent = createStripeSuccessEvent({
+      intent,
+      created: createdSeconds,
+      livemode: false,
     });
+
+    const result = await processStripeSuccessEvent(pool, { event: testEvent });
 
     const isProcessed =
       result.status === 'paid' ||

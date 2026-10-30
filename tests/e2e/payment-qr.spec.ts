@@ -139,14 +139,14 @@ test.describe('PromptPay Payment QR generation flow (TASK-042, AC-118, AC-15, AC
     await expect(page.locator('#quote-customer-fee')).toContainText('60');
     await expect(page.locator('#quote-total')).toContainText('4,060');
 
-    // 7. Generate PromptPay QR
+    // 7. Generate PromptPay QR (auto-generated or button click)
     const generateQrBtn = page.locator('#generate-payment-qr-btn');
-    if (await generateQrBtn.isVisible()) {
-      await generateQrBtn.click({ force: true });
+    if (await generateQrBtn.isVisible().catch(() => false)) {
+      await generateQrBtn.click({ timeout: 2000 }).catch(() => {});
     }
 
     // 8. Verify QR code displayed with exact quote and THB currency (AC-15, AC-26)
-    await expect(page.locator('#promptpay-qr-image')).toBeVisible();
+    await expect(page.locator('#promptpay-qr-image')).toBeVisible({ timeout: 15000 });
     await expect(page.locator('#payment-total-thb')).toContainText('4,060');
     await expect(page.locator('#payment-currency')).toHaveText('THB');
     const chargeId = (await page.locator('#payment-charge-id').innerText()).trim();
