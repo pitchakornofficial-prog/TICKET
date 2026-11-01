@@ -26,23 +26,29 @@ export function CheckoutTimeoutModal({ eventId, isOpen, onRedirect }: CheckoutTi
     }
   }, [eventId, onRedirect, router]);
 
+  // Reset countdown to 5 whenever modal opens
   useEffect(() => {
-    if (!isOpen) return;
+    if (isOpen) {
+      setCountdown(5);
+    }
+  }, [isOpen]);
 
-    setCountdown(5);
+  // Pure countdown timer decrement without side effects
+  useEffect(() => {
+    if (!isOpen || countdown <= 0) return;
+
     const timer = setInterval(() => {
-      setCountdown(prev => {
-        if (prev <= 1) {
-          clearInterval(timer);
-          handleRedirect();
-          return 0;
-        }
-        return prev - 1;
-      });
+      setCountdown(prev => Math.max(0, prev - 1));
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [isOpen, handleRedirect]);
+  }, [isOpen, countdown]);
+
+  // Safely trigger redirect during the effect phase once countdown reaches 0
+  useEffect(() => {
+    if (!isOpen || countdown !== 0) return;
+    handleRedirect();
+  }, [isOpen, countdown, handleRedirect]);
 
   if (!isOpen) return null;
 

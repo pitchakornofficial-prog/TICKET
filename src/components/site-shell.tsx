@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation';
 import { Suspense, type ReactNode } from 'react';
 import { TicketIcon } from './ticket-icon';
 import { NavbarSearch } from './navbar-search';
-import { ShieldCheckIcon } from './icons';
+import { LockIcon } from './icons';
 
 export function SiteShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
@@ -62,9 +62,9 @@ export function SiteShell({ children }: { children: ReactNode }) {
 
           {isFocusedCheckout ? (
             <div className="focused-checkout-badge-wrap">
-              <div className="focused-checkout-security-pill">
-                <ShieldCheckIcon style={{ width: '16px', height: '16px', color: '#16a34a' }} />
-                <span>ระบบสั่งซื้อบัตรปลอดภัย (Secure Checkout)</span>
+              <div className="focused-checkout-security-text">
+                <LockIcon style={{ width: '14px', height: '14px', color: '#64748b' }} />
+                <span>ระบบชำระเงินปลอดภัย 256-bit SSL</span>
               </div>
             </div>
           ) : (

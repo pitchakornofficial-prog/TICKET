@@ -1318,10 +1318,10 @@ export function OrganizerEventsManager({
                       <div className="aspect-preview-card">
                         <div className="aspect-preview-header">
                           <strong className="aspect-preview-title">2. รูปแบนเนอร์แนวยาว</strong>
-                          <span className="aspect-ratio-badge">16:9</span>
+                          <span className="aspect-ratio-badge">21:9</span>
                         </div>
                         <p className="aspect-preview-desc">
-                          ใช้สำหรับภาพพื้นหลังส่วนหัวของหน้ารายละเอียดคอนเสิร์ต (แนะนำ 1920 x 1080 px)
+                          ใช้สำหรับภาพแบนเนอร์แนวยาวของหน้ารายละเอียดคอนเสิร์ต หน้าชำระเงิน และหน้าแรก (แนะนำ 2100 x 900 px หรือสัดส่วน 21:9)
                         </p>
 
                         <div className="aspect-ratio-frame aspect-frame-banner">
@@ -1352,7 +1352,7 @@ export function OrganizerEventsManager({
                             <label className="aspect-dropzone-label">
                               <TicketIcon />
                               <span className="aspect-dropzone-text">คลิกเพื่อเลือกไฟล์รูปภาพแนวยาว</span>
-                              <span className="aspect-dropzone-hint">สัดส่วน 16:9 · JPG, PNG, WEBP</span>
+                              <span className="aspect-dropzone-hint">สัดส่วน 21:9 · JPG, PNG, WEBP</span>
                               <input
                                 id="event-cover-banner"
                                 type="file"
@@ -1516,7 +1516,7 @@ export function OrganizerEventsManager({
             {/* Simulated Public Customer View */}
             <div className="event-detail-page simulated-preview" style={{ pointerEvents: 'none' }}>
               {/* Banner */}
-              <div className="event-cover-banner-wrapper" style={{ height: '220px', borderRadius: '12px', overflow: 'hidden', background: '#0f172a', marginBottom: '1rem' }}>
+              <div className="event-cover-banner-wrapper" style={{ aspectRatio: '21 / 9', maxHeight: '440px', minHeight: '200px', borderRadius: '12px', overflow: 'hidden', background: '#0f172a', marginBottom: '1rem' }}>
                 {coverBannerPreviewUrl || posterPreviewUrl ? (
                   /* biome-ignore lint/performance/noImgElement: live preview */
                   <img src={coverBannerPreviewUrl || posterPreviewUrl || ''} alt="แบนเนอร์คอนเสิร์ต" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />

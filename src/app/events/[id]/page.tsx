@@ -9,7 +9,7 @@ import {
   ArrowLeftIcon,
   InfoIcon,
   ShieldCheckIcon,
-  UsersIcon,
+  SparklesIcon,
 } from '@/components/icons';
 import { getDatabasePool } from '@/server/database';
 import { getPublicEventWithApprovedSessions } from '@/server/events';
@@ -17,6 +17,11 @@ import { formatDate, formatTime, formatBaht } from '@/lib/locale';
 import { PurchaseStepIndicator } from '@/components/purchase-step-indicator';
 import { EventSessionsAccordion, type EventSession } from '@/components/event-sessions-accordion';
 import { PurchaseTermsFaqList } from '@/components/purchase-terms-faq-list';
+import { ExpandableEventDescription } from '@/components/expandable-event-description';
+import { EventProhibitedItemsCarousel } from '@/components/event-prohibited-items-carousel';
+import { EventInteractivePoster } from '@/components/event-interactive-poster';
+import { EventOfficialGallery } from '@/components/event-official-gallery';
+import { ArtistPointerMascot } from '@/components/artist-pointer-mascot';
 
 interface EventDetailPageProps {
   params: Promise<{ id: string }>;
@@ -156,113 +161,146 @@ export default async function EventDetailPage({ params, searchParams }: EventDet
           </div>
         </div>
 
-        <div className="event-hero-meta-grid">
-          <div className="hero-meta-item">
+        {/* Horizontal Meta Cards Track (D-148) */}
+        <div className="hero-meta-cards-track">
+          <div className="hero-meta-card">
             <div className="meta-icon-box"><MapPinIcon /></div>
-            <div>
+            <div className="hero-meta-card-content">
               <strong className="meta-item-label">สถานที่จัดงาน</strong>
               <p className="meta-item-value">{event.location}</p>
             </div>
           </div>
 
           {sessions.length > 0 && (
-            <div className="hero-meta-item">
+            <div className="hero-meta-card">
               <div className="meta-icon-box"><CalendarIcon /></div>
-              <div>
+              <div className="hero-meta-card-content">
                 <strong className="meta-item-label">กำหนดการแสดง</strong>
                 <p className="meta-item-value">
-                  {formatDate(new Date(sessions[0].startTime))}
-                  {sessions.length > 1 && ` ถึง ${formatDate(new Date(sessions[sessions.length - 1].startTime))}`}
-                  {' '}(ทั้งหมด {sessions.length} รอบการแสดง)
+                  <span className="text-nowrap">{formatDate(new Date(sessions[0].startTime))}</span>
+                  {sessions.length > 1 && (
+                    <>
+                      {' '}ถึง{' '}
+                      <span className="text-nowrap">{formatDate(new Date(sessions[sessions.length - 1].startTime))}</span>
+                    </>
+                  )}
+                  {' '}<span className="text-nowrap">(ทั้งหมด {sessions.length} รอบการแสดง)</span>
                 </p>
               </div>
             </div>
           )}
 
-          <div className="hero-meta-item">
+          <div className="hero-meta-card">
             <div className="meta-icon-box"><ClockIcon /></div>
-            <div>
+            <div className="hero-meta-card-content">
               <strong className="meta-item-label">เวลาแสดงและประตูเปิด</strong>
               <p className="meta-item-value">
-                {sessions.length > 0
-                  ? `${formatTime(new Date(sessions[0].startTime))} – ${formatTime(new Date(sessions[0].endTime))} น.`
-                  : 'แจ้งให้ทราบล่วงหน้าก่อนวันงาน'}
-                {sessions[0]?.admissionStartTime && (
-                  <span> (ประตูเปิด {formatTime(new Date(sessions[0].admissionStartTime))} น.)</span>
+                {sessions.length > 0 ? (
+                  <>
+                    <span className="text-nowrap">
+                      {formatTime(new Date(sessions[0].startTime))} – {formatTime(new Date(sessions[0].endTime))} น.
+                    </span>
+                    {sessions[0]?.admissionStartTime && (
+                      <>
+                        {' '}
+                        <span className="text-nowrap">
+                          (ประตูเปิด {formatTime(new Date(sessions[0].admissionStartTime))} น.)
+                        </span>
+                      </>
+                    )}
+                  </>
+                ) : (
+                  'แจ้งให้ทราบล่วงหน้าก่อนวันงาน'
                 )}
               </p>
             </div>
           </div>
 
-          <div className="hero-meta-item">
+          <div className="hero-meta-card">
             <div className="meta-icon-box"><ShieldCheckIcon /></div>
-            <div>
+            <div className="hero-meta-card-content">
               <strong className="meta-item-label">สิทธิ์และเงื่อนไขการจอง</strong>
-              <p className="meta-item-value">จำกัดสูงสุดไม่เกิน {event.limitPerOrder} ใบ / คำสั่งซื้อ · ไม่ต้องสมัครสมาชิก</p>
+              <p className="meta-item-value">
+                <span className="text-nowrap">จำกัดสูงสุดไม่เกิน {event.limitPerOrder} ใบ / คำสั่งซื้อ</span>
+                {' · '}
+                <span className="text-nowrap">ไม่ต้องสมัครสมาชิก</span>
+              </p>
             </div>
           </div>
         </div>
       </header>
 
-      {/* 3. Four Categorized Detail Cards (D-34, D-35) */}
+      {/* 3. Categorized Detail Cards (D-34, D-35, D-145, D-147) */}
       <div className="event-categories-list">
-        {/* Category 1: รายละเอียดงานและไลน์อัปศิลปิน */}
+        {/* Category 1: รายละเอียดคอนเสิร์ตและไลน์อัปศิลปิน (D-145, D-147) */}
         <section className="event-category-card" aria-labelledby="cat-lineup-title">
           <div className="category-header-wrap">
             <h2 id="cat-lineup-title" className="category-heading">
-              <UsersIcon style={{ width: '22px', height: '22px', color: 'var(--blue)' }} />
-              รายละเอียดงานและไลน์อัปศิลปิน (Lineup & Performers)
+              <SparklesIcon style={{ width: '22px', height: '22px', color: 'var(--blue)' }} />
+              รายละเอียดคอนเสิร์ตและไลน์อัปศิลปิน (Lineup & Details)
             </h2>
           </div>
 
           <div className="category-body-content">
             <div className="detail-with-poster-layout">
-              {/* Vertical 4:5 Poster Card (D-35) */}
+              {/* Sharp 4:5 Vertical Poster with Lightbox (D-147) */}
               <div className="detail-poster-card-col">
-                <div className="category-vertical-poster-card">
-                  {event.posterUrl ? (
-                    /* biome-ignore lint/performance/noImgElement: vertical concert poster */
-                    <img
-                      src={event.posterUrl}
-                      alt={`โปสเตอร์ ${event.title}`}
-                      className="category-vertical-poster-img"
-                    />
-                  ) : (
-                    <div className="category-vertical-poster-placeholder">
-                      <TicketIcon />
-                      <span>LIVE POSTER</span>
-                    </div>
-                  )}
-                </div>
+                <EventInteractivePoster
+                  posterUrl={event.posterUrl}
+                  title={event.title}
+                />
               </div>
 
-              {/* Details & Lineup */}
+              {/* Details, 2x2 Lineup Grid & Description (D-145) */}
               <div className="detail-info-col">
-                <h3 className="category-sub-heading" style={{ marginTop: 0 }}>ศิลปินผู้ร่วมสร้างสรรค์การแสดง</h3>
-                <div className="artist-tags-wrap">
-                  <span className="artist-tag main-artist">THE NEON BAND (ศิลปินหลัก)</span>
-                  <span className="artist-tag">ELECTRIC DREAMS</span>
-                  <span className="artist-tag">SPECIAL GUEST DJ</span>
-                  <span className="artist-tag">SYMPHONY ORCHESTRA ENSEMBLE</span>
-                </div>
-                <p className="artist-desc-copy">
-                  เตรียมพบกับการรวมตัวของไลน์อัปศิลปินแถวหน้า เต็มอิ่มกับระบบเสียงสเตอริโอรอบทิศทางและการออกแบบแสงสีเสียงระดับเวิลด์คลาส
-                </p>
-
-                {event.description && (
-                  <div className="category-sub-block">
-                    <h3 className="category-sub-heading">เกี่ยวกับคอนเสิร์ตนี้</h3>
-                    <div className="description-text">
-                      <p>{event.description}</p>
+                <div className="artist-lineup-section">
+                  <h3 className="category-sub-heading" style={{ marginTop: 0 }}>
+                    ศิลปินผู้ร่วมสร้างสรรค์การแสดง (Lineup)
+                  </h3>
+                  <div className="artist-grid-2x2">
+                    <div className="artist-card-item primary-artist">
+                      <span className="artist-role-badge">ศิลปินหลัก</span>
+                      <strong className="artist-name">THE NEON BAND</strong>
+                    </div>
+                    <div className="artist-card-item">
+                      <span className="artist-role-badge guest-badge">ศิลปินรับเชิญ</span>
+                      <strong className="artist-name">ELECTRIC DREAMS</strong>
+                    </div>
+                    <div className="artist-card-item">
+                      <span className="artist-role-badge guest-badge">Special Guest DJ</span>
+                      <strong className="artist-name">DJ NEBULA</strong>
+                    </div>
+                    <div className="artist-card-item">
+                      <span className="artist-role-badge guest-badge">วงออร์เคสตรา</span>
+                      <strong className="artist-name">SYMPHONY ENSEMBLE</strong>
                     </div>
                   </div>
-                )}
+                </div>
+
+                <div className="event-description-section" style={{ marginTop: '1.5rem', paddingTop: '1.25rem', borderTop: '1px solid var(--line)' }}>
+                  <h3 className="category-sub-heading" style={{ marginTop: 0 }}>
+                    เกี่ยวกับคอนเสิร์ตนี้
+                  </h3>
+                  {event.description ? (
+                    <ExpandableEventDescription
+                      title={event.title}
+                      description={event.description}
+                    />
+                  ) : (
+                    <p className="description-text" style={{ color: 'var(--muted)', margin: 0 }}>
+                      ผู้จัดงานยังไม่ได้ระบุรายละเอียดเพิ่มเติมสำหรับคอนเสิร์ตนี้
+                    </p>
+                  )}
+                </div>
               </div>
             </div>
           </div>
         </section>
 
-        {/* Category 2: รอบการแสดงและประเภทบัตร */}
+        {/* Category 2: ภาพและรายละเอียดเพิ่มเติมจากผู้จัด (Event Gallery & Official Details) (D-147) */}
+        <EventOfficialGallery eventTitle={event.title} />
+
+        {/* Category 3: รอบการแสดงและประเภทบัตร */}
         <section className="event-category-card" aria-labelledby="cat-sessions-title">
           <div className="category-header-wrap">
             <h2 id="cat-sessions-title" className="category-heading">
@@ -315,7 +353,10 @@ export default async function EventDetailPage({ params, searchParams }: EventDet
           </div>
         </section>
 
-        {/* Category 4: ข้อกำหนดและข้อชี้แจงในการซื้อบัตร (D-42: Independent FAQ item cards) */}
+        {/* Category 4: กฎระเบียบและสิ่งของต้องห้ามนำเข้างาน (Regulations & Prohibited Items Carousel) (D-146) */}
+        <EventProhibitedItemsCarousel />
+
+        {/* Category 5: ข้อกำหนดและข้อชี้แจงในการซื้อบัตร (D-42: Independent FAQ item cards) */}
         <PurchaseTermsFaqList />
       </div>
 
@@ -328,15 +369,23 @@ export default async function EventDetailPage({ params, searchParams }: EventDet
               {startingPrice > 0 ? `เริ่มต้น ${formatBaht(startingPrice)}` : 'ฟรี'} · จำกัด {event.limitPerOrder} ใบ/คำสั่งซื้อ
             </span>
           </div>
-          <Link
-            href={`/events/${event.id}/queue`}
-            className="primary-button sticky-bar-buy-btn"
-            id="sidebar-buy-tickets-btn"
-            data-testid="enter-queue-cta-btn"
-          >
-            ซื้อบัตร
-          </Link>
+          <div className="sticky-bar-cta-wrap">
+            <Link
+              href={`/events/${event.id}/queue`}
+              className="primary-button sticky-bar-buy-btn"
+              id="sidebar-buy-tickets-btn"
+              data-testid="enter-queue-cta-btn"
+            >
+              ซื้อบัตร
+            </Link>
+          </div>
         </div>
+
+        {/* Viewport-Right Anchored Lisa Mascot (D-158) */}
+        <ArtistPointerMascot
+          singleUrl={(event as { artistPointerUrl?: string }).artistPointerUrl}
+          customUrls={(event as { artistPointerUrls?: string[] }).artistPointerUrls}
+        />
       </aside>
     </div>
   );

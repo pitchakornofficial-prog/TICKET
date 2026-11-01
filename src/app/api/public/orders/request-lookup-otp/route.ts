@@ -39,6 +39,7 @@ export async function POST(request: Request) {
         requestId: result.requestId,
         cooldownSeconds: result.cooldownSeconds,
         expiresInSeconds: result.expiresInSeconds,
+        ...(result.devOtpCode ? { devOtpCode: result.devOtpCode } : {}),
       },
       { status: 200, headers: { 'Cache-Control': 'no-store' } },
     );

@@ -15,7 +15,7 @@ import {
   ReceiptIcon,
 } from './icons';
 import { TicketIcon } from './ticket-icon';
-import { downloadTicketAsPng, downloadAllTicketsAsPng } from './ticket-canvas-download';
+import { downloadTicketAsPng, downloadAllTicketsAsPng, generateTicketDataUrl } from './ticket-canvas-download';
 
 interface OrderSuccessViewProps {
   orderId: string;
@@ -24,11 +24,35 @@ interface OrderSuccessViewProps {
 export function OrderSuccessView({ orderId }: OrderSuccessViewProps) {
   const [reservation, setReservation] = useState<OrderReservationDetail | null>(null);
   const [tickets, setTickets] = useState<TicketDetail[]>([]);
+  const [ticketImageUrls, setTicketImageUrls] = useState<Record<string, string>>({});
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [isDownloadingAll, setIsDownloadingAll] = useState(false);
   const [activeTab, setActiveTab] = useState<'receipt' | 'tickets'>('receipt');
+
+  useEffect(() => {
+    // Generate image URLs for tickets to ensure 100% parity between on-screen view and downloaded file (D-165, D-168)
+    let active = true;
+    if (tickets && tickets.length > 0) {
+      for (const tkt of tickets) {
+        if (!ticketImageUrls[tkt.id]) {
+          generateTicketDataUrl(tkt)
+            .then(url => {
+              if (active) {
+                setTicketImageUrls(prev => ({ ...prev, [tkt.id]: url }));
+              }
+            })
+            .catch(() => {
+              // fallback to html render
+            });
+        }
+      }
+    }
+    return () => {
+      active = false;
+    };
+  }, [tickets, ticketImageUrls]);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -281,9 +305,20 @@ export function OrderSuccessView({ orderId }: OrderSuccessViewProps) {
                     </div>
                   </div>
 
+                  {reservation.discountAmount != null && reservation.discountAmount > 0 && (
+                    <div className="slip-row" style={{ color: '#16a34a' }}>
+                      <span className="slip-label">ส่วนลดสิทธิพิเศษ ม.อุบลฯ (15%):</span>
+                      <strong className="slip-value" style={{ color: '#16a34a' }}>
+                        -{formatBaht(reservation.discountAmount)}
+                      </strong>
+                    </div>
+                  )}
+
                   {reservation.customerFee > 0 && (
                     <div className="slip-row">
-                      <span className="slip-label">ค่าบริการระบบ (5%):</span>
+                      <span className="slip-label">
+                        ค่าบริการระบบ {reservation.customerFeeMode === 'percentage' ? `(${reservation.customerFeeRate}%)` : ''}:
+                      </span>
                       <strong className="slip-value">{formatBaht(reservation.customerFee)}</strong>
                     </div>
                   )}
@@ -364,88 +399,89 @@ export function OrderSuccessView({ orderId }: OrderSuccessViewProps) {
                       className="ticket-card digital-ticket-pass classic-ticket-stub"
                       data-ticket-id={tkt.id}
                       style={
-                        tkt.ticketTemplateUrl || tkt.eventPosterUrl
-                          ? {
-                              backgroundImage: `linear-gradient(rgba(15, 23, 42, 0.88), rgba(15, 23, 42, 0.94)), url(${tkt.ticketTemplateUrl || tkt.eventPosterUrl})`,
-                              backgroundSize: 'cover',
-                              backgroundPosition: 'center',
-                            }
+                        ticketImageUrls[tkt.id]
+                          ? { padding: 0, border: 'none', background: 'transparent', boxShadow: 'none' }
                           : undefined
                       }
                     >
-                      {/* Left: Main Ticket Stub Area */}
-                      <div className="stub-main-body">
-                        <div className="stub-header-row">
-                          <span className="stub-number-tag">
-                            ใบที่ {idx + 1} จาก {tickets.length}
-                          </span>
-                          <span className="ticket-pass-badge">พร้อมใช้งาน</span>
-                        </div>
+                      {ticketImageUrls[tkt.id] ? (
+                        // biome-ignore lint/performance/noImgElement: Direct rendered ticket image (D-165, D-168)
+                        <img
+                          src={ticketImageUrls[tkt.id]}
+                          alt={`บัตรเข้างาน ${tkt.ticketCode} - ${tkt.eventTitle}`}
+                          className="classic-ticket-img"
+                          style={{
+                            width: '100%',
+                            height: 'auto',
+                            display: 'block',
+                            borderRadius: 0,
+                            boxShadow: '0 4px 18px rgba(15, 23, 42, 0.08)',
+                          }}
+                        />
+                      ) : (
+                        <>
+                          {/* Left: Main Ticket Stub Area */}
+                          <div className="stub-main-body">
+                            <h3 className="stub-event-title">{tkt.eventTitle}</h3>
+                            <div className="stub-zone-badge">
+                              {tkt.ticketTypeName}
+                            </div>
 
-                        <h3 className="stub-event-title">{tkt.eventTitle}</h3>
-                        <div className="stub-zone-badge">
-                          {tkt.ticketTypeName} · {formatBaht(tkt.ticketPrice)}
-                        </div>
+                            <div className="stub-meta-grid">
+                              <div className="stub-meta-item">
+                                <span className="stub-meta-label">วันและเวลาแสดง (DATE & TIME)</span>
+                                <strong className="stub-meta-value">
+                                  {formatDate(new Date(tkt.sessionStartTime))} เวลา {formatTime(new Date(tkt.sessionStartTime))}
+                                  {tkt.sessionEndTime ? ` - ${formatTime(new Date(tkt.sessionEndTime))}` : ''}
+                                </strong>
+                              </div>
+                              <div className="stub-meta-item">
+                                <span className="stub-meta-label">สถานที่จัดงาน (VENUE)</span>
+                                <strong className="stub-meta-value">{tkt.location}</strong>
+                              </div>
+                              <div className="stub-meta-item">
+                                <span className="stub-meta-label">ผู้สั่งซื้อ (BUYER)</span>
+                                <strong className="stub-meta-value">{tkt.buyerName}</strong>
+                              </div>
+                              <div className="stub-meta-item">
+                                <span className="stub-meta-label">รหัสบัตร (TICKET CODE)</span>
+                                <strong className="stub-meta-value stub-monospace">{tkt.ticketCode}</strong>
+                              </div>
+                              <div className="stub-meta-item">
+                                <span className="stub-meta-label">หมายเลขคำสั่งซื้อ (ORDER ID)</span>
+                                <strong className="stub-meta-value stub-monospace">{tkt.orderId}</strong>
+                              </div>
+                            </div>
 
-                        <div className="stub-meta-grid">
-                          <div className="stub-meta-item">
-                            <span className="stub-meta-label">วันและเวลาแสดง</span>
-                            <strong className="stub-meta-value">
-                              {new Date(tkt.sessionStartTime).toLocaleString('th-TH', {
-                                dateStyle: 'medium',
-                                timeStyle: 'short',
-                              })}
-                            </strong>
+                            <div className="stub-footer-note">
+                              * กรุณาแสดง QR Code ต่อเจ้าหน้าที่เพื่อสแกนเข้างาน · บัตรนี้สามารถสแกนได้ 1 ครั้ง
+                            </div>
                           </div>
-                          <div className="stub-meta-item">
-                            <span className="stub-meta-label">สถานที่จัดงาน</span>
-                            <strong className="stub-meta-value">{tkt.location}</strong>
+
+                          {/* Divider: Straight Dashed Line (D-163, D-167) */}
+                          <div className="stub-divider-straight stub-notch-divider" aria-hidden="true" />
+
+                          {/* Right: Scan Stub Area */}
+                          <div className="stub-scan-side">
+                            <div className="stub-qr-frame">
+                              {/* biome-ignore lint/performance/noImgElement: Data URL SVG QR representation */}
+                              <img
+                                id={`ticket-qr-${idx}`}
+                                src={tkt.qrCodeUrl}
+                                alt={`QR Code ${tkt.ticketCode}`}
+                                width={160}
+                                height={160}
+                                style={{ display: 'block', margin: '0 auto' }}
+                              />
+                            </div>
+
+                            <div className="stub-code-label">รหัสบัตรสำหรับเข้างาน</div>
+                            <div className="stub-code-value">
+                              <strong id={`ticket-code-${idx}`}>{tkt.ticketCode}</strong>
+                            </div>
                           </div>
-                          <div className="stub-meta-item">
-                            <span className="stub-meta-label">ผู้สั่งซื้อ (Buyer)</span>
-                            <strong className="stub-meta-value">{tkt.buyerName}</strong>
-                          </div>
-                          <div className="stub-meta-item">
-                            <span className="stub-meta-label">หมายเลขคำสั่งซื้อ</span>
-                            <strong className="stub-meta-value stub-monospace">{tkt.orderId}</strong>
-                          </div>
-                        </div>
-
-                        <div className="stub-footer-note">
-                          * กรุณาแสดง QR Code ต่อเจ้าหน้าที่เพื่อสแกนเข้างาน · บัตรนี้สามารถสแกนได้ 1 ครั้ง
-                        </div>
-                      </div>
-
-                      {/* Divider: Notch Cutouts & Dashed Line */}
-                      <div className="stub-notch-divider" aria-hidden="true">
-                        <div className="stub-notch-top" />
-                        <div className="stub-dash-vertical" />
-                        <div className="stub-notch-bottom" />
-                      </div>
-
-                      {/* Right: Scan Stub Area */}
-                      <div className="stub-scan-side">
-                        <div className="stub-qr-frame">
-                          {/* biome-ignore lint/performance/noImgElement: Data URL SVG QR representation */}
-                          <img
-                            id={`ticket-qr-${idx}`}
-                            src={tkt.qrCodeUrl}
-                            alt={`QR Code ${tkt.ticketCode}`}
-                            width={160}
-                            height={160}
-                            style={{ display: 'block', margin: '0 auto' }}
-                          />
-                        </div>
-
-                        <div className="stub-code-label">รหัสบัตรสำหรับเข้างาน</div>
-                        <div className="stub-code-value">
-                          <strong id={`ticket-code-${idx}`}>{tkt.ticketCode}</strong>
-                        </div>
-
-                        <div className="stub-scan-instruction">
-                          <span>SCAN FOR ENTRY</span>
-                        </div>
-                      </div>
+                        </>
+                      )}
                     </div>
 
                     {/* Individual Ticket Download Button (D-52) */}

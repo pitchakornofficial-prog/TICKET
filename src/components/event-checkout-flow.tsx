@@ -173,10 +173,10 @@ export function EventCheckoutFlow({
   }
   const finalTicketSubtotal = Math.max(0, selectedSubtotal - ubuDiscountAmount);
 
-  // 5% customer service fee calculation (D-40)
+  // 5% customer service fee calculation (D-40, D-135: Math.ceil whole Baht)
   const SERVICE_FEE_RATE = 0.05;
   const baseTicketSubtotal = hasUbuPrivilege ? finalTicketSubtotal : selectedSubtotal;
-  const serviceFee = Math.round(baseTicketSubtotal * SERVICE_FEE_RATE);
+  const serviceFee = Math.ceil(baseTicketSubtotal * SERVICE_FEE_RATE);
   const grandTotal = baseTicketSubtotal + serviceFee;
 
   const effectiveLimit = buyerQuota ? buyerQuota.remainingQuota : limitPerOrder;
@@ -399,7 +399,7 @@ export function EventCheckoutFlow({
                       }}
                     >
                       <div className="session-tab-chip-top">
-                        <span className="session-tab-chip-pill">รอบที่ {idx + 1}</span>
+                        <span className="session-tab-chip-pill">รอบ {idx + 1}</span>
                         {isSelected && <span className="session-tab-chip-selected">เลือกแล้ว</span>}
                       </div>
                       <div className="session-tab-chip-date">
@@ -428,7 +428,7 @@ export function EventCheckoutFlow({
               >
                 {sessions.map((s, idx) => (
                   <option key={s.id} value={s.id}>
-                    รอบที่ {idx + 1}: {formatDate(new Date(s.startTime))} ({formatTime(new Date(s.startTime))} - {formatTime(new Date(s.endTime))} น.)
+                    รอบ {idx + 1}: {formatDate(new Date(s.startTime))} ({formatTime(new Date(s.startTime))} - {formatTime(new Date(s.endTime))} น.)
                   </option>
                 ))}
               </select>
@@ -781,15 +781,9 @@ export function EventCheckoutFlow({
                 )}
               </div>
 
-              {hasUbuPrivilege && ubuDiscountAmount > 0 && (
-                <span className="ubu-ticket-pill">
-                  สิทธิ์ ม.อุบลฯ -{formatBaht(ubuDiscountAmount)}
-                </span>
-              )}
-
               <div className="sticky-timer-pill" title="เวลาสำหรับทำรายการจองบัตร">
-                <ClockIcon style={{ width: '15px', height: '15px' }} />
-                <span>เหลือเวลา {formattedTimer} น.</span>
+                <ClockIcon style={{ width: '18px', height: '18px', color: '#0f172a' }} />
+                <span className="sticky-timer-digits">{formattedTimer}</span>
               </div>
 
               <button

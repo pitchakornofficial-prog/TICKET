@@ -15,11 +15,11 @@ import {
   InfoIcon,
   RefreshIcon,
   DownloadIcon,
+  SparklesIcon,
 } from './icons';
 import { AlertIcon } from './alert-icon';
 import { TicketIcon } from './ticket-icon';
-import { GuestOrderRefundManager } from './guest-order-refund-manager';
-import { downloadTicketAsPng, downloadAllTicketsAsPng } from './ticket-canvas-download';
+import { downloadTicketAsPng, downloadAllTicketsAsPng, generateTicketDataUrl } from './ticket-canvas-download';
 
 interface GuestOrderLookupViewProps {
   initialOrderId?: string;
@@ -36,21 +36,65 @@ export function GuestOrderLookupView({ initialOrderId }: GuestOrderLookupViewPro
   const [otpCode, setOtpCode] = useState('');
   const [otpDigits, setOtpDigits] = useState<string[]>(['', '', '', '', '', '']);
   const [cooldownSeconds, setCooldownSeconds] = useState(0);
+  const [devOtpCode, setDevOtpCode] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [token, setToken] = useState<string | null>(null);
+  const [_token, setToken] = useState<string | null>(null);
   const [orders, setOrders] = useState<GuestOrderSummary[]>([]);
   const [buyerInfo, setBuyerInfo] = useState<{ email: string; phone: string; name: string } | null>(
     null,
   );
-  const [expandedOrderId, setExpandedOrderId] = useState<string | null>(initialOrderId || null);
+  const [_expandedOrderId, setExpandedOrderId] = useState<string | null>(initialOrderId || null);
   const [filterTab, setFilterTab] = useState<'all' | 'upcoming' | 'past'>('all');
   const [downloadingTicketId, setDownloadingTicketId] = useState<string | null>(null);
   const [isDownloadingAll, setIsDownloadingAll] = useState(false);
   const [expandedConcertKeys, setExpandedConcertKeys] = useState<Record<string, boolean>>({});
   const [activeTicketTabs, setActiveTicketTabs] = useState<Record<string, number | 'all'>>({});
+  const [ticketImageUrls, setTicketImageUrls] = useState<Record<string, string>>({});
+  const [isPolicyExpanded, setIsPolicyExpanded] = useState(false);
 
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
+
+  // Ephemeral lookup session: clear session when user leaves page (D-166)
+  useEffect(() => {
+    if (mode !== 'orders') return;
+    const clearSession = () => {
+      sessionStorage.removeItem('ticket_guest_lookup_token');
+    };
+    window.addEventListener('pagehide', clearSession);
+    window.addEventListener('beforeunload', clearSession);
+    return () => {
+      window.removeEventListener('pagehide', clearSession);
+      window.removeEventListener('beforeunload', clearSession);
+    };
+  }, [mode]);
+
+  // Automatically generate direct ticket image passes (D-165)
+  useEffect(() => {
+    let active = true;
+    async function loadTicketImages() {
+      for (const ord of orders) {
+        for (const tkt of ord.tickets || []) {
+          if (!ticketImageUrls[tkt.id]) {
+            try {
+              const url = await generateTicketDataUrl(tkt);
+              if (active) {
+                setTicketImageUrls(prev => ({ ...prev, [tkt.id]: url }));
+              }
+            } catch {
+              // fallback is handled
+            }
+          }
+        }
+      }
+    }
+    if (orders.length > 0) {
+      loadTicketImages();
+    }
+    return () => {
+      active = false;
+    };
+  }, [orders, ticketImageUrls]);
 
   // Check existing session token in sessionStorage on load
   useEffect(() => {
@@ -145,6 +189,9 @@ export function GuestOrderLookupView({ initialOrderId }: GuestOrderLookupViewPro
 
       setRequestId(data.requestId);
       setCooldownSeconds(data.cooldownSeconds || 60);
+      if (data.devOtpCode) {
+        setDevOtpCode(data.devOtpCode);
+      }
       setOtpCode('');
       setOtpDigits(['', '', '', '', '', '']);
       setMode('otp');
@@ -312,6 +359,9 @@ export function GuestOrderLookupView({ initialOrderId }: GuestOrderLookupViewPro
 
       setRequestId(data.requestId);
       setCooldownSeconds(data.cooldownSeconds || 60);
+      if (data.devOtpCode) {
+        setDevOtpCode(data.devOtpCode);
+      }
       setIsLoading(false);
     } catch {
       setError('เกิดข้อผิดพลาดในการขอรหัส OTP ใหม่');
@@ -319,8 +369,8 @@ export function GuestOrderLookupView({ initialOrderId }: GuestOrderLookupViewPro
     }
   };
 
-  // Sign out / Clear session
-  const handleClearSession = () => {
+  // Sign out / Clear session helper
+  const _handleClearSession = () => {
     if (typeof window !== 'undefined') {
       sessionStorage.removeItem('ticket_guest_lookup_token');
     }
@@ -412,7 +462,7 @@ export function GuestOrderLookupView({ initialOrderId }: GuestOrderLookupViewPro
     return groups;
   }, []);
 
-  const uniqueBuyerNames = Array.from(new Set(orders.map(o => o.buyerName).filter(Boolean)));
+  const _uniqueBuyerNames = Array.from(new Set(orders.map(o => o.buyerName).filter(Boolean)));
 
   const toggleConcertExpand = (groupKey: string, defaultExpanded: boolean) => {
     setExpandedConcertKeys(prev => {
@@ -525,6 +575,34 @@ export function GuestOrderLookupView({ initialOrderId }: GuestOrderLookupViewPro
             </p>
           </div>
 
+          {/* Dev Test OTP Banner (D-47, D-161) */}
+          {devOtpCode && (
+            <div className="dev-otp-helper-banner" role="status">
+              <div className="dev-otp-helper-label">
+                <SparklesIcon style={{ width: '16px', height: '16px' }} />
+                <span>โหมดทดสอบ Local</span>
+              </div>
+              <div className="dev-otp-code-display">
+                รหัส OTP สำหรับทดสอบ: <strong id="dev-otp-value">{devOtpCode}</strong>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  const chars = devOtpCode.slice(0, 6).split('');
+                  const nextDigits = ['', '', '', '', '', ''];
+                  for (let i = 0; i < chars.length; i++) nextDigits[i] = chars[i];
+                  setOtpDigits(nextDigits);
+                  setOtpCode(devOtpCode);
+                  inputRefs.current[5]?.focus();
+                }}
+                className="dev-otp-autofill-btn"
+                id="dev-otp-autofill-btn"
+              >
+                คลิกเพื่อกรอกอัตโนมัติ
+              </button>
+            </div>
+          )}
+
           {error && (
             <div className="lookup-notice-box lookup-notice-error">
               <span style={{ display: 'inline-flex', flexShrink: 0, marginTop: '2px' }}>
@@ -633,34 +711,16 @@ export function GuestOrderLookupView({ initialOrderId }: GuestOrderLookupViewPro
       {/* Mode 3: Modern Concert-Grouped Orders View */}
       {mode === 'orders' && (
         <div>
-          {/* Active Session Header Bar */}
+          {/* Active Session Header Bar (D-166) */}
           <div className="lookup-session-header">
             <div className="lookup-session-user">
               <div className="lookup-session-avatar">
-                <TicketIcon style={{ width: '22px', height: '22px' }} />
+                <TicketIcon style={{ width: '24px', height: '24px', color: '#0f172a' }} />
               </div>
-              <div>
-                <div className="lookup-session-name">
-                  ผู้ซื้อ: {buyerInfo?.name || 'ลูกค้า TICKET'}
-                  {uniqueBuyerNames.length > 1 && (
-                    <span style={{ fontSize: '0.8rem', fontWeight: 500, color: '#64748b', marginLeft: '6px' }}>
-                      ({uniqueBuyerNames.length} ชื่อตามคำสั่งซื้อ)
-                    </span>
-                  )}
-                </div>
-                <div className="lookup-session-contact">
-                  อีเมล: {buyerInfo?.email} · โทรศัพท์: {buyerInfo?.phone}
-                </div>
+              <div className="lookup-session-contact-prominent">
+                อีเมล: {buyerInfo?.email} · โทรศัพท์: {buyerInfo?.phone}
               </div>
             </div>
-
-            <button
-              type="button"
-              onClick={handleClearSession}
-              className="lookup-signout-btn"
-            >
-              ออกจากระบบค้นหา
-            </button>
           </div>
 
           {/* Filter Switcher Tabs */}
@@ -739,25 +799,13 @@ export function GuestOrderLookupView({ initialOrderId }: GuestOrderLookupViewPro
                       </div>
 
                       <div className="lookup-concert-badge-group">
-                        <span className={`lookup-status-pill ${group.isUpcoming ? 'upcoming' : 'past'}`}>
-                          {group.isUpcoming ? 'กำลังจะมาถึง' : 'เสร็จสิ้นแล้ว'}
-                        </span>
-                        {group.allPaidTickets.length > 0 && (
-                          <span
-                            className="lookup-status-pill upcoming"
-                            style={{ background: '#f0fdf4', color: '#166534', borderColor: '#bbf7d0' }}
-                          >
-                            ตั๋วพร้อมใช้ {group.allPaidTickets.length} ใบ
-                          </span>
-                        )}
-
                         <button
                           type="button"
                           onClick={() => toggleConcertExpand(group.groupKey, groupIdx === 0)}
                           className="concert-toggle-btn"
                         >
                           <span>{isConcertExpanded ? 'ย่อเก็บ' : `ดูตั๋วเข้างาน (${group.allPaidTickets.length} ใบ)`}</span>
-                          <span style={{ fontSize: '0.75rem' }}>{isConcertExpanded ? '▲' : '▼'}</span>
+                          <span style={{ fontSize: '1.1rem', fontWeight: 800, marginLeft: '6px', lineHeight: 1 }}>{isConcertExpanded ? '−' : '+'}</span>
                         </button>
                       </div>
                     </div>
@@ -765,21 +813,18 @@ export function GuestOrderLookupView({ initialOrderId }: GuestOrderLookupViewPro
                     {/* Concert Body (Expandable) */}
                     {isConcertExpanded && (
                       <div className="lookup-concert-body">
-                        {group.orders.map(order => {
+                        {group.orders.map((order, orderIdx) => {
                           const isPaid = order.status === 'paid';
-                          const isExpanded = expandedOrderId === order.id || orders.length === 1;
                           const activeTicketTab = activeTicketTabs[order.id] ?? 0;
 
                           return (
                             <div
                               key={order.id}
                               id={`order-${order.id}`}
-                              className="order-card"
+                              className="lookup-order-flat"
                               style={{
-                                backgroundColor: '#ffffff',
-                                borderRadius: '16px',
-                                border: '1px solid #e2e8f0',
-                                padding: '1.5rem',
+                                borderTop: orderIdx > 0 ? '1px dashed #e2e8f0' : 'none',
+                                paddingTop: orderIdx > 0 ? '1.75rem' : '0',
                                 marginBottom: '1.5rem',
                               }}
                             >
@@ -802,9 +847,6 @@ export function GuestOrderLookupView({ initialOrderId }: GuestOrderLookupViewPro
                                   </div>
                                   <div style={{ fontSize: '1.15rem', fontWeight: 800, color: '#0f172a', fontFamily: 'monospace' }}>
                                     {order.id}
-                                  </div>
-                                  <div style={{ fontSize: '0.82rem', color: '#475569', marginTop: '3px' }}>
-                                    ผู้สั่งซื้อ: <strong style={{ color: '#0f172a' }}>{order.buyerName}</strong>
                                   </div>
                                 </div>
 
@@ -1032,93 +1074,88 @@ export function GuestOrderLookupView({ initialOrderId }: GuestOrderLookupViewPro
                                           className="ticket-card digital-ticket-pass classic-ticket-stub"
                                           data-ticket-id={tkt.id}
                                           style={
-                                            tkt.ticketTemplateUrl || tkt.eventPosterUrl
-                                              ? {
-                                                  backgroundImage: `linear-gradient(rgba(15, 23, 42, 0.88), rgba(15, 23, 42, 0.94)), url(${tkt.ticketTemplateUrl || tkt.eventPosterUrl})`,
-                                                  backgroundSize: 'cover',
-                                                  backgroundPosition: 'center',
-                                                }
+                                            ticketImageUrls[tkt.id]
+                                              ? { padding: 0, border: 'none', background: 'transparent', boxShadow: 'none' }
                                               : undefined
                                           }
                                         >
-                                          {/* Left: Main Ticket Stub Area */}
-                                          <div className="stub-main-body">
-                                            <div className="stub-header-row">
-                                              <span className="stub-number-tag">
-                                                ใบที่ {idx + 1} จาก {order.tickets.length}
-                                              </span>
-                                              <span
-                                                className="ticket-pass-badge"
-                                                style={{
-                                                  backgroundColor: tkt.admissionStatus === 'inside' ? '#15803d' : '#2563eb',
-                                                  color: '#ffffff',
-                                                }}
-                                              >
-                                                {tkt.admissionStatus === 'inside' ? 'เข้างานแล้ว' : 'ยังไม่เข้างาน'}
-                                              </span>
-                                            </div>
+                                          {ticketImageUrls[tkt.id] ? (
+                                            // biome-ignore lint/performance/noImgElement: Direct rendered ticket image (D-165)
+                                            <img
+                                              src={ticketImageUrls[tkt.id]}
+                                              alt={`บัตรเข้างาน ${tkt.ticketCode} - ${tkt.eventTitle || order.eventTitle}`}
+                                              className="classic-ticket-img"
+                                              style={{
+                                                width: '100%',
+                                                height: 'auto',
+                                                display: 'block',
+                                                borderRadius: 0,
+                                                boxShadow: '0 4px 18px rgba(15, 23, 42, 0.08)',
+                                              }}
+                                            />
+                                          ) : (
+                                            <>
+                                              {/* Left: Main Ticket Stub Area */}
+                                              <div className="stub-main-body">
+                                                <div className="stub-event-title">{tkt.eventTitle || order.eventTitle}</div>
+                                                <div className="stub-zone-badge">
+                                                  {tkt.ticketTypeName}
+                                                </div>
 
-                                            <div className="stub-event-title">{tkt.eventTitle || order.eventTitle}</div>
-                                            <div className="stub-zone-badge">
-                                              {tkt.ticketTypeName} · {formatBaht(tkt.ticketPrice)}
-                                            </div>
+                                                <div className="stub-meta-grid">
+                                                  <div className="stub-meta-item">
+                                                    <span className="stub-meta-label">วันและเวลาแสดง (DATE & TIME)</span>
+                                                    <strong className="stub-meta-value">
+                                                      {formatDate(new Date(tkt.sessionStartTime || order.sessionStartTime))} เวลา {formatTime(new Date(tkt.sessionStartTime || order.sessionStartTime))}{tkt.sessionEndTime || order.sessionEndTime ? ` - ${formatTime(new Date(tkt.sessionEndTime || order.sessionEndTime))}` : ''}
+                                                    </strong>
+                                                  </div>
+                                                  <div className="stub-meta-item">
+                                                    <span className="stub-meta-label">สถานที่จัดงาน (VENUE)</span>
+                                                    <strong className="stub-meta-value">{tkt.location || order.location}</strong>
+                                                  </div>
+                                                  <div className="stub-meta-item">
+                                                    <span className="stub-meta-label">ผู้สั่งซื้อ (BUYER)</span>
+                                                    <strong className="stub-meta-value">{tkt.buyerName || order.buyerName}</strong>
+                                                  </div>
+                                                  <div className="stub-meta-item">
+                                                    <span className="stub-meta-label">รหัสบัตร (TICKET CODE)</span>
+                                                    <strong className="stub-meta-value stub-monospace">{tkt.ticketCode}</strong>
+                                                  </div>
+                                                  <div className="stub-meta-item">
+                                                    <span className="stub-meta-label">หมายเลขคำสั่งซื้อ (ORDER ID)</span>
+                                                    <strong className="stub-meta-value stub-monospace">{tkt.orderId || order.id}</strong>
+                                                  </div>
+                                                </div>
 
-                                            <div className="stub-meta-grid">
-                                              <div className="stub-meta-item">
-                                                <span className="stub-meta-label">วันและเวลาแสดง</span>
-                                                <strong className="stub-meta-value">
-                                                  {formatDate(new Date(tkt.sessionStartTime || order.sessionStartTime))} เวลา {formatTime(new Date(tkt.sessionStartTime || order.sessionStartTime))} - {formatTime(new Date(tkt.sessionEndTime || order.sessionEndTime))}
-                                                </strong>
+                                                <div className="stub-footer-note">
+                                                  * กรุณาแสดง QR Code ต่อเจ้าหน้าที่เพื่อสแกนเข้างาน · บัตรนี้สามารถสแกนได้ 1 ครั้ง
+                                                </div>
                                               </div>
-                                              <div className="stub-meta-item">
-                                                <span className="stub-meta-label">สถานที่จัดงาน</span>
-                                                <strong className="stub-meta-value">{tkt.location || order.location}</strong>
+
+                                              {/* Divider: Straight Dashed Line (D-163) */}
+                                              <div className="stub-divider-straight" aria-hidden="true" />
+
+                                              {/* Right: Scan Stub Area */}
+                                              <div className="stub-scan-side">
+                                                <div className="stub-qr-frame">
+                                                  {/* biome-ignore lint/performance/noImgElement: Data URL SVG QR representation */}
+                                                  <img
+                                                    id={`ticket-qr-${tkt.id}`}
+                                                    src={tkt.qrCodeUrl}
+                                                    alt={`QR Code บัตร ${tkt.ticketCode}`}
+                                                    width={160}
+                                                    height={160}
+                                                    style={{ display: 'block', margin: '0 auto' }}
+                                                  />
+                                                </div>
+
+                                                <div className="stub-code-label">รหัสบัตรสำหรับเข้างาน</div>
+                                                <div className="stub-code-value">
+                                                  <strong id={`ticket-code-${tkt.id}`}>{tkt.ticketCode}</strong>
+                                                </div>
                                               </div>
-                                              <div className="stub-meta-item">
-                                                <span className="stub-meta-label">ผู้สั่งซื้อ (Buyer)</span>
-                                                <strong className="stub-meta-value">{tkt.buyerName || order.buyerName}</strong>
-                                              </div>
-                                              <div className="stub-meta-item">
-                                                <span className="stub-meta-label">รหัสบัตร</span>
-                                                <strong className="stub-meta-value stub-monospace">{tkt.ticketCode}</strong>
-                                              </div>
-                                            </div>
-
-                                            <div className="stub-footer-note">
-                                              * กรุณาแสดง QR Code ต่อเจ้าหน้าที่เพื่อสแกนเข้างาน · บัตรนี้สามารถสแกนได้ 1 ครั้ง
-                                            </div>
-                                          </div>
-
-                                          {/* Divider: Notch Cutouts & Dashed Line */}
-                                          <div className="stub-notch-divider" aria-hidden="true">
-                                            <div className="stub-notch-top" />
-                                            <div className="stub-dash-vertical" />
-                                            <div className="stub-notch-bottom" />
-                                          </div>
-
-                                          {/* Right: Scan Stub Area */}
-                                          <div className="stub-scan-side">
-                                            <div className="stub-qr-frame">
-                                              {/* biome-ignore lint/performance/noImgElement: Data URL SVG QR representation */}
-                                              <img
-                                                id={`ticket-qr-${tkt.id}`}
-                                                src={tkt.qrCodeUrl}
-                                                alt={`QR Code บัตร ${tkt.ticketCode}`}
-                                                width={160}
-                                                height={160}
-                                                style={{ display: 'block', margin: '0 auto' }}
-                                              />
-                                            </div>
-
-                                            <div className="stub-code-label">รหัสบัตรสำหรับเข้างาน</div>
-                                            <div className="stub-code-value">
-                                              <strong id={`ticket-code-${tkt.id}`}>{tkt.ticketCode}</strong>
-                                            </div>
-
-                                            <div className="stub-scan-instruction">
-                                              <span>SCAN FOR ENTRY</span>
-                                            </div>
-                                          </div>
+                                            </>
+                                          )}
                                         </div>
 
                                         {/* Action Bar: Download PNG Button */}
@@ -1134,7 +1171,7 @@ export function GuestOrderLookupView({ initialOrderId }: GuestOrderLookupViewPro
                                             <span>
                                               {downloadingTicketId === tkt.id
                                                 ? 'กำลังบันทึกรูป...'
-                                                : 'บันทึกรูปบัตร PNG (1200 x 500 px)'}
+                                                : 'บันทึกรูปบัตร PNG'}
                                             </span>
                                           </button>
                                         </div>
@@ -1145,76 +1182,47 @@ export function GuestOrderLookupView({ initialOrderId }: GuestOrderLookupViewPro
                               )}
 
                               {/* Order Details & Refund Integration */}
-                              <div className="lookup-order-accordions">
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.85rem' }}>
-                                  <span style={{ fontSize: '0.92rem', fontWeight: 700, color: '#334155' }}>
+                              {/* Order Details & Financial Summary (D-162) */}
+                              <div className="lookup-order-accordions" style={{ marginTop: '1.75rem' }}>
+                                <div style={{ marginBottom: '0.85rem' }}>
+                                  <span style={{ fontSize: '0.95rem', fontWeight: 700, color: '#334155' }}>
                                     รายละเอียดคำสั่งซื้อและการเงิน
                                   </span>
-                                  <button
-                                    type="button"
-                                    onClick={() => setExpandedOrderId(isExpanded ? null : order.id)}
-                                    style={{
-                                      background: 'none',
-                                      border: '1px solid #cbd5e1',
-                                      borderRadius: '6px',
-                                      padding: '0.35rem 0.85rem',
-                                      fontSize: '0.82rem',
-                                      color: '#475569',
-                                      cursor: 'pointer',
-                                    }}
-                                  >
-                                    {isExpanded ? 'ซ่อนรายละเอียด' : 'ดูรายละเอียด'}
-                                  </button>
                                 </div>
 
-                                {isExpanded && (
-                                  <div>
-                                    <div style={{ backgroundColor: '#f8fafc', borderRadius: '10px', padding: '1.15rem 1.25rem', fontSize: '0.88rem', border: '1px solid #e2e8f0' }}>
-                                      <h4 style={{ fontSize: '0.92rem', fontWeight: 700, color: '#0f172a', margin: '0 0 0.65rem 0' }}>
-                                        สรุปยอดเงิน
-                                      </h4>
-                                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.4rem' }}>
-                                        <span style={{ color: '#64748b' }}>ราคารวมบัตร</span>
-                                        <span style={{ fontWeight: 600 }}>{formatBaht(order.subtotal)}</span>
+                                <div style={{ backgroundColor: '#f8fafc', borderRadius: '10px', padding: '1.15rem 1.25rem', fontSize: '0.88rem', border: '1px solid #e2e8f0' }}>
+                                  <h4 style={{ fontSize: '0.92rem', fontWeight: 700, color: '#0f172a', margin: '0 0 0.65rem 0' }}>
+                                    สรุปยอดเงิน
+                                  </h4>
+                                  {order.items && order.items.length > 0 ? (
+                                    order.items.map(item => (
+                                      <div key={item.id || item.ticketTypeId} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.4rem' }}>
+                                        <span style={{ color: '#64748b' }}>{item.ticketTypeName} x {item.quantity} ใบ</span>
+                                        <span style={{ fontWeight: 600 }}>{formatBaht(item.subtotal)}</span>
                                       </div>
-                                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.4rem' }}>
-                                        <span style={{ color: '#64748b' }}>ค่าบริการลูกค้า</span>
-                                        <span>{formatBaht(order.customerFee)}</span>
-                                      </div>
-                                      <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid #e2e8f0', paddingTop: '0.55rem', marginTop: '0.55rem', fontSize: '1.02rem', fontWeight: 800, color: '#0f172a' }}>
-                                        <span>ยอดชำระทั้งหมด</span>
-                                        <span style={{ color: '#1848ed' }}>{formatBaht(order.total)}</span>
-                                      </div>
+                                    ))
+                                  ) : (
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.4rem' }}>
+                                      <span style={{ color: '#64748b' }}>{order.tickets[0]?.ticketTypeName || 'บัตรเข้าชม'} x {order.tickets.length} ใบ</span>
+                                      <span style={{ fontWeight: 600 }}>{formatBaht(order.subtotal)}</span>
                                     </div>
+                                  )}
 
-                                    <div style={{ marginTop: '1rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem' }}>
-                                      <a
-                                        href={`/events/${order.eventId}`}
-                                        style={{ fontSize: '0.85rem', color: '#1848ed', textDecoration: 'none', fontWeight: 700 }}
-                                      >
-                                        ไปยังหน้ารายละเอียดคอนเสิร์ต &rarr;
-                                      </a>
-
-                                      {isPaid && (
-                                        <div style={{ fontSize: '0.82rem', color: '#64748b' }}>
-                                          <span style={{ marginRight: '0.45rem' }}>ต้องการขอคืนเงิน?</span>
-                                          <a href="/refund-policy" style={{ color: '#475569', textDecoration: 'underline' }}>
-                                            อ่านนโยบายและเงื่อนไขการขอคืนเงิน
-                                          </a>
-                                        </div>
-                                      )}
+                                  {order.discountAmount > 0 && (
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.4rem', color: '#16a34a' }}>
+                                      <span>ส่วนลด</span>
+                                      <span style={{ fontWeight: 600 }}>-{formatBaht(order.discountAmount)}</span>
                                     </div>
-
-                                    {isPaid && token && (
-                                      <div style={{ marginTop: '1.25rem' }}>
-                                        <GuestOrderRefundManager
-                                          orderId={order.id}
-                                          sessionToken={token}
-                                        />
-                                      </div>
-                                    )}
+                                  )}
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.4rem' }}>
+                                    <span style={{ color: '#64748b' }}>ค่าบริการลูกค้า</span>
+                                    <span>{formatBaht(order.customerFee)}</span>
                                   </div>
-                                )}
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid #e2e8f0', paddingTop: '0.55rem', marginTop: '0.55rem', fontSize: '1.02rem', fontWeight: 800, color: '#0f172a' }}>
+                                    <span>ยอดชำระทั้งหมด</span>
+                                    <span style={{ color: '#1848ed' }}>{formatBaht(order.total)}</span>
+                                  </div>
+                                </div>
                               </div>
                             </div>
                           );
@@ -1226,6 +1234,55 @@ export function GuestOrderLookupView({ initialOrderId }: GuestOrderLookupViewPro
               })}
             </div>
           )}
+
+          {/* Standalone Refund & Concert Policy Card (D-166) */}
+          <div className="lookup-policy-card standalone-policy-card" style={{ marginTop: '2rem' }}>
+            <button
+              type="button"
+              onClick={() => setIsPolicyExpanded(prev => !prev)}
+              className="lookup-policy-summary"
+              style={{
+                width: '100%',
+                background: 'none',
+                border: 'none',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                padding: '1rem 1.35rem',
+                cursor: 'pointer',
+                textAlign: 'left',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+                <InfoIcon style={{ width: '18px', height: '18px', color: '#0f172a', flexShrink: 0 }} />
+                <span style={{ fontWeight: 700, fontSize: '0.95rem', color: '#0f172a' }}>
+                  นโยบายและเงื่อนไขการขอคืนเงิน
+                </span>
+              </div>
+              <span style={{ fontSize: '1.25rem', fontWeight: 800, color: '#0f172a', lineHeight: 1 }}>
+                {isPolicyExpanded ? '−' : '+'}
+              </span>
+            </button>
+            {isPolicyExpanded && (
+              <div className="lookup-policy-content" style={{ padding: '0 1.35rem 1.25rem 1.35rem' }}>
+                <p style={{ margin: '0 0 0.5rem 0' }}>
+                  การขอคืนเงินสามารถทำได้ตามเงื่อนไขที่ผู้จัดงานกำหนด โดยต้องยื่นคำขอล่วงหน้าก่อนถึงวันเริ่มการแสดงอย่างน้อย 168 ชั่วโมง (7 วันทำการ) หรือตามกรอบระยะเวลาของคอนเสิร์ต
+                </p>
+                <p style={{ margin: '0 0 0.85rem 0' }}>
+                  ระบบจะดำเนินการคืนเงินเข้าสู่บัญชีเดิมที่ใช้ในการสั่งซื้อ บัตรที่ใช้สแกนเข้างานแล้ว หรือเกินระยะเวลาที่กำหนดจะไม่สามารถยื่นขอคืนเงินได้
+                </p>
+                <div>
+                  <a
+                    href="/refund-policy"
+                    className="lookup-policy-link"
+                    style={{ fontSize: '0.85rem', color: '#0f172a', fontWeight: 600, textDecoration: 'underline' }}
+                  >
+                    อ่านนโยบายและเงื่อนไขการขอคืนเงินฉบับเต็ม
+                  </a>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>

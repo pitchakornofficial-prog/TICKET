@@ -81,4 +81,30 @@ describe('Navbar Search & Instant Home Transformation (AC-01, G-47)', () => {
     expect(globalsCss).toContain('.search-filters-toolbar');
     expect(globalsCss).toContain('.search-results-grid');
   });
+
+  it('implements D-143: Batched Infinite Scroll and Floating Back-to-Top Button for concert catalog', () => {
+    const catalogComponent = readFileSync(
+      join(rootDir, 'src/components/home-concert-catalog.tsx'),
+      'utf8',
+    );
+    expect(catalogComponent).toContain('BATCH_SIZE');
+    expect(catalogComponent).toContain('catalog-events-grid');
+    expect(catalogComponent).toContain('infinite-scroll-sentinel');
+    expect(catalogComponent).toContain('all-events-loaded-msg');
+    expect(catalogComponent).toContain('floating-back-to-top');
+    expect(catalogComponent).toContain('ChevronUpIcon');
+    expect(catalogComponent).toContain('เลื่อนกลับขึ้นด้านบน');
+    expect(catalogComponent).not.toMatch(/\p{Extended_Pictographic}/u);
+
+    const globalsCss = readFileSync(
+      join(rootDir, 'src/app/globals.css'),
+      'utf8',
+    );
+    expect(globalsCss).toContain('.catalog-events-grid');
+    expect(globalsCss).toContain('.catalog-card-item');
+    expect(globalsCss).toContain('.infinite-scroll-sentinel');
+    expect(globalsCss).toContain('.all-events-loaded-msg');
+    expect(globalsCss).toContain('.floating-back-to-top');
+    expect(globalsCss).toContain('.floating-back-to-top-icon');
+  });
 });

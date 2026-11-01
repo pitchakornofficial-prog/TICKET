@@ -132,4 +132,42 @@ describe('Unified Atomic UI Design System (D-117)', () => {
     expect(css).toContain('.ui-tabs');
     expect(css).toContain('.ui-tab-trigger-active');
   });
+
+  it('verifies OrderSuccessView minimalist ticket pass parity with D-167', () => {
+    const content = readFileSync(join(rootDir, 'src/components/order-success-view.tsx'), 'utf8');
+
+    // 1. Pure white pass, no background image linear-gradient
+    expect(content).not.toContain('backgroundImage: linear-gradient');
+    expect(content).not.toContain('tkt.ticketTemplateUrl || tkt.eventPosterUrl');
+
+    // 2. Eliminates decorative noise and badges
+    expect(content).not.toContain('stub-number-tag');
+    expect(content).not.toContain('พร้อมใช้งาน');
+    expect(content).not.toContain('SCAN FOR ENTRY');
+    expect(content).not.toContain('stub-scan-instruction');
+
+    // 3. Zone name without price
+    expect(content).toContain('{tkt.ticketTypeName}');
+    expect(content).not.toContain('{tkt.ticketTypeName} · {formatBaht(tkt.ticketPrice)}');
+
+    // 4. Straight dashed divider with test-compatible classes
+    expect(content).toContain('stub-divider-straight stub-notch-divider');
+    expect(content).not.toContain('stub-notch-top');
+    expect(content).not.toContain('stub-notch-bottom');
+
+    // 5. Bilingual labels and metadata
+    expect(content).toContain('วันและเวลาแสดง (DATE & TIME)');
+    expect(content).toContain('สถานที่จัดงาน (VENUE)');
+    expect(content).toContain('ผู้สั่งซื้อ (BUYER)');
+    expect(content).toContain('รหัสบัตร (TICKET CODE)');
+    expect(content).toContain('หมายเลขคำสั่งซื้อ (ORDER ID)');
+
+    // 6. Direct image rendering from canvas data url (D-165, D-168)
+    expect(content).toContain('generateTicketDataUrl');
+    expect(content).toContain('ticketImageUrls');
+    expect(content).toContain('classic-ticket-img');
+
+    // 7. Zero Emojis (D-14)
+    expect(content).not.toMatch(/\p{Extended_Pictographic}/u);
+  });
 });

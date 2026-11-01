@@ -49,7 +49,7 @@ export function EventSessionsAccordion({ sessions }: EventSessionsAccordionProps
 
   return (
     <div className="sessions-accordion-list" data-testid="sessions-accordion">
-      {sessions.map((session, index) => {
+      {sessions.map(session => {
         const isOpen = Boolean(openIds[session.id]);
         const startTime = new Date(session.startTime);
         const endTime = new Date(session.endTime);
@@ -76,21 +76,18 @@ export function EventSessionsAccordion({ sessions }: EventSessionsAccordionProps
               aria-controls={`session-panel-${session.id}`}
             >
               <div className="session-trigger-left">
-                <div className="session-round-pill">
-                  รอบที่ {index + 1}
-                </div>
                 <div>
                   <h3 className="session-accordion-date">
                     {formatDate(startTime)}
                   </h3>
                   <div className="session-accordion-meta">
-                    <span className="session-meta-pill">
-                      <ClockIcon style={{ width: '15px', height: '15px' }} />
-                      เวลาแสดง: {formatTime(startTime)} – {formatTime(endTime)} น.
+                    <span className="session-meta-time-text">
+                      <ClockIcon style={{ width: '15px', height: '15px', flexShrink: 0 }} />
+                      <span>เวลาแสดง: {formatTime(startTime)} – {formatTime(endTime)} น.</span>
                     </span>
                     {session.admissionStartTime && (
-                      <span className="session-meta-pill session-meta-admission">
-                        ประตูเปิด: {formatTime(new Date(session.admissionStartTime))} น.
+                      <span className="session-meta-admission-text">
+                        (ประตูเปิด {formatTime(new Date(session.admissionStartTime))} น.)
                       </span>
                     )}
                   </div>
@@ -120,6 +117,7 @@ export function EventSessionsAccordion({ sessions }: EventSessionsAccordionProps
                         <th scope="col">ประเภทบัตร</th>
                         <th scope="col">สิทธิประโยชน์ / รายละเอียด</th>
                         <th scope="col" className="text-right">ราคา</th>
+                        <th scope="col" className="text-right">คงเหลือ</th>
                         <th scope="col" className="text-center">สถานะ</th>
                       </tr>
                     </thead>
@@ -127,7 +125,7 @@ export function EventSessionsAccordion({ sessions }: EventSessionsAccordionProps
                       {ticketTypes.map(tt => {
                         const isAvailable = tt.quota > 0;
                         return (
-                          <tr key={tt.id}>
+                          <tr key={tt.id} className={!isAvailable ? 'row-sold-out' : ''}>
                             <td className="ticket-name-cell">
                               <strong>{tt.name}</strong>
                             </td>
@@ -135,7 +133,16 @@ export function EventSessionsAccordion({ sessions }: EventSessionsAccordionProps
                               {tt.description || 'บัตรเข้าชมการแสดงตามโซนที่ระบุ'}
                             </td>
                             <td className="ticket-price-cell text-right">
-                              <span className="price-num">{formatBaht(tt.price)}</span>
+                              <span className={`price-num ${!isAvailable ? 'price-sold-out' : ''}`}>
+                                {formatBaht(tt.price)}
+                              </span>
+                            </td>
+                            <td className="ticket-quota-cell text-right">
+                              {isAvailable ? (
+                                <span className="quota-available-text">{tt.quota.toLocaleString()} ใบ</span>
+                              ) : (
+                                <span className="quota-empty-text">0 ใบ</span>
+                              )}
                             </td>
                             <td className="ticket-status-cell text-center">
                               {isAvailable ? (
