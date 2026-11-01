@@ -465,4 +465,27 @@ describe('Multi-step purchase journey (TASK-040, AC-117, D-27)', () => {
       /\.artist-pointer-mascot-container\s*\{[^}]*transform:\s*rotate\(-4deg\);/,
     );
   });
+
+  it('implements D-169: Unified Session Card Layout & Max-Width Proportion for Single & Multi Sessions', () => {
+    const checkoutFlow = readFileSync(
+      join(rootDir, 'src/components/event-checkout-flow.tsx'),
+      'utf8',
+    );
+    // Verifies unified session card rendering for both 1 session and multi-sessions
+    expect(checkoutFlow).toContain('sessions.length > 0');
+    expect(checkoutFlow).toContain('session-tab-chips-grid');
+    expect(checkoutFlow).toContain('session-tab-chip-card');
+    expect(checkoutFlow).toContain('session-tab-chip-single');
+    expect(checkoutFlow).not.toContain('sessions.length === 1 && (');
+    expect(checkoutFlow).not.toMatch(/\p{Extended_Pictographic}/u);
+
+    const globalsCss = readFileSync(
+      join(rootDir, 'src/app/globals.css'),
+      'utf8',
+    );
+    expect(globalsCss).toMatch(
+      /\.session-tab-chips-grid\s*\{[^}]*grid-template-columns:\s*repeat\(auto-fill,\s*minmax\(min\(100%,\s*250px\),\s*320px\)\);/,
+    );
+    expect(globalsCss).toContain('.session-tab-chip-single');
+  });
 });

@@ -343,5 +343,73 @@ describe('TASK-018: Guest Order Lookup Unit Tests', () => {
       expect(emojiRegex.test(viewSource)).toBe(false);
       expect(emojiRegex.test(globalsCss)).toBe(false);
     });
+
+    it('implements D-170: Unified Search & Filter Toolbar with Omni-Search & Sorting', () => {
+      const rootDir = process.cwd();
+      const viewSource = readFileSync(
+        join(rootDir, 'src/components/guest-order-lookup-view.tsx'),
+        'utf8',
+      );
+      const globalsCss = readFileSync(
+        join(rootDir, 'src/app/globals.css'),
+        'utf8',
+      );
+
+      // 1. Omni-search input and clear button
+      expect(viewSource).toContain('lookup-search-filter-toolbar');
+      expect(viewSource).toContain('lookup-search-box');
+      expect(viewSource).toContain('lookup-ticket-search-input');
+      expect(viewSource).toContain('lookup-search-clear-btn');
+      expect(viewSource).toContain('searchQuery');
+
+      // 2. Status tabs and sort controls
+      expect(viewSource).toContain('lookup-sort-select');
+      expect(viewSource).toContain('lookup-tab-pill');
+      expect(viewSource).toContain('sortBy');
+
+      // 3. Clear filters button on empty search results
+      expect(viewSource).toContain('lookup-clear-filters-btn');
+      expect(viewSource).toContain('ล้างการค้นหาและตัวกรองทั้งหมด');
+
+      // 4. CSS rules in globals.css
+      expect(globalsCss).toContain('.lookup-search-filter-toolbar');
+      expect(globalsCss).toContain('.lookup-search-box');
+      expect(globalsCss).toContain('.lookup-sort-select');
+      expect(globalsCss).toMatch(/\.lookup-tab-pill\.active\s*\{[^}]*background:\s*#0f172a;/);
+
+      // 5. Zero emojis (D-14)
+      const emojiRegex = /\p{Extended_Pictographic}/u;
+      expect(emojiRegex.test(viewSource)).toBe(false);
+      expect(emojiRegex.test(globalsCss)).toBe(false);
+    });
+
+    it('implements D-171: Sequential Vertical Ticket Passes Stack and Pagination Removal', () => {
+      const rootDir = process.cwd();
+      const viewSource = readFileSync(
+        join(rootDir, 'src/components/guest-order-lookup-view.tsx'),
+        'utf8',
+      );
+
+      // 1. Selector tab bar and pagination navigation controls are completely removed
+      expect(viewSource).not.toContain('ticket-selector-bar');
+      expect(viewSource).not.toContain('ticket-nav-controls');
+      expect(viewSource).not.toContain('activeTicketTabs');
+      expect(viewSource).not.toContain('activeTicketTab');
+      expect(viewSource).not.toContain('กำลังแสดงใบที่');
+
+      // 2. All issued tickets render sequentially stacked in ticket-stubs-container
+      expect(viewSource).toContain('ticket-stubs-container');
+      expect(viewSource).toContain('order.tickets.map');
+      expect(viewSource).toContain('ticket-stub-wrapper');
+      expect(viewSource).toContain('classic-ticket-stub');
+
+      // 3. Bulk download button retained when more than 1 ticket exists
+      expect(viewSource).toContain('order.tickets.length > 1');
+      expect(viewSource).toContain('บันทึกรูปบัตรทั้งหมดลงเครื่อง');
+
+      // 4. Zero emojis (D-14)
+      const emojiRegex = /\p{Extended_Pictographic}/u;
+      expect(emojiRegex.test(viewSource)).toBe(false);
+    });
   });
 });

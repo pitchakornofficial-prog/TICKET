@@ -366,12 +366,12 @@ export function EventCheckoutFlow({
             </div>
           )}
 
-          {sessions.length > 1 && (
+          {sessions.length > 0 && (
             <div style={{ marginBottom: '1.75rem' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '0.75rem' }}>
                 <label htmlFor="session-select" style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', fontWeight: 600, fontSize: '0.98rem' }}>
                   <CalendarIcon style={{ width: '18px', height: '18px', color: 'var(--blue)' }} />
-                  <span>เลือกรอบการแสดงที่ต้องการชม</span>
+                  <span>{sessions.length > 1 ? 'เลือกรอบการแสดงที่ต้องการชม' : 'รอบการแสดง'}</span>
                 </label>
                 <span style={{ fontSize: '0.82rem', color: 'var(--muted)' }}>
                   * 1 คำสั่งซื้อผูกกับ 1 รอบการแสดง
@@ -381,20 +381,21 @@ export function EventCheckoutFlow({
               <div className="session-tab-chips-grid">
                 {sessions.map((s, idx) => {
                   const isSelected = s.id === selectedSession.id;
+                  const isSingle = sessions.length === 1;
                   return (
                     <button
                       key={s.id}
                       type="button"
                       disabled={isLocked}
-                      className={`session-tab-chip-card ${isSelected ? 'session-tab-chip-active' : ''}`}
+                      className={`session-tab-chip-card ${isSingle ? 'session-tab-chip-single' : ''} ${isSelected ? 'session-tab-chip-active' : ''}`}
                       onClick={() => {
-                        if (isLocked) return;
+                        if (isLocked || isSingle) return;
                         setSelectedSessionId(s.id);
                         setQuantities({});
                         setError(null);
                       }}
                       style={{
-                        cursor: isLocked ? 'not-allowed' : 'pointer',
+                        cursor: isLocked ? 'not-allowed' : (isSingle ? 'default' : 'pointer'),
                         opacity: isLocked ? (isSelected ? 1 : 0.6) : 1,
                       }}
                     >
@@ -432,15 +433,6 @@ export function EventCheckoutFlow({
                   </option>
                 ))}
               </select>
-            </div>
-          )}
-
-          {sessions.length === 1 && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1.25rem', padding: '0.75rem 1rem', background: '#f8fafc', borderRadius: '10px', border: '1px solid var(--line)', fontSize: '0.95rem' }}>
-              <CalendarIcon style={{ width: '18px', height: '18px', color: 'var(--blue)' }} />
-              <span>
-                <strong>รอบการแสดง:</strong> {formatDate(new Date(selectedSession.startTime))} เวลา {formatTime(new Date(selectedSession.startTime))} – {formatTime(new Date(selectedSession.endTime))} น.
-              </span>
             </div>
           )}
 

@@ -46,10 +46,11 @@ export function GuestOrderLookupView({ initialOrderId }: GuestOrderLookupViewPro
   );
   const [_expandedOrderId, setExpandedOrderId] = useState<string | null>(initialOrderId || null);
   const [filterTab, setFilterTab] = useState<'all' | 'upcoming' | 'past'>('all');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [sortBy, setSortBy] = useState<'newest' | 'oldest' | 'date_asc'>('newest');
   const [downloadingTicketId, setDownloadingTicketId] = useState<string | null>(null);
   const [isDownloadingAll, setIsDownloadingAll] = useState(false);
   const [expandedConcertKeys, setExpandedConcertKeys] = useState<Record<string, boolean>>({});
-  const [activeTicketTabs, setActiveTicketTabs] = useState<Record<string, number | 'all'>>({});
   const [ticketImageUrls, setTicketImageUrls] = useState<Record<string, string>>({});
   const [isPolicyExpanded, setIsPolicyExpanded] = useState(false);
 
@@ -418,10 +419,38 @@ export function GuestOrderLookupView({ initialOrderId }: GuestOrderLookupViewPro
   const upcomingCount = orders.filter(isEventUpcoming).length;
   const pastCount = orders.filter(o => !isEventUpcoming(o)).length;
 
-  const displayedOrders = orders.filter(order => {
-    if (filterTab === 'upcoming') return isEventUpcoming(order);
-    if (filterTab === 'past') return !isEventUpcoming(order);
+  const trimmedSearch = searchQuery.trim().toLowerCase();
+
+  const filteredOrders = orders.filter(order => {
+    // 1. Status Filter Tab
+    if (filterTab === 'upcoming' && !isEventUpcoming(order)) return false;
+    if (filterTab === 'past' && isEventUpcoming(order)) return false;
+
+    // 2. Omni-Search Query: Event title, Order ID, Location, Ticket Code, Ticket Type Name (D-170)
+    if (trimmedSearch) {
+      const matchTitle = order.eventTitle?.toLowerCase().includes(trimmedSearch);
+      const matchOrderId = order.id?.toLowerCase().includes(trimmedSearch);
+      const matchLocation = order.location?.toLowerCase().includes(trimmedSearch);
+      const matchTicketCode = order.tickets?.some(t => t.ticketCode?.toLowerCase().includes(trimmedSearch));
+      const matchTicketType =
+        order.tickets?.some(t => t.ticketTypeName?.toLowerCase().includes(trimmedSearch)) ||
+        order.items?.some(it => it.ticketTypeName?.toLowerCase().includes(trimmedSearch));
+      if (!matchTitle && !matchOrderId && !matchLocation && !matchTicketCode && !matchTicketType) {
+        return false;
+      }
+    }
+
     return true;
+  });
+
+  const displayedOrders = [...filteredOrders].sort((a, b) => {
+    if (sortBy === 'oldest') {
+      return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+    }
+    if (sortBy === 'date_asc') {
+      return new Date(a.sessionStartTime).getTime() - new Date(b.sessionStartTime).getTime();
+    }
+    return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
   });
 
   interface ConcertGroup {
@@ -723,30 +752,80 @@ export function GuestOrderLookupView({ initialOrderId }: GuestOrderLookupViewPro
             </div>
           </div>
 
-          {/* Filter Switcher Tabs */}
+          {/* Unified Search & Filter Toolbar (D-170) */}
           {orders.length > 0 && (
-            <div className="lookup-tabs-wrap">
-              <button
-                type="button"
-                onClick={() => setFilterTab('all')}
-                className={`lookup-tab-pill ${filterTab === 'all' ? 'active' : ''}`}
-              >
-                ทั้งหมด ({orders.length} รายการที่ชำระแล้ว)
-              </button>
-              <button
-                type="button"
-                onClick={() => setFilterTab('upcoming')}
-                className={`lookup-tab-pill ${filterTab === 'upcoming' ? 'active' : ''}`}
-              >
-                คอนเสิร์ตเร็วๆ นี้ ({upcomingCount})
-              </button>
-              <button
-                type="button"
-                onClick={() => setFilterTab('past')}
-                className={`lookup-tab-pill ${filterTab === 'past' ? 'active' : ''}`}
-              >
-                ประวัติที่ผ่านมา ({pastCount})
-              </button>
+            <div className="lookup-search-filter-toolbar">
+              {/* Left: Omni-Search Input */}
+              <div className="lookup-search-box">
+                <SearchIcon style={{ width: '18px', height: '18px', color: '#64748b', flexShrink: 0 }} />
+                <input
+                  id="lookup-ticket-search-input"
+                  type="text"
+                  value={searchQuery}
+                  onChange={e => setSearchQuery(e.target.value)}
+                  placeholder="ค้นหาชื่องาน, รหัสคำสั่งซื้อ, รหัสบัตร, สถานที่..."
+                  className="lookup-search-input"
+                />
+                {searchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setSearchQuery('')}
+                    className="lookup-search-clear-btn"
+                    aria-label="ล้างคำค้นหา"
+                  >
+                    ✕
+                  </button>
+                )}
+              </div>
+
+              {/* Right: Status Tabs & Sort Controls */}
+              <div className="lookup-toolbar-right">
+                <div className="lookup-tabs-wrap" role="tablist" aria-label="กรองสถานะคอนเสิร์ต">
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={filterTab === 'all'}
+                    onClick={() => setFilterTab('all')}
+                    className={`lookup-tab-pill ${filterTab === 'all' ? 'active' : ''}`}
+                  >
+                    ทั้งหมด ({orders.length})
+                  </button>
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={filterTab === 'upcoming'}
+                    onClick={() => setFilterTab('upcoming')}
+                    className={`lookup-tab-pill ${filterTab === 'upcoming' ? 'active' : ''}`}
+                  >
+                    เร็วๆ นี้ ({upcomingCount})
+                  </button>
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={filterTab === 'past'}
+                    onClick={() => setFilterTab('past')}
+                    className={`lookup-tab-pill ${filterTab === 'past' ? 'active' : ''}`}
+                  >
+                    ที่ผ่านมา ({pastCount})
+                  </button>
+                </div>
+
+                <div className="lookup-sort-wrap">
+                  <label htmlFor="lookup-sort-select" className="lookup-sort-label">
+                    เรียงตาม:
+                  </label>
+                  <select
+                    id="lookup-sort-select"
+                    value={sortBy}
+                    onChange={e => setSortBy(e.target.value as 'newest' | 'oldest' | 'date_asc')}
+                    className="lookup-sort-select"
+                  >
+                    <option value="newest">คำสั่งซื้อล่าสุด</option>
+                    <option value="oldest">คำสั่งซื้อแรกสุด</option>
+                    <option value="date_asc">วันแสดงเร็วๆ นี้</option>
+                  </select>
+                </div>
+              </div>
             </div>
           )}
 
@@ -765,9 +844,43 @@ export function GuestOrderLookupView({ initialOrderId }: GuestOrderLookupViewPro
             </div>
           ) : displayedOrders.length === 0 ? (
             <div className="lookup-center-card" style={{ textAlign: 'center', padding: '3rem 2rem' }}>
-              <p style={{ color: '#64748b', fontSize: '0.95rem', margin: 0 }}>
-                ไม่มีรายการบัตรคอนเสิร์ตในหมวดหมู่นี้
+              <div className="lookup-card-top-icon" style={{ background: '#f1f5f9', color: '#64748b' }}>
+                <SearchIcon style={{ width: '28px', height: '28px' }} />
+              </div>
+              <h3 style={{ fontSize: '1.15rem', fontWeight: 800, color: '#0f172a', margin: '0 0 0.5rem 0' }}>
+                ไม่พบบัตรคอนเสิร์ตที่ตรงกับคำค้นหา
+              </h3>
+              <p style={{ color: '#64748b', fontSize: '0.9rem', margin: '0 0 1.25rem 0' }}>
+                {trimmedSearch
+                  ? `ไม่พบรายการที่ตรงกับ "${searchQuery}" ในหมวดหมู่นี้`
+                  : 'ไม่มีรายการบัตรคอนเสิร์ตในหมวดหมู่นี้'}
               </p>
+              {(trimmedSearch || filterTab !== 'all') && (
+                <button
+                  type="button"
+                  id="lookup-clear-filters-btn"
+                  onClick={() => {
+                    setSearchQuery('');
+                    setFilterTab('all');
+                  }}
+                  className="button"
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '0.5rem',
+                    background: '#0f172a',
+                    color: '#ffffff',
+                    border: 'none',
+                    borderRadius: '8px',
+                    padding: '0.6rem 1.25rem',
+                    fontWeight: 600,
+                    fontSize: '0.9rem',
+                    cursor: 'pointer',
+                  }}
+                >
+                  ล้างการค้นหาและตัวกรองทั้งหมด
+                </button>
+              )}
             </div>
           ) : (
             /* Concert Groups */
@@ -815,7 +928,6 @@ export function GuestOrderLookupView({ initialOrderId }: GuestOrderLookupViewPro
                       <div className="lookup-concert-body">
                         {group.orders.map((order, orderIdx) => {
                           const isPaid = order.status === 'paid';
-                          const activeTicketTab = activeTicketTabs[order.id] ?? 0;
 
                           return (
                             <div
@@ -997,78 +1109,12 @@ export function GuestOrderLookupView({ initialOrderId }: GuestOrderLookupViewPro
                                     )}
                                   </div>
 
-                                  {/* D-57 High-Volume Ticket Navigation: Ticket Selector Tabs */}
-                                  {order.tickets.length > 1 && (
-                                    <div className="ticket-selector-bar" role="tablist" aria-label="เลือกใบตั๋ว">
-                                      {order.tickets.map((t, idx) => (
-                                        <button
-                                          key={t.id}
-                                          type="button"
-                                          role="tab"
-                                          aria-selected={activeTicketTab === idx}
-                                          onClick={() => setActiveTicketTabs(prev => ({ ...prev, [order.id]: idx }))}
-                                          className={`ticket-select-tab ${activeTicketTab === idx ? 'active' : ''}`}
-                                        >
-                                          <span>ใบที่ {idx + 1}</span>
-                                          <span style={{ opacity: 0.8, fontSize: '0.75rem' }}>· {t.ticketTypeName}</span>
-                                        </button>
-                                      ))}
-                                      <button
-                                        type="button"
-                                        role="tab"
-                                        aria-selected={activeTicketTab === 'all'}
-                                        onClick={() => setActiveTicketTabs(prev => ({ ...prev, [order.id]: 'all' }))}
-                                        className={`ticket-select-tab ${activeTicketTab === 'all' ? 'active' : ''}`}
-                                      >
-                                        <span>แสดงทั้งหมด ({order.tickets.length} ใบ)</span>
-                                      </button>
-                                    </div>
-                                  )}
-
-                                  {/* Quick Next/Prev Navigation when viewing single ticket */}
-                                  {order.tickets.length > 1 && activeTicketTab !== 'all' && (
-                                    <div className="ticket-nav-controls">
-                                      <button
-                                        type="button"
-                                        className="ticket-nav-btn"
-                                        disabled={(activeTicketTab as number) === 0}
-                                        onClick={() =>
-                                          setActiveTicketTabs(prev => ({
-                                            ...prev,
-                                            [order.id]: (activeTicketTab as number) - 1,
-                                          }))
-                                        }
-                                      >
-                                        ← ใบก่อนหน้า
-                                      </button>
-                                      <span className="ticket-nav-counter">
-                                        กำลังแสดงใบที่ {(activeTicketTab as number) + 1} จาก {order.tickets.length} ใบ
-                                      </span>
-                                      <button
-                                        type="button"
-                                        className="ticket-nav-btn"
-                                        disabled={(activeTicketTab as number) === order.tickets.length - 1}
-                                        onClick={() =>
-                                          setActiveTicketTabs(prev => ({
-                                            ...prev,
-                                            [order.id]: (activeTicketTab as number) + 1,
-                                          }))
-                                        }
-                                      >
-                                        ใบถัดไป →
-                                      </button>
-                                    </div>
-                                  )}
-
-                                  {/* Classic Ticket Stubs (2.5:1 ratio, 1200 x 500 px standard) */}
+                                  {/* Clean Sequential Ticket Passes Stack (D-171) */}
                                   <div className="ticket-stubs-container" style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-                                    {order.tickets.map((tkt, idx) => (
+                                    {order.tickets.map(tkt => (
                                       <div
                                         key={tkt.id}
                                         className="ticket-stub-wrapper"
-                                        style={{
-                                          display: activeTicketTab === 'all' || activeTicketTab === idx ? 'block' : 'none',
-                                        }}
                                       >
                                         <div
                                           className="ticket-card digital-ticket-pass classic-ticket-stub"
