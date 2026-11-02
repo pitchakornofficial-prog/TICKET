@@ -1,11 +1,10 @@
+import { testClientIp } from '../support/client-context';
 import { expect, test } from '@playwright/test';
 import { resetAccounts } from '../support/auth-fixture';
 import { clearCapturedEmails } from '../../src/server/email';
 
-let nextIp = 200;
 test.beforeEach(async ({ context }, testInfo) => {
-  const offset = testInfo.project.name === 'desktop-chromium' ? 0 : 50;
-  await context.setExtraHTTPHeaders({ 'x-forwarded-for': `192.0.2.${offset + nextIp++}` });
+  await context.setExtraHTTPHeaders({ 'x-forwarded-for': testClientIp(testInfo) });
 });
 
 test('forgot password gives generic response for existing and non-existing email', async ({ page }) => {

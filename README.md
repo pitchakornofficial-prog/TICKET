@@ -1,7 +1,7 @@
 # TICKET
 
 แอป Next.js/TypeScript สำหรับเว็บไซต์ขายบัตรคอนเสิร์ต พัฒนา local ก่อนตาม [ADR-0002](docs/adr/0002-local-first-and-aws-production.md)
-ขอบเขตปัจจุบันคือ [TASK-001](docs/tasks/TASK-001-local-foundation.md): shell และเครื่องมือพัฒนา ยังไม่มีการขายบัตรจริง
+สถานะ implementation ดูไฟล์ [task plan](docs/tasks/README.md) และ task แต่ละงาน; คู่มือเตรียม production อยู่ที่ [Deployment](docs/deployment.md)
 
 ## เริ่มพัฒนา
 

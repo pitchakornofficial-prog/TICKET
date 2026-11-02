@@ -1,3 +1,5 @@
+import { Pool } from 'pg';
+import { getOrderTickets } from '../../src/server/tickets';
 import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { authFixture } from '../support/auth-fixture';
@@ -352,4 +354,34 @@ describe('TASK-028: Organizer Money Report Integration Tests (AC-28, AC-64, AC-7
     expect(ownerReport.orders[0].buyerEmail).toBe(order.buyerEmail);
     expect(ownerReport.orders[0].buyerPhone).toBe(order.buyerPhone);
   });
+  it('retains the purchased price in reports, tickets and refunds after a live price change', async () => {
+    const { event, sessionId, ticketTypeId } = await createEventForOrganizer(fixture.ids.organizer, 5, 10);
+    const order = await purchaseTickets(event.id, sessionId, ticketTypeId, 2);
+    expect(order.payResult.status).toBe('paid');
+    await fixture.pool.query('UPDATE ticket_types SET price = 1800 WHERE id = $1', [ticketTypeId]);
+    const report = await getEventMoneyReport(fixture.pool, event.id, { id: fixture.ids.owner, role: 'owner' });
+    expect(report.grossSales).toBe(2000);
+    expect(report.payableAmount).toBe(1710);
+    const tickets = await getOrderTickets(fixture.pool, order.reservation.id);
+    expect(tickets.map(ticket => ticket.ticketPrice)).toEqual([1000, 1000]);
+    const refund = await submitRefundRequest(fixture.pool, {
+      verifiedToken: order.verifiedToken, orderId: order.reservation.id,
+      ticketIds: [tickets[0].id], reason: 'คืนตามราคาที่ซื้อจริง',
+    });
+    expect(refund.success).toBe(true);
+    const refundItems = await fixture.pool.query('SELECT "ticketPrice" FROM refund_request_items WHERE "refundRequestId" = $1', [refund.refundRequestId]);
+    expect(Number(refundItems.rows[0].ticketPrice)).toBe(1000);
+  });
+
+  it('serves concurrent finance reports from fresh web pools without schema deadlocks', async () => {
+    const { event } = await createEventForOrganizer(fixture.ids.organizer);
+    const pools = Array.from({ length: 3 }, () => new Pool({ connectionString: fixture.databaseUrl, max: 5 }));
+    try {
+      const reports = await Promise.all(pools.flatMap(pool => Array.from({ length: 4 }, () =>
+        getEventMoneyReport(pool, event.id, { id: fixture.ids.owner, role: 'owner' }))));
+      expect(reports).toHaveLength(12);
+      for (const report of reports) expect(report.payableAmount).toBe(0);
+    } finally { await Promise.all(pools.map(pool => pool.end())); }
+  });
+
 });

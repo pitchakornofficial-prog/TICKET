@@ -1,11 +1,10 @@
+import { testClientIp } from '../support/client-context';
 import { expect, test } from '@playwright/test';
 import { fixtureAccounts, fixturePassword } from '../support/auth-fixture';
 
-let nextIp = 1;
 test.beforeEach(async ({ context }, testInfo) => {
   test.setTimeout(60000);
-  const base = testInfo.project.name === 'desktop-chromium' ? 145 : 195;
-  await context.setExtraHTTPHeaders({ 'x-forwarded-for': `198.51.100.${base + (nextIp++ % 50)}` });
+  await context.setExtraHTTPHeaders({ 'x-forwarded-for': testClientIp(testInfo) });
 });
 
 test.describe('Paid ticket issuance flow (TASK-043, AC-119, AC-120, AC-123, AC-124, AC-125, AC-11, AC-16, AC-17, AC-18, AC-19, AC-06)', () => {
@@ -66,10 +65,10 @@ test.describe('Paid ticket issuance flow (TASK-043, AC-119, AC-120, AC-123, AC-1
     await expect(page).toHaveURL('/login');
 
     // 3. Guest visits concert detail page and proceeds to checkout
-    await page.goto(`/events/${createdEvent.id}`);
+    await page.goto(`/events/${createdEvent.id}`, { waitUntil: 'domcontentloaded' });
     await expect(page.getByRole('heading', { name: eventTitle })).toBeVisible();
 
-    const enterQueueBtn = page.getByTestId('enter-queue-cta-btn').filter({ visible: true });
+    const enterQueueBtn = page.getByTestId('enter-queue-cta-btn');
     if (await enterQueueBtn.isVisible()) {
       await enterQueueBtn.click();
       const proceedBtn = page.locator('#proceed-to-checkout-btn');

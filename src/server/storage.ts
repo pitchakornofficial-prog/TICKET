@@ -1,7 +1,7 @@
 // ADR-0003: Cloudflare R2 สำหรับเก็บภาพและหลักฐาน
 // Local substitute ที่ปลอดภัย ใช้ in-memory store หรือ loopback serving โดยไม่ใช้ instance-local persistent disk เป็น shared production storage
 
-import { R2StorageDriver, readR2Config } from './storage-r2';
+import { R2StorageDriver, readR2Config } from './storage-r2.ts';
 
 export interface StorageItem {
   data: Buffer;

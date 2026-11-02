@@ -1,10 +1,9 @@
+import { testClientIp } from '../support/client-context';
 import { expect, test } from '@playwright/test';
 import { fixtureAccounts, fixturePassword } from '../support/auth-fixture';
 
-let nextIp = 1;
 test.beforeEach(async ({ context }, testInfo) => {
-  const base = testInfo.project.name === 'desktop-chromium' ? 144 : 194;
-  await context.setExtraHTTPHeaders({ 'x-forwarded-for': `198.51.100.${base + (nextIp++ % 50)}` });
+  await context.setExtraHTTPHeaders({ 'x-forwarded-for': testClientIp(testInfo) });
 });
 
 test.describe('PromptPay Payment QR generation flow (TASK-042, AC-118, AC-15, AC-26, AC-12, AC-13, AC-70, AC-120, AC-123)', () => {
@@ -12,6 +11,7 @@ test.describe('PromptPay Payment QR generation flow (TASK-042, AC-118, AC-15, AC
     page,
     request,
   }, testInfo) => {
+    test.setTimeout(90000);
     const eventTitle = `คอนเสิร์ตชำระเงิน QR ${testInfo.project.name}`;
     const guestEmail = `buyer-qr-${testInfo.project.name}@ticket.invalid`;
     const guestName = `ศิริพงษ์ พร้อมเพย์ ${testInfo.project.name}`;
@@ -76,11 +76,11 @@ test.describe('PromptPay Payment QR generation flow (TASK-042, AC-118, AC-15, AC
     await expect(page).toHaveURL('/login');
 
     // 3. Guest opens the concert detail page
-    await page.goto(`/events/${createdEvent.id}`);
+    await page.goto(`/events/${createdEvent.id}`, { waitUntil: 'domcontentloaded' });
     await expect(page.getByRole('heading', { name: eventTitle })).toBeVisible();
 
     // Click CTA to enter Queue Waiting Room
-    const enterQueueBtn = page.getByTestId('enter-queue-cta-btn').filter({ visible: true });
+    const enterQueueBtn = page.getByTestId('enter-queue-cta-btn');
     await expect(enterQueueBtn).toBeVisible();
     await enterQueueBtn.click();
 

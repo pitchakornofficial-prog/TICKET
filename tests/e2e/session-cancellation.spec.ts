@@ -1,10 +1,10 @@
+import { testClientIp, createIsolatedBrowserContext } from '../support/client-context';
+import { saveEventDraft } from '../support/event-draft';
 import { expect, test } from '@playwright/test';
 import { fixtureAccounts, fixturePassword } from '../support/auth-fixture';
 
-let nextIp = 1;
 test.beforeEach(async ({ context }, testInfo) => {
-  const base = testInfo.project.name === 'desktop-chromium' ? 180 : 230;
-  await context.setExtraHTTPHeaders({ 'x-forwarded-for': `198.51.100.${base + (nextIp++ % 40)}` });
+  await context.setExtraHTTPHeaders({ 'x-forwarded-for': testClientIp(testInfo) });
 });
 
 test.describe('Cancel issued session & create refund cases (TASK-026, AC-35, AC-91, AC-108, R5)', () => {
@@ -30,10 +30,11 @@ test.describe('Cancel issued session & create refund cases (TASK-026, AC-35, AC-
     await page.getByRole('button', { name: 'เข้าสู่ระบบ', exact: true }).click();
     await expect(page).toHaveURL('/back-office/organizer');
 
+    await page.goto('/back-office/organizer#events');
     await page.getByRole('button', { name: '+ สร้างงานคอนเสิร์ตใหม่' }).click();
     await page.getByLabel('ชื่องานคอนเสิร์ต').fill(eventTitle);
     await page.getByLabel('สถานที่จัดงาน').fill('อิมแพ็ค อารีน่า เมืองทองธานี');
-    await page.getByRole('button', { name: 'บันทึกข้อมูลร่าง (Draft)' }).click();
+    await saveEventDraft(page);
     await expect(page.getByText('บันทึกงานคอนเสิร์ตสำเร็จ')).toBeVisible();
 
     const eventsRes = await page.request.get('/api/events');
@@ -62,7 +63,7 @@ test.describe('Cancel issued session & create refund cases (TASK-026, AC-35, AC-
     });
 
     // 2. Owner logs in on isolated ownerPage and approves initial session
-    const ownerContext = await browser.newContext();
+    const ownerContext = await createIsolatedBrowserContext(browser, testInfo, );
     const ownerPage = await ownerContext.newPage();
 
     await ownerPage.goto('/login');
@@ -78,13 +79,16 @@ test.describe('Cancel issued session & create refund cases (TASK-026, AC-35, AC-
     await expect(ownerPage.getByText(`อนุมัติรอบการแสดงของ "${eventTitle}" สำเร็จ`)).toBeVisible();
 
     // 3. Guest visits public concert page in isolated buyerContext and buys 1 ticket
-    const buyerContext = await browser.newContext();
+    const buyerContext = await createIsolatedBrowserContext(browser, testInfo, );
     const buyerPage = await buyerContext.newPage();
 
-    await buyerPage.goto(`/events/${createdEvent.id}`);
+    await buyerPage.goto(`/events/${createdEvent.id}/checkout`);
     await expect(buyerPage.getByRole('heading', { name: eventTitle })).toBeVisible();
 
     // Guest checkout form
+    const addBtn = buyerPage.getByRole('button', { name: 'เพิ่มจำนวน VIP Seating' });
+    await addBtn.click();
+
     await buyerPage.getByLabel('ชื่อ-นามสกุล *').fill(guestName);
     await buyerPage.getByLabel('อีเมล *').fill(guestEmail);
     await buyerPage.getByLabel('เบอร์โทรศัพท์มือถือ *').fill(guestPhone);
@@ -99,23 +103,22 @@ test.describe('Cancel issued session & create refund cases (TASK-026, AC-35, AC-
 
     await buyerPage.getByLabel('รหัส OTP 6 หลัก *').fill(code);
     await buyerPage.getByRole('button', { name: 'ยืนยันรหัส OTP' }).click();
+    await buyerPage.getByRole('button', { name: 'ยืนยันและดำเนินการต่อ' }).click();
     await expect(buyerPage.getByRole('heading', { name: 'ยืนยันอีเมลสำเร็จ (Guest Verified)' })).toBeVisible();
 
-    const addBtn = buyerPage.getByRole('button', { name: 'เพิ่มจำนวน VIP Seating' });
-    await addBtn.click();
-    await buyerPage.getByRole('button', { name: 'ยืนยันการเลือกบัตร (1 ใบ)' }).click();
+    await buyerPage.locator('#confirm-reservation-btn').click();
     await expect(buyerPage.getByText('กันบัตรสำเร็จ (Reserved)')).toBeVisible();
 
-    await buyerPage.getByRole('button', { name: 'สร้าง QR Code ชำระเงิน (PromptPay)' }).click();
     await expect(buyerPage.locator('#promptpay-qr-image')).toBeVisible();
 
     await buyerPage.locator('#simulate-payment-button').click();
-    await expect(buyerPage.getByText('ชำระเงินสำเร็จ')).toBeVisible();
+    await expect(buyerPage.getByText('ชำระเงินสำเร็จ (Paid)')).toBeVisible();
     await expect(buyerPage.getByText('ออกบัตรสำเร็จแล้ว')).toBeVisible();
 
     // 4. Organizer submits cancellation request (AC-35, AC-108)
+    await page.goto('/back-office/organizer#events');
     await page.reload();
-    const openCancelBtn = page.getByTestId(`open-cancel-btn-${createdEvent.id}`);
+    const openCancelBtn = page.getByTestId(`open-cancellation-btn-${createdEvent.id}`);
     await expect(openCancelBtn).toBeVisible();
     await openCancelBtn.click();
 

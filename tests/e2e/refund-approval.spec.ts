@@ -1,15 +1,16 @@
+import { testClientIp, createIsolatedBrowserContext } from '../support/client-context';
+import { saveEventDraft } from '../support/event-draft';
 import { expect, test } from '@playwright/test';
 import { fixtureAccounts, fixturePassword } from '../support/auth-fixture';
 
-let nextIp = 1;
 test.beforeEach(async ({ context }, testInfo) => {
-  const base = testInfo.project.name === 'desktop-chromium' ? 154 : 204;
-  await context.setExtraHTTPHeaders({ 'x-forwarded-for': `198.51.100.${base + (nextIp++ % 50)}` });
+  await context.setExtraHTTPHeaders({ 'x-forwarded-for': testClientIp(testInfo) });
 });
 
 test.describe('Owner Refund Approval flow (TASK-022, AC-36, AC-88, AC-89, AC-90, AC-107)', () => {
   test('buyer submits refund for 1 ticket; owner approves it; ticket is revoked, quota returned, and scanner rejects refunded ticket while valid ticket passes', async ({
     page,
+    browser,
     request,
   }, testInfo) => {
     test.setTimeout(90000);
@@ -29,10 +30,11 @@ test.describe('Owner Refund Approval flow (TASK-022, AC-36, AC-88, AC-89, AC-90,
     await page.getByRole('button', { name: 'เข้าสู่ระบบ', exact: true }).click();
     await expect(page).toHaveURL('/back-office/organizer');
 
+    await page.goto('/back-office/organizer#events');
     await page.getByRole('button', { name: '+ สร้างงานคอนเสิร์ตใหม่' }).click();
     await page.getByLabel('ชื่องานคอนเสิร์ต').fill(eventTitle);
     await page.getByLabel('สถานที่จัดงาน').fill('อิมแพ็ค ชาเลนเจอร์ ฮอลล์ 1');
-    await page.getByRole('button', { name: 'บันทึกข้อมูลร่าง (Draft)' }).click();
+    await saveEventDraft(page);
     await expect(page.getByText('บันทึกงานคอนเสิร์ตสำเร็จ')).toBeVisible();
 
     const eventsRes = await page.request.get('/api/events');
@@ -96,8 +98,13 @@ test.describe('Owner Refund Approval flow (TASK-022, AC-36, AC-88, AC-89, AC-90,
     await expect(page).toHaveURL('/login');
 
     // 3. Guest visits concert detail page and completes purchase for 2 tickets
-    await page.goto(`/events/${createdEvent.id}`);
+    await page.goto(`/events/${createdEvent.id}/checkout`);
     await expect(page.getByRole('heading', { name: eventTitle })).toBeVisible();
+
+    const addBtn = page.getByRole('button', { name: 'เพิ่มจำนวน VIP Zone A' });
+    await addBtn.click();
+    await addBtn.click();
+
 
     await page.getByLabel('ชื่อ-นามสกุล *').fill(guestName);
     await page.getByLabel('อีเมล *').fill(guestEmail);
@@ -113,27 +120,23 @@ test.describe('Owner Refund Approval flow (TASK-022, AC-36, AC-88, AC-89, AC-90,
 
     await page.getByLabel('รหัส OTP 6 หลัก *').fill(code);
     await page.getByRole('button', { name: 'ยืนยันรหัส OTP' }).click();
+    await page.getByRole('button', { name: 'ยืนยันและดำเนินการต่อ' }).click();
     await expect(page.getByRole('heading', { name: 'ยืนยันอีเมลสำเร็จ (Guest Verified)' })).toBeVisible();
 
     // Select 2 tickets
-    const addBtn = page.getByRole('button', { name: 'เพิ่มจำนวน VIP Zone A' });
-    await addBtn.click();
-    await addBtn.click();
-
-    await page.getByRole('button', { name: 'ยืนยันการเลือกบัตร (2 ใบ)' }).click();
+    await page.locator('#confirm-reservation-btn').click();
     await expect(page.getByText('กันบัตรสำเร็จ (Reserved)')).toBeVisible();
 
     // Generate PromptPay QR and simulate payment
-    const generateQrBtn = page.getByRole('button', { name: 'สร้าง QR Code ชำระเงิน (PromptPay)' });
-    await expect(generateQrBtn).toBeVisible();
-    await generateQrBtn.click();
     await expect(page.locator('#promptpay-qr-image')).toBeVisible();
 
     const simulateBtn = page.locator('#simulate-payment-button');
     await expect(simulateBtn).toBeVisible();
     await simulateBtn.click();
     await expect(page.getByText('ชำระเงินสำเร็จ (Paid)')).toBeVisible();
+    await expect(page).toHaveURL(/\/orders\/ORD-[A-Z0-9-]+\/success$/);
     await expect(page.getByText('ออกบัตรสำเร็จแล้ว (2 ใบ)')).toBeVisible();
+    await page.locator('#tab-btn-tickets').click();
 
     // Grab both ticket codes
     const ticketCode0 = (await page.locator('#ticket-code-0').innerText()).trim();
@@ -206,36 +209,41 @@ test.describe('Owner Refund Approval flow (TASK-022, AC-36, AC-88, AC-89, AC-90,
     await expect(feedbackBanner).toContainText('อนุมัติการคืนเงิน');
 
     // 7. Verify scanning behavior: Refunded ticket rejected (AC-89), other ticket accepted
-    await page.getByRole('button', { name: 'ออกจากระบบ', exact: true }).click({ force: true });
-    await expect(page).toHaveURL('/login');
+    const scannerContext = await createIsolatedBrowserContext(browser, testInfo);
+    const scannerPage = await scannerContext.newPage();
+    await scannerPage.goto('/login');
 
-    await page.getByLabel('อีเมล', { exact: true }).fill(scannerEmail);
-    await page.getByLabel('รหัสผ่าน', { exact: true }).fill(scannerPassword);
-    await page.getByRole('button', { name: 'เข้าสู่ระบบ', exact: true }).click();
-    await expect(page).toHaveURL('/back-office/scanner');
+    await scannerPage.getByLabel('อีเมล', { exact: true }).fill(scannerEmail);
+    await scannerPage.getByLabel('รหัสผ่าน', { exact: true }).fill(scannerPassword);
+    await scannerPage.getByRole('button', { name: 'เข้าสู่ระบบ', exact: true }).click();
+    await expect(scannerPage).toHaveURL('/back-office/scanner');
 
     // Open terminal for this session
-    const openTerminalBtn = page.locator(`#open-terminal-btn-${sessionId}`);
+    const openTerminalBtn = scannerPage.locator(`#open-terminal-btn-${sessionId}`);
     await openTerminalBtn.scrollIntoViewIfNeeded();
     await expect(openTerminalBtn).toBeVisible();
     await openTerminalBtn.click({ force: true });
 
-    await expect(page.locator('#admission-terminal-container')).toBeVisible();
+    await expect(scannerPage.locator('#admission-terminal-container')).toBeVisible();
 
     // Scan refunded ticket ticketCode0 (AC-89)
-    await page.locator('#scanner-ticket-input').fill(ticketCode0);
-    await page.locator('#scanner-submit-btn').click({ force: true });
+    await scannerPage.locator('#scanner-ticket-input').fill(ticketCode0);
+    await scannerPage.locator('#scanner-submit-btn').click({ force: true });
 
-    const resultCard = page.locator('#scan-result-card');
+    const resultCard = scannerPage.locator('#scan-result-card');
     await expect(resultCard).toBeVisible();
     await expect(resultCard).toHaveClass(/result-rejected/);
-    await expect(page.locator('#scan-result-message')).toContainText('บัตรถูกคืนเงินแล้ว');
+    await expect(scannerPage.locator('#scan-result-message')).toContainText('บัตรถูกคืนเงินแล้ว');
+    await scannerPage.locator('#dismiss-scan-modal-btn').click();
 
     // Scan valid ticket ticketCode1 (AC-36: sibling ticket remains valid)
-    await page.locator('#scanner-ticket-input').fill(ticketCode1);
-    await page.locator('#scanner-submit-btn').click({ force: true });
+    await scannerPage.locator('#scanner-ticket-input').fill(ticketCode1);
+    await scannerPage.locator('#scanner-submit-btn').click({ force: true });
 
     await expect(resultCard).toHaveClass(/result-success-entry/);
-    await expect(page.locator('#scan-result-message')).toContainText('บันทึกเข้างานสำเร็จ (ผ่าน)');
+    await expect(scannerPage.locator('#scan-result-message')).toContainText('บันทึกเข้างานสำเร็จ (ผ่าน)');
+    await scannerPage.locator('#dismiss-scan-modal-btn').click();
+
+    await scannerContext.close();
   });
 });

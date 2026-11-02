@@ -1,10 +1,10 @@
+import { testClientIp, createIsolatedBrowserContext } from '../support/client-context';
+import { saveEventDraft } from '../support/event-draft';
 import { expect, test } from '@playwright/test';
 import { fixtureAccounts, fixturePassword } from '../support/auth-fixture';
 
-let nextIp = 1;
 test.beforeEach(async ({ context }, testInfo) => {
-  const base = testInfo.project.name === 'desktop-chromium' ? 149 : 199;
-  await context.setExtraHTTPHeaders({ 'x-forwarded-for': `198.51.100.${base + (nextIp++ % 50)}` });
+  await context.setExtraHTTPHeaders({ 'x-forwarded-for': testClientIp(testInfo) });
 });
 
 test.describe('Guest Order Lookup flow (TASK-018, AC-21, AC-22, AC-62, AC-63, AC-75)', () => {
@@ -26,10 +26,11 @@ test.describe('Guest Order Lookup flow (TASK-018, AC-21, AC-22, AC-62, AC-63, AC
     await page.getByRole('button', { name: 'เข้าสู่ระบบ', exact: true }).click();
     await expect(page).toHaveURL('/back-office/organizer');
 
+    await page.goto('/back-office/organizer#events');
     await page.getByRole('button', { name: '+ สร้างงานคอนเสิร์ตใหม่' }).click();
     await page.getByLabel('ชื่องานคอนเสิร์ต').fill(eventTitle);
     await page.getByLabel('สถานที่จัดงาน').fill('อิมแพ็ค อารีน่า เมืองทองธานี');
-    await page.getByRole('button', { name: 'บันทึกข้อมูลร่าง (Draft)' }).click();
+    await saveEventDraft(page);
     await expect(page.getByText('บันทึกงานคอนเสิร์ตสำเร็จ')).toBeVisible();
 
     const eventsRes = await page.request.get('/api/events');
@@ -181,7 +182,7 @@ test.describe('Guest Order Lookup flow (TASK-018, AC-21, AC-22, AC-62, AC-63, AC
 
     // 5. Test AC-63: Direct link in email without verified session
     // Open a fresh browser context without any session/cookies
-    const freshContext = await browser.newContext();
+    const freshContext = await createIsolatedBrowserContext(browser, testInfo, );
     const freshPage = await freshContext.newPage();
 
     await freshPage.goto(`/my-tickets?orderId=${orderId}`);

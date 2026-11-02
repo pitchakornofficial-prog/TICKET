@@ -69,6 +69,13 @@ test.describe('Cancel session while payment is pending and refund timely amounts
     await sessionCard.getByRole('button', { name: 'อนุมัติรอบนี้' }).click({ force: true });
     await expect(ownerPage.getByText(`อนุมัติรอบการแสดงของ "${eventTitle}" สำเร็จ`)).toBeVisible();
 
+    // Use a nonzero customer fee to prove the full-refund branch includes it.
+    const feeResponse = await ownerPage.request.put(`/api/owner/events/${createdEvent.id}/fee-settings`, {
+      data: { organizerFeeMode: 'percentage', organizerFeeRate: 0,
+        customerFeeMode: 'per_order', customerFeeRate: 20, reservePercentage: 0 },
+    });
+    expect(feeResponse.status()).toBe(200);
+
     // 3. Buyer opens event, verifies OTP, and reserves 1 ticket
     const buyerContext = await browser.newContext();
     const buyerPage = await buyerContext.newPage();
@@ -163,11 +170,15 @@ test.describe('Cancel session while payment is pending and refund timely amounts
     // 7. Verify late payment callback (AC-114, G-52)
     // When late payment arrives after cancellation (T >= C), full refund including customer fee is triggered
     // Simulate payment callback on cancelled session
-    const payRes = await request.post(`/api/public/checkout/orders/${orderId}/pay-test`);
+    const payRes = await request.post(`/api/public/checkout/orders/${orderId}/pay-test`, {
+      // Stripe Event.created is second precision. Ensure T >= C even when
+      // cancellation and this callback are processed within the same second.
+      data: { providerPaidAt: new Date(Date.now() + 1000).toISOString() },
+    });
     expect(payRes.status()).toBe(200);
     const payData = await payRes.json();
     expect(payData.status).toBe('cancelled_session_refund_full');
-    expect(payData.refundAmount).toBe(1500); // 1 ticket * 1500
+    expect(payData.refundAmount).toBe(1520); // 1 ticket * 1500 + customer fee 20
 
     // 8. Owner verifies the refund case in back-office
     await ownerPage.reload();

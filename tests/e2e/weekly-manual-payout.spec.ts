@@ -1,10 +1,10 @@
+import { testClientIp, createIsolatedBrowserContext } from '../support/client-context';
+import { saveEventDraft } from '../support/event-draft';
 import { expect, test } from '@playwright/test';
 import { fixtureAccounts, fixturePassword } from '../support/auth-fixture';
 
-let nextIp = 1;
 test.beforeEach(async ({ context }, testInfo) => {
-  const base = testInfo.project.name === 'desktop-chromium' ? 180 : 230;
-  await context.setExtraHTTPHeaders({ 'x-forwarded-for': `198.51.100.${base + (nextIp++ % 40)}` });
+  await context.setExtraHTTPHeaders({ 'x-forwarded-for': testClientIp(testInfo) });
 });
 
 test.describe('Weekly manual payout: calculation, recording, history, and private proof boundary (TASK-029, AC-27, AC-30, AC-31, AC-79, AC-87, AC-92, AC-93)', () => {
@@ -30,10 +30,11 @@ test.describe('Weekly manual payout: calculation, recording, history, and privat
     await page.getByRole('button', { name: 'เข้าสู่ระบบ', exact: true }).click();
     await expect(page).toHaveURL('/back-office/organizer');
 
+    await page.goto('/back-office/organizer#events');
     await page.getByRole('button', { name: '+ สร้างงานคอนเสิร์ตใหม่' }).click();
     await page.getByLabel('ชื่องานคอนเสิร์ต').fill(eventTitle);
     await page.getByLabel('สถานที่จัดงาน').fill('อิมแพ็ค อารีน่า');
-    await page.getByRole('button', { name: 'บันทึกข้อมูลร่าง (Draft)' }).click();
+    await saveEventDraft(page);
     await expect(page.getByText('บันทึกงานคอนเสิร์ตสำเร็จ')).toBeVisible();
 
     const eventsRes = await page.request.get('/api/events');
@@ -64,7 +65,7 @@ test.describe('Weekly manual payout: calculation, recording, history, and privat
     });
 
     // 2. Owner approves session and sets fee settings (5% organizer fee, 10% reserve)
-    const ownerContext = await browser.newContext();
+    const ownerContext = await createIsolatedBrowserContext(browser, testInfo, );
     const ownerPage = await ownerContext.newPage();
     await ownerPage.goto('/login');
     await ownerPage.getByLabel('อีเมล', { exact: true }).fill(fixtureAccounts.owner.email);
@@ -89,10 +90,14 @@ test.describe('Weekly manual payout: calculation, recording, history, and privat
     expect(feeConfigRes.status()).toBe(200);
 
     // 3. Buyer purchases 2 tickets (2,000 THB tickets subtotal)
-    const buyerContext = await browser.newContext();
+    const buyerContext = await createIsolatedBrowserContext(browser, testInfo, );
     const buyerPage = await buyerContext.newPage();
-    await buyerPage.goto(`/events/${createdEvent.id}`);
+    await buyerPage.goto(`/events/${createdEvent.id}/checkout`);
     await expect(buyerPage.getByRole('heading', { name: eventTitle })).toBeVisible();
+
+    const addBtn = buyerPage.getByRole('button', { name: 'เพิ่มจำนวน VIP Zone A' });
+    await addBtn.click();
+    await addBtn.click();
 
     await buyerPage.getByLabel('ชื่อ-นามสกุล *').fill(buyerName);
     await buyerPage.getByLabel('อีเมล *').fill(buyerEmail);
@@ -108,19 +113,14 @@ test.describe('Weekly manual payout: calculation, recording, history, and privat
 
     await buyerPage.getByLabel('รหัส OTP 6 หลัก *').fill(code);
     await buyerPage.getByRole('button', { name: 'ยืนยันรหัส OTP' }).click();
+    await buyerPage.getByRole('button', { name: 'ยืนยันและดำเนินการต่อ' }).click();
     await expect(buyerPage.getByRole('heading', { name: 'ยืนยันอีเมลสำเร็จ (Guest Verified)' })).toBeVisible();
 
     // Select 2 tickets
-    const addBtn = buyerPage.getByRole('button', { name: 'เพิ่มจำนวน VIP Zone A' });
-    await addBtn.click();
-    await addBtn.click();
-    await buyerPage.getByRole('button', { name: 'ยืนยันการเลือกบัตร (2 ใบ)' }).click();
+    await buyerPage.locator('#confirm-reservation-btn').click();
     await expect(buyerPage.getByText('กันบัตรสำเร็จ (Reserved)')).toBeVisible();
 
     // Generate PromptPay QR
-    const generateQrBtn = buyerPage.getByRole('button', { name: 'สร้าง QR Code ชำระเงิน (PromptPay)' });
-    await expect(generateQrBtn).toBeVisible();
-    await generateQrBtn.click();
 
     await expect(buyerPage.locator('#promptpay-qr-image')).toBeVisible();
     const simulateBtn = buyerPage.locator('#simulate-payment-button');
@@ -131,7 +131,7 @@ test.describe('Weekly manual payout: calculation, recording, history, and privat
     await buyerContext.close();
 
     // 4. Organizer checks initial money report: Payable = 1,710 THB, Paid = 0
-    await page.goto('/back-office/organizer');
+    await page.goto('/back-office/organizer#events');
     const openReportBtn = page.locator(`[data-testid="open-money-report-btn-${createdEvent.id}"]`);
     await expect(openReportBtn).toBeVisible();
     await openReportBtn.click({ force: true });
@@ -143,11 +143,10 @@ test.describe('Weekly manual payout: calculation, recording, history, and privat
     await expect(page.locator('[data-testid="empty-payouts-message"]')).toBeVisible();
 
     // Close organizer modal
-    await page.getByRole('button', { name: 'ปิดรายงาน' }).click();
+    await openReportBtn.click({ force: true });
 
     // 5. Owner navigates to payout manager on /back-office/owner (AC-27, AC-30, AC-79)
-    await ownerPage.goto('/back-office/owner');
-    await ownerPage.locator('[data-testid="owner-nav-finance"]').click();
+    await ownerPage.goto('/back-office/owner#finance');
     const payoutManager = ownerPage.locator('[data-testid="owner-weekly-payout-manager"]');
     await expect(payoutManager).toBeVisible();
 
@@ -211,7 +210,7 @@ test.describe('Weekly manual payout: calculation, recording, history, and privat
     expect(orgProofRes.status()).toBe(403);
 
     // Scanner attempts to fetch proof endpoint directly -> 403 Forbidden
-    const scannerContext = await browser.newContext();
+    const scannerContext = await createIsolatedBrowserContext(browser, testInfo, );
     const scannerPage = await scannerContext.newPage();
     await scannerPage.goto('/login');
     await scannerPage.getByLabel('อีเมล', { exact: true }).fill(fixtureAccounts.scanner.email);
