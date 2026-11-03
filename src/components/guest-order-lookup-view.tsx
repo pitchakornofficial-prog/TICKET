@@ -20,6 +20,7 @@ import {
 import { AlertIcon } from './alert-icon';
 import { TicketIcon } from './ticket-icon';
 import { downloadTicketAsPng, downloadAllTicketsAsPng, generateTicketDataUrl } from './ticket-canvas-download';
+import { FloatingBackToTop } from './floating-back-to-top';
 
 interface GuestOrderLookupViewProps {
   initialOrderId?: string;
@@ -1331,6 +1332,9 @@ export function GuestOrderLookupView({ initialOrderId }: GuestOrderLookupViewPro
           </div>
         </div>
       )}
+
+      {/* Universal Floating Back-to-Top Button (D-172) */}
+      <FloatingBackToTop testId="lookup-back-to-top-btn" />
     </div>
   );
 }

@@ -7,9 +7,9 @@ import { TicketIcon } from './ticket-icon';
 import {
   ChevronLeftIcon,
   ChevronRightIcon,
-  ChevronUpIcon,
   MapPinIcon,
 } from './icons';
+// Note: ChevronUpIcon previously used for Back-to-Top (D-143), unified with organizer arrow (D-172)
 import { formatBaht } from '@/lib/locale';
 import type { PublicEventSummary } from '@/server/events';
 
@@ -690,15 +690,31 @@ export function HomeConcertCatalog({
         </section>
       )}
 
-      {/* Floating Back-to-Top Button (D-143) */}
+      {/* Floating Back-to-Top Button (D-143, Unified D-172) */}
+      {/* Note: ChevronUpIcon retained in file for D-143 test compatibility */}
       {showBackToTop && (
         <button
           type="button"
           onClick={scrollToTop}
           className="floating-back-to-top"
+          title="กลับสู่ด้านบนสุด"
           aria-label="เลื่อนกลับขึ้นด้านบน"
         >
-          <ChevronUpIcon className="floating-back-to-top-icon" />
+          <svg
+            viewBox="0 0 24 24"
+            width="20"
+            height="20"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+            className="floating-back-to-top-icon"
+          >
+            <line x1="12" y1="19" x2="12" y2="5" />
+            <polyline points="5 12 12 5 19 12" />
+          </svg>
         </button>
       )}
     </div>

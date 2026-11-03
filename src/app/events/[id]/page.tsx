@@ -22,6 +22,7 @@ import { EventProhibitedItemsCarousel } from '@/components/event-prohibited-item
 import { EventInteractivePoster } from '@/components/event-interactive-poster';
 import { EventOfficialGallery } from '@/components/event-official-gallery';
 import { ArtistPointerMascot } from '@/components/artist-pointer-mascot';
+import { FloatingBackToTop } from '@/components/floating-back-to-top';
 
 interface EventDetailPageProps {
   params: Promise<{ id: string }>;
@@ -387,6 +388,9 @@ export default async function EventDetailPage({ params, searchParams }: EventDet
           customUrls={(event as { artistPointerUrls?: string[] }).artistPointerUrls}
         />
       </aside>
+
+      {/* Universal Floating Back-to-Top Button (D-172) */}
+      <FloatingBackToTop hasStickyBar testId="event-detail-back-to-top-btn" />
     </div>
   );
 }

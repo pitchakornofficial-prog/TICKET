@@ -11976,6 +11976,11 @@ button.terminal-submit-btn:active {
   z-index: 99;
 }
 
+.floating-back-to-top.has-sticky-bar {
+  bottom: 6rem;
+  right: 1.5rem;
+}
+
 .floating-back-to-top:hover {
   background: #1848ed;
   border-color: #1848ed;
@@ -11991,6 +11996,20 @@ button.terminal-submit-btn:active {
 .floating-back-to-top-icon {
   width: 22px;
   height: 22px;
+}
+
+@media (max-width: 768px) {
+  .floating-back-to-top {
+    bottom: 1.25rem;
+    right: 1.25rem;
+    width: 40px;
+    height: 40px;
+  }
+
+  .floating-back-to-top.has-sticky-bar {
+    bottom: 5.25rem;
+    right: 1rem;
+  }
 }
 
 /* 5. Modal Dialog */

@@ -13,6 +13,7 @@ import { PurchaseStepIndicator } from './purchase-step-indicator';
 import { PurchaseTermsFaqList } from './purchase-terms-faq-list';
 import { CheckoutTimeoutModal } from './checkout-timeout-modal';
 import { QuotaLimitAlertModal } from './quota-limit-alert-modal';
+import { FloatingBackToTop } from './floating-back-to-top';
 import { formatBaht, formatDate, formatTime } from '@/lib/locale';
 import {
   AcademicCapIcon,
@@ -839,6 +840,9 @@ export function EventCheckoutFlow({
         remainingQuota={quotaModalData?.remainingQuota ?? 0}
         requestedQuantity={totalTickets}
       />
+
+      {/* Universal Floating Back-to-Top Button (D-172) */}
+      <FloatingBackToTop hasStickyBar testId="checkout-back-to-top-btn" />
     </div>
   );
 }

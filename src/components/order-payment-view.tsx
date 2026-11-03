@@ -10,6 +10,7 @@ import { formatBaht, formatDate, formatTime } from '@/lib/locale';
 import { PurchaseStepIndicator } from './purchase-step-indicator';
 import { PurchaseTermsFaqList } from './purchase-terms-faq-list';
 import { CheckoutTimeoutModal } from './checkout-timeout-modal';
+import { FloatingBackToTop } from './floating-back-to-top';
 import {
   ArrowLeftIcon,
   CalendarIcon,
@@ -620,6 +621,9 @@ export function OrderPaymentView({ orderId }: OrderPaymentViewProps) {
       {/* D-49: Universal Timeout Warning Modal */}
       <CheckoutTimeoutModal eventId={reservation.eventId} isOpen={isTimeoutModalOpen} />
       </div>
+
+      {/* Universal Floating Back-to-Top Button (D-172) */}
+      <FloatingBackToTop hasStickyBar testId="payment-back-to-top-btn" />
     </div>
   );
 }
