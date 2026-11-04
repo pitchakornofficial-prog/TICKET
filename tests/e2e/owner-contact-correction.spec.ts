@@ -1,10 +1,10 @@
+import { testClientIp, createIsolatedBrowserContext } from '../support/client-context';
+import { saveEventDraft } from '../support/event-draft';
 import { expect, test } from '@playwright/test';
 import { fixtureAccounts, fixturePassword } from '../support/auth-fixture';
 
-let nextIp = 1;
 test.beforeEach(async ({ context }, testInfo) => {
-  const base = testInfo.project.name === 'desktop-chromium' ? 151 : 201;
-  await context.setExtraHTTPHeaders({ 'x-forwarded-for': `198.51.100.${base + (nextIp++ % 50)}` });
+  await context.setExtraHTTPHeaders({ 'x-forwarded-for': testClientIp(testInfo) });
 });
 
 test.describe('Owner Contact Correction Flow (TASK-019, AC-76, G-24)', () => {
@@ -30,10 +30,11 @@ test.describe('Owner Contact Correction Flow (TASK-019, AC-76, G-24)', () => {
     await page.getByRole('button', { name: 'เข้าสู่ระบบ', exact: true }).click();
     await expect(page).toHaveURL('/back-office/organizer');
 
+    await page.goto('/back-office/organizer#events');
     await page.getByRole('button', { name: '+ สร้างงานคอนเสิร์ตใหม่' }).click();
     await page.getByLabel('ชื่องานคอนเสิร์ต').fill(eventTitle);
     await page.getByLabel('สถานที่จัดงาน').fill('พารากอน ฮอลล์');
-    await page.getByRole('button', { name: 'บันทึกข้อมูลร่าง (Draft)' }).click();
+    await saveEventDraft(page);
     await expect(page.getByText('บันทึกงานคอนเสิร์ตสำเร็จ')).toBeVisible();
 
     const eventsRes = await page.request.get('/api/events');
@@ -80,8 +81,13 @@ test.describe('Owner Contact Correction Flow (TASK-019, AC-76, G-24)', () => {
     await expect(page).toHaveURL('/login');
 
     // 3. Guest visits event detail page and completes purchase
-    await page.goto(`/events/${createdEvent.id}`);
+    await page.goto(`/events/${createdEvent.id}/checkout`);
     await expect(page.getByRole('heading', { name: eventTitle })).toBeVisible();
+
+    const addBtn = page.getByRole('button', { name: 'เพิ่มจำนวน บัตร Regular' });
+    await addBtn.click();
+    await addBtn.click();
+
 
     await page.getByLabel('ชื่อ-นามสกุล *').fill(buyerName);
     await page.getByLabel('อีเมล *').fill(initialEmail);
@@ -98,23 +104,17 @@ test.describe('Owner Contact Correction Flow (TASK-019, AC-76, G-24)', () => {
 
     await page.getByLabel('รหัส OTP 6 หลัก *').fill(code);
     await page.getByRole('button', { name: 'ยืนยันรหัส OTP' }).click();
+    await page.getByRole('button', { name: 'ยืนยันและดำเนินการต่อ' }).click();
     await expect(page.getByRole('heading', { name: 'ยืนยันอีเมลสำเร็จ (Guest Verified)' })).toBeVisible();
 
     // Select 2 tickets and confirm reservation
-    const addBtn = page.getByRole('button', { name: 'เพิ่มจำนวน บัตร Regular' });
-    await addBtn.click();
-    await addBtn.click();
-
-    await page.getByRole('button', { name: 'ยืนยันการเลือกบัตร (2 ใบ)' }).click();
+    await page.locator('#confirm-reservation-btn').click();
     await expect(page.getByText('กันบัตรสำเร็จ (Reserved)')).toBeVisible();
 
     const orderId = (await page.locator('#reservation-order-id').innerText()).trim();
     expect(orderId).toMatch(/^ORD-/);
 
     // Generate PromptPay QR
-    const generateQrBtn = page.getByRole('button', { name: 'สร้าง QR Code ชำระเงิน (PromptPay)' });
-    await expect(generateQrBtn).toBeVisible();
-    await generateQrBtn.click();
     await expect(page.locator('#promptpay-qr-image')).toBeVisible();
 
     // Simulate timely payment confirmation
@@ -132,7 +132,7 @@ test.describe('Owner Contact Correction Flow (TASK-019, AC-76, G-24)', () => {
     await expect(page).toHaveURL('/back-office/owner');
 
     // Switch to Customer section (TASK-038, AC-116)
-    await page.locator('[data-testid="owner-nav-customer"]').click();
+    await page.goto('/back-office/owner#customer');
 
     await expect(
       page.getByRole('heading', { name: 'แก้ไขข้อมูลติดต่อคำสั่งซื้อที่ชำระแล้ว (AC-76, G-24)' }),
@@ -170,7 +170,7 @@ test.describe('Owner Contact Correction Flow (TASK-019, AC-76, G-24)', () => {
     await page.getByRole('button', { name: 'ออกจากระบบ', exact: true }).click({ force: true });
 
     // 5. Verify Lookup behavior in a fresh browser context
-    const freshContext = await browser.newContext(testInfo.project.use);
+    const freshContext = await createIsolatedBrowserContext(browser, testInfo, testInfo.project.use);
     const freshPage = await freshContext.newPage();
 
     await freshPage.goto('/my-tickets');

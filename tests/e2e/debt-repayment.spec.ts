@@ -1,10 +1,10 @@
+import { testClientIp, createIsolatedBrowserContext } from '../support/client-context';
+import { saveEventDraft } from '../support/event-draft';
 import { expect, test } from '@playwright/test';
 import { fixtureAccounts, fixturePassword } from '../support/auth-fixture';
 
-let nextIp = 1;
 test.beforeEach(async ({ context }, testInfo) => {
-  const base = testInfo.project.name === 'desktop-chromium' ? 183 : 233;
-  await context.setExtraHTTPHeaders({ 'x-forwarded-for': `198.51.100.${base + (nextIp++ % 40)}` });
+  await context.setExtraHTTPHeaders({ 'x-forwarded-for': testClientIp(testInfo) });
 });
 
 test.describe('Event debt repayment and cross-event isolation (TASK-031, AC-85, AC-86, G-33, G-39)', () => {
@@ -17,8 +17,8 @@ test.describe('Event debt repayment and cross-event isolation (TASK-031, AC-85, 
     const eventATitle = `คอนเสิร์ต งานติดหนี้ A ${testInfo.project.name} ${Date.now()}`;
     const eventBTitle = `คอนเสิร์ต งานปกติ B ${testInfo.project.name} ${Date.now()}`;
 
-    const buyerEmailA = `buyer-debt-a-${testInfo.project.name}@ticket.invalid`;
-    const buyerEmailB = `buyer-debt-b-${testInfo.project.name}@ticket.invalid`;
+    const buyerEmailA = `buyer-debt-a-${testInfo.project.name}-${testInfo.repeatEachIndex}-${Date.now()}@ticket.invalid`;
+    const buyerEmailB = `buyer-debt-b-${testInfo.project.name}-${testInfo.repeatEachIndex}-${Date.now()}@ticket.invalid`;
     const buyerPhone = '0812345678';
     const buyerName = 'คุณวิชัย ทดสอบหนี้';
 
@@ -35,17 +35,19 @@ test.describe('Event debt repayment and cross-event isolation (TASK-031, AC-85, 
     await expect(page).toHaveURL('/back-office/organizer');
 
     // Create Event A
+    await page.goto('/back-office/organizer#events');
     await page.getByRole('button', { name: '+ สร้างงานคอนเสิร์ตใหม่' }).click();
     await page.getByLabel('ชื่องานคอนเสิร์ต').fill(eventATitle);
     await page.getByLabel('สถานที่จัดงาน').fill('อิมแพ็ค อารีน่า A');
-    await page.getByRole('button', { name: 'บันทึกข้อมูลร่าง (Draft)' }).click();
+    await saveEventDraft(page);
     await expect(page.getByText('บันทึกงานคอนเสิร์ตสำเร็จ')).toBeVisible();
 
     // Create Event B
+    await page.goto('/back-office/organizer#events');
     await page.getByRole('button', { name: '+ สร้างงานคอนเสิร์ตใหม่' }).click();
     await page.getByLabel('ชื่องานคอนเสิร์ต').fill(eventBTitle);
     await page.getByLabel('สถานที่จัดงาน').fill('อิมแพ็ค อารีน่า B');
-    await page.getByRole('button', { name: 'บันทึกข้อมูลร่าง (Draft)' }).click();
+    await saveEventDraft(page);
     await expect(page.getByText('บันทึกงานคอนเสิร์ตสำเร็จ')).toBeVisible();
 
     const eventsRes = await page.request.get('/api/events');
@@ -91,7 +93,7 @@ test.describe('Event debt repayment and cross-event isolation (TASK-031, AC-85, 
     await page.request.post(`/api/events/${eventB.id}?action=submit-session`, { data: { sessionId: sessionBId } });
 
     // 2. Owner logs in, approves both sessions, and configures fee settings (10% fee, 10% reserve)
-    const ownerContext = await browser.newContext();
+    const ownerContext = await createIsolatedBrowserContext(browser, testInfo, );
     const ownerPage = await ownerContext.newPage();
     await ownerPage.goto('/login');
     await ownerPage.getByLabel('อีเมล', { exact: true }).fill(fixtureAccounts.owner.email);
@@ -110,10 +112,12 @@ test.describe('Event debt repayment and cross-event isolation (TASK-031, AC-85, 
     });
 
     // 3. Buyer purchases 1 ticket in Event A (1,000 THB)
-    const buyerContextA = await browser.newContext();
+    const buyerContextA = await createIsolatedBrowserContext(browser, testInfo, );
     const buyerPageA = await buyerContextA.newPage();
-    await buyerPageA.goto(`/events/${eventA.id}`);
+    await buyerPageA.goto(`/events/${eventA.id}/checkout`);
     await expect(buyerPageA.getByRole('heading', { name: eventATitle })).toBeVisible({ timeout: 25000 });
+
+    await buyerPageA.getByRole('button', { name: 'เพิ่มจำนวน VIP Zone A' }).click();
 
     await buyerPageA.getByLabel('ชื่อ-นามสกุล *').fill(buyerName);
     await buyerPageA.getByLabel('อีเมล *').fill(buyerEmailA);
@@ -125,29 +129,30 @@ test.describe('Event debt repayment and cross-event isolation (TASK-031, AC-85, 
     const { code: codeA } = await otpResA.json();
     await buyerPageA.getByLabel('รหัส OTP 6 หลัก *').fill(codeA);
     await buyerPageA.getByRole('button', { name: 'ยืนยันรหัส OTP' }).click();
+    await buyerPageA.getByRole('button', { name: 'ยืนยันและดำเนินการต่อ' }).click();
     await expect(buyerPageA.getByRole('heading', { name: 'ยืนยันอีเมลสำเร็จ (Guest Verified)' })).toBeVisible();
 
-    await buyerPageA.getByRole('button', { name: 'เพิ่มจำนวน VIP Zone A' }).click();
-    await buyerPageA.getByRole('button', { name: /ยืนยันการเลือกบัตร/ }).click({ force: true });
+    await buyerPageA.locator('#confirm-reservation-btn').click({ force: true });
     await expect(buyerPageA.getByText('กันบัตรสำเร็จ (Reserved)')).toBeVisible();
 
-    await buyerPageA.getByRole('button', { name: 'สร้าง QR Code ชำระเงิน (PromptPay)' }).click({ force: true });
     await expect(buyerPageA.locator('#promptpay-qr-image')).toBeVisible();
     const simBtnA = buyerPageA.locator('#simulate-payment-button');
     await expect(simBtnA).toBeVisible();
     await simBtnA.scrollIntoViewIfNeeded();
-    await simBtnA.dispatchEvent('click');
+    await simBtnA.click();
     await expect(buyerPageA.getByText('ชำระเงินสำเร็จ (Paid)')).toBeVisible({ timeout: 25000 });
+    await expect(buyerPageA.getByText('ออกบัตรสำเร็จแล้ว (1 ใบ)')).toBeVisible({ timeout: 25000 });
 
     // 4. Owner pays out 810 THB for Event A
-    await ownerPage.goto('/back-office/owner');
+    await ownerPage.goto('/back-office/owner#finance');
     await ownerPage.reload();
-    await ownerPage.locator('[data-testid="owner-nav-finance"]').click();
     const payoutManager = ownerPage.locator('[data-testid="owner-weekly-payout-manager"]');
     await expect(payoutManager).toBeVisible();
     const payoutSelect = payoutManager.locator('#payout-event-select');
     await expect(payoutSelect.locator(`option[value="${eventA.id}"]`)).toBeAttached({ timeout: 20000 });
+    await expect(payoutSelect.locator(`option[value="${eventB.id}"]`)).toBeAttached({ timeout: 20000 });
     await payoutSelect.selectOption(eventA.id);
+    await expect(payoutSelect).toHaveValue(eventA.id);
     await expect(payoutManager.locator('[data-testid="owner-payable-amount"]')).toContainText('810.00', { timeout: 20000 });
 
     await payoutManager.locator('#submit-payout-btn').click({ force: true });
@@ -174,10 +179,12 @@ test.describe('Event debt repayment and cross-event isolation (TASK-031, AC-85, 
     // Event A is now in debt: E = 0, P = 810 -> Debt = 810 THB!
 
     // 7. Buyer purchases 1 ticket in Event B (1,000 THB)
-    const buyerContextB = await browser.newContext();
+    const buyerContextB = await createIsolatedBrowserContext(browser, testInfo, );
     const buyerPageB = await buyerContextB.newPage();
-    await buyerPageB.goto(`/events/${eventB.id}`);
+    await buyerPageB.goto(`/events/${eventB.id}/checkout`);
     await expect(buyerPageB.getByRole('heading', { name: eventBTitle })).toBeVisible({ timeout: 25000 });
+
+    await buyerPageB.getByRole('button', { name: 'เพิ่มจำนวน VIP Zone B' }).click();
 
     await buyerPageB.getByLabel('ชื่อ-นามสกุล *').fill(buyerName);
     await buyerPageB.getByLabel('อีเมล *').fill(buyerEmailB);
@@ -189,19 +196,23 @@ test.describe('Event debt repayment and cross-event isolation (TASK-031, AC-85, 
     const { code: codeB } = await otpResB.json();
     await buyerPageB.getByLabel('รหัส OTP 6 หลัก *').fill(codeB);
     await buyerPageB.getByRole('button', { name: 'ยืนยันรหัส OTP' }).click();
+    await buyerPageB.getByRole('button', { name: 'ยืนยันและดำเนินการต่อ' }).click();
+    await expect(buyerPageB.getByRole('heading', { name: 'ยืนยันอีเมลสำเร็จ (Guest Verified)' })).toBeVisible();
 
-    await buyerPageB.getByRole('button', { name: 'เพิ่มจำนวน VIP Zone B' }).click();
-    await buyerPageB.getByRole('button', { name: /ยืนยันการเลือกบัตร/ }).click({ force: true });
-    await buyerPageB.getByRole('button', { name: 'สร้าง QR Code ชำระเงิน (PromptPay)' }).click({ force: true });
+    await buyerPageB.locator('#confirm-reservation-btn').click({ force: true });
+    await expect(buyerPageB.getByText('กันบัตรสำเร็จ (Reserved)')).toBeVisible();
+    await expect(buyerPageB.locator('#promptpay-qr-image')).toBeVisible();
     const simBtnB = buyerPageB.locator('#simulate-payment-button');
     await expect(simBtnB).toBeVisible();
     await simBtnB.scrollIntoViewIfNeeded();
-    await simBtnB.dispatchEvent('click');
+    await simBtnB.click();
     await expect(buyerPageB.getByText('ชำระเงินสำเร็จ (Paid)')).toBeVisible({ timeout: 25000 });
+    await expect(buyerPageB.getByText('ออกบัตรสำเร็จแล้ว (1 ใบ)')).toBeVisible({ timeout: 25000 });
     await buyerContextB.close();
 
     // 8. Organizer checks Event B Money Report: Payable = 810 THB (CRITICAL AC-85 check!)
-    await page.goto('/back-office/organizer');
+    await page.goto('/back-office/organizer#events');
+    await page.reload();
     const openReportBBtn = page.locator(`[data-testid="open-money-report-btn-${eventB.id}"]`);
     await expect(openReportBBtn).toBeVisible();
     await openReportBBtn.click({ force: true });
@@ -209,7 +220,7 @@ test.describe('Event debt repayment and cross-event isolation (TASK-031, AC-85, 
     await expect(page.locator('#organizer-money-report-modal')).toBeVisible();
     // Event B payable must NOT be deducted by Event A's 810 THB debt!
     await expect(page.locator('[data-testid="payable-amount"]')).toContainText('810.00');
-    await page.getByRole('button', { name: 'ปิดรายงาน' }).click();
+    await openReportBBtn.click({ force: true });
 
     // 9. Organizer checks Event A Money Report: shows Debt 810 THB & isolation alert (AC-85, AC-86)
     const openReportABtn = page.locator(`[data-testid="open-money-report-btn-${eventA.id}"]`);
@@ -219,18 +230,19 @@ test.describe('Event debt repayment and cross-event isolation (TASK-031, AC-85, 
     await expect(page.locator('[data-testid="debt-amount"]')).toContainText('810.00');
     await expect(page.locator('[data-testid="debt-isolation-alert"]')).toBeVisible();
     await expect(page.locator('[data-testid="empty-repayments-message"]')).toBeVisible();
-    await page.getByRole('button', { name: 'ปิดรายงาน' }).click();
+    await openReportABtn.click({ force: true });
 
     // 10. Owner navigates to Debt Repayment Manager (TASK-031, AC-86)
-    await ownerPage.goto('/back-office/owner');
+    await ownerPage.goto('/back-office/owner#finance');
     await ownerPage.reload();
-    await ownerPage.locator('[data-testid="owner-nav-finance"]').click();
     const debtManager = ownerPage.locator('[data-testid="owner-debt-repayment-manager"]');
     await expect(debtManager).toBeVisible();
 
     const debtSelect = debtManager.locator('#owner-debt-repayment-event-select');
     await expect(debtSelect.locator(`option[value="${eventA.id}"]`)).toBeAttached({ timeout: 20000 });
+    await expect(debtSelect.locator(`option[value="${eventB.id}"]`)).toBeAttached({ timeout: 20000 });
     await debtSelect.selectOption(eventA.id);
+    await expect(debtSelect).toHaveValue(eventA.id);
 
     // Verify debt status badge & amount
     const debtStatusBadge = debtManager.locator('[data-testid="event-debt-status-badge"]');
@@ -260,7 +272,8 @@ test.describe('Event debt repayment and cross-event isolation (TASK-031, AC-85, 
     await expect(repaymentsTable).toContainText('ผู้จัดงานโอนชดเชยยอดค้างชำระเรียบร้อย');
 
     // 11. Organizer verifies Event A Money Report now reflects cleared debt & repayment history
-    await page.goto('/back-office/organizer');
+    await page.goto('/back-office/organizer#events');
+    await page.reload();
     const openReportAAfterBtn = page.locator(`[data-testid="open-money-report-btn-${eventA.id}"]`);
     await expect(openReportAAfterBtn).toBeVisible();
     await openReportAAfterBtn.click({ force: true });
@@ -268,7 +281,7 @@ test.describe('Event debt repayment and cross-event isolation (TASK-031, AC-85, 
     // Debt card is replaced by payable = 0.00 (not debt anymore)
     await expect(page.locator('[data-testid="payable-amount"]')).toContainText('0.00', { timeout: 20000 });
     await expect(page.locator('text=รับคืนหนี้แล้ว: ฿810.00')).toBeVisible({ timeout: 20000 });
-    await page.getByRole('button', { name: 'ปิดรายงาน' }).click();
+    await openReportAAfterBtn.click({ force: true });
 
     // 12. Role isolation checks (AC-86)
     // Organizer tries to POST repayment -> 403 Forbidden
@@ -278,7 +291,7 @@ test.describe('Event debt repayment and cross-event isolation (TASK-031, AC-85, 
     expect(orgRepayRes.status()).toBe(403);
 
     // Scanner tries to POST repayment -> 403 Forbidden
-    const scannerContext = await browser.newContext();
+    const scannerContext = await createIsolatedBrowserContext(browser, testInfo, );
     const scannerPage = await scannerContext.newPage();
     await scannerPage.goto('/login');
     await scannerPage.getByLabel('อีเมล', { exact: true }).fill(fixtureAccounts.scanner.email);

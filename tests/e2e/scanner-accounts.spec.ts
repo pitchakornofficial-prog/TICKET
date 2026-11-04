@@ -1,10 +1,10 @@
+import { testClientIp } from '../support/client-context';
+import { saveEventDraft } from '../support/event-draft';
 import { expect, test } from '@playwright/test';
 import { fixtureAccounts, fixturePassword } from '../support/auth-fixture';
 
-let nextIp = 1;
 test.beforeEach(async ({ context }, testInfo) => {
-  const base = testInfo.project.name === 'desktop-chromium' ? 140 : 190;
-  await context.setExtraHTTPHeaders({ 'x-forwarded-for': `198.51.100.${base + (nextIp++ % 50)}` });
+  await context.setExtraHTTPHeaders({ 'x-forwarded-for': testClientIp(testInfo) });
 });
 
 test.describe('Scanner account assignment and scoping (TASK-009, AC-09)', () => {
@@ -26,10 +26,11 @@ test.describe('Scanner account assignment and scoping (TASK-009, AC-09)', () => 
       await page.getByTestId('organizer-mobile-menu-toggle').click();
     }
     await page.getByTestId('organizer-nav-events').click();
+    await page.goto('/back-office/organizer#events');
     await page.getByRole('button', { name: '+ สร้างงานคอนเสิร์ตใหม่' }).click();
     await page.getByLabel('ชื่องานคอนเสิร์ต').fill(eventTitle);
     await page.getByLabel('สถานที่จัดงาน').fill('ศูนย์การประชุมแห่งชาติสิริกิติ์');
-    await page.getByRole('button', { name: 'บันทึกข้อมูลร่าง (Draft)' }).click();
+    await saveEventDraft(page);
     await expect(page.getByText('บันทึกงานคอนเสิร์ตสำเร็จ')).toBeVisible();
 
     // 3. Organizer assigns scanner to the event
@@ -37,7 +38,7 @@ test.describe('Scanner account assignment and scoping (TASK-009, AC-09)', () => 
       await page.getByTestId('organizer-mobile-menu-toggle').click();
     }
     await page.getByTestId('organizer-nav-scanners').click();
-    await expect(page.getByRole('heading', { name: 'จัดการทีมสแกนบัตรเฉพาะงาน' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'เจ้าหน้าที่และอุปกรณ์สแกนบัตร' })).toBeVisible();
     await page.getByLabel('เลือกงานคอนเสิร์ตที่ต้องการจัดทีมสแกน').selectOption({ label: `${eventTitle} (ฉบับร่าง)` });
 
     await page.getByLabel('ชื่อทีมสแกน / ผู้สแกน').fill(scannerName);

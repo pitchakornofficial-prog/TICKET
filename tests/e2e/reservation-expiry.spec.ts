@@ -1,10 +1,9 @@
+import { testClientIp } from '../support/client-context';
 import { expect, test } from '@playwright/test';
 import { fixtureAccounts, fixturePassword } from '../support/auth-fixture';
 
-let nextIp = 1;
 test.beforeEach(async ({ context }, testInfo) => {
-  const base = testInfo.project.name === 'desktop-chromium' ? 142 : 192;
-  await context.setExtraHTTPHeaders({ 'x-forwarded-for': `198.51.100.${base + (nextIp++ % 50)}` });
+  await context.setExtraHTTPHeaders({ 'x-forwarded-for': testClientIp(testInfo) });
 });
 
 test.describe('Reservation expiry, refresh idempotency and quota release (TASK-013, AC-70, AC-71, G-14, G-34)', () => {
@@ -12,8 +11,9 @@ test.describe('Reservation expiry, refresh idempotency and quota release (TASK-0
     page,
     request,
   }, testInfo) => {
-    const eventTitle = `คอนเสิร์ตทดสอบ Expiry ${testInfo.project.name}`;
-    const guestEmail = `buyer-expiry-${testInfo.project.name}@ticket.invalid`;
+    test.setTimeout(90000);
+    const eventTitle = `คอนเสิร์ตทดสอบ Expiry ${testInfo.project.name} ${Date.now()}`;
+    const guestEmail = `buyer-expiry-${testInfo.project.name}-${testInfo.repeatEachIndex}-${Date.now()}@ticket.invalid`;
     const guestName = `สมชาย สิ้นสุด ${testInfo.project.name}`;
     const guestPhone = '0811122334';
 

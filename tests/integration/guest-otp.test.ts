@@ -90,7 +90,7 @@ describe('Guest OTP verification and rate limiting integration (TASK-011, AC-57,
 
     // 5. Verify session retrieval
     const token = successRes.verifiedToken ?? '';
-    const session = await getVerifiedGuestSession(fixture.pool, token);
+    const session = await getVerifiedGuestSession(fixture.pool, token, new Date(baseTime.getTime() + 40000));
     expect(session).not.toBeNull();
     expect(session?.email).toBe(buyer.email);
     expect(session?.name).toBe(buyer.name);

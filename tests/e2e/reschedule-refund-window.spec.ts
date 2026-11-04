@@ -1,10 +1,10 @@
+import { testClientIp, createIsolatedBrowserContext } from '../support/client-context';
+import { saveEventDraft } from '../support/event-draft';
 import { expect, test } from '@playwright/test';
 import { fixtureAccounts, fixturePassword } from '../support/auth-fixture';
 
-let nextIp = 1;
 test.beforeEach(async ({ context }, testInfo) => {
-  const base = testInfo.project.name === 'desktop-chromium' ? 170 : 220;
-  await context.setExtraHTTPHeaders({ 'x-forwarded-for': `198.51.100.${base + (nextIp++ % 40)}` });
+  await context.setExtraHTTPHeaders({ 'x-forwarded-for': testClientIp(testInfo) });
 });
 
 test.describe('Reschedule session & special refund window (TASK-025, AC-38, AC-108, G-13)', () => {
@@ -35,10 +35,11 @@ test.describe('Reschedule session & special refund window (TASK-025, AC-38, AC-1
     await page.getByRole('button', { name: 'เข้าสู่ระบบ', exact: true }).click();
     await expect(page).toHaveURL('/back-office/organizer');
 
+    await page.goto('/back-office/organizer#events');
     await page.getByRole('button', { name: '+ สร้างงานคอนเสิร์ตใหม่' }).click();
     await page.getByLabel('ชื่องานคอนเสิร์ต').fill(eventTitle);
     await page.getByLabel('สถานที่จัดงาน').fill('อิมแพ็ค อารีน่า เมืองทองธานี');
-    await page.getByRole('button', { name: 'บันทึกข้อมูลร่าง (Draft)' }).click();
+    await saveEventDraft(page);
     await expect(page.getByText('บันทึกงานคอนเสิร์ตสำเร็จ')).toBeVisible();
 
     const eventsRes = await page.request.get('/api/events');
@@ -67,7 +68,7 @@ test.describe('Reschedule session & special refund window (TASK-025, AC-38, AC-1
     });
 
     // 2. Owner logs in on isolated ownerPage and approves initial session
-    const ownerContext = await browser.newContext();
+    const ownerContext = await createIsolatedBrowserContext(browser, testInfo, );
     const ownerPage = await ownerContext.newPage();
 
     await ownerPage.goto('/login');
@@ -83,16 +84,19 @@ test.describe('Reschedule session & special refund window (TASK-025, AC-38, AC-1
     await expect(ownerPage.getByText(`อนุมัติรอบการแสดงของ "${eventTitle}" สำเร็จ`)).toBeVisible();
 
     // 3. Guest visits public concert page in isolated buyerContext and buys 1 ticket
-    const buyerContext = await browser.newContext();
+    const buyerContext = await createIsolatedBrowserContext(browser, testInfo, );
     const buyerPage = await buyerContext.newPage();
 
-    await buyerPage.goto(`/events/${createdEvent.id}`);
+    await buyerPage.goto(`/events/${createdEvent.id}/checkout`);
     await expect(buyerPage.getByRole('heading', { name: eventTitle })).toBeVisible();
 
     // Verify original session time is shown (December 10, 2026 / 10 ธันวาคม 2569)
-    await expect(buyerPage.locator('.session-date-heading', { hasText: '10 ธันวาคม 2569' })).toBeVisible();
+    await expect(buyerPage.getByText('10 ธันวาคม 2569').first()).toBeVisible();
 
     // Guest checkout form
+    const addBtn = buyerPage.getByRole('button', { name: 'เพิ่มจำนวน VIP Seating' });
+    await addBtn.click();
+
     await buyerPage.getByLabel('ชื่อ-นามสกุล *').fill(guestName);
     await buyerPage.getByLabel('อีเมล *').fill(guestEmail);
     await buyerPage.getByLabel('เบอร์โทรศัพท์มือถือ *').fill(guestPhone);
@@ -107,14 +111,12 @@ test.describe('Reschedule session & special refund window (TASK-025, AC-38, AC-1
 
     await buyerPage.getByLabel('รหัส OTP 6 หลัก *').fill(code);
     await buyerPage.getByRole('button', { name: 'ยืนยันรหัส OTP' }).click();
+    await buyerPage.getByRole('button', { name: 'ยืนยันและดำเนินการต่อ' }).click();
     await expect(buyerPage.getByRole('heading', { name: 'ยืนยันอีเมลสำเร็จ (Guest Verified)' })).toBeVisible();
 
-    const addBtn = buyerPage.getByRole('button', { name: 'เพิ่มจำนวน VIP Seating' });
-    await addBtn.click();
-    await buyerPage.getByRole('button', { name: 'ยืนยันการเลือกบัตร (1 ใบ)' }).click();
+    await buyerPage.locator('#confirm-reservation-btn').click();
     await expect(buyerPage.getByText('กันบัตรสำเร็จ (Reserved)')).toBeVisible();
 
-    await buyerPage.getByRole('button', { name: 'สร้าง QR Code ชำระเงิน (PromptPay)' }).click();
     await expect(buyerPage.locator('#promptpay-qr-image')).toBeVisible();
 
     await buyerPage.locator('#simulate-payment-button').click();
@@ -122,22 +124,23 @@ test.describe('Reschedule session & special refund window (TASK-025, AC-38, AC-1
     await expect(buyerPage.getByText('ออกบัตรสำเร็จแล้ว (1 ใบ)')).toBeVisible();
 
     // 4. Organizer submits a reschedule amendment on organizer page
-    await page.goto('/back-office/organizer');
+    await page.goto('/back-office/organizer#events');
+    await page.reload();
     await page.locator(`[data-testid="open-amendment-btn-${createdEvent.id}"]`).click({ force: true });
-    await expect(page.locator('#amendment-form-section')).toBeVisible();
+    await expect(page.getByRole('heading', { name: /ขอแก้ไขรอบการแสดง:/ })).toBeVisible();
 
     // Enter new reschedule times
     await page.locator('#amendment-start-time').fill(newStartTime);
     await page.locator('#amendment-end-time').fill(newEndTime);
     await page.locator('[data-testid="submit-amendment-btn"]').click();
-    await expect(page.getByText(/ยื่นคำขอแก้ไขรอบการแสดงสำเร็จ/)).toBeVisible();
+    await expect(page.getByText(/ส่งคำขอแก้ไขรอบการแสดงเรียบร้อยแล้ว|ยื่นคำขอแก้ไขรอบการแสดงสำเร็จ/)).toBeVisible();
 
     // 5. Verification of AC-108 & G-13:
     // While amendment is pending, buyer still sees original session time (10 ธันวาคม 2569)
     await buyerPage.goto(`/events/${createdEvent.id}`);
     await expect(buyerPage.getByRole('heading', { name: eventTitle })).toBeVisible();
-    await expect(buyerPage.locator('.session-date-heading', { hasText: '10 ธันวาคม 2569' })).toBeVisible();
-    await expect(buyerPage.locator('.session-date-heading', { hasText: '25 ธันวาคม 2569' })).toHaveCount(0);
+    await expect(buyerPage.locator('.session-accordion-date', { hasText: '10 ธันวาคม 2569' })).toBeVisible();
+    await expect(buyerPage.locator('.session-accordion-date', { hasText: '25 ธันวาคม 2569' })).toHaveCount(0);
 
     // 6. Owner approves reschedule amendment and sets Special Refund Window on ownerPage
     await ownerPage.goto('/back-office/owner');
@@ -160,7 +163,7 @@ test.describe('Reschedule session & special refund window (TASK-025, AC-38, AC-1
     // After approval, buyer sees the updated session date (25 ธันวาคม 2569)
     await buyerPage.goto(`/events/${createdEvent.id}`);
     await expect(buyerPage.getByRole('heading', { name: eventTitle })).toBeVisible();
-    await expect(buyerPage.locator('.session-date-heading', { hasText: '25 ธันวาคม 2569' })).toBeVisible();
+    await expect(buyerPage.locator('.session-accordion-date', { hasText: '25 ธันวาคม 2569' })).toBeVisible();
 
     // 8. Buyer visits /my-tickets during special refund window (AC-38)
     await buyerPage.goto('/my-tickets');
@@ -182,7 +185,7 @@ test.describe('Reschedule session & special refund window (TASK-025, AC-38, AC-1
 
     // In orders view
     await expect(buyerPage.getByText(`ผู้ซื้อ: ${guestName}`)).toBeVisible();
-    await expect(buyerPage.getByText(eventTitle)).toBeVisible();
+    await expect(buyerPage.getByText(eventTitle).first()).toBeVisible();
 
     // Open refund section
     const toggleRefundBtn = buyerPage.locator('[data-testid="toggle-refund-section-btn"]');

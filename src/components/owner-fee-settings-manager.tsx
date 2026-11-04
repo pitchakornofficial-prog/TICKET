@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useTransition } from 'react';
+import { useState, useEffect, useCallback, useTransition, useRef } from 'react';
 import type { OrganizerFeeMode, CustomerFeeMode } from '@/server/fees';
 import { CheckCircleIcon, InfoIcon, ShieldCheckIcon } from './icons';
 import { AlertIcon } from './alert-icon';
@@ -27,6 +27,7 @@ interface EventSummary {
 export function OwnerFeeSettingsManager() {
   const [events, setEvents] = useState<EventSummary[]>([]);
   const [selectedEventId, setSelectedEventId] = useState<string>('');
+  const selectedEventIdRef = useRef<string>('');
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -40,6 +41,7 @@ export function OwnerFeeSettingsManager() {
   const [organizerFeeLocked, setOrganizerFeeLocked] = useState<boolean>(false);
 
   const selectEvent = useCallback((ev: EventSummary) => {
+    selectedEventIdRef.current = ev.id;
     setSelectedEventId(ev.id);
     const fs = ev.feeSettings;
     setOrganizerFeeMode(fs.organizerFeeMode || 'percentage');
@@ -57,10 +59,11 @@ export function OwnerFeeSettingsManager() {
       const data = await res.json();
       const list: EventSummary[] = data.events || [];
       setEvents(list);
-      if (list.length > 0 && !selectedEventId) {
+      const currentSelectedId = selectedEventIdRef.current;
+      if (list.length > 0 && !currentSelectedId) {
         selectEvent(list[0]);
-      } else if (selectedEventId) {
-        const found = list.find(e => e.id === selectedEventId);
+      } else if (currentSelectedId) {
+        const found = list.find(e => e.id === currentSelectedId);
         if (found) selectEvent(found);
       }
     } catch (err: unknown) {
@@ -69,7 +72,7 @@ export function OwnerFeeSettingsManager() {
     } finally {
       setLoading(false);
     }
-  }, [selectedEventId, selectEvent]);
+  }, [selectEvent]);
 
   useEffect(() => {
     loadEvents();

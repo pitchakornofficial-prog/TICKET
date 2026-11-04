@@ -1,10 +1,10 @@
+import { testClientIp, createIsolatedBrowserContext } from '../support/client-context';
+import { saveEventDraft } from '../support/event-draft';
 import { expect, test } from '@playwright/test';
 import { fixtureAccounts, fixturePassword } from '../support/auth-fixture';
 
-let nextIp = 1;
 test.beforeEach(async ({ context }, testInfo) => {
-  const base = testInfo.project.name === 'desktop-chromium' ? 182 : 232;
-  await context.setExtraHTTPHeaders({ 'x-forwarded-for': `198.51.100.${base + (nextIp++ % 40)}` });
+  await context.setExtraHTTPHeaders({ 'x-forwarded-for': testClientIp(testInfo) });
 });
 
 test.describe('Reserve release after final session: calculation, release, and role protection (TASK-030, AC-83)', () => {
@@ -33,10 +33,11 @@ test.describe('Reserve release after final session: calculation, release, and ro
     await page.getByRole('button', { name: 'เข้าสู่ระบบ', exact: true }).click();
     await expect(page).toHaveURL('/back-office/organizer');
 
+    await page.goto('/back-office/organizer#events');
     await page.getByRole('button', { name: '+ สร้างงานคอนเสิร์ตใหม่' }).click();
     await page.getByLabel('ชื่องานคอนเสิร์ต').fill(eventTitle);
     await page.getByLabel('สถานที่จัดงาน').fill('อิมแพ็ค อารีน่า');
-    await page.getByRole('button', { name: 'บันทึกข้อมูลร่าง (Draft)' }).click();
+    await saveEventDraft(page);
     await expect(page.getByText('บันทึกงานคอนเสิร์ตสำเร็จ')).toBeVisible();
 
     const eventsRes = await page.request.get('/api/events');
@@ -76,7 +77,7 @@ test.describe('Reserve release after final session: calculation, release, and ro
     });
 
     // 2. Owner approves both sessions and sets fee settings (10% organizer fee, 10% reserve)
-    const ownerContext = await browser.newContext();
+    const ownerContext = await createIsolatedBrowserContext(browser, testInfo, );
     const ownerPage = await ownerContext.newPage();
     await ownerPage.goto('/login');
     await ownerPage.getByLabel('อีเมล', { exact: true }).fill(fixtureAccounts.owner.email);
@@ -107,10 +108,15 @@ test.describe('Reserve release after final session: calculation, release, and ro
     expect(feeConfigRes.status()).toBe(200);
 
     // 3. Buyer purchases 1 ticket for 1,000 THB in Session 1
-    const buyerContext = await browser.newContext();
+    const buyerContext = await createIsolatedBrowserContext(browser, testInfo, );
     const buyerPage = await buyerContext.newPage();
-    await buyerPage.goto(`/events/${createdEvent.id}`);
+    await buyerPage.goto(`/events/${createdEvent.id}/checkout`);
     await expect(buyerPage.getByRole('heading', { name: eventTitle })).toBeVisible();
+
+    const addBtn = buyerPage.getByRole('button', { name: 'เพิ่มจำนวน Regular Round 1' });
+    await expect(addBtn).toBeVisible();
+    await addBtn.click();
+
 
     await buyerPage.getByLabel('ชื่อ-นามสกุล *').fill(buyerName);
     await buyerPage.getByLabel('อีเมล *').fill(buyerEmail);
@@ -127,22 +133,16 @@ test.describe('Reserve release after final session: calculation, release, and ro
 
     await buyerPage.getByLabel('รหัส OTP 6 หลัก *').fill(code);
     await buyerPage.getByRole('button', { name: 'ยืนยันรหัส OTP' }).click();
+    await buyerPage.getByRole('button', { name: 'ยืนยันและดำเนินการต่อ' }).click();
     await expect(buyerPage.getByRole('heading', { name: 'ยืนยันอีเมลสำเร็จ (Guest Verified)' })).toBeVisible();
 
     // Select 1 ticket for Regular Round 1
-    const addBtn = buyerPage.getByRole('button', { name: 'เพิ่มจำนวน Regular Round 1' });
-    await expect(addBtn).toBeVisible();
-    await addBtn.click();
-
-    const confirmBtn = buyerPage.getByRole('button', { name: /ยืนยันการเลือกบัตร/ });
+    const confirmBtn = buyerPage.locator('#confirm-reservation-btn');
     await expect(confirmBtn).toBeEnabled();
     await confirmBtn.click({ force: true });
     await expect(buyerPage.getByText('กันบัตรสำเร็จ (Reserved)')).toBeVisible();
 
     // Generate PromptPay QR
-    const generateQrBtn = buyerPage.getByRole('button', { name: 'สร้าง QR Code ชำระเงิน (PromptPay)' });
-    await expect(generateQrBtn).toBeVisible();
-    await generateQrBtn.click({ force: true });
 
     await expect(buyerPage.locator('#promptpay-qr-image')).toBeVisible();
     const simulateBtn = buyerPage.locator('#simulate-payment-button');
@@ -155,8 +155,7 @@ test.describe('Reserve release after final session: calculation, release, and ro
 
     // 4. Owner verifies initial accounting and pays out 810 THB
     // E = 900, Reserve target = 90, Held H = 90, Payable = 810, Paid = 0
-    await ownerPage.goto('/back-office/owner');
-    await ownerPage.locator('[data-testid="owner-nav-finance"]').click();
+    await ownerPage.goto('/back-office/owner#finance');
     const payoutManager = ownerPage.locator('[data-testid="owner-weekly-payout-manager"]');
     await expect(payoutManager).toBeVisible();
 
@@ -219,7 +218,7 @@ test.describe('Reserve release after final session: calculation, release, and ro
     expect(orgReleaseRes.status()).toBe(403);
 
     // Scanner tries to POST reserve release -> 403 Forbidden
-    const scannerContext = await browser.newContext();
+    const scannerContext = await createIsolatedBrowserContext(browser, testInfo, );
     const scannerPage = await scannerContext.newPage();
     await scannerPage.goto('/login');
     await scannerPage.getByLabel('อีเมล', { exact: true }).fill(fixtureAccounts.scanner.email);

@@ -1,6 +1,6 @@
 import { getDatabasePool } from '@/server/database';
 import { requestGuestOtp } from '@/server/guest-otp';
-import { getBuyerTicketCountForEvent } from '@/server/reservation';
+import { ensureReservationSchema, getBuyerTicketCountForEvent } from '@/server/reservation';
 
 export const runtime = 'nodejs';
 
@@ -31,6 +31,7 @@ export async function POST(request: Request) {
         [body.eventId],
       );
       if (eventRes.rowCount && eventRes.rowCount > 0) {
+        await ensureReservationSchema(pool);
         const limitPerOrder = Number(eventRes.rows[0].limitPerOrder) || 4;
         const alreadyPurchased = await getBuyerTicketCountForEvent(
           pool,
