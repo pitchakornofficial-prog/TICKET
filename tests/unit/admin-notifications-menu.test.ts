@@ -75,4 +75,14 @@ describe('Admin Notifications Menu & Interactive Detail Modal (D-80)', () => {
     expect(cssContent).toMatch(/\.notification-view-full-btn\s*\{[^}]*text-decoration:\s*underline/);
     expect(cssContent).toMatch(/\.notification-view-full-btn\s*\{[^}]*color:\s*#0f172a/);
   });
+
+  it('seeds UBU Freshy concert approval notification for club organizer (D-187)', () => {
+    const compContent = readFileSync(
+      join(rootDir, 'src/components/admin-notifications-menu.tsx'),
+      'utf8',
+    );
+    expect(compContent).toContain('notif-ubu-freshy-session-approved');
+    expect(compContent).toContain('UBU Freshy Music Fest 2026');
+    expect(compContent).not.toMatch(/\p{Extended_Pictographic}/u);
+  });
 });

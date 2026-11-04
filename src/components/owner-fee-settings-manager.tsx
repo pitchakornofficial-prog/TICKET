@@ -16,6 +16,8 @@ interface EventSummary {
     eventId: string;
     organizerFeeMode: OrganizerFeeMode;
     organizerFeeRate: number;
+    organizerFeePrivilegeRate?: number;
+    ubuPrivilegeMode?: boolean;
     customerFeeMode: CustomerFeeMode;
     customerFeeRate: number;
     reservePercentage: number;
@@ -38,6 +40,8 @@ export function OwnerFeeSettingsManager() {
   const [customerFeeRate, setCustomerFeeRate] = useState<number>(0);
   const [reservePercentage, setReservePercentage] = useState<number>(0);
   const [organizerFeeLocked, setOrganizerFeeLocked] = useState<boolean>(false);
+  const [organizerFeePrivilegeRate, setOrganizerFeePrivilegeRate] = useState<number>(0);
+  const [ubuPrivilegeMode, setUbuPrivilegeMode] = useState<boolean>(false);
 
   const selectEvent = useCallback((ev: EventSummary) => {
     setSelectedEventId(ev.id);
@@ -48,6 +52,8 @@ export function OwnerFeeSettingsManager() {
     setCustomerFeeRate(fs.customerFeeRate ?? 0);
     setReservePercentage(fs.reservePercentage ?? 0);
     setOrganizerFeeLocked(Boolean(fs.organizerFeeLocked));
+    setOrganizerFeePrivilegeRate(fs.organizerFeePrivilegeRate ?? 0);
+    setUbuPrivilegeMode(Boolean(fs.ubuPrivilegeMode));
   }, []);
 
   const loadEvents = useCallback(async () => {
@@ -90,6 +96,8 @@ export function OwnerFeeSettingsManager() {
           body: JSON.stringify({
             organizerFeeMode,
             organizerFeeRate: Number(organizerFeeRate),
+            organizerFeePrivilegeRate: Number(organizerFeePrivilegeRate),
+            ubuPrivilegeMode: Boolean(ubuPrivilegeMode),
             customerFeeMode,
             customerFeeRate: Number(customerFeeRate),
             reservePercentage: Number(reservePercentage),
@@ -229,6 +237,25 @@ export function OwnerFeeSettingsManager() {
                   เลือกได้ 1 รูปแบบ: เปอร์เซ็นต์ยอดขาย, บาทต่อใบ, หรือเหมาจ่ายต่องาน (F_o คำนวณราย order หรือเหมาจ่ายต่องาน)
                 </p>
 
+
+                {/* UBU Privilege Mode Switch (D-181) */}
+                <div style={{ marginBottom: '1.2rem', padding: '0.8rem 1rem', background: '#f8fafc', border: '1px solid var(--line)', borderRadius: '6px' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', cursor: organizerFeeLocked ? 'default' : 'pointer', fontWeight: 600, fontSize: '0.92rem' }}>
+                    <input
+                      id="ubu-privilege-mode-switch"
+                      type="checkbox"
+                      checked={ubuPrivilegeMode}
+                      disabled={organizerFeeLocked}
+                      onChange={e => setUbuPrivilegeMode(e.target.checked)}
+                      style={{ width: '18px', height: '18px', accentColor: 'var(--blue)' }}
+                    />
+                    <span>เปิดใช้โหมดสิทธิพิเศษนักศึกษา UBU (คิดค่าบริการแบบผสมแยกตามราคาบัตร)</span>
+                  </label>
+                  <p style={{ margin: '0.35rem 0 0 1.8rem', fontSize: '0.82rem', color: 'var(--muted)' }}>
+                    เมื่อเปิดใช้งาน ผู้ซื้อที่ใช้อีเมล @ubu.ac.th จะได้รับสิทธิ์ซื้อบัตรราคา 99 บาท (จาก 150 บาท) และระบบจะคิดค่าบริการผู้จัดงานแยกอัตรา % ตามราคาบัตร
+                  </p>
+                </div>
+
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1rem' }}>
                   <div>
                     <label htmlFor="organizer-fee-mode" style={{ display: 'block', fontSize: '0.9rem', marginBottom: '0.3rem' }}>
@@ -256,7 +283,7 @@ export function OwnerFeeSettingsManager() {
 
                   <div>
                     <label htmlFor="organizer-fee-rate" style={{ display: 'block', fontSize: '0.9rem', marginBottom: '0.3rem' }}>
-                      อัตราค่าบริการ {organizerFeeMode === 'percentage' ? '(%)' : '(฿)'}
+                      {ubuPrivilegeMode && organizerFeeMode === 'percentage' ? 'อัตราค่าบริการราคาปกติ (150฿) (%)' : `อัตราค่าบริการ ${organizerFeeMode === 'percentage' ? '(%)' : '(฿)'}`}
                     </label>
                     <input
                       id="organizer-fee-rate"
@@ -276,6 +303,31 @@ export function OwnerFeeSettingsManager() {
                       }}
                     />
                   </div>
+                  {ubuPrivilegeMode && organizerFeeMode === 'percentage' && (
+                    <div>
+                      <label htmlFor="organizer-fee-privilege-rate" style={{ display: 'block', fontSize: '0.9rem', marginBottom: '0.3rem' }}>
+                        อัตราค่าบริการราคานักศึกษา (99฿) (%)
+                      </label>
+                      <input
+                        id="organizer-fee-privilege-rate"
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        disabled={organizerFeeLocked}
+                        value={organizerFeePrivilegeRate}
+                        onChange={e => setOrganizerFeePrivilegeRate(Number(e.target.value))}
+                        style={{
+                          width: '100%',
+                          padding: '0.55rem 0.75rem',
+                          borderRadius: '4px',
+                          border: '1px solid var(--line)',
+                          background: organizerFeeLocked ? '#f3f4f6' : 'var(--white)',
+                          font: 'inherit',
+                        }}
+                      />
+                    </div>
+                  )}
+
                 </div>
               </div>
 
@@ -399,6 +451,12 @@ export function OwnerFeeSettingsManager() {
                     <strong>เงินสำรองรายงาน:</strong>{' '}
                     <span id="effective-reserve-rate">{reservePercentage.toFixed(2)}</span>%
                   </li>
+                  {ubuPrivilegeMode && (
+                    <li>
+                      <strong>โหมดสิทธิพิเศษนักศึกษา UBU:</strong> เปิดใช้งาน (อัตราสำหรับบัตร 99฿:{' '}
+                      <span id="effective-organizer-privilege-rate">{organizerFeePrivilegeRate.toFixed(2)}</span>%)
+                    </li>
+                  )}
                 </ul>
                 <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--muted)' }}>
                   * แต่ละฝ่ายมีรูปแบบค่าบริการที่มีผลเพียง 1 รูปแบบ ไม่ซ้อนหลายรูปแบบสำหรับฝ่ายเดียวตาม AC-25

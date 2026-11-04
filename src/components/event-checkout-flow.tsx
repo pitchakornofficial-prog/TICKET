@@ -156,6 +156,12 @@ export function EventCheckoutFlow({
   const UBU_MAX_DISCOUNT_TICKETS = 2;
   const hasUbuPrivilege = isUbuEmail(buyer?.email || '');
 
+  // Check if event is UBU Freshy Fest or has ticket price 150 (D-181)
+  const isUbuFreshyEvent =
+    eventTitle?.includes('UBU Freshy') ||
+    eventId?.includes('freshy') ||
+    eventId === 'event-ubu-freshy-2026';
+
   // Calculate UBU discount across selected tickets (highest priced first)
   const selectedPrices: number[] = [];
   for (const tt of ticketTypes) {
@@ -165,17 +171,29 @@ export function EventCheckoutFlow({
     }
   }
   selectedPrices.sort((a, b) => b - a);
-  const discountedTicketCount = Math.min(selectedPrices.length, UBU_MAX_DISCOUNT_TICKETS);
+
   let ubuDiscountAmount = 0;
   if (hasUbuPrivilege) {
-    for (let i = 0; i < discountedTicketCount; i++) {
-      ubuDiscountAmount += Math.round(selectedPrices[i] * (UBU_DISCOUNT_PERCENT / 100));
+    if (isUbuFreshyEvent) {
+      // D-181: Discount all tickets priced at 150 to 99 THB (51 THB discount per ticket)
+      for (const price of selectedPrices) {
+        if (price === 150) {
+          ubuDiscountAmount += 150 - 99;
+        } else {
+          ubuDiscountAmount += Math.round(price * 0.15);
+        }
+      }
+    } else {
+      const discountedTicketCount = Math.min(selectedPrices.length, UBU_MAX_DISCOUNT_TICKETS);
+      for (let i = 0; i < discountedTicketCount; i++) {
+        ubuDiscountAmount += Math.round(selectedPrices[i] * (UBU_DISCOUNT_PERCENT / 100));
+      }
     }
   }
   const finalTicketSubtotal = Math.max(0, selectedSubtotal - ubuDiscountAmount);
 
-  // 5% customer service fee calculation (D-40, D-135: Math.ceil whole Baht)
-  const SERVICE_FEE_RATE = 0.05;
+  // Customer service fee calculation (D-40, D-135, D-181: 6% for UBU Freshy Fest, Math.ceil whole Baht)
+  const SERVICE_FEE_RATE = isUbuFreshyEvent ? 0.06 : 0.05;
   const baseTicketSubtotal = hasUbuPrivilege ? finalTicketSubtotal : selectedSubtotal;
   const serviceFee = Math.ceil(baseTicketSubtotal * SERVICE_FEE_RATE);
   const grandTotal = baseTicketSubtotal + serviceFee;
@@ -212,9 +230,13 @@ export function EventCheckoutFlow({
     });
   }
 
-  function handleConfirmReservation(e: React.FormEvent) {
-    e.preventDefault();
+  function handleConfirmReservation(e?: React.FormEvent, explicitBuyer?: VerifiedBuyerInfo) {
+    if (e && typeof e.preventDefault === 'function') {
+      e.preventDefault();
+    }
     setError(null);
+
+    const activeBuyer = explicitBuyer || buyer;
 
     if (totalTickets <= 0) {
       setError('กรุณาเลือกจำนวนบัตรอย่างน้อย 1 ใบ ในขั้นตอนที่ 1');
@@ -235,7 +257,7 @@ export function EventCheckoutFlow({
       return;
     }
 
-    if (!buyer) {
+    if (!activeBuyer) {
       setError('กรุณากรอกข้อมูลผู้ซื้อและยืนยันรหัส OTP ในขั้นตอนที่ 2 ก่อนกดยืนยันการจองบัตร');
       return;
     }
@@ -250,7 +272,7 @@ export function EventCheckoutFlow({
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            verifiedToken: buyer.token,
+            verifiedToken: activeBuyer.token,
             eventId,
             sessionId: selectedSession.id,
             items,
@@ -316,7 +338,7 @@ export function EventCheckoutFlow({
             </span>
             {hasUbuPrivilege && (
               <span className="ubu-active-pill">
-                <AcademicCapIcon style={{ width: '15px', height: '15px' }} /> สิทธิพิเศษ ม.อุบลฯ ใช้งานแล้ว (-15%)
+                <AcademicCapIcon style={{ width: '15px', height: '15px' }} /> {isUbuFreshyEvent ? 'สิทธิพิเศษ ม.อุบลฯ 99 บาท/ใบ' : 'สิทธิพิเศษ ม.อุบลฯ ใช้งานแล้ว (-15%)'}
               </span>
             )}
           </div>
@@ -480,9 +502,11 @@ export function EventCheckoutFlow({
                             {formatBaht(tt.price)}
                           </div>
                           <div style={{ fontWeight: 700, fontSize: '1.15rem', color: 'var(--blue)' }}>
-                            {formatBaht(Math.round(tt.price * (1 - UBU_DISCOUNT_PERCENT / 100)))}
+                            {formatBaht(isUbuFreshyEvent && Number(tt.price) === 150 ? 99 : Math.round(Number(tt.price) * (1 - UBU_DISCOUNT_PERCENT / 100)))}
                           </div>
-                          <span className="ubu-ticket-pill">สิทธิ์ ม.อุบลฯ -{UBU_DISCOUNT_PERCENT}%</span>
+                          <span className="ubu-ticket-pill">
+                            {isUbuFreshyEvent && Number(tt.price) === 150 ? 'สิทธิ์ ม.อุบลฯ 99฿' : `สิทธิ์ ม.อุบลฯ -${UBU_DISCOUNT_PERCENT}%`}
+                          </span>
                         </>
                       ) : (
                         <div style={{ fontWeight: 700, fontSize: '1.15rem', color: 'var(--blue)' }}>
@@ -607,7 +631,7 @@ export function EventCheckoutFlow({
                   : `ท่านเคยสั่งซื้อไปแล้ว ${quota.alreadyPurchased} ใบ สามารถซื้อเพิ่มได้อีกสูงสุด ${quota.remainingQuota} ใบ (จำกัดสูงสุด ${quota.limitPerOrder} ใบ ต่อหนึ่งท่านในคอนเสิร์ตนี้)`,
               );
             }}
-            onVerified={(verifiedInfo, quotaInfo) => {
+            onVerified={(verifiedInfo, quotaInfo, autoProceed) => {
               setBuyer(verifiedInfo);
               if (quotaInfo) {
                 setBuyerQuota(quotaInfo);
@@ -617,9 +641,13 @@ export function EventCheckoutFlow({
                   setError(
                     `ท่านเลือกบัตร ${totalTickets} ใบ เกินสิทธิ์คงเหลือที่สามารถซื้อได้อีก ${quotaInfo.remainingQuota} ใบ สำหรับคอนเสิร์ตนี้ (ท่านเคยซื้อแล้ว ${quotaInfo.alreadyPurchased} ใบ จากจำกัดสูงสุด ${quotaInfo.limitPerOrder} ใบ)`,
                   );
+                  return;
                 }
               }
               setError(null);
+              if (autoProceed) {
+                handleConfirmReservation(undefined, verifiedInfo);
+              }
             }}
             onResetVerification={() => {
               setBuyer(null);
@@ -679,7 +707,10 @@ export function EventCheckoutFlow({
                   className="breakdown-close-btn"
                   aria-label="ปิดสรุปรายการ"
                 >
-                  ✕
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <line x1="18" y1="6" x2="6" y2="18" />
+                    <line x1="6" y1="6" x2="18" y2="18" />
+                  </svg>
                 </button>
               </div>
 
@@ -706,7 +737,7 @@ export function EventCheckoutFlow({
                 <div className="breakdown-discount-row">
                   <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}>
                     <AcademicCapIcon style={{ width: '16px', height: '16px', color: 'var(--blue)' }} />
-                    <span>ส่วนลดสิทธิ์ ม.อุบลฯ ({UBU_DISCOUNT_PERCENT}% สูงสุด {UBU_MAX_DISCOUNT_TICKETS} ใบ)</span>
+                    <span>{isUbuFreshyEvent ? 'ส่วนลดสิทธิ์ ม.อุบลฯ (เหลือ 99 บาท/ใบ ทุกใบ)' : `ส่วนลดสิทธิ์ ม.อุบลฯ (${UBU_DISCOUNT_PERCENT}% สูงสุด ${UBU_MAX_DISCOUNT_TICKETS} ใบ)`}</span>
                   </span>
                   <span className="discount-value">-{formatBaht(ubuDiscountAmount)}</span>
                 </div>
@@ -719,7 +750,7 @@ export function EventCheckoutFlow({
               </div>
 
               <div className="breakdown-fee-row">
-                <span>ค่าธรรมเนียมบริการ (5%)</span>
+                <span>ค่าธรรมเนียมบริการ ({isUbuFreshyEvent ? '6%' : '5%'})</span>
                 <span>+{formatBaht(serviceFee)}</span>
               </div>
 
@@ -769,7 +800,7 @@ export function EventCheckoutFlow({
                 </div>
                 {serviceFee > 0 && (
                   <div className="checkout-sticky-fee-subnote">
-                    (รวมค่าบริการ 5% {formatBaht(serviceFee)})
+                    (รวมค่าบริการ {isUbuFreshyEvent ? '6%' : '5%'} {formatBaht(serviceFee)})
                   </div>
                 )}
               </div>

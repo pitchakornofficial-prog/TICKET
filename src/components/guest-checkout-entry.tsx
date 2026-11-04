@@ -39,11 +39,11 @@ export function GuestCheckoutEntry({
   onStepChange,
   stepNumber,
   hasSelectedTickets = true,
-  summaryDetails,
+  summaryDetails: _summaryDetails,
 }: {
   eventId?: string;
   totalTickets?: number;
-  onVerified?: (buyer: VerifiedBuyerInfo, quota?: BuyerQuotaInfo) => void;
+  onVerified?: (buyer: VerifiedBuyerInfo, quota?: BuyerQuotaInfo, autoProceed?: boolean) => void;
   onResetVerification?: () => void;
   onQuotaExceeded?: (quota: BuyerQuotaInfo) => void;
   onStepChange?: (step: 'details' | 'otp' | 'verified') => void;
@@ -57,6 +57,7 @@ export function GuestCheckoutEntry({
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
+  const [pdpaAccepted, setPdpaAccepted] = useState(false);
 
   // OTP details
   const [otpCode, setOtpCode] = useState('');
@@ -65,7 +66,6 @@ export function GuestCheckoutEntry({
   const [requestId, setRequestId] = useState('');
   const [cooldownSeconds, setCooldownSeconds] = useState(0);
   const [expiresInSeconds, setExpiresInSeconds] = useState(0);
-  const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
   const [devOtpCode, setDevOtpCode] = useState<string | null>(null);
 
   // Status & error messages
@@ -101,6 +101,11 @@ export function GuestCheckoutEntry({
     // Gating check (D-45)
     if (!hasSelectedTickets) {
       setError('กรุณาเลือกจำนวนบัตรอย่างน้อย 1 ใบ ในขั้นตอนที่ 1 ก่อนขอรหัส OTP');
+      return;
+    }
+
+    if (!pdpaAccepted) {
+      setError('กรุณากดยินยอมตามนโยบายความเป็นส่วนตัว (PDPA) ก่อนดำเนินการต่อ');
       return;
     }
 
@@ -286,22 +291,8 @@ export function GuestCheckoutEntry({
     inputRefs.current[focusTarget]?.focus();
   }
 
-  // Step 2: Open Confirmation Modal before final lock (D-46)
-  function handleOpenConfirmModal(e: React.FormEvent) {
-    e.preventDefault();
-    setError(null);
-    setSuccessMsg(null);
-
-    if (otpCode.trim().length !== 6) {
-      setError('กรุณาระบุรหัส OTP 6 หลักให้ครบถ้วน');
-      return;
-    }
-    setIsConfirmModalOpen(true);
-  }
-
-  // Step 2.1: Execute verified OTP after user confirms in modal
+  // Step 2: Execute verified OTP in modal (D-188)
   async function handleExecuteVerifyOtp() {
-    setIsConfirmModalOpen(false);
     setError(null);
     setSuccessMsg(null);
 
@@ -348,7 +339,7 @@ export function GuestCheckoutEntry({
         setStep('verified');
         if (onStepChange) onStepChange('verified');
         setSuccessMsg('ยืนยันตัวตนสำเร็จแล้ว');
-        if (onVerified) onVerified(buyerInfo, data.buyerQuota);
+        if (onVerified) onVerified(buyerInfo, data.buyerQuota, true);
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : 'เกิดข้อผิดพลาดในการยืนยัน OTP';
         setError(msg);
@@ -430,146 +421,105 @@ export function GuestCheckoutEntry({
         </div>
       )}
 
-      {/* Step 1: Progressive Buyer Details Form (D-38) */}
+      {/* Step 1: Streamlined Full-Width Buyer Details Form (D-188) */}
       {step === 'details' && (
         <form onSubmit={handleRequestOtp} noValidate className="guest-step-form">
-          <div className="guest-progressive-steps">
-            {/* Step 1.1: Name */}
-            <div className="guest-step-box">
-              <div className="guest-step-box-header">
-                <span className="guest-step-micro-badge">1</span>
-                <div>
-                  <strong className="guest-step-box-title">ชื่อ-นามสกุลผู้ซื้อ</strong>
-                  <span className="guest-step-box-sub">ใช้ระบุตัวตนและชื่อบนบัตรดิจิทัล</span>
-                </div>
-              </div>
-              <div>
-                <label htmlFor="buyer-name" style={{ display: 'block', fontWeight: 600, fontSize: '0.9rem', marginBottom: '0.35rem' }}>
-                  ชื่อ-นามสกุล *
-                </label>
-                <input
-                  id="buyer-name"
-                  type="text"
-                  required
-                  value={name}
-                  onChange={e => {
-                    setName(e.target.value);
-                    setError(null);
-                  }}
-                  placeholder="เช่น สมชาย ใจดี"
-                  className="guest-step-input"
-                />
-              </div>
+          <div className="guest-fields-stack">
+            <div className="guest-field-group">
+              <label htmlFor="buyer-name" className="guest-field-label">
+                ชื่อ-นามสกุล *
+              </label>
+              <input
+                id="buyer-name"
+                type="text"
+                required
+                value={name}
+                onChange={e => {
+                  setName(e.target.value);
+                  setError(null);
+                }}
+                placeholder="เช่น สมชาย ใจดี"
+                className="guest-step-input"
+              />
             </div>
 
-            {/* Step 1.2: Phone */}
-            <div className="guest-step-box">
-              <div className="guest-step-box-header">
-                <span className="guest-step-micro-badge">2</span>
-                <div>
-                  <strong className="guest-step-box-title">เบอร์โทรศัพท์มือถือ</strong>
-                  <span className="guest-step-box-sub">สำหรับติดต่อกรณีฉุกเฉินหรือประสานงานหน้างาน</span>
-                </div>
-              </div>
-              <div>
-                <label htmlFor="buyer-phone" style={{ display: 'block', fontWeight: 600, fontSize: '0.9rem', marginBottom: '0.35rem' }}>
-                  เบอร์โทรศัพท์มือถือ *
-                </label>
-                <input
-                  id="buyer-phone"
-                  type="tel"
-                  required
-                  value={phone}
-                  onChange={e => {
-                    setPhone(e.target.value);
-                    setError(null);
-                  }}
-                  placeholder="เช่น 0812345678"
-                  className="guest-step-input"
-                />
-              </div>
+            <div className="guest-field-group">
+              <label htmlFor="buyer-phone" className="guest-field-label">
+                เบอร์โทรศัพท์มือถือ *
+              </label>
+              <input
+                id="buyer-phone"
+                type="tel"
+                required
+                value={phone}
+                onChange={e => {
+                  setPhone(e.target.value);
+                  setError(null);
+                }}
+                placeholder="เช่น 0812345678"
+                className="guest-step-input"
+              />
             </div>
 
-            {/* Step 1.3: Email & UBU Privilege */}
-            <div className="guest-step-box">
-              <div className="guest-step-box-header">
-                <span className="guest-step-micro-badge">3</span>
-                <div>
-                  <strong className="guest-step-box-title">อีเมลสำหรับรับบัตรและรหัส OTP</strong>
-                  <span className="guest-step-box-sub">ส่งบัตรดิจิทัลทางอีเมลนี้หลังชำระเงิน</span>
+            <div className="guest-field-group">
+              <label htmlFor="buyer-email" className="guest-field-label">
+                อีเมลสำหรับรับบัตรและรหัส OTP *
+              </label>
+              <input
+                id="buyer-email"
+                type="email"
+                required
+                value={email}
+                onChange={e => {
+                  setEmail(e.target.value);
+                  setError(null);
+                  if (onResetVerification) onResetVerification();
+                }}
+                placeholder="เช่น your-email@ubu.ac.th หรือ user@example.com"
+                className="guest-step-input"
+                style={{
+                  borderColor: isUbuEmail(email) ? 'var(--blue)' : undefined,
+                  boxShadow: isUbuEmail(email) ? '0 0 0 3px rgba(24, 72, 237, 0.12)' : undefined,
+                }}
+              />
+              {isUbuEmail(email) && (
+                <div className="ubu-detect-notice" role="status">
+                  <SparklesIcon style={{ width: '15px', height: '15px', color: 'var(--blue)', flexShrink: 0 }} />
+                  <span>ตรวจพบอีเมลสถาบัน ม.อุบลฯ (@ubu.ac.th) — รับสิทธิ์ราคาพิเศษ 99 บาท/ใบ เมื่อยืนยัน OTP</span>
                 </div>
-              </div>
-              <div>
-                <label htmlFor="buyer-email" style={{ display: 'block', fontWeight: 600, fontSize: '0.9rem', marginBottom: '0.35rem' }}>
-                  อีเมล *
-                </label>
-                <input
-                  id="buyer-email"
-                  type="email"
-                  required
-                  value={email}
-                  onChange={e => {
-                    setEmail(e.target.value);
-                    setError(null);
-                    if (onResetVerification) onResetVerification();
-                  }}
-                  placeholder="เช่น your-email@ubu.ac.th หรือ your-email@example.com"
-                  className="guest-step-input"
-                  style={{
-                    borderColor: isUbuEmail(email) ? 'var(--blue)' : undefined,
-                    boxShadow: isUbuEmail(email) ? '0 0 0 3px rgba(24, 72, 237, 0.12)' : undefined,
-                  }}
-                />
-                {isUbuEmail(email) && (
-                  <div className="ubu-detect-notice" role="status">
-                    <SparklesIcon style={{ width: '15px', height: '15px', color: 'var(--blue)', flexShrink: 0 }} />
-                    <span>ตรวจพบอีเมลสถาบัน ม.อุบลฯ (@ubu.ac.th) — จะได้รับสิทธิ์ส่วนลด 15% ทันทีเมื่อยืนยัน OTP</span>
-                  </div>
-                )}
-              </div>
+              )}
+            </div>
+
+            {/* PDPA Consent Checkbox (D-188) */}
+            <div className="pdpa-consent-row">
+              <input
+                type="checkbox"
+                id="pdpa-consent-checkbox"
+                checked={pdpaAccepted}
+                onChange={e => {
+                  setPdpaAccepted(e.target.checked);
+                  setError(null);
+                }}
+                className="pdpa-checkbox"
+                required
+              />
+              <label htmlFor="pdpa-consent-checkbox" className="pdpa-label">
+                ฉันได้อ่านและยอมรับ <a href="/privacy" target="_blank" rel="noopener noreferrer" className="pdpa-link">นโยบายความเป็นส่วนตัว (PDPA)</a> และเงื่อนไขการให้บริการ
+              </label>
             </div>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '1rem', marginTop: '1.25rem' }}>
+          <div className="guest-form-submit-row">
             {!hasSelectedTickets ? (
-              <p
-                style={{
-                  margin: 0,
-                  fontSize: '0.88rem',
-                  color: '#b45309',
-                  background: '#fef3c7',
-                  border: '1px solid #fde68a',
-                  padding: '0.45rem 0.85rem',
-                  borderRadius: '6px',
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: '0.4rem',
-                }}
-              >
+              <p className="guest-ticket-warn-notice">
                 <AlertIcon />
-                <span>กรุณาเลือกจำนวนบัตรอย่างน้อย 1 ใบ ในขั้นตอนที่ 1 ก่อนขอรหัส OTP</span>
+                <span>กรุณาเลือกจำนวนบัตรในขั้นตอนที่ 1 ก่อนขอรหัส OTP</span>
               </p>
-            ) : (
-              <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--muted)' }}>
-                * ข้อมูลจำเป็นต้องครบทุกช่องเพื่อขอรหัสยืนยันตัวตน
-              </p>
-            )}
+            ) : null}
             <button
               type="submit"
-              disabled={isPending || !hasSelectedTickets}
-              className="action-button"
-              style={{
-                minHeight: '44px',
-                padding: '0.7rem 1.8rem',
-                background: !hasSelectedTickets ? '#94a3b8' : 'var(--blue)',
-                color: 'var(--white)',
-                border: 'none',
-                borderRadius: '8px',
-                fontWeight: 600,
-                cursor: isPending || !hasSelectedTickets ? 'not-allowed' : 'pointer',
-                opacity: !hasSelectedTickets ? 0.65 : 1,
-                transition: 'all 0.2s ease',
-              }}
+              disabled={isPending || !hasSelectedTickets || !pdpaAccepted}
+              className="action-button guest-submit-otp-btn"
             >
               {isPending ? 'กำลังส่งรหัส...' : 'ขอรหัส OTP เพื่อซื้อบัตร'}
             </button>
@@ -577,154 +527,140 @@ export function GuestCheckoutEntry({
         </form>
       )}
 
-      {/* Step 2: OTP Verification Form */}
+      {/* Step 2: Full Modal Dialog for OTP Verification (D-188) */}
       {step === 'otp' && (
-        <form onSubmit={handleOpenConfirmModal} noValidate style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '14px', padding: '1.5rem' }}>
-          <div style={{ marginBottom: '1.2rem', paddingBottom: '0.8rem', borderBottom: '1px solid var(--line)' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.5rem' }}>
-              <span style={{ fontSize: '0.85rem', color: 'var(--blue)', fontWeight: 600, textTransform: 'uppercase' }}>
-                ขั้นตอนที่ 2: กรอกรหัส OTP
-              </span>
-              {isUbuEmail(email) && (
-                <span className="ubu-inline-pill">
-                  <AcademicCapIcon style={{ width: '14px', height: '14px' }} /> รอเปิดใช้งานสิทธิ์ ม.อุบลฯ
-                </span>
+        <div className="otp-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="otp-modal-title">
+          <div className="otp-modal-card">
+            <div className="otp-modal-header">
+              <div className="otp-modal-icon-wrap">
+                <ShieldCheckIcon style={{ width: '22px', height: '22px', color: 'var(--blue)' }} />
+              </div>
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                  <h3 id="otp-modal-title" style={{ margin: 0, fontSize: '1.2rem', fontWeight: 700 }}>
+                    ยืนยันรหัส OTP
+                  </h3>
+                  {isUbuEmail(email) && (
+                    <span className="ubu-inline-pill">
+                      <AcademicCapIcon style={{ width: '14px', height: '14px' }} /> รอเปิดใช้งานสิทธิ์ ม.อุบลฯ
+                    </span>
+                  )}
+                </div>
+                <p style={{ margin: '0.25rem 0 0', fontSize: '0.85rem', color: 'var(--muted)' }}>
+                  ส่งรหัส 6 หลักไปยัง <strong>{email}</strong> แล้ว
+                </p>
+              </div>
+            </div>
+
+            {/* Dev Test OTP Banner (D-47) */}
+            {devOtpCode && (
+              <div className="dev-otp-helper-banner" role="status">
+                <div className="dev-otp-helper-label">
+                  <SparklesIcon style={{ width: '16px', height: '16px' }} />
+                  <span>โหมดทดสอบ Local</span>
+                </div>
+                <div className="dev-otp-code-display">
+                  รหัส OTP สำหรับทดสอบ: <strong id="dev-otp-value">{devOtpCode}</strong>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const chars = devOtpCode.slice(0, 6).split('');
+                    const nextDigits = ['', '', '', '', '', ''];
+                    for (let i = 0; i < chars.length; i++) nextDigits[i] = chars[i];
+                    setOtpDigits(nextDigits);
+                    setOtpCode(devOtpCode);
+                    inputRefs.current[5]?.focus();
+                  }}
+                  className="dev-otp-autofill-btn"
+                  id="dev-otp-autofill-btn"
+                >
+                  คลิกเพื่อกรอกอัตโนมัติ
+                </button>
+              </div>
+            )}
+
+            <div className="otp-input-centered-section">
+              <label htmlFor="otp-input" className="otp-input-label">
+                รหัส OTP 6 หลัก *
+              </label>
+              <fieldset className="otp-boxes-group" aria-label="ช่องกรอกรหัส OTP 6 หลัก">
+                {OTP_BOX_KEYS.map((boxKey, idx) => (
+                  <input
+                    key={boxKey}
+                    ref={el => {
+                      inputRefs.current[idx] = el;
+                    }}
+                    id={idx === 0 ? 'otp-input' : `otp-input-${idx}`}
+                    aria-label={idx === 0 ? 'รหัส OTP 6 หลัก *' : `รหัส OTP หลักที่ ${idx + 1}`}
+                    type="text"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    autoComplete={idx === 0 ? 'one-time-code' : 'off'}
+                    maxLength={6}
+                    value={otpDigits[idx] || ''}
+                    onFocus={e => e.target.select()}
+                    onChange={e => handleDigitChange(idx, e.target.value)}
+                    onKeyDown={e => handleKeyDown(idx, e)}
+                    onPaste={handlePaste}
+                    className={`otp-digit-box ${otpDigits[idx] ? 'otp-digit-filled' : ''}`}
+                  />
+                ))}
+              </fieldset>
+              {expiresInSeconds > 0 && (
+                <p className="otp-expiry-countdown">
+                  รหัสหมดอายุใน: {Math.floor(expiresInSeconds / 60)}:{(expiresInSeconds % 60).toString().padStart(2, '0')} นาที
+                </p>
               )}
             </div>
-            <p style={{ margin: '0.4rem 0 0', fontSize: '0.95rem' }}>
-              ส่งรหัส OTP 6 หลักไปยัง <strong>{email}</strong> แล้ว (รหัสมีอายุ 5 นาที)
-            </p>
-          </div>
 
-          {/* Dev Test OTP Banner (D-47) */}
-          {devOtpCode && (
-            <div className="dev-otp-helper-banner" role="status">
-              <div className="dev-otp-helper-label">
-                <SparklesIcon style={{ width: '16px', height: '16px' }} />
-                <span>โหมดทดสอบ Local</span>
-              </div>
-              <div className="dev-otp-code-display">
-                รหัส OTP สำหรับทดสอบ: <strong id="dev-otp-value">{devOtpCode}</strong>
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  const chars = devOtpCode.slice(0, 6).split('');
-                  const nextDigits = ['', '', '', '', '', ''];
-                  for (let i = 0; i < chars.length; i++) nextDigits[i] = chars[i];
-                  setOtpDigits(nextDigits);
-                  setOtpCode(devOtpCode);
-                  inputRefs.current[5]?.focus();
-                }}
-                className="dev-otp-autofill-btn"
-                id="dev-otp-autofill-btn"
-              >
-                คลิกเพื่อกรอกอัตโนมัติ
-              </button>
-            </div>
-          )}
-
-          <div className="otp-input-centered-section">
-            <label
-              htmlFor="otp-input"
-              className="otp-input-label"
-            >
-              รหัส OTP 6 หลัก *
-            </label>
-            <fieldset
-              className="otp-boxes-group"
-              aria-label="ช่องกรอกรหัส OTP 6 หลัก"
-            >
-              {OTP_BOX_KEYS.map((boxKey, idx) => (
-                <input
-                  key={boxKey}
-                  ref={el => {
-                    inputRefs.current[idx] = el;
-                  }}
-                  id={idx === 0 ? 'otp-input' : `otp-input-${idx}`}
-                  aria-label={idx === 0 ? 'รหัส OTP 6 หลัก *' : `รหัส OTP หลักที่ ${idx + 1}`}
-                  type="text"
-                  inputMode="numeric"
-                  pattern="[0-9]*"
-                  autoComplete={idx === 0 ? 'one-time-code' : 'off'}
-                  maxLength={6}
-                  value={otpDigits[idx] || ''}
-                  onFocus={e => e.target.select()}
-                  onChange={e => handleDigitChange(idx, e.target.value)}
-                  onKeyDown={e => handleKeyDown(idx, e)}
-                  onPaste={handlePaste}
-                  className={`otp-digit-box ${otpDigits[idx] ? 'otp-digit-filled' : ''}`}
-                />
-              ))}
-            </fieldset>
-            {expiresInSeconds > 0 && (
-              <p className="otp-expiry-countdown">
-                รหัสหมดอายุใน: {Math.floor(expiresInSeconds / 60)}:{(expiresInSeconds % 60).toString().padStart(2, '0')} นาที
-              </p>
-            )}
-          </div>
-
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '1rem' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '0.5rem 0 1rem', fontSize: '0.85rem' }}>
               <button
                 type="button"
                 onClick={handleResendOtp}
                 disabled={cooldownSeconds > 0 || isPending}
                 style={{
                   background: 'none',
-                  border: '1px solid var(--line)',
-                  padding: '0.6rem 1.2rem',
-                  borderRadius: '8px',
-                  fontSize: '0.9rem',
+                  border: 'none',
+                  padding: 0,
+                  fontSize: '0.85rem',
+                  color: cooldownSeconds > 0 ? 'var(--muted)' : 'var(--blue)',
                   cursor: cooldownSeconds > 0 || isPending ? 'not-allowed' : 'pointer',
-                  color: cooldownSeconds > 0 ? 'var(--muted)' : 'var(--black)',
+                  textDecoration: 'underline',
                 }}
               >
                 {cooldownSeconds > 0 ? `ขอรหัสใหม่ได้ในอีก ${cooldownSeconds} วินาที` : 'ขอรหัส OTP ใหม่'}
               </button>
+            </div>
+
+            <div className="otp-modal-actions">
               <button
                 type="button"
                 id="back-to-details-btn"
                 onClick={() => {
                   setStep('details');
+                  setOtpCode('');
+                  setOtpDigits(['', '', '', '', '', '']);
                   setError(null);
                   if (onStepChange) onStepChange('details');
                   if (onResetVerification) onResetVerification();
                 }}
-                style={{
-                  background: 'none',
-                  border: 'none',
-                  padding: '0.4rem 0.6rem',
-                  fontSize: '0.85rem',
-                  color: 'var(--muted)',
-                  cursor: 'pointer',
-                  textDecoration: 'underline',
-                }}
+                className="otp-modal-cancel-btn"
               >
-                แก้ไขอีเมลหรือเบอร์โทร
+                ย้อนกลับ
+              </button>
+              <button
+                type="button"
+                disabled={isPending || otpCode.trim().length !== 6}
+                onClick={handleExecuteVerifyOtp}
+                className="otp-modal-confirm-btn"
+                id="confirm-otp-modal-proceed-btn"
+              >
+                {isPending ? 'กำลังตรวจสอบ...' : 'ยืนยันและไปหน้าชำระเงิน'}
               </button>
             </div>
-
-            <button
-              type="submit"
-              disabled={isPending || otpCode.length !== 6}
-              className="action-button"
-              style={{
-                minHeight: '44px',
-                padding: '0.7rem 1.8rem',
-                background: 'var(--blue)',
-                color: 'var(--white)',
-                border: 'none',
-                borderRadius: '8px',
-                fontWeight: 600,
-                cursor: isPending || otpCode.length !== 6 ? 'not-allowed' : 'pointer',
-                opacity: otpCode.length !== 6 ? 0.6 : 1,
-              }}
-            >
-              {isPending ? 'กำลังตรวจสอบ...' : 'ยืนยันรหัส OTP'}
-            </button>
           </div>
-        </form>
+        </div>
       )}
 
       {/* Step 3: Verified Status (D-46 Strict One-Way Lock) */}
@@ -737,18 +673,8 @@ export function GuestCheckoutEntry({
             </h3>
           </div>
           <p style={{ margin: '0 0 1rem', fontSize: '0.95rem', color: '#166534' }}>
-            ข้อมูลผู้ซื้อและการเลือกรอบ/บัตรถูกล็อกเรียบร้อยแล้ว ไม่สามารถแก้ไขได้ กรุณากดยืนยันและชำระเงินที่แถบด้านล่างเพื่อดำเนินการต่อ
+            ข้อมูลผู้ซื้อได้รับการยืนยันเรียบร้อยแล้ว
           </p>
-
-          {isUbuEmail(verifiedBuyer.email) && (
-            <div className="ubu-verified-alert">
-              <AcademicCapIcon style={{ width: '20px', height: '20px', color: 'var(--blue)', flexShrink: 0 }} />
-              <div>
-                <strong>เปิดใช้งานสิทธิพิเศษ UBU Privilege เรียบร้อยแล้ว</strong>
-                <p>คำสั่งซื้อนี้ได้รับส่วนลดพิเศษ 15% (สูงสุด 2 ใบ) โดยคำนวณในแถบสรุปคำสั่งซื้อแล้ว</p>
-              </div>
-            </div>
-          )}
 
           <div style={{ background: 'var(--white)', border: '1px solid #bbf7d0', borderRadius: '10px', padding: '1rem', fontSize: '0.9rem', lineHeight: 1.6, marginTop: '1rem' }}>
             <div><strong>ชื่อผู้ซื้อ:</strong> <span id="verified-buyer-name">{verifiedBuyer.name}</span></div>
@@ -782,80 +708,6 @@ export function GuestCheckoutEntry({
             >
               แก้ไขข้อมูลผู้ซื้อ / ใช้อีเมลอื่น
             </button>
-          </div>
-        </div>
-      )}
-
-      {/* Confirmation Modal before Final Lock (D-46) */}
-      {isConfirmModalOpen && (
-        <div className="otp-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="confirm-modal-title">
-          <div className="otp-modal-card">
-            <div className="otp-modal-header">
-              <div className="otp-modal-icon-wrap">
-                <AlertIcon />
-              </div>
-              <div>
-                <h3 id="confirm-modal-title" style={{ margin: 0, fontSize: '1.2rem', fontWeight: 700 }}>
-                  ยืนยันข้อมูลคำสั่งซื้อและการล็อกสิทธิ์
-                </h3>
-                <p style={{ margin: '0.25rem 0 0', fontSize: '0.85rem', color: 'var(--muted)' }}>
-                  โปรดตรวจสอบความถูกต้อง ข้อมูลจะถูกล็อกถาวรหลังยืนยัน
-                </p>
-              </div>
-            </div>
-
-            <div className="otp-modal-summary-box">
-              <div className="otp-modal-summary-row">
-                <span className="summary-label">ชื่อผู้ซื้อ:</span>
-                <strong>{name}</strong>
-              </div>
-              <div className="otp-modal-summary-row">
-                <span className="summary-label">อีเมลรับบัตร:</span>
-                <strong>{email}</strong>
-              </div>
-              <div className="otp-modal-summary-row">
-                <span className="summary-label">เบอร์โทรศัพท์:</span>
-                <strong>{phone}</strong>
-              </div>
-              {summaryDetails?.sessionText && (
-                <div className="otp-modal-summary-row">
-                  <span className="summary-label">รอบการแสดง:</span>
-                  <strong>{summaryDetails.sessionText}</strong>
-                </div>
-              )}
-              {summaryDetails?.ticketsText && (
-                <div className="otp-modal-summary-row">
-                  <span className="summary-label">รายการบัตร:</span>
-                  <strong style={{ color: 'var(--blue)' }}>{summaryDetails.ticketsText}</strong>
-                </div>
-              )}
-            </div>
-
-            <div className="otp-modal-warning-alert">
-              <ShieldCheckIcon style={{ width: '18px', height: '18px', color: '#991b1b', flexShrink: 0, marginTop: '2px' }} />
-              <span>
-                <strong>คำเตือน:</strong> เมื่อกดยืนยันแล้ว ระบบจะล็อกการเลือกรอบการแสดง จำนวนบัตร และข้อมูลผู้ซื้ออย่างถาวรทันที และจะไม่สามารถย้อนกลับมาแก้ไขได้อีกต่อไป
-              </span>
-            </div>
-
-            <div className="otp-modal-actions">
-              <button
-                type="button"
-                onClick={() => setIsConfirmModalOpen(false)}
-                className="otp-modal-cancel-btn"
-              >
-                กลับไปตรวจสอบ
-              </button>
-              <button
-                type="button"
-                disabled={isPending}
-                onClick={handleExecuteVerifyOtp}
-                className="otp-modal-confirm-btn"
-                id="confirm-otp-modal-proceed-btn"
-              >
-                {isPending ? 'กำลังตรวจสอบ...' : 'ยืนยันและดำเนินการต่อ'}
-              </button>
-            </div>
           </div>
         </div>
       )}

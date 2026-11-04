@@ -42,17 +42,15 @@ describe('Owner Editorial Headers Clean-Up & Platform Governance Policies View (
     expect(policiesContent).not.toMatch(/\p{Extended_Pictographic}/u);
   });
 
-  it('integrates policies into OwnerWorkspaceView with owner-nav-policies tab and stage view', () => {
+  it('verifies policies removed from OwnerWorkspaceView navigation per D-185', () => {
     const workspaceContent = readFileSync(
       join(rootDir, 'src/components/owner-workspace-view.tsx'),
       'utf8',
     );
 
-    expect(workspaceContent).toContain("'policies'");
-    expect(workspaceContent).toContain('OwnerPoliciesView');
-    expect(workspaceContent).toContain('owner-section-content-policies');
-    expect(workspaceContent).toMatch(/owner-nav-\$\{section\.id\}/);
-    expect(workspaceContent).toContain('ข้อตกลง');
+    expect(workspaceContent).not.toContain("'policies'");
+    expect(workspaceContent).not.toContain('owner-section-content-policies');
+    expect(workspaceContent).toMatch(/owner-nav-\${section\.id}/);
     expect(workspaceContent).not.toMatch(/\p{Extended_Pictographic}/u);
   });
 
@@ -92,7 +90,7 @@ describe('Owner Editorial Headers Clean-Up & Platform Governance Policies View (
       join(rootDir, 'src/components/owner-overview-dashboard.tsx'),
       'utf8',
     );
-    expect(dashboardContent).toContain('launchpad-owner-policies');
-    expect(dashboardContent).toContain('กฎบัตรและนโยบายกำกับดูแล');
+    expect(dashboardContent).not.toContain('launchpad-owner-policies');
+    expect(dashboardContent).not.toContain('กฎบัตรและนโยบายกำกับดูแล');
   });
 });

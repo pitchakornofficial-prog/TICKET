@@ -5,15 +5,13 @@ import { join } from 'node:path';
 describe('Organizer Policies & Agreements View (D-111)', () => {
   const rootDir = process.cwd();
 
-  it('wires OrganizerPoliciesView into OrganizerWorkspaceView for policies section', () => {
+  it('verifies policies section removed from OrganizerWorkspaceView per D-185', () => {
     const workspaceContent = readFileSync(
       join(rootDir, 'src/components/organizer-workspace-view.tsx'),
       'utf8',
     );
-    expect(workspaceContent).toContain('OrganizerPoliciesView');
-    expect(workspaceContent).toContain("activeSection === 'policies'");
-    expect(workspaceContent).toContain('organizer-nav-policies');
-    expect(workspaceContent).toContain('ข้อตกลง');
+    expect(workspaceContent).not.toContain('organizer-nav-policies');
+    expect(workspaceContent).not.toContain("activeSection === 'policies'");
     expect(workspaceContent).not.toMatch(/\p{Extended_Pictographic}/u);
   });
 

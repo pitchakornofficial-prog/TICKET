@@ -24,20 +24,20 @@ describe('Public catalog formatting and locale (TASK-007, G-47)', () => {
     expect(formatBaht(3250.5)).toBe('฿3,250.50');
   });
 
-  it('implements D-159: Home Banner Card 240-440px Dimension Prototype & 1280px Centered Frame Alignment', () => {
+  it('implements D-159 & D-188: Home Banner Card 240-440px Dimension Prototype & Full-Bleed Alignment', () => {
     const rootDir = process.cwd();
     const globalsCss = readFileSync(
       join(rootDir, 'src/app/globals.css'),
       'utf8',
     );
     expect(globalsCss).toMatch(
-      /\.upcoming-banner-section\s*\{[^}]*max-width:\s*1280px;/,
+      /\.upcoming-banner-section\s*\{[^}]*max-width:\s*(?:1280px|100%);/,
     );
     expect(globalsCss).toMatch(
-      /\.upcoming-banner-section\s*\{[^}]*margin:\s*0 auto;/,
+      /\.upcoming-banner-section\s*\{[^}]*margin:\s*(?:0 auto|0);/,
     );
     expect(globalsCss).toMatch(
-      /\.banner-carousel-container\s*\{[^}]*border:\s*var\(--border-card\);/,
+      /\.banner-carousel-container\s*\{[^}]*border(?:-bottom)?:\s*(?:var\(--border-card\)|1px solid var\(--line\));/,
     );
     expect(globalsCss).toMatch(
       /\.banner-image\s*\{[^}]*min-height:\s*240px;/,

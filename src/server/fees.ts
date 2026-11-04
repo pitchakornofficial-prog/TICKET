@@ -7,6 +7,8 @@ export interface EventFeeSettings {
   eventId: string;
   organizerFeeMode: OrganizerFeeMode;
   organizerFeeRate: number;
+  organizerFeePrivilegeRate?: number;
+  ubuPrivilegeMode?: boolean;
   customerFeeMode: CustomerFeeMode;
   customerFeeRate: number;
   reservePercentage: number;
@@ -19,6 +21,8 @@ export interface EventFeeSettings {
 export interface FeeSettingsInput {
   organizerFeeMode: OrganizerFeeMode;
   organizerFeeRate: number;
+  organizerFeePrivilegeRate?: number;
+  ubuPrivilegeMode?: boolean;
   customerFeeMode: CustomerFeeMode;
   customerFeeRate: number;
   reservePercentage: number;
@@ -98,12 +102,20 @@ export function calculateOrganizerOrderFee(
   rate: number,
   ticketCount: number,
   orderTicketSubtotal: number,
+  privilegeRate?: number,
+  privilegeSubtotal?: number,
 ): number {
   if (rate < 0) throw new Error('Organizer fee rate cannot be negative');
   if (ticketCount < 0) throw new Error('Ticket count cannot be negative');
   if (orderTicketSubtotal < 0) throw new Error('Order ticket subtotal cannot be negative');
 
   if (mode === 'percentage') {
+    if (privilegeRate !== undefined && privilegeSubtotal !== undefined && privilegeSubtotal > 0) {
+      const regularSubtotal = Math.max(0, orderTicketSubtotal - privilegeSubtotal);
+      const regularFee = roundHalfUp((regularSubtotal * rate) / 100);
+      const privFee = roundHalfUp((privilegeSubtotal * privilegeRate) / 100);
+      return roundHalfUp(regularFee + privFee);
+    }
     return roundHalfUp((orderTicketSubtotal * rate) / 100);
   }
   if (mode === 'per_ticket') {
@@ -141,13 +153,15 @@ export async function ensureFeeSchema(pool: Pool): Promise<void> {
       "updatedBy" TEXT REFERENCES auth_user(id)
     );
     CREATE INDEX IF NOT EXISTS idx_event_fee_settings_eventId ON event_fee_settings("eventId");
+    ALTER TABLE event_fee_settings ADD COLUMN IF NOT EXISTS "ubuPrivilegeMode" BOOLEAN NOT NULL DEFAULT FALSE;
+    ALTER TABLE event_fee_settings ADD COLUMN IF NOT EXISTS "organizerFeePrivilegeRate" NUMERIC(12, 2) NOT NULL DEFAULT 0;
   `);
 }
 
 export async function getEventFeeSettings(pool: Pool, eventId: string): Promise<EventFeeSettings> {
   await ensureFeeSchema(pool);
   const res = await pool.query(
-    `SELECT "eventId", "organizerFeeMode", "organizerFeeRate", "customerFeeMode", "customerFeeRate",
+    `SELECT "eventId", "organizerFeeMode", "organizerFeeRate", "organizerFeePrivilegeRate", "ubuPrivilegeMode", "customerFeeMode", "customerFeeRate",
             "reservePercentage", "organizerFeeLocked", "createdAt", "updatedAt", "updatedBy"
      FROM event_fee_settings
      WHERE "eventId" = $1`,
@@ -171,6 +185,8 @@ export async function getEventFeeSettings(pool: Pool, eventId: string): Promise<
     eventId: row.eventId,
     organizerFeeMode: row.organizerFeeMode as OrganizerFeeMode,
     organizerFeeRate: Number(row.organizerFeeRate),
+    organizerFeePrivilegeRate: row.organizerFeePrivilegeRate != null ? Number(row.organizerFeePrivilegeRate) : 0,
+    ubuPrivilegeMode: Boolean(row.ubuPrivilegeMode),
     customerFeeMode: row.customerFeeMode as CustomerFeeMode,
     customerFeeRate: Number(row.customerFeeRate),
     reservePercentage: Number(row.reservePercentage),
@@ -237,24 +253,29 @@ export async function saveEventFeeSettings(
 
   const res = await pool.query(
     `INSERT INTO event_fee_settings (
-       "eventId", "organizerFeeMode", "organizerFeeRate", "customerFeeMode", "customerFeeRate",
-       "reservePercentage", "organizerFeeLocked", "updatedAt", "updatedBy"
+       "eventId", "organizerFeeMode", "organizerFeeRate", "organizerFeePrivilegeRate", "ubuPrivilegeMode",
+       "customerFeeMode", "customerFeeRate", "reservePercentage", "organizerFeeLocked", "updatedAt", "updatedBy"
      )
-     VALUES ($1, $2, $3, $4, $5, $6, $7, now(), $8)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, now(), $10)
      ON CONFLICT ("eventId") DO UPDATE SET
        "organizerFeeMode" = EXCLUDED."organizerFeeMode",
        "organizerFeeRate" = EXCLUDED."organizerFeeRate",
+       "organizerFeePrivilegeRate" = EXCLUDED."organizerFeePrivilegeRate",
+       "ubuPrivilegeMode" = EXCLUDED."ubuPrivilegeMode",
        "customerFeeMode" = EXCLUDED."customerFeeMode",
        "customerFeeRate" = EXCLUDED."customerFeeRate",
        "reservePercentage" = EXCLUDED."reservePercentage",
        "updatedAt" = now(),
        "updatedBy" = EXCLUDED."updatedBy"
-     RETURNING "eventId", "organizerFeeMode", "organizerFeeRate", "customerFeeMode", "customerFeeRate",
-               "reservePercentage", "organizerFeeLocked", "createdAt", "updatedAt", "updatedBy"`,
+     RETURNING "eventId", "organizerFeeMode", "organizerFeeRate", "organizerFeePrivilegeRate", "ubuPrivilegeMode",
+               "customerFeeMode", "customerFeeRate", "reservePercentage", "organizerFeeLocked",
+               "createdAt", "updatedAt", "updatedBy"`,
     [
       eventId,
       input.organizerFeeMode,
       roundHalfUp(input.organizerFeeRate),
+      roundHalfUp(input.organizerFeePrivilegeRate ?? 0),
+      Boolean(input.ubuPrivilegeMode),
       input.customerFeeMode,
       roundHalfUp(input.customerFeeRate),
       roundHalfUp(input.reservePercentage),
@@ -268,6 +289,8 @@ export async function saveEventFeeSettings(
     eventId: row.eventId,
     organizerFeeMode: row.organizerFeeMode as OrganizerFeeMode,
     organizerFeeRate: Number(row.organizerFeeRate),
+    organizerFeePrivilegeRate: row.organizerFeePrivilegeRate != null ? Number(row.organizerFeePrivilegeRate) : 0,
+    ubuPrivilegeMode: Boolean(row.ubuPrivilegeMode),
     customerFeeMode: row.customerFeeMode as CustomerFeeMode,
     customerFeeRate: Number(row.customerFeeRate),
     reservePercentage: Number(row.reservePercentage),
@@ -309,6 +332,7 @@ export async function listAllEventsWithFeeSettings(
     `SELECT e.id, e.title, e.location, e.status, e."organizerId",
             u.name as "organizerName", u.email as "organizerEmail",
             f."organizerFeeMode", f."organizerFeeRate",
+            f."organizerFeePrivilegeRate", f."ubuPrivilegeMode",
             f."customerFeeMode", f."customerFeeRate",
             f."reservePercentage", f."organizerFeeLocked",
             f."updatedAt" as "feeUpdatedAt"
@@ -330,6 +354,8 @@ export async function listAllEventsWithFeeSettings(
       eventId: row.id,
       organizerFeeMode: (row.organizerFeeMode || 'percentage') as OrganizerFeeMode,
       organizerFeeRate: row.organizerFeeRate != null ? Number(row.organizerFeeRate) : 0,
+      organizerFeePrivilegeRate: row.organizerFeePrivilegeRate != null ? Number(row.organizerFeePrivilegeRate) : 0,
+      ubuPrivilegeMode: Boolean(row.ubuPrivilegeMode),
       customerFeeMode: (row.customerFeeMode || 'per_ticket') as CustomerFeeMode,
       customerFeeRate: row.customerFeeRate != null ? Number(row.customerFeeRate) : 0,
       reservePercentage: row.reservePercentage != null ? Number(row.reservePercentage) : 0,
@@ -337,4 +363,8 @@ export async function listAllEventsWithFeeSettings(
       updatedAt: row.feeUpdatedAt?.toISOString(),
     },
   }));
+}
+
+export function isUbuEmail(emailAddress: string): boolean {
+  return /@(?:[a-zA-Z0-9-]+.)*ubu.ac.th$/i.test((emailAddress || '').trim());
 }

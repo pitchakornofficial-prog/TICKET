@@ -11,8 +11,10 @@ import {
   CheckCircleIcon,
   ClockIcon,
   DownloadIcon,
+  MailIcon,
   MapPinIcon,
   ReceiptIcon,
+  XIcon,
 } from './icons';
 import { TicketIcon } from './ticket-icon';
 import { downloadTicketAsPng, downloadAllTicketsAsPng, generateTicketDataUrl } from './ticket-canvas-download';
@@ -30,6 +32,35 @@ export function OrderSuccessView({ orderId }: OrderSuccessViewProps) {
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [isDownloadingAll, setIsDownloadingAll] = useState(false);
   const [activeTab, setActiveTab] = useState<'receipt' | 'tickets'>('receipt');
+  const [devEmailModalOpen, setDevEmailModalOpen] = useState(false);
+  const [capturedEmail, setCapturedEmail] = useState<{
+    to: string;
+    subject: string;
+    html?: string;
+    text?: string;
+  } | null>(null);
+  const [isLoadingDevEmail, setIsLoadingDevEmail] = useState(false);
+
+  const handleOpenDevEmailModal = async () => {
+    setDevEmailModalOpen(true);
+    setIsLoadingDevEmail(true);
+    try {
+      const res = await fetch('/api/dev/captured-emails');
+      if (res.ok) {
+        const data = await res.json();
+        const emails: Array<{ to: string; subject: string; html?: string; text?: string }> = data?.emails || [];
+        const matched =
+          emails.slice().reverse().find(m => m.to === reservation?.buyerEmail || m.subject?.includes(orderId)) ||
+          emails[emails.length - 1] ||
+          null;
+        setCapturedEmail(matched);
+      }
+    } catch {
+      // ignore
+    } finally {
+      setIsLoadingDevEmail(false);
+    }
+  };
 
   useEffect(() => {
     // Generate image URLs for tickets to ensure 100% parity between on-screen view and downloaded file (D-165, D-168)
@@ -353,6 +384,31 @@ export function OrderSuccessView({ orderId }: OrderSuccessViewProps) {
                   <p className="slip-email-note">
                     * ระบบได้ส่งอีเมลยืนยันคำสั่งซื้อไปยัง <strong>{reservation.buyerEmail}</strong> เรียบร้อยแล้ว (AC-19)
                   </p>
+
+                  <div className="dev-mail-preview-wrap" style={{ marginTop: '0.85rem' }}>
+                    <button
+                      id="dev-mail-preview-btn"
+                      type="button"
+                      onClick={handleOpenDevEmailModal}
+                      className="button button-secondary dev-mail-btn"
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '0.45rem',
+                        padding: '0.45rem 0.9rem',
+                        borderRadius: '8px',
+                        fontSize: '0.82rem',
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                        border: '1px dashed #94a3b8',
+                        background: '#f8fafc',
+                        color: '#0f172a',
+                      }}
+                    >
+                      <MailIcon style={{ width: '15px', height: '15px' }} />
+                      <span>เปิดดูอีเมลตั๋วที่ระบบส่งออก (Dev Preview)</span>
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
@@ -525,6 +581,147 @@ export function OrderSuccessView({ orderId }: OrderSuccessViewProps) {
           </div>
         </div>
       </div>
+
+      {/* Dev Mailbox Modal Dialog */}
+      {devEmailModalOpen && (
+        <div
+          className="otp-modal-overlay"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="dev-email-modal-title"
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(15, 23, 42, 0.65)',
+            backdropFilter: 'blur(4px)',
+            zIndex: 9999,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '1.25rem',
+          }}
+        >
+          <div
+            className="dev-email-modal-card"
+            style={{
+              background: '#ffffff',
+              borderRadius: '16px',
+              maxWidth: '680px',
+              width: '100%',
+              maxHeight: '90vh',
+              display: 'flex',
+              flexDirection: 'column',
+              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
+              overflow: 'hidden',
+            }}
+          >
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                padding: '1rem 1.25rem',
+                borderBottom: '1px solid #e2e8f0',
+                background: '#f8fafc',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <MailIcon style={{ width: '20px', height: '20px', color: '#0f172a' }} />
+                <h3 id="dev-email-modal-title" style={{ margin: 0, fontSize: '1rem', fontWeight: 700, color: '#0f172a' }}>
+                  จำลองการส่งอีเมลตั๋ว (Dev Mail Preview)
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setDevEmailModalOpen(false)}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  cursor: 'pointer',
+                  padding: '0.25rem',
+                  color: '#64748b',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <XIcon style={{ width: '20px', height: '20px' }} />
+              </button>
+            </div>
+
+            <div style={{ padding: '1rem 1.25rem', overflowY: 'auto', flex: 1 }}>
+              {isLoadingDevEmail ? (
+                <div style={{ textAlign: 'center', padding: '2rem', color: '#64748b' }}>
+                  กำลังโหลดข้อมูลอีเมล...
+                </div>
+              ) : !capturedEmail ? (
+                <div style={{ textAlign: 'center', padding: '2rem', color: '#64748b' }}>
+                  ยังไม่พบข้อมูลอีเมลในระบบจำลอง (Captured Emails)
+                </div>
+              ) : (
+                <div>
+                  <div
+                    style={{
+                      background: '#f1f5f9',
+                      padding: '0.75rem 1rem',
+                      borderRadius: '8px',
+                      fontSize: '0.85rem',
+                      marginBottom: '1rem',
+                      lineHeight: 1.6,
+                    }}
+                  >
+                    <div>
+                      <strong>ผู้รับ (To):</strong> {capturedEmail.to}
+                    </div>
+                    <div>
+                      <strong>หัวข้อ (Subject):</strong> {capturedEmail.subject}
+                    </div>
+                  </div>
+
+                  <div
+                    style={{
+                      border: '1px solid #e2e8f0',
+                      borderRadius: '8px',
+                      padding: '1rem',
+                      background: '#ffffff',
+                    }}
+                  >
+                    {capturedEmail.html ? (
+                      <div
+                        // biome-ignore lint/security/noDangerouslySetInnerHtml: Dev email preview
+                        dangerouslySetInnerHTML={{ __html: capturedEmail.html }}
+                      />
+                    ) : (
+                      <pre style={{ whiteSpace: 'pre-wrap', margin: 0, fontFamily: 'inherit', fontSize: '0.9rem' }}>
+                        {capturedEmail.text}
+                      </pre>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div
+              style={{
+                padding: '0.75rem 1.25rem',
+                borderTop: '1px solid #e2e8f0',
+                background: '#f8fafc',
+                display: 'flex',
+                justifyContent: 'flex-end',
+              }}
+            >
+              <button
+                type="button"
+                onClick={() => setDevEmailModalOpen(false)}
+                className="button button-primary"
+                style={{ padding: '0.45rem 1.2rem', fontSize: '0.88rem' }}
+              >
+                ปิดหน้าต่าง
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -146,11 +146,11 @@ export function EventSessionsAccordion({ sessions }: EventSessionsAccordionProps
                             </td>
                             <td className="ticket-status-cell text-center">
                               {isAvailable ? (
-                                <span className="status-badge available-badge mini">
+                                <span className="ticket-status-text status-available available-badge">
                                   เปิดจำหน่าย
                                 </span>
                               ) : (
-                                <span className="status-badge sold-out-badge mini">
+                                <span className="ticket-status-text status-sold-out sold-out-badge">
                                   บัตรหมด
                                 </span>
                               )}
@@ -160,6 +160,38 @@ export function EventSessionsAccordion({ sessions }: EventSessionsAccordionProps
                       })}
                     </tbody>
                   </table>
+                </div>
+
+                {/* Mobile Responsive Cards (D-188) */}
+                <div className="ticket-types-cards-mobile">
+                  {ticketTypes.map(tt => {
+                    const isAvailable = tt.quota > 0;
+                    return (
+                      <article key={`mob-${tt.id}`} className={`ticket-mobile-card ${!isAvailable ? 'row-sold-out' : ''}`}>
+                        <div className="ticket-mobile-card-top">
+                          <strong className="ticket-mobile-name">{tt.name}</strong>
+                          <span className={`ticket-status-text ${isAvailable ? 'status-available available-badge' : 'status-sold-out sold-out-badge'}`}>
+                            {isAvailable ? 'เปิดจำหน่าย' : 'บัตรหมด'}
+                          </span>
+                        </div>
+                        <p className="ticket-mobile-desc">{tt.description || 'บัตรเข้าชมการแสดงตามโซนที่ระบุ'}</p>
+                        <div className="ticket-mobile-card-bottom">
+                          <div className="ticket-mobile-price-group">
+                            <span className="ticket-mobile-label">ราคา</span>
+                            <span className={`ticket-mobile-price ${!isAvailable ? 'price-sold-out' : ''}`}>
+                              {formatBaht(tt.price)}
+                            </span>
+                          </div>
+                          <div className="ticket-mobile-quota-group">
+                            <span className="ticket-mobile-label">คงเหลือ</span>
+                            <span className={isAvailable ? 'quota-available-text' : 'quota-empty-text'}>
+                              {isAvailable ? `${tt.quota.toLocaleString()} ใบ` : '0 ใบ'}
+                            </span>
+                          </div>
+                        </div>
+                      </article>
+                    );
+                  })}
                 </div>
               </div>
             )}

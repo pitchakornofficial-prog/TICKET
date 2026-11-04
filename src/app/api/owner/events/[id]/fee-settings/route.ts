@@ -62,6 +62,8 @@ export async function PUT(
       {
         organizerFeeMode: body.organizerFeeMode,
         organizerFeeRate: Number(body.organizerFeeRate),
+        organizerFeePrivilegeRate: body.organizerFeePrivilegeRate != null ? Number(body.organizerFeePrivilegeRate) : 0,
+        ubuPrivilegeMode: Boolean(body.ubuPrivilegeMode),
         customerFeeMode: body.customerFeeMode,
         customerFeeRate: Number(body.customerFeeRate),
         reservePercentage: Number(body.reservePercentage),

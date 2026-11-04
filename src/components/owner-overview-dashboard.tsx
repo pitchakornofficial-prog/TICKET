@@ -164,7 +164,7 @@ export function OwnerOverviewDashboard({
                 type="button"
                 className="overview-create-btn"
                 data-testid="owner-overview-invite-btn"
-                onClick={() => onNavigateToSection('system', 'invite-organizer-form')}
+                onClick={() => onNavigateToSection('invitations', 'invite-organizer-form')}
               >
                 <UserPlusIcon className="btn-icon" />
                 <span>เชิญผู้จัดงานใหม่</span>
@@ -511,27 +511,7 @@ export function OwnerOverviewDashboard({
               </div>
             </button>
 
-            {/* Launchpad 5: Policies (D-116) */}
-            <button
-              type="button"
-              className="launchpad-card"
-              data-testid="launchpad-owner-policies"
-              onClick={() => onNavigateToSection('policies', 'owner-policies-view')}
-            >
-              <div className="launchpad-icon-box bg-blue">
-                <ShieldCheckIcon className="launchpad-icon text-blue" />
-              </div>
-              <div className="launchpad-body">
-                <h3 className="launchpad-title">กฎบัตรและนโยบายกำกับดูแล</h3>
-                <p className="launchpad-desc">
-                  โครงสร้างค่าบริการ กองทุนสำรอง 30 วัน สิทธิ์สแกนเนอร์ และมาตรการ PDPA
-                </p>
-              </div>
-              <div className="launchpad-footer">
-                <span className="launchpad-cta">ดูข้อตกลงและนโยบาย</span>
-                <ChevronRightIcon className="cta-icon" />
-              </div>
-            </button>
+            
           </div>
         </section>
       )}

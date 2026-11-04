@@ -188,7 +188,8 @@ export async function sendOrderTicketsEmail(
   }
 
   const deliveryId = `EML-${randomUUID().slice(0, 8).toUpperCase()}`;
-  const orderUrl = `${baseUrl}/my-tickets?orderId=${order.id}`;
+  // Direct ticket view link without requiring redundant OTP verification (D-188)
+  const orderUrl = `${baseUrl}/orders/${order.id}/success?tab=tickets`;
 
   const { subject, html, text } = buildTicketEmailContent(
     orderId,

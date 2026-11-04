@@ -273,8 +273,8 @@ describe('Multi-step purchase journey (TASK-040, AC-117, D-27)', () => {
       'utf8',
     );
     expect(eventDetail).toContain('sticky-bar-cta-wrap');
-    expect(eventDetail).toContain('ArtistPointerMascot');
-    expect(eventDetail).toContain('artistPointerUrl');
+    expect(eventDetail).not.toContain('ArtistPointerMascot');
+    expect(eventDetail).not.toContain('artistPointerUrl');
     expect(eventDetail).not.toMatch(/\p{Extended_Pictographic}/u);
 
     const mascotComponent = readFileSync(
@@ -438,7 +438,7 @@ describe('Multi-step purchase journey (TASK-040, AC-117, D-27)', () => {
       join(rootDir, 'src/app/events/[id]/page.tsx'),
       'utf8',
     );
-    expect(eventDetail).toContain('ArtistPointerMascot');
+    expect(eventDetail).not.toContain('ArtistPointerMascot');
     expect(eventDetail).toContain('event-sticky-bottom-bar');
     expect(eventDetail).not.toMatch(/\p{Extended_Pictographic}/u);
 

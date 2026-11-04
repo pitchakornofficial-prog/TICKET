@@ -16,6 +16,7 @@ import {
   CalendarIcon,
   CheckCircleIcon,
   ClockIcon,
+  DownloadIcon,
   MapPinIcon,
   ShieldCheckIcon,
   UsersIcon,
@@ -43,6 +44,58 @@ export function OrderPaymentView({ orderId }: OrderPaymentViewProps) {
 
   const [remainingSeconds, setRemainingSeconds] = useState<number>(0);
   const [isTimeoutModalOpen, setIsTimeoutModalOpen] = useState(false);
+  const [isDownloadingQr, setIsDownloadingQr] = useState(false);
+
+  const handleDownloadQrCode = useCallback(async () => {
+    if (!charge?.qrCodeUrl || !reservation) return;
+    setIsDownloadingQr(true);
+    try {
+      const filename = `promptpay-qr-${reservation.id}.png`;
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+
+      await new Promise<void>((resolve, reject) => {
+        img.onload = () => resolve();
+        img.onerror = () => reject(new Error('โหลดภาพ QR Code ไม่สำเร็จ'));
+        img.src = charge.qrCodeUrl;
+      });
+
+      const canvas = document.createElement('canvas');
+      const padding = 28;
+      const size = Math.max(img.width || 280, 280);
+      canvas.width = size + padding * 2;
+      canvas.height = size + padding * 2;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        throw new Error('ไม่สามารถสร้าง context รูปภาพได้');
+      }
+
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(img, padding, padding, size, size);
+
+      const pngUrl = canvas.toDataURL('image/png');
+      const link = document.createElement('a');
+      link.href = pngUrl;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch {
+      try {
+        const link = document.createElement('a');
+        link.href = charge.qrCodeUrl;
+        link.download = `promptpay-qr-${reservation.id}.svg`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      } catch {
+        alert('ไม่สามารถดาวน์โหลดภาพ QR Code ได้');
+      }
+    } finally {
+      setIsDownloadingQr(false);
+    }
+  }, [charge?.qrCodeUrl, reservation]);
 
   const handleGeneratePaymentQr = useCallback(async (targetOrderId?: string) => {
     const targetId = targetOrderId || reservation?.id;
@@ -246,22 +299,185 @@ export function OrderPaymentView({ orderId }: OrderPaymentViewProps) {
           orderId={reservation.id}
         />
 
-        {/* Top Wide Horizontal Concert Banner (D-137) */}
-        <div className="payment-cover-banner-wrapper">
-          {reservation.eventPosterUrl ? (
-            /* biome-ignore lint/performance/noImgElement: wide panoramic banner */
-            <img
-              src={reservation.eventPosterUrl}
-              alt={`แบนเนอร์คอนเสิร์ต ${reservation.eventTitle || 'คอนเสิร์ต'}`}
-              className="payment-cover-banner-img"
-            />
-          ) : (
-            <div className="payment-cover-banner-placeholder">
-              <TicketIcon style={{ width: '42px', height: '42px', color: 'var(--blue)' }} />
-              <span>LIVE CONCERT EXPERIENCE</span>
-            </div>
+      {/* 0. Topmost Payment Focus Card (D-189: Push PromptPay QR to the very top above concert info) */}
+      {!isPaid && (
+        <>
+          {isPaymentException && (
+            <section
+              role="alert"
+              id="payment-exception-banner"
+              className="payment-alert-card payment-alert-exception"
+            >
+              <div className="payment-alert-header">
+                <AlertIcon />
+                <strong className="payment-alert-title">
+                  คำสั่งซื้อนี้อยู่ระหว่างรอเจ้าหน้าที่ตรวจสอบเพื่อคืนเงินเต็มจำนวน (G-23, G-35)
+                </strong>
+              </div>
+              <p className="payment-alert-desc">
+                {paymentExceptionMessage ||
+                  'ระบบได้รับยอดชำระเงินเรียบร้อยแล้ว แต่เนื่องจากคำสั่งซื้อชำระเกินกำหนดเวลา 15 นาที หรือโควตาบัตรไม่เพียงพอในขณะที่ผลชำระเงินมาถึง ระบบจึงไม่ออกบัตรบางส่วน และได้เปิดเคสให้เจ้าหน้าที่ตรวจสอบเพื่อดำเนินการโอนเงินคืนเต็มจำนวน'}
+              </p>
+              <button
+                type="button"
+                onClick={handleStartNewOrder}
+                className="primary-button"
+              >
+                เริ่มทำรายการใหม่
+              </button>
+            </section>
           )}
-        </div>
+
+          {isExpired && (
+            <section
+              role="alert"
+              className="payment-alert-card payment-alert-expired"
+            >
+              <div className="payment-alert-header">
+                <AlertIcon />
+                <strong className="payment-alert-title">
+                  คำสั่งซื้อนี้หมดเวลาการชำระเงิน 15 นาทีแล้ว (AC-13, AC-70)
+                </strong>
+              </div>
+              <p className="payment-alert-desc">
+                ระบบได้ทำการยกเลิกการล็อกโควตาบัตรและคืนสิทธิ์ให้แก่ผู้ซื้อท่านอื่นเรียบร้อยแล้ว หากท่านต้องการซื้อบัตร กรุณาเริ่มต้นทำรายการจองบัตรใหม่อีกครั้ง
+              </p>
+              <button
+                type="button"
+                onClick={handleStartNewOrder}
+                className="primary-button"
+              >
+                กลับไปเลือกบัตรใหม่
+              </button>
+            </section>
+          )}
+
+          {!isExpired && !isPaymentException && reservation.status !== 'cancelled' && (
+            <section id="promptpay-payment-section" className="payment-qr-card" aria-label="ชำระเงินผ่าน PromptPay QR">
+              <div className="payment-qr-card-header">
+                <h2 className="payment-qr-title" style={{ margin: '0 0 0.4rem' }}>
+                  ชำระเงินผ่าน PromptPay QR
+                </h2>
+                <p className="payment-qr-desc">
+                  เปิดแอปพลิเคชันธนาคารบนมือถือ สแกน QR Code ยอดเงินตรงตามคำสั่งซื้อ <strong>{formatBaht(reservation.total)}</strong>
+                </p>
+              </div>
+
+              {/* Hidden elements for locator compatibility */}
+              <div style={{ display: 'none' }}>
+                <strong id="payment-total-thb">{formatBaht(reservation.total)}</strong>
+                <span id="payment-currency">THB</span>
+              </div>
+
+              {paymentError && (
+                <div role="alert" className="payment-error-alert">
+                  {paymentError}
+                </div>
+              )}
+
+              {!charge ? (
+                <div className="payment-qr-loading-container" style={{ textAlign: 'center', padding: '2rem 1rem' }}>
+                  <div
+                    className="payment-qr-loading-spinner"
+                    style={{
+                      width: '44px',
+                      height: '44px',
+                      margin: '0 auto 0.75rem',
+                      border: '3px solid #e2e8f0',
+                      borderTopColor: 'var(--blue)',
+                      borderRadius: '50%',
+                      animation: 'spin 0.8s linear infinite',
+                    }}
+                  />
+                  <p style={{ margin: 0, fontSize: '0.95rem', fontWeight: 600, color: 'var(--black)' }}>
+                    กำลังโหลด QR Code ชำระเงิน PromptPay...
+                  </p>
+                  <p style={{ margin: '0.25rem 0 1rem', fontSize: '0.85rem', color: 'var(--muted)' }}>
+                    ระบบกำลังจัดเตรียม QR Code ยอดเงินตรงตามคำสั่งซื้ออัตโนมัติ
+                  </p>
+                  <button
+                    id="generate-payment-qr-btn"
+                    type="button"
+                    onClick={() => handleGeneratePaymentQr()}
+                    disabled={isGeneratingQr}
+                    className="primary-button payment-generate-cta-btn"
+                    style={{ fontSize: '0.88rem', padding: '0.5rem 1.2rem' }}
+                  >
+                    {isGeneratingQr ? 'กำลังสร้าง QR Code...' : 'สร้าง QR Code ชำระเงิน (PromptPay)'}
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <div className="payment-qr-frame">
+                    {/* biome-ignore lint/performance/noImgElement: Data URL SVG QR representation */}
+                    <img
+                      id="promptpay-qr-image"
+                      src={charge.qrCodeUrl}
+                      alt="PromptPay QR Code"
+                      width={220}
+                      height={220}
+                      style={{ display: 'block', margin: '0 auto' }}
+                    />
+                  </div>
+
+                  <div className="payment-qr-download-container" style={{ textAlign: 'center', margin: '0.25rem auto 1.25rem' }}>
+                    <button
+                      id="download-qr-code-btn"
+                      type="button"
+                      onClick={handleDownloadQrCode}
+                      disabled={isDownloadingQr}
+                      className="button button-secondary download-qr-btn"
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '0.45rem',
+                        padding: '0.45rem 1rem',
+                      }}
+                    >
+                      <DownloadIcon style={{ width: '15px', height: '15px', color: '#475569' }} />
+                      <span>{isDownloadingQr ? 'กำลังบันทึกรูป...' : 'บันทึกรูป QR Code (PNG)'}</span>
+                    </button>
+                  </div>
+
+                  <div className="payment-charge-meta">
+                    รหัสธุรกรรม (Charge ID): <strong id="payment-charge-id">{charge.id}</strong>
+                  </div>
+
+                  <div className="payment-tips-box">
+                    <ShieldCheckIcon style={{ width: '16px', height: '16px', flexShrink: 0 }} />
+                    <span>กรุณาสแกนชำระให้เสร็จสิ้นก่อนเวลาหมด 15 นาที</span>
+                  </div>
+
+                  {/* Test Simulation Button */}
+                  <button
+                    id="simulate-payment-button"
+                    type="button"
+                    onClick={handleSimulatePaymentSuccess}
+                    disabled={isVerifyingPayment}
+                    className="primary-button payment-simulate-btn"
+                  >
+                    {isVerifyingPayment
+                      ? 'กำลังตรวจสอบการชำระเงิน...'
+                      : 'ยืนยันการชำระเงินสำเร็จ (ทดสอบ / Test Payment)'}
+                  </button>
+
+                  {/* Button fallback for tests if needed */}
+                  <button
+                    id="generate-payment-qr-btn"
+                    type="button"
+                    tabIndex={-1}
+                    onClick={() => handleGeneratePaymentQr()}
+                    style={{ display: 'none' }}
+                  >
+                    สร้าง QR Code ชำระเงิน (PromptPay)
+                  </button>
+                </>
+              )}
+            </section>
+          )}
+        </>
+      )}
 
       {/* 1. Concert Information (Compact Status Bar) */}
       <section className="checkout-compact-status-bar" aria-label="ข้อมูลคอนเสิร์ต">
@@ -365,9 +581,7 @@ export function OrderPaymentView({ orderId }: OrderPaymentViewProps) {
       )}
 
       {!isPaid && (
-        <>
-          {/* 2. Order Summary & Price Breakdown Card (D-50: Placed first in stacked sequence) */}
-          <section className="payment-order-summary-card" aria-label="สรุปรายการคำสั่งซื้อ">
+        <section className="payment-order-summary-card" aria-label="สรุปรายการคำสั่งซื้อ">
         <div className="payment-card-header">
           <div className="payment-card-title-wrap">
             <TicketIcon style={{ width: '22px', height: '22px', color: 'var(--blue)' }} />
@@ -420,150 +634,10 @@ export function OrderPaymentView({ orderId }: OrderPaymentViewProps) {
           </div>
         </div>
       </section>
-
-      {/* 3. Payment Focus Card (PromptPay QR / Exception / Expired) (D-50) */}
-      {!isPaid && (
-        <>
-          {isPaymentException && (
-            <section
-              role="alert"
-              id="payment-exception-banner"
-              className="payment-alert-card payment-alert-exception"
-            >
-              <div className="payment-alert-header">
-                <AlertIcon />
-                <strong className="payment-alert-title">
-                  คำสั่งซื้อนี้อยู่ระหว่างรอเจ้าหน้าที่ตรวจสอบเพื่อคืนเงินเต็มจำนวน (G-23, G-35)
-                </strong>
-              </div>
-              <p className="payment-alert-desc">
-                {paymentExceptionMessage ||
-                  'ระบบได้รับยอดชำระเงินเรียบร้อยแล้ว แต่เนื่องจากคำสั่งซื้อชำระเกินกำหนดเวลา 15 นาที หรือโควตาบัตรไม่เพียงพอในขณะที่ผลชำระเงินมาถึง ระบบจึงไม่ออกบัตรบางส่วน และได้เปิดเคสให้เจ้าหน้าที่ตรวจสอบเพื่อดำเนินการโอนเงินคืนเต็มจำนวน'}
-              </p>
-              <button
-                type="button"
-                onClick={handleStartNewOrder}
-                className="primary-button"
-              >
-                เริ่มทำรายการใหม่
-              </button>
-            </section>
-          )}
-
-          {isExpired && (
-            <section
-              role="alert"
-              className="payment-alert-card payment-alert-expired"
-            >
-              <div className="payment-alert-header">
-                <AlertIcon />
-                <strong className="payment-alert-title">
-                  คำสั่งซื้อนี้หมดเวลาชำระเงิน 15 นาทีแล้ว (AC-71)
-                </strong>
-              </div>
-              <p className="payment-alert-desc">
-                ระบบได้ทำการคืนโควตาบัตรกลับสู่ระบบเรียบร้อยแล้ว รายการกันบัตรเดิมไม่สามารถต่ออายุได้ หากต้องการซื้อบัตร กรุณากดปุ่มด้านล่างเพื่อเริ่มทำรายการใหม่
-              </p>
-              <button
-                type="button"
-                onClick={handleStartNewOrder}
-                className="primary-button"
-              >
-                กลับไปเลือกบัตรใหม่
-              </button>
-            </section>
-          )}
-
-          {!isExpired && !isPaymentException && reservation.status !== 'cancelled' && (
-            <section id="promptpay-payment-section" className="payment-qr-card" aria-label="ชำระเงินผ่าน PromptPay QR">
-              <div className="payment-qr-card-header">
-                <h2 className="payment-qr-title">
-                  ชำระเงินผ่าน PromptPay QR
-                </h2>
-                <p className="payment-qr-desc">
-                  เปิดแอปพลิเคชันธนาคารบนมือถือ สแกน QR Code ยอดเงินตรงตามคำสั่งซื้อ
-                </p>
-              </div>
-
-              {/* Hidden elements for locator compatibility */}
-              <div style={{ display: 'none' }}>
-                <strong id="payment-total-thb">{formatBaht(reservation.total)}</strong>
-                <span id="payment-currency">THB</span>
-              </div>
-
-              {paymentError && (
-                <div role="alert" className="payment-error-alert">
-                  {paymentError}
-                </div>
-              )}
-
-              {!charge ? (
-                <button
-                  id="generate-payment-qr-btn"
-                  type="button"
-                  onClick={() => handleGeneratePaymentQr()}
-                  disabled={isGeneratingQr}
-                  className="primary-button payment-generate-cta-btn"
-                >
-                  {isGeneratingQr ? 'กำลังสร้าง QR Code...' : 'สร้าง QR Code ชำระเงิน (PromptPay)'}
-                </button>
-              ) : (
-                <>
-                  <div className="payment-qr-frame">
-                    {/* biome-ignore lint/performance/noImgElement: Data URL SVG QR representation */}
-                    <img
-                      id="promptpay-qr-image"
-                      src={charge.qrCodeUrl}
-                      alt="PromptPay QR Code"
-                      width={220}
-                      height={220}
-                      style={{ display: 'block', margin: '0 auto' }}
-                    />
-                  </div>
-
-                  <div className="payment-charge-meta">
-                    รหัสธุรกรรม (Charge ID): <strong id="payment-charge-id">{charge.id}</strong>
-                  </div>
-
-                  <div className="payment-tips-box">
-                    <ShieldCheckIcon style={{ width: '16px', height: '16px', flexShrink: 0 }} />
-                    <span>กรุณาสแกนชำระให้เสร็จสิ้นก่อนเวลาหมด 15 นาที</span>
-                  </div>
-
-                  {/* Test Simulation Button */}
-                  <button
-                    id="simulate-payment-button"
-                    type="button"
-                    onClick={handleSimulatePaymentSuccess}
-                    disabled={isVerifyingPayment}
-                    className="primary-button payment-simulate-btn"
-                  >
-                    {isVerifyingPayment
-                      ? 'กำลังตรวจสอบการชำระเงิน...'
-                      : 'ยืนยันการชำระเงินสำเร็จ (ทดสอบ / Test Payment)'}
-                  </button>
-
-                  {/* Button fallback for tests if needed */}
-                  <button
-                    id="generate-payment-qr-btn"
-                    type="button"
-                    tabIndex={-1}
-                    onClick={() => handleGeneratePaymentQr()}
-                    style={{ display: 'none' }}
-                  >
-                    สร้าง QR Code ชำระเงิน (PromptPay)
-                  </button>
-                </>
-              )}
-            </section>
-          )}
-        </>
       )}
 
       {/* Bottom Purchase Terms & FAQ List (D-50) */}
       <PurchaseTermsFaqList />
-      </>
-      )}
 
       {/* 6. Sticky Bottom Timer & Amount Bar (D-51: visible everywhere when scrolling) */}
       {!isPaid && !isPaymentException && (

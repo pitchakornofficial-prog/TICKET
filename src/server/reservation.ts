@@ -311,7 +311,7 @@ export async function createReservation(
 
     // 5. Lock organizer fee atomically on first reservation (G-49, AC-111)
     const feeRes = await client.query(
-      `SELECT "organizerFeeMode", "organizerFeeRate", "customerFeeMode", "customerFeeRate", "organizerFeeLocked"
+      `SELECT "organizerFeeMode", "organizerFeeRate", "organizerFeePrivilegeRate", "ubuPrivilegeMode", "customerFeeMode", "customerFeeRate", "organizerFeeLocked"
        FROM event_fee_settings
        WHERE "eventId" = $1
        FOR UPDATE`,
@@ -343,21 +343,34 @@ export async function createReservation(
       }
     }
 
-    // 6. Calculate UBU Privilege Discount (D-37, D-134)
-    // 15% discount on up to 2 tickets (applied to highest priced tickets first)
+    // 6. Calculate UBU Privilege Discount (D-37, D-134, D-181)
     const hasUbuPrivilege = isUbuEmail(verifiedSession.email);
     let discountAmount = 0;
     if (hasUbuPrivilege) {
-      const ticketPrices: number[] = [];
-      for (const item of orderItemsToInsert) {
-        for (let i = 0; i < item.quantity; i++) {
-          ticketPrices.push(item.unitPrice);
+      const isUbuPrivilegeMode = Boolean(feeRes.rows[0]?.ubuPrivilegeMode);
+      const isUbuFreshyEvent = isUbuPrivilegeMode || input.eventId === 'event-ubu-freshy-2026';
+      if (isUbuFreshyEvent) {
+        // D-181: Reduce price to 99 THB for ALL tickets (51 THB discount per 150 THB ticket)
+        for (const item of orderItemsToInsert) {
+          if (item.unitPrice === 150) {
+            discountAmount = roundHalfUp(discountAmount + (150 - 99) * item.quantity);
+          } else {
+            discountAmount = roundHalfUp(discountAmount + Math.round(item.unitPrice * 0.15) * item.quantity);
+          }
         }
-      }
-      ticketPrices.sort((a, b) => b - a);
-      const maxDiscountTickets = Math.min(ticketPrices.length, 2);
-      for (let i = 0; i < maxDiscountTickets; i++) {
-        discountAmount = roundHalfUp(discountAmount + Math.round(ticketPrices[i] * 0.15));
+      } else {
+        // D-37: 15% discount on up to 2 tickets (applied to highest priced tickets first)
+        const ticketPrices: number[] = [];
+        for (const item of orderItemsToInsert) {
+          for (let i = 0; i < item.quantity; i++) {
+            ticketPrices.push(item.unitPrice);
+          }
+        }
+        ticketPrices.sort((a, b) => b - a);
+        const maxDiscountTickets = Math.min(ticketPrices.length, 2);
+        for (let i = 0; i < maxDiscountTickets; i++) {
+          discountAmount = roundHalfUp(discountAmount + Math.round(ticketPrices[i] * 0.15));
+        }
       }
     }
 

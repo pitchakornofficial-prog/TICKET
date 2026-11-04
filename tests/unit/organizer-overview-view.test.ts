@@ -84,11 +84,11 @@ describe('Organizer Workspace Overview View (D-114)', () => {
     expect(overviewContent).toContain('overview-launchpad-grid');
     expect(overviewContent).toContain('launchpad-finance');
     expect(overviewContent).toContain('launchpad-scanners');
-    expect(overviewContent).toContain('launchpad-policies');
+    expect(overviewContent).not.toContain('launchpad-policies');
     expect(overviewContent).toContain('launchpad-contact');
     expect(overviewContent).toContain('รายงานการเงินและรอบโอนเงิน');
     expect(overviewContent).toContain('จัดการทีมงานสแกนบัตร');
-    expect(overviewContent).toContain('ข้อตกลงและเงื่อนไขการบริการ');
+    expect(overviewContent).not.toContain('ข้อตกลงและเงื่อนไขการบริการ');
     expect(overviewContent).toContain('ติดต่อเจ้าของระบบ');
   });
 

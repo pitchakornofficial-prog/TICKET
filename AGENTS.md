@@ -7,6 +7,7 @@
 - [Product requirements and UI design](docs/requirement.md)
 - [Domain context and setup status](CONTEXT.md)
 - [Workflow and source ownership](docs/workflow.md)
+- [Data Integrity Rules (อ่านก่อนแตะข้อมูล/ข่าว/แจ้งเตือน/การเงิน)](CONTEXT.md#data-integrity-rules)
 - [Application and shared data](docs/adr/0001-application-and-shared-data.md)
 - [AWS production target and local-first development](docs/adr/0002-local-first-and-aws-production.md)
 - [Payment, email, and storage integrations](docs/adr/0003-external-integrations.md)

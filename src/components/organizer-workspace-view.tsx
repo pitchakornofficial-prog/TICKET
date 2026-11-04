@@ -6,7 +6,6 @@ import {
   UsersIcon,
   BanknotesIcon,
   CalendarIcon,
-  ShieldCheckIcon,
   SlidersIcon,
   ChatBubbleLeftRightIcon,
   BookOpenIcon,
@@ -19,7 +18,6 @@ import { OrganizerContactView } from '@/components/organizer-contact-view';
 import { OrganizerGuideView } from '@/components/organizer-guide-view';
 import { OrganizerScannerManager } from '@/components/organizer-scanner-manager';
 import { OrganizerEventsManager } from '@/components/organizer-events-manager';
-import { OrganizerPoliciesView } from '@/components/organizer-policies-view';
 import { OrganizerFinanceView } from '@/components/organizer-finance-view';
 import { OrganizerOverviewView } from '@/components/organizer-overview-view';
 
@@ -29,7 +27,6 @@ export type OrganizerSectionId =
   | 'scanners'
   | 'finance'
   | 'news'
-  | 'policies'
   | 'guide'
   | 'contact'
   | 'settings';
@@ -52,10 +49,6 @@ const HASH_TO_SECTION: Record<string, OrganizerSectionId> = {
   money: 'finance',
   news: 'news',
   announcements: 'news',
-  policies: 'policies',
-  policy: 'policies',
-  terms: 'policies',
-  agreement: 'policies',
   guide: 'guide',
   manual: 'guide',
   howto: 'guide',
@@ -182,16 +175,6 @@ export function OrganizerWorkspaceView({ initialSection }: OrganizerWorkspaceVie
                 <CalendarIcon className="organizer-subnav-icon" />
                 <span>ข่าวสาร</span>
               </button>
-
-              <button
-                type="button"
-                data-testid="organizer-nav-policies"
-                className={`organizer-subnav-tab ${activeSection === 'policies' ? 'active' : ''}`}
-                onClick={() => handleSelectTab('policies')}
-              >
-                <ShieldCheckIcon className="organizer-subnav-icon" />
-                <span>ข้อตกลง</span>
-              </button>
             </div>
 
             <div className="organizer-subnav-right-group">
@@ -243,8 +226,6 @@ export function OrganizerWorkspaceView({ initialSection }: OrganizerWorkspaceVie
           <OrganizerScannerManager />
         ) : activeSection === 'finance' ? (
           <OrganizerFinanceView />
-        ) : activeSection === 'policies' ? (
-          <OrganizerPoliciesView />
         ) : activeSection === 'overview' ? (
           <OrganizerOverviewView
             onNavigateSection={handleSelectTab}

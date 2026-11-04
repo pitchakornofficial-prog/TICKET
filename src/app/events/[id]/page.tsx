@@ -21,7 +21,6 @@ import { ExpandableEventDescription } from '@/components/expandable-event-descri
 import { EventProhibitedItemsCarousel } from '@/components/event-prohibited-items-carousel';
 import { EventInteractivePoster } from '@/components/event-interactive-poster';
 import { EventOfficialGallery } from '@/components/event-official-gallery';
-import { ArtistPointerMascot } from '@/components/artist-pointer-mascot';
 import { FloatingBackToTop } from '@/components/floating-back-to-top';
 
 interface EventDetailPageProps {
@@ -381,12 +380,6 @@ export default async function EventDetailPage({ params, searchParams }: EventDet
             </Link>
           </div>
         </div>
-
-        {/* Viewport-Right Anchored Lisa Mascot (D-158) */}
-        <ArtistPointerMascot
-          singleUrl={(event as { artistPointerUrl?: string }).artistPointerUrl}
-          customUrls={(event as { artistPointerUrls?: string[] }).artistPointerUrls}
-        />
       </aside>
 
       {/* Universal Floating Back-to-Top Button (D-172) */}
