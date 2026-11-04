@@ -3,6 +3,10 @@ import { pathToFileURL } from 'node:url';
 // Pure validation: no connections, credentials in output, or provider requests.
 export function productionConfigErrors(env) {
   const errors = [];
+  const staging = env.TICKET_DEPLOY_ENV === 'staging';
+  if (env.TICKET_DEPLOY_ENV && !['production', 'staging'].includes(env.TICKET_DEPLOY_ENV)) {
+    errors.push('TICKET_DEPLOY_ENV must be production or staging');
+  }
   const requireValue = (name) => {
     if (!env[name]?.trim()) errors.push(`${name} is required`);
   };
@@ -22,8 +26,10 @@ export function productionConfigErrors(env) {
   if (!env.RESEND_API_KEY?.startsWith('re_')) errors.push('RESEND_API_KEY must be a Resend API key');
   if (!/^[^\r\n]*@[^\s<>]+\.[^\s<>]+>?$/.test(env.EMAIL_FROM || '') ||
     /\.(invalid|local|example|test)>?$/i.test(env.EMAIL_FROM || '')) errors.push('EMAIL_FROM must use a verified public email domain');
-  if (!env.STRIPE_SECRET_KEY?.startsWith('sk_live_')) errors.push('STRIPE_SECRET_KEY must be Live mode');
-  if (!env.STRIPE_PUBLISHABLE_KEY?.startsWith('pk_live_')) errors.push('STRIPE_PUBLISHABLE_KEY must be Live mode');
+  const stripeMode = staging ? 'test' : 'live';
+  if (!['sk', 'rk'].some(prefix => env.STRIPE_SECRET_KEY?.startsWith(`${prefix}_${stripeMode}_`))) errors.push(`STRIPE_SECRET_KEY must be ${staging ? 'Test' : 'Live'} mode`);
+  if (!env.STRIPE_PUBLISHABLE_KEY?.startsWith(`pk_${stripeMode}_`)) errors.push(`STRIPE_PUBLISHABLE_KEY must be ${staging ? 'Test' : 'Live'} mode`);
+  if (staging && env.STRIPE_LIVE_MODE === 'true') errors.push('STRIPE_LIVE_MODE must not be true in staging');
   if (!env.STRIPE_WEBHOOK_SECRET?.startsWith('whsec_') || env.STRIPE_WEBHOOK_SECRET === 'whsec_test_secret') errors.push('STRIPE_WEBHOOK_SECRET must be the production endpoint signing secret');
   try {
     const url = new URL(env.R2_ENDPOINT || `https://${env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`);

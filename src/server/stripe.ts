@@ -406,7 +406,7 @@ export class HttpStripeClient implements StripeClient {
   }
 
   isLiveMode(): boolean {
-    return this.secretKey.startsWith('sk_live_') || process.env.STRIPE_LIVE_MODE === 'true';
+    return /^(sk|rk)_live_/.test(this.secretKey) || process.env.STRIPE_LIVE_MODE === 'true';
   }
 
   async createPromptPayIntent(params: CreatePromptPayIntentParams): Promise<StripePaymentIntent> {
@@ -526,7 +526,7 @@ export function isStripeLiveMode(): boolean {
     return true;
   }
   const key = process.env.STRIPE_SECRET_KEY || '';
-  if (key.startsWith('sk_live_') || process.env.STRIPE_LIVE_MODE === 'true') {
+  if (/^(sk|rk)_live_/.test(key) || process.env.STRIPE_LIVE_MODE === 'true') {
     return true;
   }
   return false;
@@ -542,8 +542,8 @@ export function getStripeClient(): StripeClient {
   }
 
   const secretKey = process.env.STRIPE_SECRET_KEY;
-  // If a real secret key is supplied (not empty and not dummy placeholder) and not in test runner
-  if (secretKey && !secretKey.startsWith('test_') && secretKey.startsWith('sk_') && process.env.NODE_ENV !== 'test') {
+  // Use Stripe for standard and restricted keys; test runners inject their own client.
+  if (secretKey && /^(sk|rk)_(live|test)_/.test(secretKey) && process.env.NODE_ENV !== 'test') {
     return new HttpStripeClient(secretKey);
   }
 

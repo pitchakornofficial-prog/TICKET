@@ -22,7 +22,8 @@ export default async function Workspace({
 }) {
   const { role } = await params;
   if (!isRole(role)) notFound();
-  const actor = await readActor(getAuth(), await headers());
+  const requestHeaders = await headers();
+  const actor = await readActor(getAuth(), requestHeaders);
   if (!actor) redirect('/login');
   const access = roleAccess(actor, role);
   const isScannerWorkspaceAllowed =

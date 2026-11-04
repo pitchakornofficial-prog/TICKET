@@ -30,4 +30,19 @@ describe('production configuration gate', () => {
     expect(errors.join('\n')).not.toContain('private-invalid-key');
     expect(errors.join('\n')).toContain('STRIPE_SECRET_KEY');
   });
+  it('accepts only matching test keys in explicitly selected staging', () => {
+    const staging = { ...valid, TICKET_DEPLOY_ENV: 'staging', STRIPE_SECRET_KEY: 'sk_test_fixture', STRIPE_PUBLISHABLE_KEY: 'pk_test_fixture' };
+    expect(productionConfigErrors(staging)).toEqual([]);
+    expect(productionConfigErrors({ ...staging, STRIPE_PUBLISHABLE_KEY: 'pk_live_fixture' }).join('\n')).toContain('Test mode');
+    expect(productionConfigErrors({ ...staging, STRIPE_LIVE_MODE: 'true' }).join('\n')).toContain('STRIPE_LIVE_MODE');
+    expect(productionConfigErrors({ ...staging, TICKET_DEPLOY_ENV: 'invalid' }).join('\n')).toContain('TICKET_DEPLOY_ENV');
+    expect(productionConfigErrors({ ...staging, TICKET_DEPLOY_ENV: undefined }).join('\n')).toContain('Live mode');
+  });
+  it('accepts restricted keys only in their matching environment', () => {
+    expect(productionConfigErrors({ ...valid, STRIPE_SECRET_KEY: 'rk_live_fixture' })).toEqual([]);
+    const staging = { ...valid, TICKET_DEPLOY_ENV: 'staging', STRIPE_SECRET_KEY: 'rk_test_fixture', STRIPE_PUBLISHABLE_KEY: 'pk_test_fixture' };
+    expect(productionConfigErrors(staging)).toEqual([]);
+    expect(productionConfigErrors({ ...valid, STRIPE_SECRET_KEY: 'rk_test_fixture' }).join('\n')).toContain('Live mode');
+    expect(productionConfigErrors({ ...staging, STRIPE_SECRET_KEY: 'rk_live_fixture' }).join('\n')).toContain('Test mode');
+  });
 });

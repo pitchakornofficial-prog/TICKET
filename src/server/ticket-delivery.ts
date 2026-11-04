@@ -20,6 +20,19 @@ export interface TicketEmailDeliveryRecord {
   eventTitle?: string;
 }
 
+function ticketOrderUrl(orderId: string, override?: string): string {
+  const baseUrl = override || process.env.BETTER_AUTH_URL ||
+    (process.env.NODE_ENV === 'production' ? '' : 'http://127.0.0.1:3000');
+  if (!baseUrl) throw new Error('BETTER_AUTH_URL is required for ticket email links');
+  const url = new URL('/my-tickets', baseUrl);
+  if (process.env.NODE_ENV === 'production' &&
+      (url.protocol !== 'https:' || ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname))) {
+    throw new Error('Ticket email links require a public HTTPS origin');
+  }
+  url.searchParams.set('orderId', orderId);
+  return url.toString();
+}
+
 export async function ensureTicketDeliverySchema(pool: Pool): Promise<void> {
   await ensureTicketSchema(pool);
   await ensureReservationSchema(pool);
@@ -155,7 +168,6 @@ export async function sendOrderTicketsEmail(
   await ensureTicketDeliverySchema(pool);
   const now = options?.now || new Date();
   const transport = options?.transport || emailTransport;
-  const baseUrl = options?.baseUrl || 'http://127.0.0.1:3000';
 
   // 1. Fetch order details
   const orderRes = await pool.query(
@@ -188,7 +200,7 @@ export async function sendOrderTicketsEmail(
   }
 
   const deliveryId = `EML-${randomUUID().slice(0, 8).toUpperCase()}`;
-  const orderUrl = `${baseUrl}/my-tickets?orderId=${order.id}`;
+  const orderUrl = ticketOrderUrl(order.id, options?.baseUrl);
 
   const { subject, html, text } = buildTicketEmailContent(
     orderId,
@@ -272,7 +284,6 @@ export async function retryTicketEmailDelivery(
   await ensureTicketDeliverySchema(pool);
   const now = options?.now || new Date();
   const transport = options?.transport || emailTransport;
-  const baseUrl = options?.baseUrl || 'http://127.0.0.1:3000';
 
   const res = await pool.query(
     `SELECT d.id, d."orderId", d."recipientEmail", d.status, d."retryCount",
@@ -293,7 +304,7 @@ export async function retryTicketEmailDelivery(
   const delivery = res.rows[0];
   const tickets = await getOrderTickets(pool, delivery.orderId);
 
-  const orderUrl = `${baseUrl}/events/${delivery.eventId}`;
+  const orderUrl = ticketOrderUrl(delivery.orderId, options?.baseUrl);
   const { subject, html, text } = buildTicketEmailContent(
     delivery.orderId,
     delivery.buyerName,

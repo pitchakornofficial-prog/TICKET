@@ -1,5 +1,13 @@
 # Deployment — AWS Singapore
 
+## Production rollout 2026-11-04
+
+`ticket.phatysd.me` routes through the existing `ticket-workload-test` load balancer to the `ticket-production` stack. Its account-specific CloudFormation template is [ticket-production.json](../infra/aws/ticket-production.json). The production ECS service uses a separate Neon `production` branch and `/ticket/production/` SSM parameters. The staging service remains running for rollback and continues to incur charges. Do not delete the staging stack while production depends on its load balancer, listener, network, certificate, or ECR repository.
+
+The production owner was bootstrapped from SSM; the bootstrap password parameter remains in SSM. The owner sign-in, public homepage, target health, restricted Stripe key read access, and signed/unsigned webhook checks passed. `pay-test` returns 403 in live mode. The paid purchase E2E suite was run locally with test providers; a live PromptPay payment, Stripe payout readiness, production load capacity, and a Neon backup/restore drill have not been verified. One production task is configured; no production autoscaling policy or AWS Budget alert is configured. Neon Free limits and its short recovery history need review before selling tickets.
+
+Event fee settings currently allow one organizer rate per event and default to zero. Do not open sales for an event requiring different organizer rates per ticket category until the feature and financial reports are updated and verified. Production currently contains no concert configuration from staging.
+
 เป้าหมายตาม [ADR-0002](adr/0002-local-first-and-aws-production.md): ECS Fargate ARM64 + ALB, private RDS PostgreSQL, Cloudflare, SSM SecureString, Resend และ R2; Stripe ตาม [ADR-0003](adr/0003-external-integrations.md).
 ชุดนี้เตรียม source/container และคำสั่งปฏิบัติการ ไม่ได้สร้าง AWS resources หรือรับรอง capacity.
 

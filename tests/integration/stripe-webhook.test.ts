@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { authFixture } from '../support/auth-fixture';
 import { setDatabasePool } from '../../src/server/database';
 import { createEventDraft, approveSession } from '../../src/server/events';
@@ -436,6 +436,22 @@ describe('Stripe Verified Webhook Ticket Issuance Integration (TASK-043, AC-119,
       expect(payTestData.message).toContain('AC-123');
     } finally {
       stripe.setLiveMode(false);
+    }
+  });
+
+  it('rejects the test payment endpoint when configured with a live restricted key', async () => {
+    vi.stubEnv('STRIPE_SECRET_KEY', 'rk_live_fixture');
+    vi.stubEnv('STRIPE_LIVE_MODE', 'false');
+    try {
+      const response = await handlePayTest(
+        new Request('http://localhost/api/public/checkout/orders/ORD-LIVE-TEST/pay-test', {
+          method: 'POST',
+        }),
+        { params: Promise.resolve({ id: 'ORD-LIVE-TEST' }) },
+      );
+      expect(response.status).toBe(403);
+    } finally {
+      vi.unstubAllEnvs();
     }
   });
 
