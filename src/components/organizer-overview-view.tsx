@@ -17,6 +17,7 @@ import {
 } from './icons';
 import { TicketIcon } from './ticket-icon';
 import { Button, Badge } from '@/components/ui';
+import { HeaderInfoTooltip } from './header-info-tooltip';
 import { formatBaht } from '@/lib/locale';
 import type { OrganizerSectionId } from './organizer-workspace-view';
 
@@ -173,7 +174,10 @@ export function OrganizerOverviewView({
       {/* Header Toolbar (D-122: Clean Baseline) */}
       <header className="overview-header-toolbar">
         <div className="overview-header-titles">
-          <h1 className="overview-header-title">ภาพรวมระบบผู้จัดงาน</h1>
+          <h1 className="overview-header-title">
+            ภาพรวมระบบผู้จัดงาน
+            <HeaderInfoTooltip text="ศูนย์รวมภาพรวมสถิติคอนเสิร์ตของคุณ สรุปยอดขายรวม บัตรที่จำหน่ายได้ และงานค้างที่ต้องดำเนินการ" />
+          </h1>
           <p className="overview-header-subtitle">
             ติดตามสถานะงานคอนเสิร์ต ยอดจำหน่ายบัตร และความพร้อมของทีมงานแบบเรียลไทม์
           </p>

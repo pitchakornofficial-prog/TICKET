@@ -12,6 +12,7 @@ import {
   CheckIcon,
 } from '@/components/icons';
 import { Button } from '@/components/ui';
+import { HeaderInfoTooltip } from './header-info-tooltip';
 
 const TOPIC_CATEGORIES = [
   'ปัญหาการเงินและการจ่ายเงินรอบสัปดาห์',
@@ -97,7 +98,10 @@ export function OrganizerContactView() {
         {/* Header Toolbar */}
         <header className="contact-page-header">
           <div className="contact-header-text">
-            <h1 className="contact-page-title">ติดต่อเจ้าของระบบ TICKET</h1>
+            <h1 className="contact-page-title">
+              ติดต่อเจ้าของระบบ TICKET
+              <HeaderInfoTooltip text="ช่องทางติดต่ออย่างเป็นทางการสำหรับผู้จัดงาน เพื่อประสานงาน แจ้งปัญหา หรือขอคำปรึกษาเร่งด่วนกับเจ้าของระบบ" />
+            </h1>
             <p className="contact-page-desc">
               ช่องทางติดต่ออย่างเป็นทางการสำหรับผู้จัดงานและผู้ว่าจ้าง เพื่อประสานงาน แจ้งปัญหา หรือขอคำปรึกษาเร่งด่วน
             </p>

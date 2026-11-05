@@ -14,6 +14,7 @@ import {
 } from '@/components/icons';
 import { TicketIcon } from '@/components/ticket-icon';
 import { Button, Badge } from '@/components/ui';
+import { HeaderInfoTooltip } from './header-info-tooltip';
 
 export interface OrganizerNewsItem {
   id: string;
@@ -344,7 +345,10 @@ export function OrganizerNewsView() {
         {/* Header Toolbar (D-122: Clean Baseline) */}
         <header className="news-management-header">
           <div className="news-management-title-wrap">
-            <h1 className="news-management-title">จัดการข่าวสารและประกาศ</h1>
+            <h1 className="news-management-title">
+              จัดการข่าวสารและประกาศ
+              <HeaderInfoTooltip text="เขียน แก้ไข และส่งคำขอประชาสัมพันธ์คอนเสิร์ต เพื่อให้เจ้าของระบบตรวจสอบและอนุมัติก่อนเผยแพร่สู่สาธารณะ" />
+            </h1>
             <p className="news-management-desc">
               เขียน แก้ไข และส่งคำขอประชาสัมพันธ์คอนเสิร์ต
               เพื่อให้เจ้าของระบบตรวจสอบและอนุมัติก่อนเผยแพร่สู่สาธารณะ

@@ -329,7 +329,7 @@ export async function submitSessionForApproval(
   await ensureEventSchema(pool);
   return inTransaction(pool, async client => {
     const res = await client.query(
-      `SELECT s.id, e."organizerId" 
+      `SELECT s.id, s."eventId", e."organizerId" 
        FROM event_sessions s
        JOIN events e ON e.id = s."eventId"
        WHERE s.id = $1`,
@@ -343,6 +343,10 @@ export async function submitSessionForApproval(
     await client.query(
       `UPDATE event_sessions SET status = 'pending_approval', "updatedAt" = now() WHERE id = $1`,
       [sessionId],
+    );
+    await client.query(
+      `UPDATE events SET status = 'pending_approval', "updatedAt" = now() WHERE id = $1 AND status = 'draft'`,
+      [res.rows[0].eventId],
     );
     return { success: true };
   });
@@ -2088,7 +2092,7 @@ export async function seedUbuFreshyFest(pool: Pool): Promise<void> {
         45000,
         new Date(Date.now() - 2 * 24 * 60 * 60 * 1000),
         'TXN-UBU2026-PAYOUT01',
-        'https://images.unsplash.com/photo-1554224155-6726b3ff858f?auto=format&fit=crop&w=1000&q=80',
+        '/api/organizer/payouts/payout-ubu-freshy-w01/slip',
         'รอบโอนเงินค่าบัตรจำหน่ายล่วงหน้าสัปดาห์ที่ 1 ให้สโมสรนักศึกษา ม.อุบลฯ',
         ownerId,
       ],
@@ -2105,6 +2109,7 @@ export async function seedUbuFreshyFest(pool: Pool): Promise<void> {
         coverBannerUrl: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?auto=format&fit=crop&w=1600&q=80',
         daysOffset: 21,
         durationHours: 5,
+        status: 'approved',
         ticketTypes: [
           { id: 'tt-ubu-acoustic-early', name: 'Early Bird บัตรเข้างาน', price: 120, quota: 1500, desc: 'บัตรราคาพิเศษช่วง Early Bird เข้าชมการแสดงโซนทั่วไป' },
           { id: 'tt-ubu-acoustic-reg', name: 'Regular บัตรเข้างาน', price: 180, quota: 2500, desc: 'บัตรเข้าชมการแสดงราคาปกติ โซนทั่วไป' },
@@ -2119,6 +2124,7 @@ export async function seedUbuFreshyFest(pool: Pool): Promise<void> {
         coverBannerUrl: 'https://images.unsplash.com/photo-1459749411175-04bf5292ceea?auto=format&fit=crop&w=1600&q=80',
         daysOffset: 35,
         durationHours: 6,
+        status: 'pending_approval',
         ticketTypes: [
           { id: 'tt-ubu-isan-indy-zone-a', name: 'บัตร Regular Zone A (หน้าเวที)', price: 250, quota: 3000, desc: 'โซนยืนหน้าเวที สัมผัสความมันส์ใกล้ชิดศิลปิน' },
           { id: 'tt-ubu-isan-indy-zone-b', name: 'บัตร Regular Zone B (อัฒจันทร์)', price: 200, quota: 3000, desc: 'โซนนั่งอัฒจันทร์ มองเห็นเวทีชัดเจนมุมกว้าง' },
@@ -2133,6 +2139,7 @@ export async function seedUbuFreshyFest(pool: Pool): Promise<void> {
         coverBannerUrl: 'https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?auto=format&fit=crop&w=1600&q=80',
         daysOffset: 50,
         durationHours: 7,
+        status: 'draft',
         ticketTypes: [
           { id: 'tt-ubu-countdown-ga', name: 'บัตรเข้างาน Countdown 2026', price: 199, quota: 5000, desc: 'บัตรเข้าชมงานมหกรรมดนตรีเคานต์ดาวน์ปีใหม่และกิจกรรมพิเศษ' },
         ],
@@ -2146,13 +2153,13 @@ export async function seedUbuFreshyFest(pool: Pool): Promise<void> {
            "posterUrl", "coverBannerUrl", status, "limitPerOrder",
            "createdAt", "updatedAt"
          )
-         VALUES ($1, $2, $3, $4, $5, $6, $7, 'approved', 4, now(), now())
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 4, now(), now())
          ON CONFLICT (id) DO UPDATE SET
-           status = 'approved',
+           status = EXCLUDED.status,
            title = EXCLUDED.title,
            location = EXCLUDED.location,
            description = EXCLUDED.description`,
-        [ec.id, organizerId, ec.title, ec.description, ec.location, ec.posterUrl, ec.coverBannerUrl],
+        [ec.id, organizerId, ec.title, ec.description, ec.location, ec.posterUrl, ec.coverBannerUrl, ec.status],
       );
 
       const sessId = `session-${ec.id}-s1`;
@@ -2167,9 +2174,9 @@ export async function seedUbuFreshyFest(pool: Pool): Promise<void> {
            "admissionStartTime", "admissionEndTime", status,
            "createdAt", "updatedAt"
          )
-         VALUES ($1, $2, $3, $4, $5, $6, 'approved', now(), now())
-         ON CONFLICT (id) DO UPDATE SET status = 'approved'`,
-        [sessId, ec.id, sTime, eTime, admStart, admEnd],
+         VALUES ($1, $2, $3, $4, $5, $6, $7, now(), now())
+         ON CONFLICT (id) DO UPDATE SET status = EXCLUDED.status`,
+        [sessId, ec.id, sTime, eTime, admStart, admEnd, ec.status],
       );
 
       for (const tt of ec.ticketTypes) {
@@ -2204,3 +2211,73 @@ export async function seedUbuFreshyFest(pool: Pool): Promise<void> {
     // Non-blocking in isolated unit tests
   }
 }
+
+/**
+ * Reverts a pending_approval event and its sessions back to draft (D-200 Item 2)
+ */
+export async function revertEventToDraft(
+  pool: Pool,
+  eventId: string,
+  organizerId: string,
+): Promise<{ success: boolean; eventId: string }> {
+  const evRes = await pool.query<{ id: string; status: string }>(
+    `SELECT id, status FROM events WHERE id = $1 AND "organizerId" = $2`,
+    [eventId, organizerId],
+  );
+  if (evRes.rows.length === 0) {
+    throw new Error('ไม่พบงานคอนเสิร์ตหรือไม่มีสิทธิ์ดำเนินการ');
+  }
+  const currentStatus = evRes.rows[0].status;
+  if (currentStatus !== 'pending_approval' && currentStatus !== 'submitted') {
+    throw new Error('สามารถดึงกลับเป็นฉบับร่างได้เฉพาะงานที่อยู่ในสถานะรออนุมัติเท่านั้น');
+  }
+
+  await pool.query(
+    `UPDATE events SET status = 'draft', "updatedAt" = now() WHERE id = $1`,
+    [eventId],
+  );
+  await pool.query(
+    `UPDATE event_sessions SET status = 'draft', "updatedAt" = now() WHERE "eventId" = $1 AND status IN ('pending_approval', 'submitted')`,
+    [eventId],
+  );
+
+  return { success: true, eventId };
+}
+
+/**
+ * Deletes an event draft or pending approval event that has not been approved or sold (D-200 Item 3)
+ */
+export async function deleteEventDraft(
+  pool: Pool,
+  eventId: string,
+  organizerId: string,
+): Promise<{ success: boolean; eventId: string }> {
+  const evRes = await pool.query<{ id: string; status: string }>(
+    `SELECT id, status FROM events WHERE id = $1 AND "organizerId" = $2`,
+    [eventId, organizerId],
+  );
+  if (evRes.rows.length === 0) {
+    throw new Error('ไม่พบงานคอนเสิร์ตหรือไม่มีสิทธิ์ดำเนินการ');
+  }
+  const currentStatus = evRes.rows[0].status;
+  if (currentStatus !== 'draft' && currentStatus !== 'pending_approval' && currentStatus !== 'submitted') {
+    throw new Error('สามารถลบได้เฉพาะงานคอนเสิร์ตในสถานะฉบับร่างหรือรออนุมัติเท่านั้น');
+  }
+
+  // Double-check no orders or tickets exist for this event
+  const orderCheck = await pool.query(
+    `SELECT id FROM orders WHERE "eventId" = $1 LIMIT 1`,
+    [eventId],
+  );
+  if (orderCheck.rows.length > 0) {
+    throw new Error('ไม่สามารถลบงานคอนเสิร์ตที่มีประวัติคำสั่งซื้อได้');
+  }
+
+  await pool.query(
+    `DELETE FROM events WHERE id = $1 AND "organizerId" = $2`,
+    [eventId, organizerId],
+  );
+
+  return { success: true, eventId };
+}
+

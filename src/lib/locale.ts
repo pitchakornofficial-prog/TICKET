@@ -8,6 +8,16 @@ export function formatBaht(amount: number): string {
   }).format(amount);
 }
 
+export function formatBahtCompact(amount: number): string {
+  const hasFraction = amount % 1 !== 0;
+  return new Intl.NumberFormat(locale, {
+    style: 'currency',
+    currency: 'THB',
+    minimumFractionDigits: hasFraction ? 2 : 0,
+    maximumFractionDigits: 2,
+  }).format(amount);
+}
+
 export function formatDateTime(instant: Date): string {
   return new Intl.DateTimeFormat(locale, {
     timeZone, dateStyle: 'long', timeStyle: 'short',

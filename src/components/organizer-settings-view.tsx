@@ -11,6 +11,7 @@ import {
   CrossCircleIcon,
 } from '@/components/icons';
 import { Button } from '@/components/ui';
+import { HeaderInfoTooltip } from './header-info-tooltip';
 
 interface BankAccount {
   id: string;
@@ -260,7 +261,10 @@ export function OrganizerSettingsView() {
       {/* Standardized Header Toolbar (D-119) */}
       <header className="settings-page-header">
         <div className="settings-header-text">
-          <h1 className="settings-page-title">การตั้งค่าโปรไฟล์และบัญชีผู้จัดงาน</h1>
+          <h1 className="settings-page-title">
+            การตั้งค่าโปรไฟล์และบัญชีผู้จัดงาน
+            <HeaderInfoTooltip text="จัดการข้อมูลผู้จัดงาน ข้อมูลติดต่อฉุกเฉิน ความปลอดภัยรหัสผ่าน และบัญชีธนาคารสำหรับรับเงิน" />
+          </h1>
           <p className="settings-page-desc">
             จัดการข้อมูลผู้จัดงาน ข้อมูลติดต่อฉุกเฉิน ความปลอดภัยรหัสผ่าน และบัญชีธนาคารสำหรับรับเงิน
           </p>

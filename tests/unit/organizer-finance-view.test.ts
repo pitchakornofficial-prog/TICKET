@@ -176,9 +176,51 @@ describe('Organizer Financial Reports & Payouts Workspace (D-113)', () => {
     expect(financeContent).toContain('ภาพสลิปจากแอดมิน');
     expect(financeContent).toContain('รายละเอียด');
 
-    // Official slip card in Modal
+    // Slip in Modal
     expect(financeContent).toContain('finance-official-slip-card');
-    expect(financeContent).toContain('TICKET TRANSFER SLIP');
+    expect(financeContent).toContain('finance-pure-slip-card');
     expect(financeContent).not.toMatch(/\p{Extended_Pictographic}/u);
+  });
+
+  it('implements D-201 and D-202: Admin Bank Transfer Slip Upload, Realistic e-Slip & Pure Image with Square Corners & Download Button', () => {
+    const financeContent = readFileSync(
+      join(rootDir, 'src/components/organizer-finance-view.tsx'),
+      'utf8',
+    );
+    expect(financeContent).toContain('getSlipImageSrc');
+    expect(financeContent).toContain('handleDownloadSlip');
+    expect(financeContent).toContain('payout-slip-img');
+    expect(financeContent).toContain('download-payout-slip-btn');
+    expect(financeContent).toContain('finance-slip-download-btn');
+    expect(financeContent).toContain('ดาวน์โหลดภาพสลิป (PNG)');
+    expect(financeContent).toContain('generateBankSlipSvgDataUrl');
+    expect(financeContent).not.toMatch(/\p{Extended_Pictographic}/u);
+
+    // Verify slip API route
+    const slipRouteContent = readFileSync(
+      join(rootDir, 'src/app/api/organizer/payouts/[id]/slip/route.ts'),
+      'utf8',
+    );
+    expect(slipRouteContent).toContain('generateBankSlipSvg');
+    expect(slipRouteContent).toContain('payout.organizerId !== session.user.id');
+    expect(slipRouteContent).not.toMatch(/\p{Extended_Pictographic}/u);
+
+    // Verify bank slip generator has square corners
+    const bankSlipContent = readFileSync(
+      join(rootDir, 'src/lib/bank-slip.ts'),
+      'utf8',
+    );
+    expect(bankSlipContent).toContain('โอนเงินสำเร็จ');
+    expect(bankSlipContent).toContain('generateBankSlipSvg');
+    expect(bankSlipContent).toContain('generateBankSlipSvgDataUrl');
+    expect(bankSlipContent).toContain('rx="0"');
+    expect(bankSlipContent).not.toMatch(/\p{Extended_Pictographic}/u);
+
+    // CSS rules for sharp corners (border-radius: 0) and shadow
+    const cssContent = readFileSync(join(rootDir, 'src/app/globals.css'), 'utf8');
+    expect(cssContent).toContain('.finance-slip-pure-img');
+    expect(cssContent).toContain('border-radius: 0');
+    expect(cssContent).toContain('box-shadow');
+    expect(cssContent).toContain('.finance-slip-download-btn');
   });
 });

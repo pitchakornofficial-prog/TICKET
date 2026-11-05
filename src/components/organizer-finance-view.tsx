@@ -20,6 +20,8 @@ import {
 } from '@/components/icons';
 import { TicketIcon } from '@/components/ticket-icon';
 import { Button, Badge } from '@/components/ui';
+import { HeaderInfoTooltip } from './header-info-tooltip';
+import { generateBankSlipSvgDataUrl } from '@/lib/bank-slip';
 
 export interface OrganizerEventItem {
   id: string;
@@ -247,6 +249,54 @@ export function OrganizerFinanceView() {
     }
   };
 
+  const getSlipImageSrc = (payout: PayoutHistoryItem) => {
+    if (
+      payout.transferProofUrl &&
+      !payout.transferProofUrl.includes('photo-1554224155-6726b3ff858f')
+    ) {
+      return payout.transferProofUrl;
+    }
+    return `/api/organizer/payouts/${payout.id}/slip`;
+  };
+
+  const handleDownloadSlip = (imageSrc: string, payout: PayoutHistoryItem) => {
+    const refCode = payout.transferProofKey || `TXN-${payout.id.slice(0, 8).toUpperCase()}`;
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = img.naturalWidth || 480;
+      canvas.height = img.naturalHeight || 720;
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        try {
+          const pngUrl = canvas.toDataURL('image/png');
+          const a = document.createElement('a');
+          a.href = pngUrl;
+          a.download = `bank-slip-${refCode}.png`;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+        } catch {
+          const a = document.createElement('a');
+          a.href = imageSrc;
+          a.download = `bank-slip-${refCode}.png`;
+          a.target = '_blank';
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+        }
+      }
+    };
+    img.onerror = () => {
+      window.open(imageSrc, '_blank');
+    };
+    img.src = imageSrc;
+  };
+
   // Top Summary KPIs aggregated across loaded reports (or current report)
   const aggregatedKPIs = useMemo(() => {
     const reportList = Object.values(allReports);
@@ -342,7 +392,10 @@ export function OrganizerFinanceView() {
       {/* 1. Header Toolbar (D-122: Clean Baseline) */}
       <header className="finance-management-header">
         <div className="finance-management-title-wrap">
-          <h1 className="finance-management-title">รายงานการเงินและยอดรับเงิน</h1>
+          <h1 className="finance-management-title">
+            รายงานการเงินและยอดรับเงิน
+            <HeaderInfoTooltip text="ตรวจสอบสรุปรายได้ ยอดขายสุทธิ ค่าบริการ เงินสำรอง ยอดพร้อมถอน และประวัติการรับเงินโอนจากแพลตฟอร์ม" />
+          </h1>
           <p className="finance-management-desc">
             ตรวจสอบภาพรวมรายได้จากการขายบัตร ยอดเงินสุทธิพร้อมรับ และประวัติการโอนเงินรายสัปดาห์
           </p>
@@ -948,59 +1001,45 @@ export function OrganizerFinanceView() {
             <div className="finance-modal-body">
               {payoutModalTab === 'slip' ? (
                 <div id="panel-payout-slip" role="tabpanel" aria-labelledby="tab-payout-slip">
-                  {/* Official Slip Card in Modal (D-183, D-185) */}
-                  <div className="finance-official-slip-card finance-modal-slip-card">
-                    <div className="finance-official-slip-head">
-                      <div className="slip-brand-logo">
-                        <BanknotesIcon width={16} height={16} />
-                        <span>TICKET TRANSFER SLIP</span>
-                      </div>
-                      <span className="slip-stamp-success">โอนเงินสำเร็จ</span>
+                  {/* Pure Slip Image with Download Button (D-202: no fussy card, sharp corners, shadow) */}
+                  <div className="finance-official-slip-card finance-pure-slip-card">
+                    <div className="finance-slip-img-container finance-pure-slip-img-container">
+                      {/* biome-ignore lint/performance/noImgElement: modal payout proof slip image */}
+                      <img
+                        src={getSlipImageSrc(selectedPayout)}
+                        alt="รูปสลิปหลักฐานการโอนเงินจากแอดมิน"
+                        className="finance-slip-preview-img finance-slip-pure-img"
+                        data-testid="payout-slip-img"
+                        onError={(e) => {
+                          const fallbackUrl = generateBankSlipSvgDataUrl({
+                            amount: selectedPayout.amount,
+                            paidAt: selectedPayout.paidAt,
+                            transferRef:
+                              selectedPayout.transferProofKey ||
+                              `TXN-${selectedPayout.id.slice(0, 8).toUpperCase()}`,
+                            eventTitle:
+                              selectedPayout.eventTitle || currentReport?.eventTitle,
+                            note: selectedPayout.transferNote,
+                          });
+                          (e.target as HTMLImageElement).src = fallbackUrl;
+                        }}
+                      />
                     </div>
-                    {selectedPayout.transferProofUrl ? (
-                      <div className="finance-slip-img-container">
-                        {/* biome-ignore lint/performance/noImgElement: modal payout proof slip image */}
-                        <img
-                          src={selectedPayout.transferProofUrl}
-                          alt="รูปสลิปหลักฐานการโอนเงินจากแอดมิน"
-                          className="finance-slip-preview-img"
-                        />
-                      </div>
-                    ) : (
-                      <div className="finance-slip-digital-receipt">
-                        <div className="receipt-amount-row">
-                          <span className="receipt-label">ยอดโอนสุทธิ</span>
-                          <span className="receipt-val">{formatBaht(selectedPayout.amount)}</span>
-                        </div>
-                        <div className="receipt-divider" />
-                        <div className="receipt-info-row">
-                          <span>คอนเสิร์ต:</span>
-                          <strong>{selectedPayout.eventTitle || currentReport?.eventTitle || 'คอนเสิร์ต'}</strong>
-                        </div>
-                        <div className="receipt-info-row">
-                          <span>วันที่และเวลาที่โอน:</span>
-                          <span>
-                            {selectedPayout.paidAt ? formatDate(new Date(selectedPayout.paidAt)) : formatDate(new Date(selectedPayout.createdAt))}
-                          </span>
-                        </div>
-                        <div className="receipt-info-row">
-                          <span>ผู้บันทึกการโอน:</span>
-                          <span>{selectedPayout.recordedByName || 'เจ้าของระบบ TICKET'}</span>
-                        </div>
-                        <div className="receipt-info-row">
-                          <span>เลขอ้างอิงสลิป:</span>
-                          <span className="font-mono">{selectedPayout.transferProofKey || (`TXN-${selectedPayout.id.slice(0, 8).toUpperCase()}`)}</span>
-                        </div>
-                        {selectedPayout.transferNote && (
-                          <div className="receipt-info-row">
-                            <span>หมายเหตุการโอน:</span>
-                            <span>{selectedPayout.transferNote}</span>
-                          </div>
-                        )}
-                      </div>
-                    )}
-                    <div className="finance-official-slip-footer">
-                      <span>หลักฐานการโอนเงินโดยเจ้าของระบบ TICKET</span>
+
+                    <div className="finance-pure-slip-actions">
+                      <button
+                        type="button"
+                        id="download-payout-slip-btn"
+                        data-testid="download-payout-slip-btn"
+                        className="finance-slip-download-btn"
+                        onClick={() =>
+                          handleDownloadSlip(getSlipImageSrc(selectedPayout), selectedPayout)
+                        }
+                        title="ดาวน์โหลดภาพสลิปเป็นไฟล์ PNG"
+                      >
+                        <DownloadIcon width={16} height={16} />
+                        <span>ดาวน์โหลดภาพสลิป (PNG)</span>
+                      </button>
                     </div>
                   </div>
                 </div>

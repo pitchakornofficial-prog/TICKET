@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import type { EventMoneyReportDetail } from '@/server/reports';
 import { formatDate, formatTime } from '@/lib/locale';
-import { RefreshIcon } from './icons';
+import { RefreshIcon, DownloadIcon } from './icons';
 import { AlertIcon } from './alert-icon';
 
 export interface OrganizerMoneyReportViewProps {
@@ -42,6 +42,55 @@ export function OrganizerMoneyReportView({
   useEffect(() => {
     fetchReport();
   }, [fetchReport]);
+
+  const handleExportCsv = () => {
+    if (!report) return;
+    const lines: string[] = [];
+    lines.push(`"รายงานสรุปการเงิน TICKET - ${report.eventTitle}"`);
+    lines.push(`"รหัสคอนเสิร์ต: ${report.eventId}"`);
+    lines.push(`"วันที่ออกรายงาน: ${formatDate(new Date())}"`);
+    lines.push('');
+    lines.push('"หัวข้อสรุปการเงิน","จำนวนเงิน (บาท)","รายละเอียด / หมายเหตุ"');
+    lines.push(`"ยอดขายบัตรทั้งหมด (Gross)",${report.grossSales.toFixed(2)},"ออกบัตรแล้ว ${report.totalTicketsIssuedCount} ใบ"`);
+    lines.push(`"ยอดคืนเงินที่อนุมัติ (Refunds)",${(-report.approvedRefundDeductions).toFixed(2)},"คืนแล้ว ${report.totalTicketsRefundedCount} ใบ"`);
+    lines.push(`"ยอดขายสุทธิ (Net Sales)",${report.netSales.toFixed(2)},"บัตรใช้งานได้ ${report.totalTicketsValidCount} ใบ"`);
+    lines.push(`"ค่าบริการระบบ (Organizer Fee)",${(-report.organizerFee).toFixed(2)},"หักค่าบริการแพลตฟอร์ม"`);
+    lines.push(`"สิทธิ์สุทธิผู้จัดงาน (E)",${report.netEntitlement.toFixed(2)},"ยอดขายสุทธิหักค่าบริการ"`);
+    lines.push(`"เงินสำรองที่กันไว้จริง (Held H)",${report.actualHeldReserve.toFixed(2)},"เป้าหมายสำรอง ${report.reserveTarget.toFixed(2)}"`);
+    lines.push(`"ยอดที่โอนจ่ายแล้ว (Paid P)",${report.totalPaidOut.toFixed(2)},"โอนจ่ายตามรอบสำเร็จ"`);
+    lines.push(`"ยอดพร้อมจ่าย (Payable)",${(report.isDebt ? -report.debtAmount : report.payableAmount).toFixed(2)},"${report.isDebt ? 'หนี้ค้างชำระ' : 'ยอดที่โอนได้ทันที'}"`);
+    lines.push('');
+
+    if (report.sessions.length > 0) {
+      lines.push('"สรุปตามรอบการแสดง"');
+      lines.push('"รอบการแสดง","สถานะ","ออกบัตร (ใบ)","บัตรคงเหลือ (ใบ)","คืนบัตร (ใบ)","ยอดขายรวม (บาท)","ยอดคืนเงิน (บาท)","ยอดสุทธิ (บาท)"');
+      for (const s of report.sessions) {
+        const sDate = `${formatDate(new Date(s.sessionStartTime))} ${formatTime(new Date(s.sessionStartTime))}`;
+        lines.push(`"${sDate}","${s.sessionStatus === 'approved' ? 'เปิดขายปกติ' : s.sessionStatus === 'cancelled' ? 'ยกเลิกรอบ' : s.sessionStatus}",${s.issuedTicketsCount},${s.validTicketsCount},${s.refundedTicketsCount},${s.grossSales.toFixed(2)},${s.approvedRefunds.toFixed(2)},${s.netSales.toFixed(2)}`);
+      }
+      lines.push('');
+    }
+
+    if (report.orders.length > 0) {
+      lines.push('"รายการคำสั่งซื้อ"');
+      lines.push('"หมายเลขคำสั่งซื้อ","ผู้ซื้อ","อีเมล","เบอร์โทร","บัตรคงเหลือ / ทั้งหมด","ยอดขายรวม (บาท)","ยอดคืนเงิน (บาท)","ยอดสุทธิ (บาท)","ค่าบริการ (บาท)"');
+      for (const o of report.orders) {
+        lines.push(`"${o.orderId}","${o.buyerName}","${o.buyerEmail}","${o.buyerPhone}","${o.validTicketsCount} / ${o.totalTicketsCount}",${o.grossSubtotal.toFixed(2)},${o.refundDeductions.toFixed(2)},${o.netSubtotal.toFixed(2)},${o.orderFeeAdjusted.toFixed(2)}`);
+      }
+      lines.push('');
+    }
+
+    const csvContent = `\uFEFF${lines.join('\r\n')}`;
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `ticket-money-report-${report.eventId}-${Date.now()}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
 
   return (
     <div
@@ -99,6 +148,28 @@ export function OrganizerMoneyReportView({
           >
             <RefreshIcon style={{ width: '14px', height: '14px' }} />
             รีเฟรช
+          </button>
+          <button
+            type="button"
+            onClick={handleExportCsv}
+            disabled={loading || !report}
+            data-testid="export-money-report-csv-btn"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+              padding: '8px 14px',
+              fontSize: '13px',
+              fontWeight: 600,
+              borderRadius: '6px',
+              border: '1px solid #cbd5e1',
+              backgroundColor: '#ffffff',
+              color: '#0f172a',
+              cursor: loading || !report ? 'not-allowed' : 'pointer',
+            }}
+          >
+            <DownloadIcon style={{ width: '14px', height: '14px' }} />
+            ดาวน์โหลดรายงาน CSV
           </button>
           {onClose && (
             <button
@@ -374,13 +445,15 @@ export function OrganizerMoneyReportView({
             </div>
           </div>
 
-          {/* Session breakdown table */}
+          {/* Session breakdown table (D-197 Collapsible Accordion) */}
           {report.sessions.length > 0 && (
-            <div style={{ marginTop: '30px' }}>
-              <h3 style={{ fontSize: '16px', fontWeight: 'bold', color: '#0f172a', marginBottom: '12px' }}>
-                สรุปยอดตามรอบการแสดง (Sessions)
-              </h3>
-              <div style={{ overflowX: 'auto', border: '1px solid #e2e8f0', borderRadius: '6px' }}>
+            <details open className="report-collapsible-section" style={{ marginTop: '24px' }}>
+              <summary className="report-collapsible-summary">
+                <span style={{ fontSize: '15px', fontWeight: 'bold', color: '#0f172a' }}>
+                  สรุปยอดตามรอบการแสดง ({report.sessions.length} รอบ)
+                </span>
+              </summary>
+              <div style={{ marginTop: '14px', overflowX: 'auto', border: '1px solid #e2e8f0', borderRadius: '6px' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px', textAlign: 'left' }}>
                   <thead style={{ backgroundColor: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
                     <tr>
@@ -433,227 +506,236 @@ export function OrganizerMoneyReportView({
                   </tbody>
                 </table>
               </div>
-            </div>
+            </details>
           )}
 
-          {/* Line items orders table (AC-64, AC-110) */}
-          <div style={{ marginTop: '30px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-              <h3 style={{ fontSize: '16px', fontWeight: 'bold', color: '#0f172a', margin: 0 }}>
-                รายการคำสั่งซื้อและค่าบริการรายคำสั่ง (Orders Breakdown — AC-110)
-              </h3>
-              <span style={{ fontSize: '12px', color: '#64748b' }}>
-                * ข้อมูลติดต่อผู้ซื้อถูกปิดบังบางส่วนเพื่อความปลอดภัย (AC-64)
-              </span>
-            </div>
-
-            {report.orders.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: '24px', backgroundColor: '#f8fafc', borderRadius: '6px', color: '#64748b', fontSize: '13px' }}>
-                ยังไม่มีรายการสั่งซื้อที่ชำระเงินสำเร็จ
+          {/* Line items orders table (AC-64, AC-110, D-197 Collapsible Accordion) */}
+          <details open className="report-collapsible-section" style={{ marginTop: '20px' }}>
+            <summary className="report-collapsible-summary">
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', flexWrap: 'wrap', gap: '8px' }}>
+                <span style={{ fontSize: '15px', fontWeight: 'bold', color: '#0f172a' }}>
+                  รายการคำสั่งซื้อและค่าบริการรายคำสั่ง ({report.orders.length} รายการ)
+                </span>
+                <span style={{ fontSize: '12px', color: '#64748b', fontWeight: 'normal' }}>
+                  * ข้อมูลติดต่อผู้ซื้อถูกปิดบังบางส่วนเพื่อความปลอดภัย (AC-64)
+                </span>
               </div>
-            ) : (
-              <div style={{ overflowX: 'auto', border: '1px solid #e2e8f0', borderRadius: '6px' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px', textAlign: 'left' }}>
-                  <thead style={{ backgroundColor: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
-                    <tr>
-                      <th style={{ padding: '10px 12px' }}>หมายเลขคำสั่งซื้อ</th>
-                      <th style={{ padding: '10px 12px' }}>ผู้ซื้อ</th>
-                      <th style={{ padding: '10px 12px' }}>อีเมล (Masked)</th>
-                      <th style={{ padding: '10px 12px' }}>เบอร์โทร (Masked)</th>
-                      <th style={{ padding: '10px 12px', textAlign: 'right' }}>จำนวนบัตร</th>
-                      <th style={{ padding: '10px 12px', textAlign: 'right' }}>ยอดขายรวม</th>
-                      <th style={{ padding: '10px 12px', textAlign: 'right' }}>ยอดคืนเงิน</th>
-                      <th style={{ padding: '10px 12px', textAlign: 'right' }}>ยอดขายสุทธิ</th>
-                      <th style={{ padding: '10px 12px', textAlign: 'right' }}>ค่าบริการ (F_o)</th>
-                      <th style={{ padding: '10px 12px', textAlign: 'right' }}>ปรับค่าบริการ (ΔF_o)</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {report.orders.map((o, idx) => (
-                      <tr key={o.orderId} style={{ borderBottom: idx < report.orders.length - 1 ? '1px solid #f1f5f9' : 'none' }}>
-                        <td style={{ padding: '10px 12px', fontFamily: 'monospace', fontWeight: 600 }}>{o.orderId}</td>
-                        <td style={{ padding: '10px 12px' }}>{o.buyerName}</td>
-                        <td style={{ padding: '10px 12px', color: '#475569' }} data-testid="masked-email">{o.buyerEmail}</td>
-                        <td style={{ padding: '10px 12px', color: '#475569' }} data-testid="masked-phone">{o.buyerPhone}</td>
-                        <td style={{ padding: '10px 12px', textAlign: 'right' }}>
-                          {o.validTicketsCount} / {o.totalTicketsCount}
-                        </td>
-                        <td style={{ padding: '10px 12px', textAlign: 'right' }}>
-                          ฿{o.grossSubtotal.toLocaleString('th-TH', { minimumFractionDigits: 2 })}
-                        </td>
-                        <td style={{ padding: '10px 12px', textAlign: 'right', color: o.refundDeductions > 0 ? '#dc2626' : '#64748b' }}>
-                          {o.refundDeductions > 0 ? `-฿${o.refundDeductions.toLocaleString('th-TH', { minimumFractionDigits: 2 })}` : '-'}
-                        </td>
-                        <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 600 }}>
-                          ฿{o.netSubtotal.toLocaleString('th-TH', { minimumFractionDigits: 2 })}
-                        </td>
-                        <td style={{ padding: '10px 12px', textAlign: 'right', color: '#b45309', fontWeight: 600 }}>
-                          ฿{o.orderFeeAdjusted.toLocaleString('th-TH', { minimumFractionDigits: 2 })}
-                        </td>
-                        <td style={{ padding: '10px 12px', textAlign: 'right', color: o.feeAdjustment > 0 ? '#16a34a' : '#64748b' }}>
-                          {o.feeAdjustment > 0 ? `-฿${o.feeAdjustment.toLocaleString('th-TH', { minimumFractionDigits: 2 })}` : '-'}
-                        </td>
+            </summary>
+
+            <div style={{ marginTop: '14px' }}>
+              {report.orders.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '24px', backgroundColor: '#f8fafc', borderRadius: '6px', color: '#64748b', fontSize: '13px' }}>
+                  ยังไม่มีรายการสั่งซื้อที่ชำระเงินสำเร็จ
+                </div>
+              ) : (
+                <div style={{ overflowX: 'auto', border: '1px solid #e2e8f0', borderRadius: '6px' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px', textAlign: 'left' }}>
+                    <thead style={{ backgroundColor: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
+                      <tr>
+                        <th style={{ padding: '10px 12px' }}>หมายเลขคำสั่งซื้อ</th>
+                        <th style={{ padding: '10px 12px' }}>ผู้ซื้อ</th>
+                        <th style={{ padding: '10px 12px' }}>อีเมล (Masked)</th>
+                        <th style={{ padding: '10px 12px' }}>เบอร์โทร (Masked)</th>
+                        <th style={{ padding: '10px 12px', textAlign: 'right' }}>จำนวนบัตร</th>
+                        <th style={{ padding: '10px 12px', textAlign: 'right' }}>ยอดขายรวม</th>
+                        <th style={{ padding: '10px 12px', textAlign: 'right' }}>ยอดคืนเงิน</th>
+                        <th style={{ padding: '10px 12px', textAlign: 'right' }}>ยอดขายสุทธิ</th>
+                        <th style={{ padding: '10px 12px', textAlign: 'right' }}>ค่าบริการ (F_o)</th>
+                        <th style={{ padding: '10px 12px', textAlign: 'right' }}>ปรับค่าบริการ (ΔF_o)</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-
-          {/* Payout History Section (AC-31, AC-92) */}
-          <div style={{ marginTop: '30px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-              <h3 style={{ fontSize: '16px', fontWeight: 'bold', color: '#0f172a', margin: 0 }}>
-                ประวัติการโอนเงินให้ผู้จัดงาน (Payout History — AC-31)
-              </h3>
-              <span style={{ fontSize: '12px', color: '#64748b' }}>
-                * ไฟล์หลักฐานการโอนเงินจำกัดสิทธิ์เฉพาะผู้ดูแลระบบ (AC-92)
-              </span>
-            </div>
-
-            {report.payouts.length === 0 ? (
-              <div
-                data-testid="empty-payouts-message"
-                style={{
-                  textAlign: 'center',
-                  padding: '24px',
-                  backgroundColor: '#f8fafc',
-                  borderRadius: '6px',
-                  color: '#64748b',
-                  fontSize: '13px',
-                }}
-              >
-                ยังไม่มีประวัติการโอนเงินสำหรับคอนเสิร์ตนี้
-              </div>
-            ) : (
-              <div style={{ overflowX: 'auto', border: '1px solid #e2e8f0', borderRadius: '6px' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px', textAlign: 'left' }}>
-                  <thead style={{ backgroundColor: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
-                    <tr>
-                      <th style={{ padding: '10px 12px' }}>รหัสรายการ</th>
-                      <th style={{ padding: '10px 12px' }}>วันที่บันทึกโอน</th>
-                      <th style={{ padding: '10px 12px', textAlign: 'right' }}>จำนวนเงินที่โอน</th>
-                      <th style={{ padding: '10px 12px', textAlign: 'center' }}>สถานะ</th>
-                      <th style={{ padding: '10px 12px' }}>หมายเหตุ</th>
-                      {report.payouts.some(p => p.transferProofUrl) && (
-                        <th style={{ padding: '10px 12px', textAlign: 'center' }}>หลักฐาน (Owner)</th>
-                      )}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {report.payouts.map((p, idx) => (
-                      <tr
-                        key={p.id}
-                        data-testid={`payout-row-${p.id}`}
-                        style={{ borderBottom: idx < report.payouts.length - 1 ? '1px solid #f1f5f9' : 'none' }}
-                      >
-                        <td style={{ padding: '10px 12px', fontFamily: 'monospace', fontWeight: 600 }}>{p.id}</td>
-                        <td style={{ padding: '10px 12px', whiteSpace: 'nowrap' }}>
-                          {formatDate(new Date(p.paidAt))} {formatTime(new Date(p.paidAt))}
-                        </td>
-                        <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 'bold', color: p.status === 'completed' ? '#0284c7' : '#991b1b' }}>
-                          ฿{p.amount.toLocaleString('th-TH', { minimumFractionDigits: 2 })}
-                        </td>
-                        <td style={{ padding: '10px 12px', textAlign: 'center' }}>
-                          <span
-                            style={{
-                              padding: '2px 8px',
-                              borderRadius: '4px',
-                              fontSize: '11px',
-                              fontWeight: 600,
-                              backgroundColor: p.status === 'completed' ? '#e0f2fe' : '#fee2e2',
-                              color: p.status === 'completed' ? '#0369a1' : '#991b1b',
-                            }}
-                          >
-                            {p.status === 'completed' ? 'โอนสำเร็จ' : 'โอนไม่สำเร็จ'}
-                          </span>
-                        </td>
-                        <td style={{ padding: '10px 12px', color: '#475569' }}>
-                          {p.transferNote || (p.transferFailureReason ? `เหตุผล: ${p.transferFailureReason}` : '-')}
-                        </td>
-                        {p.transferProofUrl && (
-                          <td style={{ padding: '10px 12px', textAlign: 'center' }}>
-                            <a
-                              href={`/api/owner/payouts/${p.id}/proof`}
-                              target="_blank"
-                              rel="noreferrer"
-                              data-testid={`payout-proof-link-${p.id}`}
-                              style={{
-                                color: '#2563eb',
-                                textDecoration: 'underline',
-                                fontWeight: 500,
-                              }}
-                            >
-                              ดูหลักฐาน
-                            </a>
+                    </thead>
+                    <tbody>
+                      {report.orders.map((o, idx) => (
+                        <tr key={o.orderId} style={{ borderBottom: idx < report.orders.length - 1 ? '1px solid #f1f5f9' : 'none' }}>
+                          <td style={{ padding: '10px 12px', fontFamily: 'monospace', fontWeight: 600 }}>{o.orderId}</td>
+                          <td style={{ padding: '10px 12px' }}>{o.buyerName}</td>
+                          <td style={{ padding: '10px 12px', color: '#475569' }} data-testid="masked-email">{o.buyerEmail}</td>
+                          <td style={{ padding: '10px 12px', color: '#475569' }} data-testid="masked-phone">{o.buyerPhone}</td>
+                          <td style={{ padding: '10px 12px', textAlign: 'right' }}>
+                            {o.validTicketsCount} / {o.totalTicketsCount}
                           </td>
+                          <td style={{ padding: '10px 12px', textAlign: 'right' }}>
+                            ฿{o.grossSubtotal.toLocaleString('th-TH', { minimumFractionDigits: 2 })}
+                          </td>
+                          <td style={{ padding: '10px 12px', textAlign: 'right', color: o.refundDeductions > 0 ? '#dc2626' : '#64748b' }}>
+                            {o.refundDeductions > 0 ? `-฿${o.refundDeductions.toLocaleString('th-TH', { minimumFractionDigits: 2 })}` : '-'}
+                          </td>
+                          <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 600 }}>
+                            ฿{o.netSubtotal.toLocaleString('th-TH', { minimumFractionDigits: 2 })}
+                          </td>
+                          <td style={{ padding: '10px 12px', textAlign: 'right', color: '#b45309', fontWeight: 600 }}>
+                            ฿{o.orderFeeAdjusted.toLocaleString('th-TH', { minimumFractionDigits: 2 })}
+                          </td>
+                          <td style={{ padding: '10px 12px', textAlign: 'right', color: o.feeAdjustment > 0 ? '#16a34a' : '#64748b' }}>
+                            {o.feeAdjustment > 0 ? `-฿${o.feeAdjustment.toLocaleString('th-TH', { minimumFractionDigits: 2 })}` : '-'}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </details>
+
+          {/* Payout History Section (AC-31, AC-92, D-197 Collapsible Accordion) */}
+          <details open className="report-collapsible-section" style={{ marginTop: '20px' }}>
+            <summary className="report-collapsible-summary">
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', flexWrap: 'wrap', gap: '8px' }}>
+                <span style={{ fontSize: '15px', fontWeight: 'bold', color: '#0f172a' }}>
+                  ประวัติการโอนเงินให้ผู้จัดงาน ({report.payouts.length} รายการ)
+                </span>
+                <span style={{ fontSize: '12px', color: '#64748b', fontWeight: 'normal' }}>
+                  * ไฟล์หลักฐานการโอนเงินจำกัดสิทธิ์เฉพาะผู้ดูแลระบบ (AC-92)
+                </span>
+              </div>
+            </summary>
+
+            <div style={{ marginTop: '14px' }}>
+              {report.payouts.length === 0 ? (
+                <div
+                  data-testid="empty-payouts-message"
+                  style={{
+                    textAlign: 'center',
+                    padding: '24px',
+                    backgroundColor: '#f8fafc',
+                    borderRadius: '6px',
+                    color: '#64748b',
+                    fontSize: '13px',
+                  }}
+                >
+                  ยังไม่มีประวัติการโอนเงินสำหรับคอนเสิร์ตนี้
+                </div>
+              ) : (
+                <div style={{ overflowX: 'auto', border: '1px solid #e2e8f0', borderRadius: '6px' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px', textAlign: 'left' }}>
+                    <thead style={{ backgroundColor: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
+                      <tr>
+                        <th style={{ padding: '10px 12px' }}>รหัสรายการ</th>
+                        <th style={{ padding: '10px 12px' }}>วันที่บันทึกโอน</th>
+                        <th style={{ padding: '10px 12px', textAlign: 'right' }}>จำนวนเงินที่โอน</th>
+                        <th style={{ padding: '10px 12px', textAlign: 'center' }}>สถานะ</th>
+                        <th style={{ padding: '10px 12px' }}>หมายเหตุ</th>
+                        {report.payouts.some(p => p.transferProofUrl) && (
+                          <th style={{ padding: '10px 12px', textAlign: 'center' }}>หลักฐาน (Owner)</th>
                         )}
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-
-          {/* Debt Repayment History Section (AC-86) */}
-          <div style={{ marginTop: '30px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-              <h3 style={{ fontSize: '16px', fontWeight: 'bold', color: '#0f172a', margin: 0 }}>
-                ประวัติการรับชำระคืนหนี้จากผู้จัดงาน (Debt Repayment History — AC-86)
-              </h3>
+                    </thead>
+                    <tbody>
+                      {report.payouts.map((p, idx) => (
+                        <tr
+                          key={p.id}
+                          data-testid={`payout-row-${p.id}`}
+                          style={{ borderBottom: idx < report.payouts.length - 1 ? '1px solid #f1f5f9' : 'none' }}
+                        >
+                          <td style={{ padding: '10px 12px', fontFamily: 'monospace', fontWeight: 600 }}>{p.id}</td>
+                          <td style={{ padding: '10px 12px', whiteSpace: 'nowrap' }}>
+                            {formatDate(new Date(p.paidAt))} {formatTime(new Date(p.paidAt))}
+                          </td>
+                          <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 'bold', color: p.status === 'completed' ? '#0284c7' : '#991b1b' }}>
+                            ฿{p.amount.toLocaleString('th-TH', { minimumFractionDigits: 2 })}
+                          </td>
+                          <td style={{ padding: '10px 12px', textAlign: 'center' }}>
+                            <span
+                              style={{
+                                padding: '2px 8px',
+                                borderRadius: '4px',
+                                fontSize: '11px',
+                                fontWeight: 600,
+                                backgroundColor: p.status === 'completed' ? '#e0f2fe' : '#fee2e2',
+                                color: p.status === 'completed' ? '#0369a1' : '#991b1b',
+                              }}
+                            >
+                              {p.status === 'completed' ? 'โอนสำเร็จ' : 'โอนไม่สำเร็จ'}
+                            </span>
+                          </td>
+                          <td style={{ padding: '10px 12px', color: '#475569' }}>
+                            {p.transferNote || (p.transferFailureReason ? `เหตุผล: ${p.transferFailureReason}` : '-')}
+                          </td>
+                          {p.transferProofUrl && (
+                            <td style={{ padding: '10px 12px', textAlign: 'center' }}>
+                              <a
+                                href={`/api/owner/payouts/${p.id}/proof`}
+                                target="_blank"
+                                rel="noreferrer"
+                                data-testid={`payout-proof-link-${p.id}`}
+                                style={{
+                                  color: '#2563eb',
+                                  textDecoration: 'underline',
+                                  fontWeight: 500,
+                                }}
+                              >
+                                ดูหลักฐาน
+                              </a>
+                            </td>
+                          )}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
+          </details>
 
-            {report.repayments.length === 0 ? (
-              <div
-                data-testid="empty-repayments-message"
-                style={{
-                  textAlign: 'center',
-                  padding: '24px',
-                  backgroundColor: '#f8fafc',
-                  borderRadius: '6px',
-                  color: '#64748b',
-                  fontSize: '13px',
-                }}
-              >
-                ยังไม่มีประวัติการบันทึกรับเงินคืนสำหรับคอนเสิร์ตนี้
-              </div>
-            ) : (
-              <div style={{ overflowX: 'auto', border: '1px solid #e2e8f0', borderRadius: '6px' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px', textAlign: 'left' }}>
-                  <thead style={{ backgroundColor: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
-                    <tr>
-                      <th style={{ padding: '10px 12px' }}>รหัสรายการ</th>
-                      <th style={{ padding: '10px 12px' }}>วันที่บันทึกรับคืน</th>
-                      <th style={{ padding: '10px 12px', textAlign: 'right' }}>จำนวนเงินที่รับคืน</th>
-                      <th style={{ padding: '10px 12px' }}>หมายเหตุ</th>
-                      <th style={{ padding: '10px 12px' }}>ผู้บันทึก</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {report.repayments.map((rp, idx) => (
-                      <tr
-                        key={rp.id}
-                        data-testid={`repayment-row-${rp.id}`}
-                        style={{ borderBottom: idx < report.repayments.length - 1 ? '1px solid #f1f5f9' : 'none' }}
-                      >
-                        <td style={{ padding: '10px 12px', fontFamily: 'monospace', fontWeight: 600 }}>{rp.id}</td>
-                        <td style={{ padding: '10px 12px', whiteSpace: 'nowrap' }}>
-                          {formatDate(new Date(rp.repaidAt))} {formatTime(new Date(rp.repaidAt))}
-                        </td>
-                        <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 'bold', color: '#16a34a' }}>
-                          ฿{rp.amount.toLocaleString('th-TH', { minimumFractionDigits: 2 })}
-                        </td>
-                        <td style={{ padding: '10px 12px', color: '#475569' }}>{rp.notes || '-'}</td>
-                        <td style={{ padding: '10px 12px', color: '#475569' }}>{rp.recordedByName || 'ผู้ดูแลระบบ'}</td>
+          {/* Debt Repayment History Section (AC-86, D-197 Collapsible Accordion) */}
+          <details open className="report-collapsible-section" style={{ marginTop: '20px' }}>
+            <summary className="report-collapsible-summary">
+              <span style={{ fontSize: '15px', fontWeight: 'bold', color: '#0f172a' }}>
+                ประวัติการรับชำระคืนหนี้จากผู้จัดงาน ({report.repayments.length} รายการ)
+              </span>
+            </summary>
+            <div style={{ marginTop: '14px' }}>
+              {report.repayments.length === 0 ? (
+                <div
+                  data-testid="empty-repayments-message"
+                  style={{
+                    textAlign: 'center',
+                    padding: '24px',
+                    backgroundColor: '#f8fafc',
+                    borderRadius: '6px',
+                    color: '#64748b',
+                    fontSize: '13px',
+                  }}
+                >
+                  ยังไม่มีประวัติการบันทึกรับเงินคืนสำหรับคอนเสิร์ตนี้
+                </div>
+              ) : (
+                <div style={{ overflowX: 'auto', border: '1px solid #e2e8f0', borderRadius: '6px' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px', textAlign: 'left' }}>
+                    <thead style={{ backgroundColor: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
+                      <tr>
+                        <th style={{ padding: '10px 12px' }}>รหัสรายการ</th>
+                        <th style={{ padding: '10px 12px' }}>วันที่บันทึกรับคืน</th>
+                        <th style={{ padding: '10px 12px', textAlign: 'right' }}>จำนวนเงินที่รับคืน</th>
+                        <th style={{ padding: '10px 12px' }}>หมายเหตุ</th>
+                        <th style={{ padding: '10px 12px' }}>ผู้บันทึก</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
+                    </thead>
+                    <tbody>
+                      {report.repayments.map((rp, idx) => (
+                        <tr
+                          key={rp.id}
+                          data-testid={`repayment-row-${rp.id}`}
+                          style={{ borderBottom: idx < report.repayments.length - 1 ? '1px solid #f1f5f9' : 'none' }}
+                        >
+                          <td style={{ padding: '10px 12px', fontFamily: 'monospace', fontWeight: 600 }}>{rp.id}</td>
+                          <td style={{ padding: '10px 12px', whiteSpace: 'nowrap' }}>
+                            {formatDate(new Date(rp.repaidAt))} {formatTime(new Date(rp.repaidAt))}
+                          </td>
+                          <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 'bold', color: '#16a34a' }}>
+                            ฿{rp.amount.toLocaleString('th-TH', { minimumFractionDigits: 2 })}
+                          </td>
+                          <td style={{ padding: '10px 12px', color: '#475569' }}>{rp.notes || '-'}</td>
+                          <td style={{ padding: '10px 12px', color: '#475569' }}>{rp.recordedByName || 'ผู้ดูแลระบบ'}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </details>
         </div>
       )}
     </div>

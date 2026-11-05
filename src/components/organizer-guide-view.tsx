@@ -12,6 +12,7 @@ import {
 } from '@/components/icons';
 import { TicketIcon } from '@/components/ticket-icon';
 import { Button, Badge } from '@/components/ui';
+import { HeaderInfoTooltip } from './header-info-tooltip';
 
 interface GuideStep {
   stepNum: number;
@@ -316,7 +317,10 @@ export function OrganizerGuideView() {
         {/* Header Toolbar */}
         <header className="guide-page-header">
           <div className="guide-header-text">
-            <h1 className="guide-page-title">คู่มือการใช้งานระบบสำหรับผู้จัดงาน</h1>
+            <h1 className="guide-page-title">
+              คู่มือการใช้งานระบบสำหรับผู้จัดงาน
+              <HeaderInfoTooltip text="คู่มือขั้นตอนการจัดคอนเสิร์ต การตั้งค่ารอบการแสดง การตั้งค่าราคาบัตร และคำแนะนำการใช้งานระบบทุกฟังก์ชัน" />
+            </h1>
             <p className="guide-page-desc">
               รวบรวมแนวทางปฏิบัติ ขั้นตอนการทำงาน และกฎเกณฑ์สำคัญในการจัดการคอนเสิร์ต การสแกนบัตร และการเงินบนแพลตฟอร์ม TICKET
             </p>
