@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import Link from 'next/link';
 import { TicketIcon } from './ticket-icon';
 import { Button, Badge } from '@/components/ui';
+import { HeaderInfoTooltip } from './header-info-tooltip';
 import {
   CheckCircleIcon,
   AlertTriangleIcon,
@@ -694,6 +695,7 @@ export function OrganizerScannerManager() {
         <div className="scanner-workspace-title-wrap">
           <h1 id="organizer-scanner-heading" className="scanner-workspace-title">
             เจ้าหน้าที่และอุปกรณ์สแกนบัตร
+            <HeaderInfoTooltip text="จัดการบัญชีทีมงานสแกนบัตรหน้างาน กำหนดสิทธิ์รายคอนเสิร์ต และตรวจสอบความพร้อมในการตรวจบัตรเข้างาน" />
           </h1>
           <p className="scanner-workspace-desc card-caption">
             เพิ่มและจัดการทีมสแกนเนอร์ ตรวจสอบสถานะการเชื่อมต่อ และควบคุมประตูเข้างาน

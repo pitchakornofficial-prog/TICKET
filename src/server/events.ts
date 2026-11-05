@@ -21,6 +21,14 @@ export interface EventDraftInput {
   salesStartTime?: string;
   salesEndTime?: string;
   limitPerOrder?: number;
+  ageRestriction?: string;
+  refundPolicy?: string;
+  entryGuidelines?: string;
+  payoutAccountId?: string;
+  payoutBankName?: string;
+  payoutAccountNumber?: string;
+  payoutAccountName?: string;
+  ubuPrivilegeMode?: boolean;
 }
 
 export interface SessionDraftInput {
@@ -33,6 +41,7 @@ export interface SessionDraftInput {
     price: number;
     quota: number;
     description?: string;
+    isStudentPrivilege?: boolean;
   }[];
 }
 
@@ -80,6 +89,14 @@ export async function ensureEventSchema(pool: Pool): Promise<void> {
     ALTER TABLE events ADD COLUMN IF NOT EXISTS "googleMapsUrl" TEXT;
     ALTER TABLE events ADD COLUMN IF NOT EXISTS "salesStartTime" TIMESTAMPTZ;
     ALTER TABLE events ADD COLUMN IF NOT EXISTS "salesEndTime" TIMESTAMPTZ;
+    ALTER TABLE events ADD COLUMN IF NOT EXISTS "ageRestriction" TEXT;
+    ALTER TABLE events ADD COLUMN IF NOT EXISTS "refundPolicy" TEXT;
+    ALTER TABLE events ADD COLUMN IF NOT EXISTS "entryGuidelines" TEXT;
+    ALTER TABLE events ADD COLUMN IF NOT EXISTS "payoutAccountId" TEXT;
+    ALTER TABLE events ADD COLUMN IF NOT EXISTS "payoutBankName" TEXT;
+    ALTER TABLE events ADD COLUMN IF NOT EXISTS "payoutAccountNumber" TEXT;
+    ALTER TABLE events ADD COLUMN IF NOT EXISTS "payoutAccountName" TEXT;
+    ALTER TABLE events ADD COLUMN IF NOT EXISTS "ubuPrivilegeMode" BOOLEAN NOT NULL DEFAULT FALSE;
     CREATE INDEX IF NOT EXISTS idx_events_organizerId ON events("organizerId");
 
     CREATE TABLE IF NOT EXISTS event_sessions (
@@ -106,6 +123,8 @@ export async function ensureEventSchema(pool: Pool): Promise<void> {
       "updatedAt" TIMESTAMPTZ NOT NULL DEFAULT now()
     );
     CREATE INDEX IF NOT EXISTS idx_ticket_types_sessionId ON ticket_types("sessionId");
+    ALTER TABLE ticket_types ADD COLUMN IF NOT EXISTS "isStudentPrivilege" BOOLEAN NOT NULL DEFAULT FALSE;
+    ALTER TABLE event_sessions ADD COLUMN IF NOT EXISTS "rejectionReason" TEXT;
 
     CREATE TABLE IF NOT EXISTS event_scanners (
       id TEXT PRIMARY KEY,
@@ -193,8 +212,8 @@ export async function createEventDraft(
   return inTransaction(pool, async client => {
     const eventId = randomUUID();
     await client.query(
-      `INSERT INTO events (id, "organizerId", title, description, location, "posterUrl", "ticketTemplateUrl", "coverBannerUrl", "googleMapsUrl", "salesStartTime", "salesEndTime", "limitPerOrder", status, "createdAt", "updatedAt")
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'draft', now(), now())`,
+      `INSERT INTO events (id, "organizerId", title, description, location, "posterUrl", "ticketTemplateUrl", "coverBannerUrl", "googleMapsUrl", "salesStartTime", "salesEndTime", "limitPerOrder", "ageRestriction", "refundPolicy", "entryGuidelines", "payoutAccountId", "payoutBankName", "payoutAccountNumber", "payoutAccountName", "ubuPrivilegeMode", status, "createdAt", "updatedAt")
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, 'draft', now(), now())`,
       [
         eventId,
         organizerId,
@@ -208,6 +227,14 @@ export async function createEventDraft(
         eventInput.salesStartTime ? new Date(eventInput.salesStartTime) : null,
         eventInput.salesEndTime ? new Date(eventInput.salesEndTime) : null,
         limit,
+        eventInput.ageRestriction || 'all',
+        eventInput.refundPolicy || 'refundable_7d',
+        eventInput.entryGuidelines || null,
+        eventInput.payoutAccountId || null,
+        eventInput.payoutBankName || null,
+        eventInput.payoutAccountNumber || null,
+        eventInput.payoutAccountName || null,
+        Boolean(eventInput.ubuPrivilegeMode),
       ],
     );
 
@@ -231,9 +258,9 @@ export async function createEventDraft(
         if (tt.price < 0) throw new Error('ราคาบัตรต้องไม่ติดลบ');
         const ttId = randomUUID();
         await client.query(
-          `INSERT INTO ticket_types (id, "sessionId", name, price, quota, description, "createdAt", "updatedAt")
-           VALUES ($1, $2, $3, $4, $5, $6, now(), now())`,
-          [ttId, sessionId, tt.name.trim(), tt.price, tt.quota, tt.description || ''],
+          `INSERT INTO ticket_types (id, "sessionId", name, price, quota, description, "isStudentPrivilege", "createdAt", "updatedAt")
+           VALUES ($1, $2, $3, $4, $5, $6, $7, now(), now())`,
+          [ttId, sessionId, tt.name.trim(), tt.price, tt.quota, tt.description || '', Boolean(tt.isStudentPrivilege)],
         );
       }
     }
@@ -288,6 +315,21 @@ export async function updateEventDraft(
     if (eventInput.limitPerOrder !== undefined) {
       await client.query('UPDATE events SET "limitPerOrder" = $1, "updatedAt" = now() WHERE id = $2', [eventInput.limitPerOrder, eventId]);
     }
+    if (eventInput.ageRestriction !== undefined) {
+      await client.query('UPDATE events SET "ageRestriction" = $1, "updatedAt" = now() WHERE id = $2', [eventInput.ageRestriction, eventId]);
+    }
+    if (eventInput.refundPolicy !== undefined) {
+      await client.query('UPDATE events SET "refundPolicy" = $1, "updatedAt" = now() WHERE id = $2', [eventInput.refundPolicy, eventId]);
+    }
+    if (eventInput.entryGuidelines !== undefined) {
+      await client.query('UPDATE events SET "entryGuidelines" = $1, "updatedAt" = now() WHERE id = $2', [eventInput.entryGuidelines, eventId]);
+    }
+    if (eventInput.payoutAccountId !== undefined) {
+      await client.query('UPDATE events SET "payoutAccountId" = $1, "payoutBankName" = $2, "payoutAccountNumber" = $3, "payoutAccountName" = $4, "updatedAt" = now() WHERE id = $5', [eventInput.payoutAccountId, eventInput.payoutBankName || null, eventInput.payoutAccountNumber || null, eventInput.payoutAccountName || null, eventId]);
+    }
+    if (eventInput.ubuPrivilegeMode !== undefined) {
+      await client.query('UPDATE events SET "ubuPrivilegeMode" = $1, "updatedAt" = now() WHERE id = $2', [Boolean(eventInput.ubuPrivilegeMode), eventId]);
+    }
 
     if (sessionsInput) {
       await client.query('DELETE FROM event_sessions WHERE "eventId" = $1 AND status = \'draft\'', [eventId]);
@@ -329,7 +371,7 @@ export async function submitSessionForApproval(
   await ensureEventSchema(pool);
   return inTransaction(pool, async client => {
     const res = await client.query(
-      `SELECT s.id, e."organizerId" 
+      `SELECT s.id, s."eventId", e."organizerId" 
        FROM event_sessions s
        JOIN events e ON e.id = s."eventId"
        WHERE s.id = $1`,
@@ -343,6 +385,10 @@ export async function submitSessionForApproval(
     await client.query(
       `UPDATE event_sessions SET status = 'pending_approval', "updatedAt" = now() WHERE id = $1`,
       [sessionId],
+    );
+    await client.query(
+      `UPDATE events SET status = 'pending_approval', "updatedAt" = now() WHERE id = $1 AND status = 'draft'`,
+      [res.rows[0].eventId],
     );
     return { success: true };
   });
@@ -388,6 +434,10 @@ export async function listPendingSessionsForOwner(pool: Pool) {
   const res = await pool.query(
     `SELECT s.id AS "sessionId", s."startTime", s."endTime", s.status AS "sessionStatus",
             e.id AS "eventId", e.title AS "eventTitle", e.location, e."posterUrl",
+            e.description AS "eventDescription", e."googleMapsUrl", e."salesStartTime", e."salesEndTime",
+            e."limitPerOrder", e."ageRestriction", e."refundPolicy", e."entryGuidelines",
+            e."payoutAccountId", e."payoutBankName", e."payoutAccountNumber", e."payoutAccountName",
+            e."ubuPrivilegeMode",
             u.name AS "organizerName", u.email AS "organizerEmail",
             (SELECT COUNT(*) FROM ticket_types tt WHERE tt."sessionId" = s.id) AS "ticketTypeCount"
      FROM event_sessions s
@@ -397,6 +447,42 @@ export async function listPendingSessionsForOwner(pool: Pool) {
      ORDER BY s."createdAt" ASC`,
   );
   return res.rows;
+}
+
+export async function rejectSession(
+  pool: Pool,
+  sessionId: string,
+  ownerId: string,
+  reason: string,
+) {
+  await ensureEventSchema(pool);
+  return inTransaction(pool, async client => {
+    const userRes = await client.query('SELECT role FROM auth_user WHERE id = $1', [ownerId]);
+    if (userRes.rowCount === 0 || userRes.rows[0].role !== 'owner') {
+      throw new Error('ไม่อนุญาต: เฉพาะเจ้าของเว็บเท่านั้นที่สามารถปฏิเสธรอบการแสดงได้');
+    }
+
+    const sessRes = await client.query(
+      `SELECT s.id, s."eventId", s.status, e.title 
+       FROM event_sessions s
+       JOIN events e ON e.id = s."eventId"
+       WHERE s.id = $1`,
+      [sessionId],
+    );
+    if (sessRes.rowCount === 0) throw new Error('ไม่พบข้อมูลรอบการแสดง');
+
+    await client.query(
+      `UPDATE event_sessions SET status = 'draft', "rejectionReason" = $2, "updatedAt" = now() WHERE id = $1`,
+      [sessionId, reason.trim()],
+    );
+
+    await client.query(
+      `UPDATE events SET status = 'draft', "updatedAt" = now() WHERE id = $1`,
+      [sessRes.rows[0].eventId],
+    );
+
+    return { success: true, sessionId, eventId: sessRes.rows[0].eventId, reason: reason.trim() };
+  });
 }
 
 export async function listOrganizerEvents(pool: Pool, organizerId: string) {
@@ -416,6 +502,25 @@ export async function listOrganizerEvents(pool: Pool, organizerId: string) {
      GROUP BY e.id
      ORDER BY e."createdAt" DESC`,
     [organizerId],
+  );
+  return res.rows;
+}
+
+export async function listAllEventsForOwner(pool: Pool) {
+  await ensureEventSchema(pool);
+  const res = await pool.query(
+    `SELECT e.*, 
+            COUNT(DISTINCT s.id) AS "sessionCount",
+            COALESCE(SUM(tt.quota), 0) AS "totalQuota",
+            MIN(tt.price) AS "minPrice",
+            MAX(tt.price) AS "maxPrice",
+            MIN(s."startTime") AS "firstSessionStartTime",
+            MAX(s."endTime") AS "lastSessionEndTime"
+     FROM events e
+     LEFT JOIN event_sessions s ON s."eventId" = e.id
+     LEFT JOIN ticket_types tt ON tt."sessionId" = s.id
+     GROUP BY e.id
+     ORDER BY e."createdAt" DESC`,
   );
   return res.rows;
 }
@@ -2088,7 +2193,7 @@ export async function seedUbuFreshyFest(pool: Pool): Promise<void> {
         45000,
         new Date(Date.now() - 2 * 24 * 60 * 60 * 1000),
         'TXN-UBU2026-PAYOUT01',
-        'https://images.unsplash.com/photo-1554224155-6726b3ff858f?auto=format&fit=crop&w=1000&q=80',
+        '/api/organizer/payouts/payout-ubu-freshy-w01/slip',
         'รอบโอนเงินค่าบัตรจำหน่ายล่วงหน้าสัปดาห์ที่ 1 ให้สโมสรนักศึกษา ม.อุบลฯ',
         ownerId,
       ],
@@ -2105,6 +2210,7 @@ export async function seedUbuFreshyFest(pool: Pool): Promise<void> {
         coverBannerUrl: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?auto=format&fit=crop&w=1600&q=80',
         daysOffset: 21,
         durationHours: 5,
+        status: 'approved',
         ticketTypes: [
           { id: 'tt-ubu-acoustic-early', name: 'Early Bird บัตรเข้างาน', price: 120, quota: 1500, desc: 'บัตรราคาพิเศษช่วง Early Bird เข้าชมการแสดงโซนทั่วไป' },
           { id: 'tt-ubu-acoustic-reg', name: 'Regular บัตรเข้างาน', price: 180, quota: 2500, desc: 'บัตรเข้าชมการแสดงราคาปกติ โซนทั่วไป' },
@@ -2119,6 +2225,7 @@ export async function seedUbuFreshyFest(pool: Pool): Promise<void> {
         coverBannerUrl: 'https://images.unsplash.com/photo-1459749411175-04bf5292ceea?auto=format&fit=crop&w=1600&q=80',
         daysOffset: 35,
         durationHours: 6,
+        status: 'pending_approval',
         ticketTypes: [
           { id: 'tt-ubu-isan-indy-zone-a', name: 'บัตร Regular Zone A (หน้าเวที)', price: 250, quota: 3000, desc: 'โซนยืนหน้าเวที สัมผัสความมันส์ใกล้ชิดศิลปิน' },
           { id: 'tt-ubu-isan-indy-zone-b', name: 'บัตร Regular Zone B (อัฒจันทร์)', price: 200, quota: 3000, desc: 'โซนนั่งอัฒจันทร์ มองเห็นเวทีชัดเจนมุมกว้าง' },
@@ -2133,6 +2240,7 @@ export async function seedUbuFreshyFest(pool: Pool): Promise<void> {
         coverBannerUrl: 'https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?auto=format&fit=crop&w=1600&q=80',
         daysOffset: 50,
         durationHours: 7,
+        status: 'draft',
         ticketTypes: [
           { id: 'tt-ubu-countdown-ga', name: 'บัตรเข้างาน Countdown 2026', price: 199, quota: 5000, desc: 'บัตรเข้าชมงานมหกรรมดนตรีเคานต์ดาวน์ปีใหม่และกิจกรรมพิเศษ' },
         ],
@@ -2146,13 +2254,13 @@ export async function seedUbuFreshyFest(pool: Pool): Promise<void> {
            "posterUrl", "coverBannerUrl", status, "limitPerOrder",
            "createdAt", "updatedAt"
          )
-         VALUES ($1, $2, $3, $4, $5, $6, $7, 'approved', 4, now(), now())
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 4, now(), now())
          ON CONFLICT (id) DO UPDATE SET
-           status = 'approved',
+           status = EXCLUDED.status,
            title = EXCLUDED.title,
            location = EXCLUDED.location,
            description = EXCLUDED.description`,
-        [ec.id, organizerId, ec.title, ec.description, ec.location, ec.posterUrl, ec.coverBannerUrl],
+        [ec.id, organizerId, ec.title, ec.description, ec.location, ec.posterUrl, ec.coverBannerUrl, ec.status],
       );
 
       const sessId = `session-${ec.id}-s1`;
@@ -2167,9 +2275,9 @@ export async function seedUbuFreshyFest(pool: Pool): Promise<void> {
            "admissionStartTime", "admissionEndTime", status,
            "createdAt", "updatedAt"
          )
-         VALUES ($1, $2, $3, $4, $5, $6, 'approved', now(), now())
-         ON CONFLICT (id) DO UPDATE SET status = 'approved'`,
-        [sessId, ec.id, sTime, eTime, admStart, admEnd],
+         VALUES ($1, $2, $3, $4, $5, $6, $7, now(), now())
+         ON CONFLICT (id) DO UPDATE SET status = EXCLUDED.status`,
+        [sessId, ec.id, sTime, eTime, admStart, admEnd, ec.status],
       );
 
       for (const tt of ec.ticketTypes) {
@@ -2204,3 +2312,73 @@ export async function seedUbuFreshyFest(pool: Pool): Promise<void> {
     // Non-blocking in isolated unit tests
   }
 }
+
+/**
+ * Reverts a pending_approval event and its sessions back to draft (D-200 Item 2)
+ */
+export async function revertEventToDraft(
+  pool: Pool,
+  eventId: string,
+  organizerId: string,
+): Promise<{ success: boolean; eventId: string }> {
+  const evRes = await pool.query<{ id: string; status: string }>(
+    `SELECT id, status FROM events WHERE id = $1 AND "organizerId" = $2`,
+    [eventId, organizerId],
+  );
+  if (evRes.rows.length === 0) {
+    throw new Error('ไม่พบงานคอนเสิร์ตหรือไม่มีสิทธิ์ดำเนินการ');
+  }
+  const currentStatus = evRes.rows[0].status;
+  if (currentStatus !== 'pending_approval' && currentStatus !== 'submitted') {
+    throw new Error('สามารถดึงกลับเป็นฉบับร่างได้เฉพาะงานที่อยู่ในสถานะรออนุมัติเท่านั้น');
+  }
+
+  await pool.query(
+    `UPDATE events SET status = 'draft', "updatedAt" = now() WHERE id = $1`,
+    [eventId],
+  );
+  await pool.query(
+    `UPDATE event_sessions SET status = 'draft', "updatedAt" = now() WHERE "eventId" = $1 AND status IN ('pending_approval', 'submitted')`,
+    [eventId],
+  );
+
+  return { success: true, eventId };
+}
+
+/**
+ * Deletes an event draft or pending approval event that has not been approved or sold (D-200 Item 3)
+ */
+export async function deleteEventDraft(
+  pool: Pool,
+  eventId: string,
+  organizerId: string,
+): Promise<{ success: boolean; eventId: string }> {
+  const evRes = await pool.query<{ id: string; status: string }>(
+    `SELECT id, status FROM events WHERE id = $1 AND "organizerId" = $2`,
+    [eventId, organizerId],
+  );
+  if (evRes.rows.length === 0) {
+    throw new Error('ไม่พบงานคอนเสิร์ตหรือไม่มีสิทธิ์ดำเนินการ');
+  }
+  const currentStatus = evRes.rows[0].status;
+  if (currentStatus !== 'draft' && currentStatus !== 'pending_approval' && currentStatus !== 'submitted') {
+    throw new Error('สามารถลบได้เฉพาะงานคอนเสิร์ตในสถานะฉบับร่างหรือรออนุมัติเท่านั้น');
+  }
+
+  // Double-check no orders or tickets exist for this event
+  const orderCheck = await pool.query(
+    `SELECT id FROM orders WHERE "eventId" = $1 LIMIT 1`,
+    [eventId],
+  );
+  if (orderCheck.rows.length > 0) {
+    throw new Error('ไม่สามารถลบงานคอนเสิร์ตที่มีประวัติคำสั่งซื้อได้');
+  }
+
+  await pool.query(
+    `DELETE FROM events WHERE id = $1 AND "organizerId" = $2`,
+    [eventId, organizerId],
+  );
+
+  return { success: true, eventId };
+}
+

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-describe('Organizer Contact Owner Workspace (D-85)', () => {
+describe('Organizer Contact Owner Workspace (D-85, D-207, D-208, D-209)', () => {
   const rootDir = process.cwd();
 
   it('wires OrganizerContactView and contact tab into OrganizerWorkspaceView', () => {
@@ -17,30 +17,36 @@ describe('Organizer Contact Owner Workspace (D-85)', () => {
     expect(workspaceContent).not.toMatch(/\p{Extended_Pictographic}/u);
   });
 
-  it('renders official contact channels with hotline, email, line, and operating hours', () => {
+  it('renders official contact channels with hotline, email, line, operating hours, and office address synced from central state (D-208)', () => {
     const contactContent = readFileSync(
       join(rootDir, 'src/components/organizer-contact-view.tsx'),
       'utf8',
     );
     expect(contactContent).toContain('สายด่วนผู้จัดงาน');
-    expect(contactContent).toContain('organizer-support@ticket.co.th');
-    expect(contactContent).toContain('@ticket-organizer');
+    expect(contactContent).toContain('อีเมลฝ่ายประสานงานผู้จัด');
+    expect(contactContent).toContain('LINE Official Account');
     expect(contactContent).toContain('เวลาทำการของฝ่ายปฏิบัติการ');
-    expect(contactContent).toContain('02-123-4567');
+    expect(contactContent).toContain('ที่อยู่สำนักงานใหญ่ (Headquarters)');
+    expect(contactContent).toContain('loadOwnerContactInfo');
     expect(contactContent).not.toMatch(/\p{Extended_Pictographic}/u);
   });
 
-  it('provides a direct message form with category dropdown, concert selector, and submit action', () => {
+  it('removes direct message form (D-209) and buggy floating back to top button (D-207)', () => {
     const contactContent = readFileSync(
       join(rootDir, 'src/components/organizer-contact-view.tsx'),
       'utf8',
     );
-    expect(contactContent).toContain('contact-topic-select');
-    expect(contactContent).toContain('contact-concert-select');
-    expect(contactContent).toContain('contact-subject-input');
-    expect(contactContent).toContain('contact-message-textarea');
-    expect(contactContent).toContain('contact-submit-btn');
-    expect(contactContent).toContain('ส่งข้อความถึงเจ้าของระบบ');
+    // Removed direct message form (D-209)
+    expect(contactContent).not.toContain('contact-topic-select');
+    expect(contactContent).not.toContain('contact-concert-select');
+    expect(contactContent).not.toContain('contact-subject-input');
+    expect(contactContent).not.toContain('contact-message-textarea');
+    expect(contactContent).not.toContain('contact-submit-btn');
+    expect(contactContent).not.toContain('ส่งข้อความตรงถึงเจ้าของระบบ');
+
+    // Removed floating back to top button (D-207)
+    expect(contactContent).not.toContain('settings-floating-top-btn');
+    expect(contactContent).not.toContain('showScrollTop');
     expect(contactContent).not.toMatch(/\p{Extended_Pictographic}/u);
   });
 
@@ -53,6 +59,6 @@ describe('Organizer Contact Owner Workspace (D-85)', () => {
     expect(cssContent).toContain('.contact-page-container');
     expect(cssContent).toContain('.contact-content-grid');
     expect(cssContent).toContain('.channel-item');
-    expect(cssContent).toContain('.contact-submit-btn');
+    expect(cssContent).toContain('.contact-centered-grid');
   });
 });

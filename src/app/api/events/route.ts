@@ -1,5 +1,5 @@
 import { getAuth } from '@/server/auth';
-import { createEventDraft, listOrganizerEvents } from '@/server/events';
+import { createEventDraft, listAllEventsForOwner, listOrganizerEvents } from '@/server/events';
 import type { Pool } from 'pg';
 
 export const runtime = 'nodejs';
@@ -7,12 +7,14 @@ export const runtime = 'nodejs';
 export async function GET(request: Request) {
   const auth = getAuth();
   const session = await auth.api.getSession({ headers: request.headers });
-  if (session?.user.role !== 'organizer') {
-    return Response.json({ message: 'ไม่อนุญาต: เฉพาะผู้จัดงานเท่านั้น' }, { status: 403 });
+  if (!session?.user || (session.user.role !== 'organizer' && session.user.role !== 'owner')) {
+    return Response.json({ message: 'ไม่อนุญาต: เฉพาะผู้จัดงานหรือผู้ดูแลระบบเท่านั้น' }, { status: 403 });
   }
 
   const pool = auth.options.database as Pool;
-  const events = await listOrganizerEvents(pool, session.user.id);
+  const events = session.user.role === 'owner'
+    ? await listAllEventsForOwner(pool)
+    : await listOrganizerEvents(pool, session.user.id);
   return Response.json({ events }, { status: 200, headers: { 'Cache-Control': 'no-store' } });
 }
 
@@ -34,6 +36,14 @@ export async function POST(request: Request) {
     salesStartTime?: string;
     salesEndTime?: string;
     limitPerOrder?: number;
+    ageRestriction?: string;
+    refundPolicy?: string;
+    entryGuidelines?: string;
+    payoutAccountId?: string;
+    payoutBankName?: string;
+    payoutAccountNumber?: string;
+    payoutAccountName?: string;
+    ubuPrivilegeMode?: boolean;
     sessions?: {
       startTime: string;
       endTime: string;
@@ -44,6 +54,7 @@ export async function POST(request: Request) {
         price: number;
         quota: number;
         description?: string;
+        isStudentPrivilege?: boolean;
       }[];
     }[];
   } = {};
@@ -74,6 +85,14 @@ export async function POST(request: Request) {
         salesStartTime: body.salesStartTime,
         salesEndTime: body.salesEndTime,
         limitPerOrder: body.limitPerOrder ?? 4,
+        ageRestriction: body.ageRestriction,
+        refundPolicy: body.refundPolicy,
+        entryGuidelines: body.entryGuidelines,
+        payoutAccountId: body.payoutAccountId,
+        payoutBankName: body.payoutBankName,
+        payoutAccountNumber: body.payoutAccountNumber,
+        payoutAccountName: body.payoutAccountName,
+        ubuPrivilegeMode: Boolean(body.ubuPrivilegeMode),
       },
       body.sessions || [],
     );

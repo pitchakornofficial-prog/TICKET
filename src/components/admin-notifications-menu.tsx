@@ -22,6 +22,7 @@ export interface AdminNotification {
   timestamp: string;
   timeAgo: string;
   isRead: boolean;
+  isSaved?: boolean;
   referenceId?: string;
 }
 
@@ -36,6 +37,7 @@ const INITIAL_NOTIFICATIONS: AdminNotification[] = [
     timestamp: '2026-11-04 10:00 น.',
     timeAgo: 'เมื่อวานนี้',
     isRead: false,
+    isSaved: false,
     referenceId: 'event-ubu-freshy-2026',
   },
 ];
@@ -49,15 +51,18 @@ const categoryLabels: Record<AdminNotification['category'], string> = {
 
 export function AdminNotificationsMenu() {
   const [isOpen, setIsOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState<'all' | 'unread'>('all');
+  const [activeTab, setActiveTab] = useState<'all' | 'unread' | 'saved'>('all');
   const [notifications, setNotifications] = useState<AdminNotification[]>(INITIAL_NOTIFICATIONS);
   const [activeModalNotif, setActiveModalNotif] = useState<AdminNotification | null>(null);
 
   const menuRef = useRef<HTMLDivElement>(null);
 
   const unreadCount = notifications.filter((n) => !n.isRead).length;
+  const savedCount = notifications.filter((n) => n.isSaved).length;
+
   const filteredNotifications = notifications.filter((n) => {
     if (activeTab === 'unread') return !n.isRead;
+    if (activeTab === 'saved') return !!n.isSaved;
     return true;
   });
 
@@ -104,6 +109,16 @@ export function AdminNotificationsMenu() {
     );
     if (activeModalNotif && activeModalNotif.id === id) {
       setActiveModalNotif((prev) => (prev ? { ...prev, isRead: !prev.isRead } : null));
+    }
+  };
+
+  const handleToggleSave = (id: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    setNotifications((prev) =>
+      prev.map((n) => (n.id === id ? { ...n, isSaved: !n.isSaved } : n)),
+    );
+    if (activeModalNotif && activeModalNotif.id === id) {
+      setActiveModalNotif((prev) => (prev ? { ...prev, isSaved: !prev.isSaved } : null));
     }
   };
 
@@ -205,7 +220,7 @@ export function AdminNotificationsMenu() {
               </div>
             </div>
 
-            {/* Filter Tabs */}
+            {/* Filter Tabs (D-203: All, Unread, Saved) */}
             <div className="notifications-filter-tabs" role="tablist">
               <button
                 type="button"
@@ -225,6 +240,16 @@ export function AdminNotificationsMenu() {
               >
                 ยังไม่อ่าน ({unreadCount})
               </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={activeTab === 'saved'}
+                className={`notifications-tab-btn ${activeTab === 'saved' ? 'is-active' : ''}`}
+                onClick={() => setActiveTab('saved')}
+                title="รายการที่บันทึกไว้ (เก็บไว้)"
+              >
+                ที่บันทึกไว้ ({savedCount})
+              </button>
             </div>
           </div>
 
@@ -239,7 +264,9 @@ export function AdminNotificationsMenu() {
                 <p className="notifications-empty-subtitle">
                   {activeTab === 'unread'
                     ? 'คุณได้อ่านการแจ้งเตือนครบทุกรายการแล้ว'
-                    : 'เมื่อมีข้อมูลใหม่ ระบบจะแจ้งเตือนให้ทราบที่นี่'}
+                    : activeTab === 'saved'
+                      ? 'ยังไม่มีรายการแจ้งเตือนที่บันทึกไว้'
+                      : 'เมื่อมีข้อมูลใหม่ ระบบจะแจ้งเตือนให้ทราบที่นี่'}
                 </p>
               </div>
             ) : (
@@ -254,7 +281,12 @@ export function AdminNotificationsMenu() {
                         {getCategoryIcon(notif.category)}
                         <span>{categoryLabels[notif.category]}</span>
                       </span>
-                      {!notif.isRead && <span className="notification-unread-dot" />}
+                      {!notif.isRead && <span className="notification-unread-dot" title="ยังไม่อ่าน" />}
+                      {notif.isSaved && (
+                        <span className="notification-saved-indicator" title="บันทึกไว้ในรายการ">
+                          <BookmarkIcon width={12} height={12} />
+                        </span>
+                      )}
                     </div>
                     <span className="notification-timestamp">{notif.timeAgo}</span>
                   </div>
@@ -279,19 +311,27 @@ export function AdminNotificationsMenu() {
                       อ่านฉบับเต็ม
                     </button>
                     <div className="notification-card-actions">
+                      {!notif.isRead && (
+                        <button
+                          type="button"
+                          className="notification-action-btn action-mark-read"
+                          onClick={(e) => handleToggleRead(notif.id, e)}
+                          title="ทำเครื่องหมายว่าอ่านแล้ว"
+                          aria-label="ทำเครื่องหมายว่าอ่านแล้ว"
+                        >
+                          <CheckIcon width={14} height={14} />
+                          <span>อ่านแล้ว</span>
+                        </button>
+                      )}
                       <button
                         type="button"
-                        className={`notification-action-btn ${notif.isRead ? 'is-saved' : ''}`}
-                        onClick={(e) => handleToggleRead(notif.id, e)}
-                        title={notif.isRead ? 'ทำเครื่องหมายว่ายังไม่อ่าน' : 'เก็บไว้ / อ่านแล้ว'}
-                        aria-label={notif.isRead ? 'ทำเครื่องหมายว่ายังไม่อ่าน' : 'เก็บไว้ / อ่านแล้ว'}
+                        className={`notification-action-btn ${notif.isSaved ? 'is-saved' : ''}`}
+                        onClick={(e) => handleToggleSave(notif.id, e)}
+                        title={notif.isSaved ? 'ยกเลิกการบันทึก (เก็บไว้)' : 'บันทึกไว้ดูภายหลัง (เก็บไว้)'}
+                        aria-label={notif.isSaved ? 'ยกเลิกการบันทึก' : 'บันทึกไว้ดูภายหลัง'}
                       >
-                        {notif.isRead ? (
-                          <BookmarkIcon width={14} height={14} />
-                        ) : (
-                          <CheckIcon width={14} height={14} />
-                        )}
-                        <span>{notif.isRead ? 'เก็บไว้' : 'อ่านแล้ว'}</span>
+                        <BookmarkIcon width={14} height={14} />
+                        <span>{notif.isSaved ? 'บันทึกแล้ว' : 'เก็บไว้'}</span>
                       </button>
                       <button
                         type="button"
@@ -378,7 +418,7 @@ export function AdminNotificationsMenu() {
               </div>
             </div>
 
-            {/* Modal Footer Actions */}
+            {/* Modal Footer Actions (D-203: Real Bookmark & Read Toggle) */}
             <div className="notification-modal-footer">
               <button
                 type="button"
@@ -392,21 +432,30 @@ export function AdminNotificationsMenu() {
               <div className="notification-modal-footer-right">
                 <button
                   type="button"
-                  className="notification-modal-btn btn-keep"
-                  onClick={() => handleToggleRead(activeModalNotif.id)}
+                  className={`notification-modal-btn btn-keep btn-save ${activeModalNotif.isSaved ? 'is-saved' : ''}`}
+                  onClick={() => handleToggleSave(activeModalNotif.id)}
+                  title={activeModalNotif.isSaved ? 'ยกเลิกการบันทึก' : 'บันทึกไว้ในรายการ (เก็บไว้)'}
                 >
-                  {activeModalNotif.isRead ? (
-                    <>
-                      <BookmarkIcon width={15} height={15} />
-                      <span>เก็บไว้ในรายการ</span>
-                    </>
-                  ) : (
-                    <>
-                      <CheckIcon width={15} height={15} />
-                      <span>ทำเครื่องหมายว่าอ่านแล้ว</span>
-                    </>
-                  )}
+                  <BookmarkIcon width={15} height={15} />
+                  <span>
+                    {activeModalNotif.isSaved
+                      ? 'บันทึกแล้ว (เก็บไว้ในรายการ)'
+                      : 'บันทึกไว้ (เก็บไว้ในรายการ)'}
+                  </span>
                 </button>
+
+                <button
+                  type="button"
+                  className="notification-modal-btn btn-toggle-read"
+                  onClick={() => handleToggleRead(activeModalNotif.id)}
+                  title={activeModalNotif.isRead ? 'ทำเครื่องหมายว่ายังไม่อ่าน' : 'ทำเครื่องหมายว่าอ่านแล้ว'}
+                >
+                  <CheckIcon width={15} height={15} />
+                  <span>
+                    {activeModalNotif.isRead ? 'ทำเครื่องหมายว่ายังไม่อ่าน' : 'ทำเครื่องหมายว่าอ่านแล้ว'}
+                  </span>
+                </button>
+
                 <button
                   type="button"
                   className="notification-modal-btn btn-close"

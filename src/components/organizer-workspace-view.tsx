@@ -72,6 +72,14 @@ export function OrganizerWorkspaceView({ initialSection }: OrganizerWorkspaceVie
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [openCreateOnEvents, setOpenCreateOnEvents] = useState(false);
+  const [targetHighlightEventId, setTargetHighlightEventId] = useState<string | null>(null);
+
+  const handleNavigateWithEvent = (section: OrganizerSectionId, eventId?: string) => {
+    if (eventId) {
+      setTargetHighlightEventId(eventId);
+    }
+    handleSelectTab(section);
+  };
 
   // Sync with URL hash
   useEffect(() => {
@@ -225,10 +233,13 @@ export function OrganizerWorkspaceView({ initialSection }: OrganizerWorkspaceVie
         ) : activeSection === 'scanners' ? (
           <OrganizerScannerManager />
         ) : activeSection === 'finance' ? (
-          <OrganizerFinanceView />
+          <OrganizerFinanceView
+            initialSelectedEventId={targetHighlightEventId || undefined}
+            highlightEventId={targetHighlightEventId || undefined}
+          />
         ) : activeSection === 'overview' ? (
           <OrganizerOverviewView
-            onNavigateSection={handleSelectTab}
+            onNavigateSection={handleNavigateWithEvent}
             onOpenCreateConcert={() => {
               setOpenCreateOnEvents(true);
               handleSelectTab('events');
@@ -238,6 +249,7 @@ export function OrganizerWorkspaceView({ initialSection }: OrganizerWorkspaceVie
           <OrganizerEventsManager
             initialOpenCreate={openCreateOnEvents}
             onCloseCreate={() => setOpenCreateOnEvents(false)}
+            initialHighlightEventId={targetHighlightEventId || undefined}
           />
         ) : (
           <div

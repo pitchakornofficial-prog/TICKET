@@ -85,4 +85,36 @@ describe('Admin Notifications Menu & Interactive Detail Modal (D-80)', () => {
     expect(compContent).toContain('UBU Freshy Music Fest 2026');
     expect(compContent).not.toMatch(/\p{Extended_Pictographic}/u);
   });
+
+  it('implements D-203: Real Bookmark System & 3-Tab Filter with Read/Saved Separation', () => {
+    const compContent = readFileSync(
+      join(rootDir, 'src/components/admin-notifications-menu.tsx'),
+      'utf8',
+    );
+    // Real bookmark toggle handler
+    expect(compContent).toContain('handleToggleSave');
+    expect(compContent).toContain('isSaved');
+    expect(compContent).toContain('savedCount');
+    // 3 tabs: All, Unread, Saved
+    expect(compContent).toContain('ที่บันทึกไว้');
+    expect(compContent).toContain('ยังไม่อ่าน');
+    expect(compContent).toContain('ทั้งหมด');
+    // Save button states
+    expect(compContent).toContain('บันทึกแล้ว');
+    expect(compContent).toContain('เก็บไว้');
+    // Explicit mark read
+    expect(compContent).toContain('action-mark-read');
+    expect(compContent).toContain('อ่านแล้ว');
+    // Modal buttons
+    expect(compContent).toContain('btn-toggle-read');
+    expect(compContent).toContain('btn-save');
+    expect(compContent).not.toMatch(/\p{Extended_Pictographic}/u);
+
+    // CSS rules for saved button and saved indicator
+    const cssContent = readFileSync(join(rootDir, 'src/app/globals.css'), 'utf8');
+    expect(cssContent).toContain('.notification-action-btn.is-saved');
+    expect(cssContent).toContain('.notification-saved-indicator');
+    expect(cssContent).toContain('.notification-modal-btn.btn-save.is-saved');
+    expect(cssContent).toContain('.notification-modal-btn.btn-toggle-read');
+  });
 });

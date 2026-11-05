@@ -10,7 +10,7 @@ import {
   MapPinIcon,
 } from './icons';
 // Note: ChevronUpIcon previously used for Back-to-Top (D-143), unified with organizer arrow (D-172)
-import { formatBaht } from '@/lib/locale';
+import { formatBahtCompact } from '@/lib/locale';
 import type { PublicEventSummary } from '@/server/events';
 
 interface HomeConcertCatalogProps {
@@ -360,6 +360,9 @@ export function HomeConcertCatalog({
             </section>
           )}
 
+          {/* Section Divider between Banner & Catalog (D-192) */}
+          <hr className="catalog-section-divider" />
+
           {/* General Concert Catalog: Horizontal Scroll Row with 4:5 Poster Cards (D-30, D-32) */}
           <section className="catalog-section" aria-labelledby="catalog-heading">
             <div className="catalog-header-bar">
@@ -445,10 +448,9 @@ export function HomeConcertCatalog({
 
                           <div className="card-split-footer">
                             <div className="card-split-price">
-                              <span className="price-label">ราคาบัตร</span>
                               <span className="price-amount">
                                 {event.startingPrice > 0
-                                  ? `เริ่มต้น ${formatBaht(event.startingPrice)}`
+                                  ? `ราคาเริ่มต้น ${formatBahtCompact(event.startingPrice)}`
                                   : 'ฟรี'}
                               </span>
                             </div>
@@ -639,10 +641,9 @@ export function HomeConcertCatalog({
 
                         <div className="card-split-footer">
                           <div className="card-split-price">
-                            <span className="price-label">ราคาบัตร</span>
                             <span className="price-amount">
                               {event.startingPrice > 0
-                                ? `เริ่มต้น ${formatBaht(event.startingPrice)}`
+                                ? `ราคาเริ่มต้น ${formatBahtCompact(event.startingPrice)}`
                                 : 'ฟรี'}
                             </span>
                           </div>
