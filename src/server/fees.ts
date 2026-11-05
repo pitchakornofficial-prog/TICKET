@@ -1,4 +1,5 @@
 import type { Pool } from 'pg';
+import { inTransaction } from './database.ts';
 
 export type OrganizerFeeMode = 'percentage' | 'per_ticket' | 'flat_fee';
 export type CustomerFeeMode = 'per_ticket' | 'per_order' | 'percentage';
@@ -139,7 +140,9 @@ export function calculateReserveTarget(netEntitlement: number, reservePercentage
 }
 
 export async function ensureFeeSchema(pool: Pool): Promise<void> {
-  await pool.query(`
+  await inTransaction(pool, async client => {
+    await client.query('SELECT pg_advisory_xact_lock($1)', [945162030]);
+    await client.query(`
     CREATE TABLE IF NOT EXISTS event_fee_settings (
       "eventId" TEXT PRIMARY KEY REFERENCES events(id) ON DELETE CASCADE,
       "organizerFeeMode" TEXT NOT NULL DEFAULT 'percentage',
@@ -156,6 +159,7 @@ export async function ensureFeeSchema(pool: Pool): Promise<void> {
     ALTER TABLE event_fee_settings ADD COLUMN IF NOT EXISTS "ubuPrivilegeMode" BOOLEAN NOT NULL DEFAULT FALSE;
     ALTER TABLE event_fee_settings ADD COLUMN IF NOT EXISTS "organizerFeePrivilegeRate" NUMERIC(12, 2) NOT NULL DEFAULT 0;
   `);
+  });
 }
 
 export async function getEventFeeSettings(pool: Pool, eventId: string): Promise<EventFeeSettings> {
