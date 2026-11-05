@@ -1,10 +1,10 @@
+import { testClientIp } from '../support/client-context';
+import { saveEventDraft } from '../support/event-draft';
 import { expect, test } from '@playwright/test';
 import { fixtureAccounts, fixturePassword } from '../support/auth-fixture';
 
-let nextIp = 1;
 test.beforeEach(async ({ context }, testInfo) => {
-  const base = testInfo.project.name === 'desktop-chromium' ? 156 : 206;
-  await context.setExtraHTTPHeaders({ 'x-forwarded-for': `198.51.100.${base + (nextIp++ % 50)}` });
+  await context.setExtraHTTPHeaders({ 'x-forwarded-for': testClientIp(testInfo) });
 });
 
 test.describe('Owner Manual Refund Transfer & Private Proof Flow (TASK-023, AC-37, AC-92, AC-93)', () => {
@@ -25,10 +25,11 @@ test.describe('Owner Manual Refund Transfer & Private Proof Flow (TASK-023, AC-3
     await page.getByRole('button', { name: 'เข้าสู่ระบบ', exact: true }).click();
     await expect(page).toHaveURL('/back-office/organizer');
 
+    await page.goto('/back-office/organizer#events');
     await page.getByRole('button', { name: '+ สร้างงานคอนเสิร์ตใหม่' }).click();
     await page.getByLabel('ชื่องานคอนเสิร์ต').fill(eventTitle);
     await page.getByLabel('สถานที่จัดงาน').fill('อิมแพ็ค ชาเลนเจอร์ ฮอลล์ 2');
-    await page.getByRole('button', { name: 'บันทึกข้อมูลร่าง (Draft)' }).click();
+    await saveEventDraft(page);
     await expect(page.getByText('บันทึกงานคอนเสิร์ตสำเร็จ')).toBeVisible();
 
     const eventsRes = await page.request.get('/api/events');
@@ -81,8 +82,13 @@ test.describe('Owner Manual Refund Transfer & Private Proof Flow (TASK-023, AC-3
     await expect(page).toHaveURL('/login');
 
     // 3. Guest visits concert detail page and completes purchase for 2 tickets
-    await page.goto(`/events/${createdEvent.id}`);
+    await page.goto(`/events/${createdEvent.id}/checkout`);
     await expect(page.getByRole('heading', { name: eventTitle })).toBeVisible();
+
+    const addBtn = page.getByRole('button', { name: 'เพิ่มจำนวน Regular Zone' });
+    await addBtn.click();
+    await addBtn.click();
+
 
     await page.getByLabel('ชื่อ-นามสกุล *').fill(guestName);
     await page.getByLabel('อีเมล *').fill(guestEmail);
@@ -98,20 +104,14 @@ test.describe('Owner Manual Refund Transfer & Private Proof Flow (TASK-023, AC-3
 
     await page.getByLabel('รหัส OTP 6 หลัก *').fill(code);
     await page.getByRole('button', { name: 'ยืนยันรหัส OTP' }).click();
+    await page.getByRole('button', { name: 'ยืนยันและดำเนินการต่อ' }).click();
     await expect(page.getByRole('heading', { name: 'ยืนยันอีเมลสำเร็จ (Guest Verified)' })).toBeVisible();
 
     // Select 2 tickets
-    const addBtn = page.getByRole('button', { name: 'เพิ่มจำนวน Regular Zone' });
-    await addBtn.click();
-    await addBtn.click();
-
-    await page.getByRole('button', { name: 'ยืนยันการเลือกบัตร (2 ใบ)' }).click();
+    await page.locator('#confirm-reservation-btn').click();
     await expect(page.getByText('กันบัตรสำเร็จ (Reserved)')).toBeVisible();
 
     // Generate PromptPay QR and simulate payment
-    const generateQrBtn = page.getByRole('button', { name: 'สร้าง QR Code ชำระเงิน (PromptPay)' });
-    await expect(generateQrBtn).toBeVisible();
-    await generateQrBtn.click();
     await expect(page.locator('#promptpay-qr-image')).toBeVisible();
 
     const simulateBtn = page.locator('#simulate-payment-button');

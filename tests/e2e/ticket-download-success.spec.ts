@@ -1,11 +1,11 @@
+import { testClientIp } from '../support/client-context';
+import { saveEventDraft } from '../support/event-draft';
 import { expect, test } from '@playwright/test';
 import { fixtureAccounts, fixturePassword } from '../support/auth-fixture';
 
-let nextIp = 1;
 test.beforeEach(async ({ context }, testInfo) => {
   test.setTimeout(60000);
-  const base = testInfo.project.name === 'desktop-chromium' ? 120 : 170;
-  await context.setExtraHTTPHeaders({ 'x-forwarded-for': `198.51.100.${base + (nextIp++ % 40)}` });
+  await context.setExtraHTTPHeaders({ 'x-forwarded-for': testClientIp(testInfo) });
 });
 
 test.describe('Dedicated Payment Success Page & Ticket Download (D-52)', () => {
@@ -25,10 +25,11 @@ test.describe('Dedicated Payment Success Page & Ticket Download (D-52)', () => {
     await page.getByRole('button', { name: 'เข้าสู่ระบบ', exact: true }).click();
     await expect(page).toHaveURL('/back-office/organizer');
 
+    await page.goto('/back-office/organizer#events');
     await page.getByRole('button', { name: '+ สร้างงานคอนเสิร์ตใหม่' }).click();
     await page.getByLabel('ชื่องานคอนเสิร์ต').fill(eventTitle);
     await page.getByLabel('สถานที่จัดงาน').fill('อิมแพ็ค อารีน่า เมืองทองธานี');
-    await page.getByRole('button', { name: 'บันทึกข้อมูลร่าง (Draft)' }).click();
+    await saveEventDraft(page);
     await expect(page.getByText('บันทึกงานคอนเสิร์ตสำเร็จ')).toBeVisible();
 
     const eventsRes = await page.request.get('/api/events');
@@ -67,7 +68,9 @@ test.describe('Dedicated Payment Success Page & Ticket Download (D-52)', () => {
     const sessionCard = page.locator('.pending-session-card', { hasText: eventTitle });
     await expect(sessionCard).toBeVisible();
     await sessionCard.getByRole('button', { name: 'อนุมัติรอบนี้' }).click();
+    await expect(page.getByText(`อนุมัติรอบการแสดงของ "${eventTitle}" สำเร็จ`)).toBeVisible();
     await page.getByRole('button', { name: 'ออกจากระบบ', exact: true }).click();
+    await expect(page).toHaveURL('/login');
 
     // 3. Guest visits concert page and enters queue
     await page.goto(`/events/${createdEvent.id}`);

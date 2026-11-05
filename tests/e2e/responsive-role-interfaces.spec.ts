@@ -1,10 +1,9 @@
+import { testClientIp, createIsolatedBrowserContext } from '../support/client-context';
 import { test, expect } from '@playwright/test';
 import { fixtureAccounts, fixturePassword } from '../support/auth-fixture';
 
-let nextIp = 50;
 test.beforeEach(async ({ context }, testInfo) => {
-  const base = testInfo.project.name === 'desktop-chromium' ? 120 : 170;
-  await context.setExtraHTTPHeaders({ 'x-forwarded-for': `198.51.100.${base + (nextIp++ % 50)}` });
+  await context.setExtraHTTPHeaders({ 'x-forwarded-for': testClientIp(testInfo) });
 });
 
 test.describe('TASK-036: Responsive Role Interfaces and Mandatory Contract (AC-43, AC-44, AC-45, AC-46, AC-47, AC-48, AC-104)', () => {
@@ -48,7 +47,7 @@ test.describe('TASK-036: Responsive Role Interfaces and Mandatory Contract (AC-4
     await expect(page).toHaveURL('/back-office/organizer');
 
     // Verify back-office brand and zero emojis
-    await expect(page.locator('.eyebrow')).toHaveText(/TICKET \/ พื้นที่ทีมงาน/);
+    await expect(page.locator('.admin-brand-name')).toHaveText(/TICKET/);
     const organizerBodyText = await page.locator('body').innerText();
     expect(organizerBodyText).not.toMatch(/\p{Extended_Pictographic}/u);
 
@@ -59,9 +58,9 @@ test.describe('TASK-036: Responsive Role Interfaces and Mandatory Contract (AC-4
     expect(backOfficeOverflow).toBe(false);
   });
 
-  test('AC-104: Timezone preservation: browser in non-Bangkok timezone (UTC) renders times in Asia/Bangkok', async ({ browser }) => {
+  test('AC-104: Timezone preservation: browser in non-Bangkok timezone (UTC) renders times in Asia/Bangkok', async ({ browser }, testInfo) => {
     // Launch a context explicitly set to UTC
-    const utcContext = await browser.newContext({
+    const utcContext = await createIsolatedBrowserContext(browser, testInfo, {
       timezoneId: 'UTC',
       locale: 'th-TH',
     });

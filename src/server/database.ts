@@ -1,6 +1,8 @@
 import { Pool, type PoolClient } from 'pg';
 
-export function createDatabasePool(connectionString = process.env.DATABASE_URL): Pool {
+export function createDatabasePool(
+  connectionString = process.env.DATABASE_URL || process.env.TEST_DATABASE_URL,
+): Pool {
   if (!connectionString) throw new Error('DATABASE_URL is required');
   const url = new URL(connectionString);
   if (!['postgres:', 'postgresql:'].includes(url.protocol)) {
@@ -15,6 +17,10 @@ export function createDatabasePool(connectionString = process.env.DATABASE_URL):
 }
 
 let sharedPool: Pool | undefined;
+
+export function setDatabasePool(pool: Pool | undefined): void {
+  sharedPool = pool;
+}
 
 export function getDatabasePool(): Pool {
   if (!sharedPool) {

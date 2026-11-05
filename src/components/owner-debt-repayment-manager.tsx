@@ -2,7 +2,7 @@
 
 import { formatDate, formatTime } from '@/lib/locale';
 import type { EventMoneyReportDetail } from '@/server/reports';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 function AlertCircleIcon({ className = '', style }: { className?: string; style?: React.CSSProperties }) {
   return (
@@ -55,12 +55,17 @@ interface EventOption {
 export function OwnerDebtRepaymentManager() {
   const [events, setEvents] = useState<EventOption[]>([]);
   const [selectedEventId, setSelectedEventId] = useState<string>('');
+  const selectedEventIdRef = useRef<string>('');
   const [report, setReport] = useState<EventMoneyReportDetail | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
   const [amount, setAmount] = useState<string>('');
   const [notes, setNotes] = useState<string>('');
   const [submitting, setSubmitting] = useState<boolean>(false);
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+
+  useEffect(() => {
+    selectedEventIdRef.current = selectedEventId;
+  }, [selectedEventId]);
 
   // Load events
   useEffect(() => {
@@ -74,7 +79,11 @@ export function OwnerDebtRepaymentManager() {
             title: e.title,
           }));
           setEvents(eventList);
-          setSelectedEventId(prev => prev || (eventList[0]?.id || ''));
+          setSelectedEventId(prev => {
+            const next = prev || (eventList[0]?.id || '');
+            selectedEventIdRef.current = next;
+            return next;
+          });
         }
       } catch (err) {
         console.error('Failed to load events for debt repayment manager:', err);
@@ -92,6 +101,9 @@ export function OwnerDebtRepaymentManager() {
     }
     try {
       const res = await fetch(`/api/owner/events/${eventId}/money-report`);
+      if (selectedEventIdRef.current !== eventId) {
+        return;
+      }
       if (res.ok) {
         const data = await res.json();
         setReport(data.report);
@@ -104,10 +116,14 @@ export function OwnerDebtRepaymentManager() {
         setReport(null);
       }
     } catch (err) {
-      console.error('Failed to load money report:', err);
-      setReport(null);
+      if (selectedEventIdRef.current === eventId) {
+        console.error('Failed to load money report:', err);
+        setReport(null);
+      }
     } finally {
-      setLoading(false);
+      if (selectedEventIdRef.current === eventId) {
+        setLoading(false);
+      }
     }
   }, []);
 
@@ -198,7 +214,11 @@ export function OwnerDebtRepaymentManager() {
           <select
             id="owner-debt-repayment-event-select"
             value={selectedEventId}
-            onChange={(e) => setSelectedEventId(e.target.value)}
+            onChange={(e) => {
+              const newId = e.target.value;
+              selectedEventIdRef.current = newId;
+              setSelectedEventId(newId);
+            }}
             style={{
               padding: '6px 12px',
               border: '1px solid #cbd5e1',

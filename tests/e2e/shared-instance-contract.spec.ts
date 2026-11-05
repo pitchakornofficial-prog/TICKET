@@ -1,10 +1,9 @@
+import { testClientIp } from '../support/client-context';
 import { expect, test } from '@playwright/test';
 import { fixtureAccounts, fixturePassword } from '../support/auth-fixture';
 
-let nextIp = 1;
 test.beforeEach(async ({ context }, testInfo) => {
-  const base = testInfo.project.name === 'desktop-chromium' ? 149 : 199;
-  await context.setExtraHTTPHeaders({ 'x-forwarded-for': `198.51.100.${base + (nextIp++ % 50)}` });
+  await context.setExtraHTTPHeaders({ 'x-forwarded-for': testClientIp(testInfo) });
 });
 
 test.describe('TASK-037: Shared Instance Contract (AC-105)', () => {

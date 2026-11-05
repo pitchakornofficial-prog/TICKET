@@ -33,30 +33,41 @@ export interface OwnerNewsItem {
   authorName: string;
 }
 
+let newsSchemaPromise: Promise<void> | null = null;
+
 export async function ensureNewsSchema(pool: Pool): Promise<void> {
-  try {
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS news (
-        id TEXT PRIMARY KEY,
-        title TEXT NOT NULL,
-        content TEXT NOT NULL,
-        status TEXT NOT NULL DEFAULT 'draft',
-        "coverUrl" TEXT,
-        "publishedAt" TIMESTAMPTZ,
-        "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        "updatedAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        "authorId" TEXT NOT NULL REFERENCES auth_user(id)
-      );
-      CREATE INDEX IF NOT EXISTS idx_news_status_published_at ON news(status, "publishedAt" DESC);
-    `);
-  } catch (error) {
-    const err = error as { code?: string };
-    if (err?.code === '42P01') {
-      // auth_user table does not exist yet (e.g. during early build before migrations)
-      return;
-    }
-    throw error;
+  if (!newsSchemaPromise) {
+    newsSchemaPromise = (async () => {
+      try {
+        await pool.query(`
+          CREATE TABLE IF NOT EXISTS news (
+            id TEXT PRIMARY KEY,
+            title TEXT NOT NULL,
+            content TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'draft',
+            "coverUrl" TEXT,
+            "publishedAt" TIMESTAMPTZ,
+            "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            "updatedAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+            "authorId" TEXT NOT NULL REFERENCES auth_user(id)
+          );
+          CREATE INDEX IF NOT EXISTS idx_news_status_published_at ON news(status, "publishedAt" DESC);
+        `);
+      } catch (error) {
+        const err = error as { code?: string };
+        if (err?.code === '42P01') {
+          newsSchemaPromise = null;
+          return;
+        }
+        if (err?.code === '23505') {
+          return;
+        }
+        newsSchemaPromise = null;
+        throw error;
+      }
+    })();
   }
+  return newsSchemaPromise;
 }
 
 export async function listPublishedNews(pool: Pool): Promise<PublicNewsSummary[]> {

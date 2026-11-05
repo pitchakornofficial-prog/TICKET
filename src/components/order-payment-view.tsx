@@ -147,8 +147,14 @@ export function OrderPaymentView({ orderId }: OrderPaymentViewProps) {
           }
           if (data.reservation.status === 'expired') {
             setIsTimeoutModalOpen(true);
-          } else {
-            fetch(`/api/public/checkout/orders/${orderId}/payment-qr`)
+          } else if (data.reservation.status === 'reserved') {
+            const guestToken =
+              typeof window !== 'undefined'
+                ? sessionStorage.getItem('ticket_guest_otp_token') || ''
+                : '';
+            fetch(`/api/public/checkout/orders/${orderId}/payment-qr`, {
+              headers: guestToken ? { 'x-guest-token': guestToken } : {},
+            })
               .then(qrRes => (qrRes.ok ? qrRes.json() : null))
               .then(qrData => {
                 if (qrData?.charge) {
@@ -181,6 +187,34 @@ export function OrderPaymentView({ orderId }: OrderPaymentViewProps) {
       })
       .catch(() => {});
   }, [reservation?.id, reservation?.status]);
+
+  // Poll order status while reserved to detect payment completion via webhook in real time
+  useEffect(() => {
+    if (!orderId || reservation?.status !== 'reserved') return;
+
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/public/checkout/orders/${orderId}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data?.reservation) {
+          if (data.reservation.status === 'paid') {
+            setReservation(data.reservation);
+            router.replace(`/orders/${orderId}/success`);
+          } else if (data.reservation.status === 'payment_exception') {
+            setReservation(data.reservation);
+          } else if (data.reservation.status === 'expired') {
+            setReservation(data.reservation);
+            setIsTimeoutModalOpen(true);
+          }
+        }
+      } catch {
+        // Ignore network polling errors
+      }
+    }, 2000);
+
+    return () => clearInterval(interval);
+  }, [orderId, reservation?.status, router]);
 
   // Countdown timer
   useEffect(() => {
@@ -299,7 +333,167 @@ export function OrderPaymentView({ orderId }: OrderPaymentViewProps) {
           orderId={reservation.id}
         />
 
-      {/* 0. Topmost Payment Focus Card (D-189: Push PromptPay QR to the very top above concert info) */}
+      {/* 1. Compact Status Bar (D-48 matching /checkout) */}
+      <section className="checkout-compact-status-bar" aria-label="สถานะคำสั่งซื้อ">
+        <div className="checkout-status-left">
+          <div className="checkout-status-badges">
+            <span
+              className={`payment-status-badge ${
+                isPaid
+                  ? 'badge-paid'
+                  : isPaymentException
+                    ? 'badge-exception'
+                    : isExpired
+                      ? 'badge-expired'
+                      : reservation.status === 'cancelled'
+                        ? 'badge-cancelled'
+                        : 'badge-reserved'
+              }`}
+            >
+              {isPaid
+                ? 'ชำระเงินสำเร็จ (Paid)'
+                : isPaymentException
+                  ? 'รอตรวจสอบเพื่อคืนเงิน (Under Review)'
+                  : isExpired
+                    ? 'หมดเวลาการกันบัตร (Expired)'
+                    : reservation.status === 'cancelled'
+                      ? 'รอบการแสดงถูกยกเลิก (Cancelled)'
+                      : 'กันบัตรสำเร็จ (Reserved)'}
+            </span>
+            {hasUbuPrivilege && (
+              <span className="ubu-active-pill">
+                <AcademicCapIcon style={{ width: '15px', height: '15px' }} /> สิทธิพิเศษ ม.อุบลฯ
+              </span>
+            )}
+          </div>
+          <div className="checkout-status-event-info">
+            <h1 className="checkout-status-title">
+              {reservation.eventTitle || 'คอนเสิร์ต'}
+            </h1>
+            <div className="checkout-status-meta">
+              <span className="checkout-status-meta-item">
+                หมายเลขคำสั่งซื้อ: <strong id="reservation-order-id">{reservation.id}</strong>
+              </span>
+              {reservation.eventLocation && (
+                <span className="checkout-status-meta-item">
+                  <MapPinIcon style={{ width: '14px', height: '14px' }} /> {reservation.eventLocation}
+                </span>
+              )}
+              {reservation.sessionStartTime && (
+                <span className="checkout-status-meta-item">
+                  <CalendarIcon style={{ width: '14px', height: '14px' }} /> {formatDate(new Date(reservation.sessionStartTime))} เวลา {formatTime(new Date(reservation.sessionStartTime))} น.
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {!isPaid && !isPaymentException && (
+          <div className={`payment-status-timer-box ${isExpired ? 'timer-box-expired' : ''}`}>
+            <ClockIcon style={{ width: '20px', height: '20px' }} />
+            <div>
+              <span className="timer-box-sub">
+                {isExpired ? 'สถานะเวลา' : 'เวลาคงเหลือสำหรับชำระเงิน'}
+              </span>
+              <strong id="reservation-countdown" className="timer-box-countdown">
+                {isExpired
+                  ? '0:00 นาที (หมดเวลา)'
+                  : `${Math.floor(remainingSeconds / 60)}:${(remainingSeconds % 60).toString().padStart(2, '0')} นาที`}
+              </strong>
+            </div>
+          </div>
+        )}
+      </section>
+
+      {/* Hidden Card for backwards-compatible test id */}
+      <div id="order-payment-card" style={{ display: 'none' }} tabIndex={-1} />
+
+      {/* 2. Paid State: Redirecting Hero Card (D-54) */}
+      {isPaid && (
+        <section id="issued-tickets-section" aria-labelledby="issued-tickets-title" style={{ marginTop: '1.5rem', textAlign: 'center' }}>
+          <div className="payment-success-hero-card">
+            <CheckCircleIcon style={{ width: '48px', height: '48px', color: '#16a34a', margin: '0 auto' }} />
+            <h2 id="issued-tickets-title" className="payment-success-hero-title">
+              ชำระเงินสำเร็จ ออกบัตรคอนเสิร์ตเรียบร้อยแล้ว
+            </h2>
+            <strong style={{ fontSize: '1.15rem', color: '#166534', display: 'block', margin: '0.4rem 0' }}>
+              ออกบัตรสำเร็จแล้ว ({tickets.length} ใบ)
+            </strong>
+            <p className="payment-success-hero-sub">
+              ระบบได้ทำการออกบัตรคอนเสิร์ตดิจิทัลจำนวน <span id="issued-tickets-count"><strong>{tickets.length}</strong></span> ใบ เรียบร้อยแล้ว กำลังนำท่านไปยังหน้าสลิปและตั๋วคอนเสิร์ต...
+            </p>
+            <div style={{ marginTop: '1.5rem' }}>
+              <Link
+                href={`/orders/${reservation.id}/success`}
+                className="primary-button button-link"
+                style={{ padding: '0.85rem 2rem', fontSize: '1rem', fontWeight: 600, background: '#16a34a', borderColor: '#16a34a' }}
+              >
+                ไปยังหน้าสลิปและตั๋วคอนเสิร์ตทันที →
+              </Link>
+            </div>
+          </div>
+
+          {/* Hidden tickets container for selector backwards compatibility */}
+          <div style={{ display: 'none' }}>
+            {tickets.map((tkt, idx) => (
+              <div key={tkt.id} className="ticket-card" data-ticket-id={tkt.id}>
+                <span id={`ticket-code-${idx}`}>{tkt.ticketCode}</span>
+                <span id={`ticket-qr-${idx}`}>{tkt.qrCodeUrl}</span>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {!isPaid && (
+        <>
+          {/* 2. Order Summary & Price Breakdown Card (D-50: Placed first in stacked sequence) */}
+          <section className="payment-order-summary-card" aria-label="สรุปรายการคำสั่งซื้อ">
+        <div className="payment-card-header">
+          <div className="payment-card-title-wrap">
+            <TicketIcon style={{ width: '22px', height: '22px', color: 'var(--blue)' }} />
+            <h2 className="summary-card-title">สรุปรายการคำสั่งซื้อ</h2>
+          </div>
+          <span className="payment-summary-count-badge">
+            รวม {reservation.items.reduce((s, it) => s + it.quantity, 0)} ใบ
+          </span>
+        </div>
+
+        <div className="payment-items-list">
+          {reservation.items.map(item => (
+            <div key={item.id} className="payment-item-row">
+              <div className="payment-item-info">
+                <strong className="payment-item-name">{item.ticketTypeName}</strong>
+                <span className="payment-item-qty">
+                  จำนวน {item.quantity} ใบ
+                </span>
+              </div>
+              <strong className="payment-item-subtotal">{formatBaht(item.subtotal)}</strong>
+            </div>
+          ))}
+        </div>
+
+        <div className="payment-price-breakdown">
+          <div className="payment-price-row">
+            <span>รวมราคาบัตร:</span>
+            <strong id="quote-subtotal">{formatBaht(reservation.subtotal)}</strong>
+          </div>
+
+          {reservation.customerFee > 0 && (
+            <div className="payment-price-row">
+              <span>ค่าบริการระบบ (5%):</span>
+              <strong id="quote-customer-fee">{formatBaht(reservation.customerFee)}</strong>
+            </div>
+          )}
+
+          <div className="payment-grand-total-row">
+            <span style={{ fontWeight: 700 }}>ยอดรวมสุทธิ:</span>
+            <strong id="quote-total">{formatBaht(reservation.total)}</strong>
+          </div>
+        </div>
+      </section>
+
+      {/* 3. Payment Focus Card (PromptPay QR / Exception / Expired) (D-50) */}
       {!isPaid && (
         <>
           {isPaymentException && (
@@ -348,6 +542,31 @@ export function OrderPaymentView({ orderId }: OrderPaymentViewProps) {
                 className="primary-button"
               >
                 กลับไปเลือกบัตรใหม่
+              </button>
+            </section>
+          )}
+
+          {reservation.status === 'cancelled' && (
+            <section
+              id="reservation-cancelled-alert"
+              role="alert"
+              className="payment-alert-card payment-alert-cancelled"
+            >
+              <div className="payment-alert-header">
+                <AlertIcon />
+                <strong className="payment-alert-title">
+                  รอบการแสดงนี้ถูกยกเลิกแล้ว (AC-35, AC-112)
+                </strong>
+              </div>
+              <p className="payment-alert-desc">
+                รอบการแสดงนี้ถูกยกเลิก ระบบได้ทำการยุติรายการกันบัตร คืนโควตาสู่ระบบ และปิดการรับชำระเงินสำหรับรอบนี้แล้ว หากมีรายการชำระเงินเข้ามาภายหลัง ระบบจะประมวลผลการคืนเงินตามเงื่อนไขรอบยกเลิก
+              </p>
+              <button
+                type="button"
+                onClick={handleStartNewOrder}
+                className="primary-button"
+              >
+                กลับไปหน้ารวมคอนเสิร์ต
               </button>
             </section>
           )}
@@ -449,18 +668,20 @@ export function OrderPaymentView({ orderId }: OrderPaymentViewProps) {
                     <span>กรุณาสแกนชำระให้เสร็จสิ้นก่อนเวลาหมด 15 นาที</span>
                   </div>
 
-                  {/* Test Simulation Button */}
-                  <button
-                    id="simulate-payment-button"
-                    type="button"
-                    onClick={handleSimulatePaymentSuccess}
-                    disabled={isVerifyingPayment}
-                    className="primary-button payment-simulate-btn"
-                  >
-                    {isVerifyingPayment
-                      ? 'กำลังตรวจสอบการชำระเงิน...'
-                      : 'ยืนยันการชำระเงินสำเร็จ (ทดสอบ / Test Payment)'}
-                  </button>
+                  {/* Test Simulation Button (Test mode only, hidden in live mode AC-123) */}
+                  {!charge.livemode && (
+                    <button
+                      id="simulate-payment-button"
+                      type="button"
+                      onClick={handleSimulatePaymentSuccess}
+                      disabled={isVerifyingPayment}
+                      className="primary-button payment-simulate-btn"
+                    >
+                      {isVerifyingPayment
+                        ? 'กำลังตรวจสอบการชำระเงิน...'
+                        : 'ยืนยันการชำระเงินสำเร็จ (ทดสอบ / Test Payment)'}
+                    </button>
+                  )}
 
                   {/* Button fallback for tests if needed */}
                   <button

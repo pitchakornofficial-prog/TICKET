@@ -1,10 +1,10 @@
+import { testClientIp } from '../support/client-context';
+import { saveEventDraft } from '../support/event-draft';
 import { expect, test } from '@playwright/test';
 import { fixtureAccounts, fixturePassword } from '../support/auth-fixture';
 
-let nextIp = 400;
 test.beforeEach(async ({ context }, testInfo) => {
-  const offset = testInfo.project.name === 'desktop-chromium' ? 0 : 50;
-  await context.setExtraHTTPHeaders({ 'x-forwarded-for': `192.0.2.${offset + nextIp++}` });
+  await context.setExtraHTTPHeaders({ 'x-forwarded-for': testClientIp(testInfo) });
 });
 
 test('organizer logs in, creates a concert draft with poster and views it in their workspace', async ({ page }, testInfo) => {
@@ -29,16 +29,17 @@ test('organizer logs in, creates a concert draft with poster and views it in the
   // 3. Fill event details
   await page.getByLabel('ชื่องานคอนเสิร์ต').fill(eventTitle);
   await page.getByLabel('สถานที่จัดงาน').fill(location);
-  await page.getByLabel('รายละเอียด').fill('เทศกาลดนตรีฤดูหนาวประจำปี');
+  await page.getByLabel('เกี่ยวกับคอนเสิร์ตนี้ / รายละเอียดและจุดเด่น').fill('เทศกาลดนตรีฤดูหนาวประจำปี');
 
-  // Upload dummy poster
-  await page.getByLabel('โปสเตอร์งาน').setInputFiles({
+  // Upload dummy poster in the media step
+  await page.getByRole('button', { name: '3. รูปภาพ & สื่อประชาสัมพันธ์', exact: true }).click();
+  await page.locator('#event-poster').setInputFiles({
     name: 'test-poster.png',
     mimeType: 'image/png',
     buffer: Buffer.from('fake-png-content'),
   });
 
-  await page.getByRole('button', { name: 'บันทึกข้อมูลร่าง (Draft)' }).click();
+  await saveEventDraft(page);
 
   // 4. Verify draft appears in organizer workspace with poster
   await expect(page.getByText('บันทึกงานคอนเสิร์ตสำเร็จ')).toBeVisible();

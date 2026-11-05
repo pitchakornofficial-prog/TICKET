@@ -1,10 +1,10 @@
+import { testClientIp } from '../support/client-context';
+import { saveEventDraft } from '../support/event-draft';
 import { expect, test } from '@playwright/test';
 import { fixtureAccounts, fixturePassword } from '../support/auth-fixture';
 
-let nextIp = 500;
 test.beforeEach(async ({ context }, testInfo) => {
-  const offset = testInfo.project.name === 'desktop-chromium' ? 0 : 50;
-  await context.setExtraHTTPHeaders({ 'x-forwarded-for': `192.0.2.${offset + nextIp++}` });
+  await context.setExtraHTTPHeaders({ 'x-forwarded-for': testClientIp(testInfo) });
 });
 
 test('organizer submits two sessions, owner approves one session, and only approved session appears (AC-02, AC-66)', async ({ page }, testInfo) => {
@@ -18,10 +18,11 @@ test('organizer submits two sessions, owner approves one session, and only appro
   await expect(page).toHaveURL('/back-office/organizer');
 
   // Create event with two sessions
+  await page.goto('/back-office/organizer#events');
   await page.getByRole('button', { name: '+ สร้างงานคอนเสิร์ตใหม่' }).click();
   await page.getByLabel('ชื่องานคอนเสิร์ต').fill(eventTitle);
   await page.getByLabel('สถานที่จัดงาน').fill('เอ็มแคปปิตอล ฮอลล์');
-  await page.getByRole('button', { name: 'บันทึกข้อมูลร่าง (Draft)' }).click();
+  await saveEventDraft(page);
   await expect(page.getByText('บันทึกงานคอนเสิร์ตสำเร็จ')).toBeVisible();
 
   // Find created event in DB or API to get session ids and submit session 1
@@ -71,7 +72,7 @@ test('organizer submits two sessions, owner approves one session, and only appro
   await expect(page).toHaveURL('/back-office/owner');
 
   // Verify pending session card is visible
-  await expect(page.getByRole('heading', { name: 'รอบการแสดงที่รอการอนุมัติ (Owner Review)' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'รอบการแสดงใหม่ที่รออนุมัติเปิดขาย (New Sessions)' })).toBeVisible();
   const sessionCard = page.locator('.pending-session-card', { hasText: eventTitle });
   await expect(sessionCard).toBeVisible();
 

@@ -744,7 +744,7 @@ export function OrganizerEventsManager({
       }
 
       const res = await fetch(
-        `/api/events/${activeEventDetails.id}/sessions/${selectedSessionId}/amendment`,
+        `/api/organizer/events/${activeEventDetails.id}/sessions/${selectedSessionId}/amendments`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -804,7 +804,7 @@ export function OrganizerEventsManager({
 
     try {
       const res = await fetch(
-        `/api/events/${cancelEventDetails.id}/sessions/${selectedCancelSessionId}/cancel`,
+        `/api/organizer/events/${cancelEventDetails.id}/sessions/${selectedCancelSessionId}/cancel`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },

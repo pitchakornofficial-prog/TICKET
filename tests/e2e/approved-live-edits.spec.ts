@@ -1,4 +1,6 @@
+import { saveEventDraft } from '../support/event-draft';
 import { expect, test } from '@playwright/test';
+import { reserveThroughCheckout } from '../support/purchase-journey';
 import { fixtureAccounts, fixturePassword } from '../support/auth-fixture';
 
 let nextIp = 1;
@@ -26,10 +28,10 @@ test.describe('Approved live session edits & quota protection (TASK-024, AC-67, 
     await page.getByRole('button', { name: 'เข้าสู่ระบบ', exact: true }).click();
     await expect(page).toHaveURL('/back-office/organizer');
 
-    await page.getByRole('button', { name: '+ สร้างงานคอนเสิร์ตใหม่' }).click();
+    await page.getByRole('button', { name: 'สร้างคอนเสิร์ตใหม่' }).click();
     await page.getByLabel('ชื่องานคอนเสิร์ต').fill(eventTitle);
     await page.getByLabel('สถานที่จัดงาน').fill('รอยัล พารากอน ฮอลล์');
-    await page.getByRole('button', { name: 'บันทึกข้อมูลร่าง (Draft)' }).click();
+    await saveEventDraft(page);
     await expect(page.getByText('บันทึกงานคอนเสิร์ตสำเร็จ')).toBeVisible();
 
     const eventsRes = await page.request.get('/api/events');
@@ -81,68 +83,21 @@ test.describe('Approved live session edits & quota protection (TASK-024, AC-67, 
     });
     const buyerPage = await buyerContext.newPage();
 
-    await buyerPage.goto(`/events/${createdEvent.id}`);
-    await expect(buyerPage.getByRole('heading', { name: eventTitle })).toBeVisible();
-    await expect(buyerPage.getByText('฿1,000.00').first()).toBeVisible();
-
-    await buyerPage.getByLabel('ชื่อ-นามสกุล *').fill('ผู้ซื้อท่านที่หนึ่ง');
-    await buyerPage.getByLabel('อีเมล *').fill(buyer1Email);
-    await buyerPage.getByLabel('เบอร์โทรศัพท์มือถือ *').fill('0811111111');
-    await buyerPage.getByRole('button', { name: 'ขอรหัส OTP เพื่อซื้อบัตร' }).click();
-    await expect(buyerPage.getByText('ส่งรหัส OTP 6 หลักไปยังอีเมลของคุณเรียบร้อยแล้ว')).toBeVisible();
-
-    const otp1Res = await request.get(
-      `/api/auth/test-inspect-reset-token?type=guest_otp&email=${encodeURIComponent(buyer1Email)}`,
-    );
-    const { code: code1 } = await otp1Res.json();
-    await buyerPage.getByLabel('รหัส OTP 6 หลัก *').fill(code1);
-    await buyerPage.getByRole('button', { name: 'ยืนยันรหัส OTP' }).click();
-    await expect(buyerPage.getByRole('heading', { name: 'ยืนยันอีเมลสำเร็จ (Guest Verified)' })).toBeVisible();
-
-    const addBtn1 = buyerPage.getByRole('button', { name: 'เพิ่มจำนวน บัตร Regular Standard' });
-    await addBtn1.click();
-    await addBtn1.click();
-    await buyerPage.getByRole('button', { name: 'ยืนยันการเลือกบัตร (2 ใบ)' }).click();
-    await expect(buyerPage.getByText('กันบัตรสำเร็จ (Reserved)')).toBeVisible();
-
-    // Pay for Buyer 1
-    await buyerPage.getByRole('button', { name: 'สร้าง QR Code ชำระเงิน (PromptPay)' }).click();
-    await expect(buyerPage.locator('#promptpay-qr-image')).toBeVisible();
+    await reserveThroughCheckout(buyerPage, {
+      eventId: createdEvent.id,
+      buyer: { name: 'ผู้ซื้อท่านที่หนึ่ง', email: buyer1Email, phone: '0811111111' },
+      tickets: [{ name: 'บัตร Regular Standard', quantity: 2 }],
+    });
     await buyerPage.locator('#simulate-payment-button').click();
-    await expect(buyerPage.getByText('ชำระเงินสำเร็จ (Paid)')).toBeVisible();
+    await expect(buyerPage).toHaveURL(/\/orders\/ORD-[A-Z0-9-]+\/success$/);
     await expect(buyerPage.getByText('ออกบัตรสำเร็จแล้ว (2 ใบ)')).toBeVisible();
 
-    // 4. Reset buyer session state for Buyer 2 (heldQuota will become 3)
-    await buyerContext.clearCookies();
-    await buyerPage.evaluate(() => {
-      sessionStorage.clear();
-      localStorage.clear();
+    // A separate checkout holds one ticket at the original price.
+    const buyer2OrderId = await reserveThroughCheckout(buyerPage, {
+      eventId: createdEvent.id,
+      buyer: { name: 'ผู้ซื้อท่านที่สอง', email: buyer2Email, phone: '0822222222' },
+      tickets: [{ name: 'บัตร Regular Standard', quantity: 1 }],
     });
-
-    await buyerPage.goto(`/events/${createdEvent.id}`);
-    await expect(buyerPage.getByRole('heading', { name: eventTitle })).toBeVisible();
-    await buyerPage.getByLabel('ชื่อ-นามสกุล *').fill('ผู้ซื้อท่านที่สอง');
-    await buyerPage.getByLabel('อีเมล *').fill(buyer2Email);
-    await buyerPage.getByLabel('เบอร์โทรศัพท์มือถือ *').fill('0822222222');
-    await buyerPage.getByRole('button', { name: 'ขอรหัส OTP เพื่อซื้อบัตร' }).click();
-    await expect(buyerPage.getByText('ส่งรหัส OTP 6 หลักไปยังอีเมลของคุณเรียบร้อยแล้ว')).toBeVisible();
-
-    const otp2Res = await request.get(
-      `/api/auth/test-inspect-reset-token?type=guest_otp&email=${encodeURIComponent(buyer2Email)}`,
-    );
-    const { code: code2 } = await otp2Res.json();
-    await buyerPage.getByLabel('รหัส OTP 6 หลัก *').fill(code2);
-    await buyerPage.getByRole('button', { name: 'ยืนยันรหัส OTP' }).click();
-    await expect(buyerPage.getByRole('heading', { name: 'ยืนยันอีเมลสำเร็จ (Guest Verified)' })).toBeVisible();
-
-    const addBtn2 = buyerPage.getByRole('button', { name: 'เพิ่มจำนวน บัตร Regular Standard' });
-    await addBtn2.click();
-    await buyerPage.getByRole('button', { name: 'ยืนยันการเลือกบัตร (1 ใบ)' }).click();
-    await expect(buyerPage.getByText('กันบัตรสำเร็จ (Reserved)')).toBeVisible();
-
-    // Verify locked quote for Buyer 2: Subtotal 1,000 THB
-    const buyer2OrderId = (await buyerPage.locator('#reservation-order-id').innerText()).trim();
-    expect(buyer2OrderId).toMatch(/^ORD-/);
 
     // 5. Organizer submits amendment via UI on admin page
     await page.goto('/login');
@@ -152,9 +107,11 @@ test.describe('Approved live session edits & quota protection (TASK-024, AC-67, 
     await page.getByRole('button', { name: 'เข้าสู่ระบบ', exact: true }).click();
     await expect(page).toHaveURL('/back-office/organizer');
 
+    await page.goto('/back-office/organizer#events');
+
     // Open amendment form
     await page.locator(`[data-testid="open-amendment-btn-${createdEvent.id}"]`).click({ force: true });
-    await expect(page.locator('#amendment-form-section')).toBeVisible();
+    await expect(page.getByRole('heading', { name: /ขอแก้ไขรอบการแสดง:/ })).toBeVisible();
 
     // First verify AC-109 rejection on low quota (< heldQuota 3)
     await page.locator(`[data-testid="amendment-quota-${ticketTypeId}"]`).fill('2');
@@ -166,6 +123,7 @@ test.describe('Approved live session edits & quota protection (TASK-024, AC-67, 
     await page.locator(`[data-testid="amendment-quota-${ticketTypeId}"]`).fill('25');
     await page.locator('[data-testid="submit-amendment-btn"]').click();
     await expect(page.getByText(/ยื่นคำขอแก้ไขรอบการแสดงสำเร็จ/)).toBeVisible();
+    await page.getByRole('button', { name: 'ปิดหน้าต่าง', exact: true }).click();
 
     await page.getByRole('button', { name: 'ออกจากระบบ', exact: true }).click({ force: true });
     await expect(page).toHaveURL('/login');
@@ -176,7 +134,9 @@ test.describe('Approved live session edits & quota protection (TASK-024, AC-67, 
     const publicBeforeData = await publicBeforeRes.json();
     expect(Number(publicBeforeData.event.sessions[0].ticketTypes[0].price)).toBe(1000);
 
-    // 7. Owner logs in and approves amendment
+    // 7. A separate operator login uses its own client IP, keeping the real
+    // sign-in rate limiter enabled for the application.
+    await page.setExtraHTTPHeaders({ 'x-forwarded-for': '198.51.100.159' });
     await page.goto('/login');
     await expect(page.getByRole('button', { name: 'เข้าสู่ระบบ', exact: true })).toBeVisible();
     await page.getByLabel('อีเมล', { exact: true }).fill(fixtureAccounts.owner.email);
@@ -197,6 +157,11 @@ test.describe('Approved live session edits & quota protection (TASK-024, AC-67, 
     await approveBtn.dispatchEvent('click');
     await expect(page.getByText(/อนุมัติการแก้ไขรอบของ/)).toBeVisible({ timeout: 10000 });
 
+    // Issued tickets remain accounted at their purchased price after approval.
+    const reportResponse = await page.request.get(`/api/owner/events/${createdEvent.id}/money-report`);
+    expect(reportResponse.status()).toBe(200);
+    expect((await reportResponse.json()).report.grossSales).toBe(2000);
+
     await page.getByRole('button', { name: 'ออกจากระบบ', exact: true }).click({ force: true });
     await expect(page).toHaveURL('/login');
 
@@ -211,11 +176,10 @@ test.describe('Approved live session edits & quota protection (TASK-024, AC-67, 
     await expect(buyerPage.getByText('฿1,800.00').first()).toBeVisible();
 
     // 9. Buyer 2's pre-existing active reservation retains original 1,000 THB quote throughout 15-minute hold (AC-68)
-    const orderCheckRes = await page.request.get(`/api/public/orders/${buyer2OrderId}`);
-    if (orderCheckRes.status() === 200) {
-      const orderData = await orderCheckRes.json();
-      expect(Number(orderData.order.total)).toBe(1000);
-    }
+    const orderCheckRes = await request.get(`/api/public/checkout/orders/${buyer2OrderId}`);
+    expect(orderCheckRes.status()).toBe(200);
+    const orderData = await orderCheckRes.json();
+    expect(Number(orderData.reservation.total)).toBe(1000);
 
     await buyerContext.close();
   });

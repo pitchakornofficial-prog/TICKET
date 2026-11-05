@@ -1,5 +1,10 @@
 import { test, expect } from '@playwright/test';
 import { fixtureAccounts, fixturePassword } from '../support/auth-fixture';
+import { testClientIp } from '../support/client-context';
+
+test.beforeEach(async ({ context }, testInfo) => {
+  await context.setExtraHTTPHeaders({ 'x-forwarded-for': testClientIp(testInfo) });
+});
 
 test.describe('Online Admission Scanning Journey (TASK-020, AC-08, AC-39, AC-49, AC-95, AC-100, AC-101, AC-65)', () => {
   test('scanner logs in, opens terminal, scans entry, repeat entry rejected, scans exit, scans reentry, checks stats and logs without buyer PII', async ({
@@ -79,8 +84,11 @@ test.describe('Online Admission Scanning Journey (TASK-020, AC-08, AC-39, AC-49,
     await expect(page).toHaveURL('/login');
 
     // 3. Guest buyer visits concert detail page and completes purchase
-    await page.goto(`/events/${createdEvent.id}`);
+    await page.goto(`/events/${createdEvent.id}/checkout`);
     await expect(page.getByRole('heading', { name: eventTitle })).toBeVisible();
+
+    const addBtn = page.getByRole('button', { name: 'เพิ่มจำนวน บัตรนั่ง VIP' });
+    await addBtn.click();
 
     await page.getByLabel('ชื่อ-นามสกุล *').fill(buyerName);
     await page.getByLabel('อีเมล *').fill(buyerEmail);
@@ -97,19 +105,15 @@ test.describe('Online Admission Scanning Journey (TASK-020, AC-08, AC-39, AC-49,
 
     await page.getByLabel('รหัส OTP 6 หลัก *').fill(otpCode);
     await page.getByRole('button', { name: 'ยืนยันรหัส OTP' }).click();
+    await page.getByRole('button', { name: 'ยืนยันและดำเนินการต่อ' }).click();
     await expect(page.getByRole('heading', { name: 'ยืนยันอีเมลสำเร็จ (Guest Verified)' })).toBeVisible();
 
     // Select 1 ticket and reserve
-    const addBtn = page.getByRole('button', { name: 'เพิ่มจำนวน บัตรนั่ง VIP' });
-    await addBtn.click();
-    await page.getByRole('button', { name: 'ยืนยันการเลือกบัตร (1 ใบ)' }).click();
+    await page.locator('#confirm-reservation-btn').click();
 
     await expect(page.getByText('กันบัตรสำเร็จ (Reserved)')).toBeVisible();
 
     // Create PromptPay QR
-    const generateQrBtn = page.getByRole('button', { name: 'สร้าง QR Code ชำระเงิน (PromptPay)' });
-    await expect(generateQrBtn).toBeVisible();
-    await generateQrBtn.click();
     await expect(page.locator('#promptpay-qr-image')).toBeVisible();
 
     // Simulate payment
@@ -118,7 +122,9 @@ test.describe('Online Admission Scanning Journey (TASK-020, AC-08, AC-39, AC-49,
     await simulateBtn.click();
 
     await expect(page.getByText('ชำระเงินสำเร็จ (Paid)')).toBeVisible();
+    await expect(page).toHaveURL(/\/orders\/ORD-[A-Z0-9-]+\/success$/);
     await expect(page.getByText('ออกบัตรสำเร็จแล้ว (1 ใบ)')).toBeVisible();
+    await page.locator('#tab-btn-tickets').click();
 
     const ticketCodeText = (await page.locator('#ticket-code-0').innerText()).trim();
     expect(ticketCodeText).toMatch(/^TK-/);
@@ -159,6 +165,8 @@ test.describe('Online Admission Scanning Journey (TASK-020, AC-08, AC-39, AC-49,
     expect(resultText).not.toContain(buyerEmail);
     expect(resultText).not.toContain(buyerPhone);
 
+    await page.locator('#dismiss-scan-modal-btn').click({ force: true });
+
     // Verify stats updated: currently inside = 1
     await expect(page.locator('#stats-currently-inside')).toHaveText('1');
     await expect(page.locator('#stats-total-entries')).toHaveText('1');
@@ -169,11 +177,12 @@ test.describe('Online Admission Scanning Journey (TASK-020, AC-08, AC-39, AC-49,
 
     await expect(resultCard).toHaveClass(/result-rejected/);
     await expect(page.locator('#scan-result-message')).toContainText('บัตรอยู่ในพื้นที่จัดงานแล้ว');
+    await page.locator('#dismiss-scan-modal-btn').click({ force: true });
 
     // 7. STEP C: Exit scan (AC-39)
     const exitModeBtn = page.locator('#mode-exit-btn');
     await exitModeBtn.scrollIntoViewIfNeeded();
-    await exitModeBtn.click();
+    await exitModeBtn.click({ force: true });
     await expect(exitModeBtn).toHaveClass(/active/);
 
     await page.locator('#scanner-ticket-input').fill(ticketCodeText);
@@ -182,6 +191,7 @@ test.describe('Online Admission Scanning Journey (TASK-020, AC-08, AC-39, AC-49,
     await expect(resultCard).toHaveClass(/result-success-exit/);
     await expect(page.locator('#scan-result-message')).toContainText('บันทึกออกนอกงานสำเร็จ');
     await expect(page.locator('#scanned-ticket-admission-status')).toHaveText('อยู่นอกพื้นที่จัดงาน');
+    await page.locator('#dismiss-scan-modal-btn').click({ force: true });
 
     // Stats: currently inside = 0, total exits = 1
     await expect(page.locator('#stats-currently-inside')).toHaveText('0');
@@ -190,7 +200,7 @@ test.describe('Online Admission Scanning Journey (TASK-020, AC-08, AC-39, AC-49,
     // 8. STEP D: Re-entry scan (AC-95)
     const entryModeBtn = page.locator('#mode-entry-btn');
     await entryModeBtn.scrollIntoViewIfNeeded();
-    await entryModeBtn.click();
+    await entryModeBtn.click({ force: true });
     await expect(entryModeBtn).toHaveClass(/active/);
 
     await page.locator('#scanner-ticket-input').fill(ticketCodeText);
@@ -199,6 +209,7 @@ test.describe('Online Admission Scanning Journey (TASK-020, AC-08, AC-39, AC-49,
     await expect(resultCard).toHaveClass(/result-success-entry/);
     await expect(page.locator('#scan-result-message')).toHaveText('บันทึกเข้างานสำเร็จ (ผ่าน)');
     await expect(page.locator('#scanned-ticket-admission-status')).toHaveText('อยู่ในพื้นที่จัดงาน');
+    await page.locator('#dismiss-scan-modal-btn').click({ force: true });
 
     // Stats: currently inside = 1, total entries = 2
     await expect(page.locator('#stats-currently-inside')).toHaveText('1');

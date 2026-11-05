@@ -15,7 +15,7 @@ test.describe('Public customer pages and navigation (TASK-007, D-02, D-05, D-08,
     await expect(page.getByRole('link', { name: 'เข้าสู่ระบบหลังบ้าน' })).toHaveCount(0);
 
     // Search input
-    const searchInput = page.getByRole('searchbox', { name: 'ค้นหาชื่องานคอนเสิร์ต' });
+    const searchInput = page.locator('#navbar-search-input');
     await expect(searchInput).toBeVisible();
 
     // Footer links to policy pages
@@ -64,16 +64,15 @@ test.describe('Public customer pages and navigation (TASK-007, D-02, D-05, D-08,
 
   test('search form submits query and displays results or empty state (AC-03)', async ({ page }) => {
     await page.goto('/');
-    const searchInput = page.getByRole('searchbox', { name: 'ค้นหาชื่องานคอนเสิร์ต' });
+    const searchInput = page.locator('#navbar-search-input');
     await searchInput.fill('NonExistentRockConcert2026');
-    await page.getByRole('button', { name: 'ค้นหา' }).click();
 
     await expect(page).toHaveURL(/\/\?q=NonExistentRockConcert2026/);
-    await expect(page.getByText('ผลการค้นหาสำหรับ “NonExistentRockConcert2026”')).toBeVisible();
-    await expect(page.getByText('ไม่พบคอนเสิร์ตที่ตรงกับคำค้นหา')).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'ผลการค้นหาสำหรับ “NonExistentRockConcert2026”' })).toBeVisible();
+    await expect(page.getByText('ไม่พบคอนเสิร์ตที่ตรงกับเงื่อนไขการค้นหา')).toBeVisible();
 
-    // Clear search link returns to home
-    await page.getByRole('link', { name: 'ล้างคำค้นหา' }).click();
+    // Clear search button returns to home
+    await page.locator('.clear-search-button').click();
     await expect(page).toHaveURL('/');
   });
 });

@@ -1,3 +1,5 @@
+import { createIsolatedBrowserContext } from '../support/client-context';
+import { saveEventDraft } from '../support/event-draft';
 import { test, expect } from '@playwright/test';
 import { fixtureAccounts, fixturePassword } from '../support/auth-fixture';
 
@@ -26,10 +28,11 @@ test.describe('TASK-035: Primary Handover and Emergency Recovery (AC-97, AC-98)'
 
     // Create Event
     await page.goto('/back-office/organizer#events');
+    await page.goto('/back-office/organizer#events');
     await page.getByRole('button', { name: '+ สร้างงานคอนเสิร์ตใหม่' }).click();
     await page.getByLabel('ชื่องานคอนเสิร์ต').fill(eventTitle);
     await page.getByLabel('สถานที่จัดงาน').fill('อิมแพ็ค อารีน่า ฮอลล์ 3');
-    await page.getByRole('button', { name: 'บันทึกข้อมูลร่าง (Draft)' }).click();
+    await saveEventDraft(page);
     await expect(page.getByText('บันทึกงานคอนเสิร์ตสำเร็จ')).toBeVisible({ timeout: 20000 });
 
     const eventsRes = await page.request.get('/api/events');
@@ -56,7 +59,7 @@ test.describe('TASK-035: Primary Handover and Emergency Recovery (AC-97, AC-98)'
     // Submit and approve session
     await page.request.post(`/api/events/${event.id}?action=submit-session`, { data: { sessionId } });
 
-    const ownerContext = await browser.newContext();
+    const ownerContext = await createIsolatedBrowserContext(browser, testInfo, );
     const ownerPage = await ownerContext.newPage();
     await ownerPage.goto('/login');
     await ownerPage.getByLabel('อีเมล', { exact: true }).fill(fixtureAccounts.owner.email);
@@ -116,7 +119,7 @@ test.describe('TASK-035: Primary Handover and Emergency Recovery (AC-97, AC-98)'
     await page.locator('#cancel-handover-modal-btn').click();
 
     // 5. Scanner 2 logs in and downloads offline dataset
-    const scanner2Context = await browser.newContext();
+    const scanner2Context = await createIsolatedBrowserContext(browser, testInfo, );
     const scanner2Page = await scanner2Context.newPage();
     await scanner2Page.goto('/login');
     await scanner2Page.getByLabel('อีเมล', { exact: true }).fill(scanner2Email);

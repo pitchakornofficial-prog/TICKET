@@ -7,7 +7,8 @@ import { LoginForm } from '@/components/login-form';
 import { ArrowLeftIcon, ShieldCheckIcon } from '@/components/icons';
 
 export default async function LoginPage() {
-  const actor = await readActor(getAuth(), await headers());
+  const requestHeaders = await headers();
+  const actor = await readActor(getAuth(), requestHeaders);
   if (actor) redirect(roleHome(actor.role));
   return (
     <section className="opening account-page login-page-section" aria-labelledby="login-title">

@@ -1,0 +1,488 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "TICKET production operations preparation",
+  "Resources": {
+    "Cluster": {
+      "Type": "AWS::ECS::Cluster",
+      "Properties": {
+        "ClusterName": "ticket-production"
+      }
+    },
+    "Logs": {
+      "Type": "AWS::Logs::LogGroup",
+      "Properties": {
+        "LogGroupName": "/ecs/ticket-production",
+        "RetentionInDays": 14
+      }
+    },
+    "TaskSecurity": {
+      "Type": "AWS::EC2::SecurityGroup",
+      "Properties": {
+        "GroupDescription": "TICKET production task outbound",
+        "VpcId": "vpc-04b2a1a3c10a0306b"
+      }
+    },
+    "ExecutionRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "ecs-tasks.amazonaws.com"
+              },
+              "Action": "sts:AssumeRole"
+            }
+          ]
+        },
+        "ManagedPolicyArns": [
+          "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
+        ],
+        "Policies": [
+          {
+            "PolicyName": "ReadProductionDatabaseOnly",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "ssm:GetParameters"
+                  ],
+                  "Resource": [
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/ticket/production/DATABASE_URL_DIRECT"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/ticket/production/BOOTSTRAP_OWNER_PASSWORD"
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "OperationsTask": {
+      "Type": "AWS::ECS::TaskDefinition",
+      "Properties": {
+        "Family": "ticket-production-operations",
+        "RequiresCompatibilities": [
+          "FARGATE"
+        ],
+        "NetworkMode": "awsvpc",
+        "Cpu": "256",
+        "Memory": "512",
+        "RuntimePlatform": {
+          "CpuArchitecture": "ARM64",
+          "OperatingSystemFamily": "LINUX"
+        },
+        "ExecutionRoleArn": {
+          "Fn::GetAtt": [
+            "ExecutionRole",
+            "Arn"
+          ]
+        },
+        "ContainerDefinitions": [
+          {
+            "Name": "operations",
+            "Image": "901708383730.dkr.ecr.ap-southeast-1.amazonaws.com/ticket-workload-test:production-ops-20261104",
+            "Essential": true,
+            "Command": [
+              "node",
+              "scripts/db-check.ts"
+            ],
+            "Secrets": [
+              {
+                "Name": "DATABASE_URL",
+                "ValueFrom": {
+                  "Fn::Sub": "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/ticket/production/DATABASE_URL_DIRECT"
+                }
+              }
+            ],
+            "LogConfiguration": {
+              "LogDriver": "awslogs",
+              "Options": {
+                "awslogs-group": {
+                  "Ref": "Logs"
+                },
+                "awslogs-region": {
+                  "Ref": "AWS::Region"
+                },
+                "awslogs-stream-prefix": "ops"
+              }
+            }
+          }
+        ]
+      }
+    },
+    "WebExecutionRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "ecs-tasks.amazonaws.com"
+              },
+              "Action": "sts:AssumeRole"
+            }
+          ]
+        },
+        "ManagedPolicyArns": [
+          "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
+        ],
+        "Policies": [
+          {
+            "PolicyName": "ReadProductionParameters",
+            "PolicyDocument": {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "ssm:GetParameters"
+                  ],
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/ticket/production/*"
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    "Ingress": {
+      "Type": "AWS::EC2::SecurityGroupIngress",
+      "Properties": {
+        "GroupId": {
+          "Ref": "TaskSecurity"
+        },
+        "IpProtocol": "tcp",
+        "FromPort": 3000,
+        "ToPort": 3000,
+        "SourceSecurityGroupId": "sg-01826a56935021d21"
+      }
+    },
+    "TargetGroup": {
+      "Type": "AWS::ElasticLoadBalancingV2::TargetGroup",
+      "Properties": {
+        "Name": "ticket-production-web",
+        "VpcId": "vpc-04b2a1a3c10a0306b",
+        "Port": 3000,
+        "Protocol": "HTTP",
+        "TargetType": "ip",
+        "HealthCheckPath": "/api/health",
+        "Matcher": {
+          "HttpCode": "200"
+        }
+      }
+    },
+    "PreviewRule": {
+      "Type": "AWS::ElasticLoadBalancingV2::ListenerRule",
+      "Properties": {
+        "ListenerArn": "arn:aws:elasticloadbalancing:ap-southeast-1:901708383730:listener/app/ticket-workload-alb/b5befd83bb1b6303/0faa60d4e1a2b3dd",
+        "Priority": 30,
+        "Conditions": [
+          {
+            "Field": "http-header",
+            "HttpHeaderConfig": {
+              "HttpHeaderName": "x-ticket-preview",
+              "Values": [
+                "production-check-20261104"
+              ]
+            }
+          }
+        ],
+        "Actions": [
+          {
+            "Type": "forward",
+            "TargetGroupArn": {
+              "Ref": "TargetGroup"
+            }
+          }
+        ]
+      }
+    },
+    "WebTask": {
+      "Type": "AWS::ECS::TaskDefinition",
+      "Properties": {
+        "Family": "ticket-production-web",
+        "RequiresCompatibilities": [
+          "FARGATE"
+        ],
+        "NetworkMode": "awsvpc",
+        "Cpu": "512",
+        "Memory": "1024",
+        "RuntimePlatform": {
+          "CpuArchitecture": "ARM64",
+          "OperatingSystemFamily": "LINUX"
+        },
+        "ExecutionRoleArn": {
+          "Fn::GetAtt": [
+            "WebExecutionRole",
+            "Arn"
+          ]
+        },
+        "ContainerDefinitions": [
+          {
+            "Name": "web",
+            "Image": "901708383730.dkr.ecr.ap-southeast-1.amazonaws.com/ticket-workload-test@sha256:16b404bff33b7cd29d3d9fa9c79440f6fe76137efdf167c5976245ae1f14a1bd",
+            "Essential": true,
+            "PortMappings": [
+              {
+                "ContainerPort": 3000,
+                "Protocol": "tcp"
+              }
+            ],
+            "Environment": [
+              {
+                "Name": "TICKET_DEPLOY_ENV",
+                "Value": "production"
+              },
+              {
+                "Name": "BETTER_AUTH_URL",
+                "Value": "https://ticket.phatysd.me"
+              },
+              {
+                "Name": "EMAIL_FROM",
+                "Value": "TICKET <noreply@ticket.phatysd.me>"
+              }
+            ],
+            "Secrets": [
+              {
+                "Name": "DATABASE_URL",
+                "ValueFrom": {
+                  "Fn::Sub": "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/ticket/production/DATABASE_URL"
+                }
+              },
+              {
+                "Name": "BETTER_AUTH_SECRET",
+                "ValueFrom": {
+                  "Fn::Sub": "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/ticket/production/BETTER_AUTH_SECRET"
+                }
+              },
+              {
+                "Name": "RESEND_API_KEY",
+                "ValueFrom": {
+                  "Fn::Sub": "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/ticket/production/RESEND_API_KEY"
+                }
+              },
+              {
+                "Name": "STRIPE_SECRET_KEY",
+                "ValueFrom": {
+                  "Fn::Sub": "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/ticket/production/STRIPE_SECRET_KEY"
+                }
+              },
+              {
+                "Name": "STRIPE_PUBLISHABLE_KEY",
+                "ValueFrom": {
+                  "Fn::Sub": "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/ticket/production/STRIPE_PUBLISHABLE_KEY"
+                }
+              },
+              {
+                "Name": "STRIPE_WEBHOOK_SECRET",
+                "ValueFrom": {
+                  "Fn::Sub": "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/ticket/production/STRIPE_WEBHOOK_SECRET"
+                }
+              },
+              {
+                "Name": "R2_ACCESS_KEY_ID",
+                "ValueFrom": {
+                  "Fn::Sub": "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/ticket/production/R2_ACCESS_KEY_ID"
+                }
+              },
+              {
+                "Name": "R2_SECRET_ACCESS_KEY",
+                "ValueFrom": {
+                  "Fn::Sub": "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/ticket/production/R2_SECRET_ACCESS_KEY"
+                }
+              },
+              {
+                "Name": "R2_BUCKET",
+                "ValueFrom": {
+                  "Fn::Sub": "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/ticket/production/R2_BUCKET"
+                }
+              },
+              {
+                "Name": "R2_ACCOUNT_ID",
+                "ValueFrom": {
+                  "Fn::Sub": "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/ticket/production/R2_ACCOUNT_ID"
+                }
+              }
+            ],
+            "LogConfiguration": {
+              "LogDriver": "awslogs",
+              "Options": {
+                "awslogs-group": {
+                  "Ref": "Logs"
+                },
+                "awslogs-region": {
+                  "Ref": "AWS::Region"
+                },
+                "awslogs-stream-prefix": "web"
+              }
+            }
+          }
+        ]
+      }
+    },
+    "WebService": {
+      "Type": "AWS::ECS::Service",
+      "DependsOn": [
+        "PreviewRule"
+      ],
+      "Properties": {
+        "ServiceName": "ticket-production-web",
+        "Cluster": {
+          "Ref": "Cluster"
+        },
+        "TaskDefinition": {
+          "Ref": "WebTask"
+        },
+        "LaunchType": "FARGATE",
+        "DesiredCount": 1,
+        "DeploymentConfiguration": {
+          "DeploymentCircuitBreaker": {
+            "Enable": true,
+            "Rollback": true
+          },
+          "MaximumPercent": 200,
+          "MinimumHealthyPercent": 100
+        },
+        "HealthCheckGracePeriodSeconds": 90,
+        "NetworkConfiguration": {
+          "AwsvpcConfiguration": {
+            "AssignPublicIp": "ENABLED",
+            "Subnets": [
+              "subnet-031011f6ddef9bf0d",
+              "subnet-0fe3fde21c408f0d9"
+            ],
+            "SecurityGroups": [
+              {
+                "Ref": "TaskSecurity"
+              }
+            ]
+          }
+        },
+        "LoadBalancers": [
+          {
+            "ContainerName": "web",
+            "ContainerPort": 3000,
+            "TargetGroupArn": {
+              "Ref": "TargetGroup"
+            }
+          }
+        ]
+      }
+    },
+    "OwnerTask": {
+      "Type": "AWS::ECS::TaskDefinition",
+      "Properties": {
+        "Family": "ticket-production-owner-bootstrap",
+        "RequiresCompatibilities": [
+          "FARGATE"
+        ],
+        "NetworkMode": "awsvpc",
+        "Cpu": "256",
+        "Memory": "512",
+        "RuntimePlatform": {
+          "CpuArchitecture": "ARM64",
+          "OperatingSystemFamily": "LINUX"
+        },
+        "ExecutionRoleArn": {
+          "Fn::GetAtt": [
+            "ExecutionRole",
+            "Arn"
+          ]
+        },
+        "ContainerDefinitions": [
+          {
+            "Name": "operations",
+            "Image": "901708383730.dkr.ecr.ap-southeast-1.amazonaws.com/ticket-workload-test:production-ops-20261104",
+            "Essential": true,
+            "Command": [
+              "node",
+              "-e",
+              "const {spawnSync}=require('node:child_process'); const input=JSON.stringify({name:'Yodsavee',email:'yodsavee.su.68@ubu.ac.th',password:process.env.BOOTSTRAP_OWNER_PASSWORD}); const env={...process.env}; delete env.BOOTSTRAP_OWNER_PASSWORD; const r=spawnSync(process.execPath,['scripts/bootstrap-owner.ts'],{input,env,stdio:['pipe','inherit','inherit']}); process.exit(r.status ?? 1);"
+            ],
+            "Secrets": [
+              {
+                "Name": "DATABASE_URL",
+                "ValueFrom": {
+                  "Fn::Sub": "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/ticket/production/DATABASE_URL_DIRECT"
+                }
+              },
+              {
+                "Name": "BOOTSTRAP_OWNER_PASSWORD",
+                "ValueFrom": {
+                  "Fn::Sub": "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/ticket/production/BOOTSTRAP_OWNER_PASSWORD"
+                }
+              }
+            ],
+            "LogConfiguration": {
+              "LogDriver": "awslogs",
+              "Options": {
+                "awslogs-group": {
+                  "Ref": "Logs"
+                },
+                "awslogs-region": {
+                  "Ref": "AWS::Region"
+                },
+                "awslogs-stream-prefix": "ops"
+              }
+            }
+          }
+        ]
+      }
+    },
+    "ProductionRule": {
+      "Type": "AWS::ElasticLoadBalancingV2::ListenerRule",
+      "Properties": {
+        "ListenerArn": "arn:aws:elasticloadbalancing:ap-southeast-1:901708383730:listener/app/ticket-workload-alb/b5befd83bb1b6303/0faa60d4e1a2b3dd",
+        "Priority": 50,
+        "Conditions": [
+          {
+            "Field": "host-header",
+            "HostHeaderConfig": {
+              "Values": [
+                "ticket.phatysd.me"
+              ]
+            }
+          }
+        ],
+        "Actions": [
+          {
+            "Type": "forward",
+            "TargetGroupArn": {
+              "Ref": "TargetGroup"
+            }
+          }
+        ]
+      }
+    }
+  },
+  "Outputs": {
+    "SecurityGroup": {
+      "Value": {
+        "Ref": "TaskSecurity"
+      }
+    },
+    "TaskDefinition": {
+      "Value": {
+        "Ref": "OperationsTask"
+      }
+    },
+    "Cluster": {
+      "Value": {
+        "Ref": "Cluster"
+      }
+    }
+  }
+}
