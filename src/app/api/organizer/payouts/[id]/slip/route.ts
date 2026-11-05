@@ -1,4 +1,4 @@
-import { getAuth } from '@/server/auth';
+import { getAuth, type TicketAuth } from '@/server/auth';
 import { getDatabasePool } from '@/server/database';
 import { storage } from '@/server/storage';
 import { generateBankSlipSvg, generateBankSlipSvgDataUrl } from '@/lib/bank-slip';
@@ -10,7 +10,7 @@ export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  const auth = getAuth();
+  const auth: TicketAuth = getAuth();
   const session = await auth.api.getSession({ headers: request.headers });
 
   if (!session) {
@@ -26,7 +26,7 @@ export async function GET(
   }
 
   const { id: payoutId } = await params;
-  const pool = (auth.options.database as Pool) || getDatabasePool();
+  const pool: Pool = getDatabasePool();
 
   try {
     const res = await pool.query<{
@@ -77,10 +77,19 @@ export async function GET(
             slipUrl: `/api/organizer/payouts/${payoutId}/slip`,
           });
         }
+        const isPdf = item.contentType === 'application/pdf';
+        const contentDisposition = isPdf
+          ? `attachment; filename="payout-slip-${payoutId}.pdf"`
+          : `inline; filename="payout-slip-${payoutId}.png"`;
+
         return new Response(new Uint8Array(item.data), {
           status: 200,
           headers: {
             'Content-Type': item.contentType || 'image/png',
+            'Content-Disposition': contentDisposition,
+            'Content-Security-Policy': "default-src 'none'; sandbox",
+            'X-Content-Type-Options': 'nosniff',
+            'X-Frame-Options': 'DENY',
             'Cache-Control': 'private, no-cache, no-store, must-revalidate',
           },
         });

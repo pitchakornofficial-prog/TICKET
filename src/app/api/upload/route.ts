@@ -1,5 +1,6 @@
 import { getAuth } from '@/server/auth';
 import { storage } from '@/server/storage';
+import { validateUploadedFile } from '@/server/file-validator';
 import { randomUUID } from 'node:crypto';
 
 export const runtime = 'nodejs';
@@ -27,11 +28,19 @@ export async function POST(request: Request) {
   }
 
   const buffer = Buffer.from(await file.arrayBuffer());
-  const contentType = file.type || 'application/octet-stream';
-  const ext = file.name?.split('.').pop() || 'png';
-  const prefix = visibility === 'private' ? 'proofs' : 'posters';
-  const key = `${prefix}/${randomUUID()}.${ext}`;
+  const originalFilename = file.name || 'upload.png';
+  const claimedContentType = file.type || 'application/octet-stream';
 
-  const { url } = await storage.put(key, buffer, contentType, visibility);
+  const validation = validateUploadedFile(buffer, claimedContentType, originalFilename, visibility);
+  if (!validation.valid) {
+    return Response.json({ message: validation.error }, { status: 400 });
+  }
+
+  const finalContentType = validation.detectedContentType || 'application/octet-stream';
+  const finalExt = validation.normalizedExtension || 'png';
+  const prefix = visibility === 'private' ? 'proofs' : 'posters';
+  const key = `${prefix}/${randomUUID()}.${finalExt}`;
+
+  const { url } = await storage.put(key, buffer, finalContentType, visibility);
   return Response.json({ url, key }, { status: 201 });
 }
