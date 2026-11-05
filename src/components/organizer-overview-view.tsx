@@ -569,28 +569,6 @@ export function OrganizerOverviewView({
             </div>
           </button>
 
-          {/* Launchpad 3: Policies */}
-          <button
-            type="button"
-            className="launchpad-card"
-            data-testid="launchpad-policies"
-            onClick={() => onNavigateSection?.('policies')}
-          >
-            <div className="launchpad-icon-box bg-emerald">
-              <ShieldCheckIcon className="launchpad-icon text-emerald" />
-            </div>
-            <div className="launchpad-body">
-              <h3 className="launchpad-title">ข้อตกลงและเงื่อนไขการบริการ</h3>
-              <p className="launchpad-desc">
-                ตรวจสอบข้อกำหนดค่าธรรมเนียมนโยบายการคืนเงินและมาตรฐานความปลอดภัยข้อมูลผู้ซื้อ
-              </p>
-            </div>
-            <div className="launchpad-footer">
-              <span className="launchpad-cta">อ่านข้อตกลงและเงื่อนไข</span>
-              <ChevronRightIcon className="cta-icon" />
-            </div>
-          </button>
-
           {/* Launchpad 4: Contact Owner */}
           <button
             type="button"

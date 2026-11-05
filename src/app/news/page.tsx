@@ -1,6 +1,5 @@
 import { getDatabasePool } from '@/server/database';
 import { listPublishedNews, type PublicNewsSummary } from '@/server/news';
-import { CURATED_NEWS_LIST } from '@/server/curated-news';
 import { NewsListClient, type NewsItemDisplay } from '@/components/news-list-client';
 
 export const dynamic = 'force-dynamic';
@@ -23,25 +22,16 @@ export default async function NewsListPage() {
     }
   }
 
-  // Use database news if published, otherwise use curated news announcements (D-70)
-  const newsList: NewsItemDisplay[] =
-    dbNewsList.length > 0
-      ? dbNewsList.map(n => ({
+  // Only real published news from the database (D-185)
+  const newsList: NewsItemDisplay[] = dbNewsList.map(n => ({
           id: n.id,
           title: n.title,
           snippet: n.snippet,
-          coverUrl: undefined,
-          category: 'ข่าวสาร',
+          coverUrl: n.coverUrl || undefined,
+          category: (n as { category?: string }).category || 'ข่าวสาร',
           publishedAt: n.publishedAt,
-        }))
-      : CURATED_NEWS_LIST.map(n => ({
-          id: n.id,
-          title: n.title,
-          snippet: n.snippet,
-          coverUrl: n.coverUrl,
-          category: n.category,
-          publishedAt: n.publishedAt,
-        }));
+          relatedConcertTitle: (n as { relatedConcertTitle?: string }).relatedConcertTitle,
+      }));
 
   return (
     <article className="static-page news-page" aria-labelledby="news-title">

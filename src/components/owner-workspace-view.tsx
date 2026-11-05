@@ -10,9 +10,8 @@ import {
   MenuIcon,
   ChevronDownIcon,
   UserPlusIcon,
-  ShieldCheckIcon,
 } from '@/components/icons';
-import { InviteOrganizerForm } from '@/components/invite-organizer-form';
+import { OwnerInvitationsView } from '@/components/owner-invitations-view';
 import { OwnerSessionApprovalManager } from '@/components/owner-session-approval-manager';
 import { OwnerNewsManager } from '@/components/owner-news-manager';
 import { OwnerFeeSettingsManager } from '@/components/owner-fee-settings-manager';
@@ -25,15 +24,14 @@ import { OwnerReserveReleaseManager } from '@/components/owner-reserve-release-m
 import { OwnerDebtRepaymentManager } from '@/components/owner-debt-repayment-manager';
 import { OwnerSyncConflictManager } from '@/components/owner-sync-conflict-manager';
 import { OwnerOverviewDashboard } from '@/components/owner-overview-dashboard';
-import { OwnerPoliciesView } from '@/components/owner-policies-view';
 
 export type OwnerSectionId =
   | 'overview'
   | 'approval'
   | 'finance'
   | 'customer'
-  | 'system'
-  | 'policies';
+  | 'invitations'
+  | 'system';
 
 interface SectionConfig {
   id: OwnerSectionId;
@@ -68,16 +66,16 @@ const SECTIONS: SectionConfig[] = [
     icon: UsersIcon,
   },
   {
-    id: 'system',
-    label: 'ระบบ',
-    description: 'เชิญผู้จัดงาน ข่าวสาร และจัดการข้อขัดแย้งออฟไลน์',
-    icon: SlidersIcon,
+    id: 'invitations',
+    label: 'เชิญผู้ใช้งาน',
+    description: 'เชิญผู้จัดงานและแอดมิน กำหนดสิทธิ์ และประวัติคำเชิญ',
+    icon: UserPlusIcon,
   },
   {
-    id: 'policies',
-    label: 'ข้อตกลง',
-    description: 'กฎบัตรการกำกับดูแลแพลตฟอร์ม โครงสร้างค่าบริการ เงินสำรอง และเงื่อนไขทางกฎหมาย',
-    icon: ShieldCheckIcon,
+    id: 'system',
+    label: 'ระบบ',
+    description: 'จัดการข่าวสาร และจัดการข้อขัดแย้งออฟไลน์',
+    icon: SlidersIcon,
   },
 ];
 
@@ -95,15 +93,14 @@ const HASH_TO_SECTION: Record<string, OwnerSectionId> = {
   customer: 'customer',
   'owner-contact-correction-manager': 'customer',
   'owner-email-deliveries-manager': 'customer',
+  invitations: 'invitations',
+  invitation: 'invitations',
+  'owner-invitations-view': 'invitations',
+  'invite-organizer-form': 'invitations',
   system: 'system',
-  'invite-organizer-form': 'system',
   'owner-news-manager': 'system',
   'owner-sync-conflict-manager': 'system',
   'owner-sync-conflicts-manager': 'system',
-  policies: 'policies',
-  'owner-policies-view': 'policies',
-  terms: 'policies',
-  policy: 'policies',
 };
 
 interface OwnerWorkspaceViewProps {
@@ -145,17 +142,22 @@ export function OwnerWorkspaceView({ initialSection }: OwnerWorkspaceViewProps) 
     }
   };
 
-  const handleNavigateToSection = (section: OwnerSectionId, targetManagerId: string) => {
+  const handleNavigateToSection = (section: OwnerSectionId, targetManagerId?: string) => {
     setActiveSection(section);
     setMobileMenuOpen(false);
     if (typeof window !== 'undefined') {
-      window.history.replaceState(null, '', `#${targetManagerId}`);
-      setTimeout(() => {
-        const el = document.getElementById(targetManagerId);
-        if (el) {
-          el.scrollIntoView({ behavior: 'smooth' });
-        }
-      }, 50);
+      const hash = targetManagerId || section;
+      window.history.replaceState(null, '', `#${hash}`);
+      if (targetManagerId) {
+        setTimeout(() => {
+          const el = document.getElementById(targetManagerId);
+          if (el) {
+            el.scrollIntoView({ behavior: 'smooth' });
+          }
+        }, 50);
+      } else {
+        window.scrollTo(0, 0);
+      }
     }
   };
 
@@ -207,9 +209,9 @@ export function OwnerWorkspaceView({ initialSection }: OwnerWorkspaceViewProps) 
             <div className="owner-subnav-right-group">
               <button
                 type="button"
-                className="owner-subnav-tab invite-quick-btn"
+                className={`owner-subnav-tab invite-quick-btn ${activeSection === 'invitations' ? 'is-active' : ''}`}
                 data-testid="owner-nav-invite"
-                onClick={() => handleNavigateToSection('system', 'invite-organizer-form')}
+                onClick={() => handleNavigateToSection('invitations', 'invite-organizer-form')}
               >
                 <UserPlusIcon className="owner-subnav-icon" />
                 <span>เชิญผู้จัดงาน</span>
@@ -230,21 +232,8 @@ export function OwnerWorkspaceView({ initialSection }: OwnerWorkspaceViewProps) 
             isFullOverview={true}
           />
         </main>
-      ) : activeSection === 'policies' ? (
-        <main
-          className="owner-content-stage"
-          data-testid="owner-section-content-policies"
-        >
-          <OwnerPoliciesView />
-        </main>
       ) : (
         <div className="owner-workspace-content-wrap">
-          {/* Compact Overview Dashboard at top (TASK-039, AC-115, D-17) */}
-          <OwnerOverviewDashboard
-            onNavigateToSection={handleNavigateToSection}
-            isFullOverview={false}
-          />
-
           <main
             className="owner-main-content"
             id="owner-main-content"
@@ -293,9 +282,17 @@ export function OwnerWorkspaceView({ initialSection }: OwnerWorkspaceViewProps) 
                 </nav>
               )}
 
+              {activeSection === 'invitations' && (
+                <nav className="owner-section-subtabs" aria-label="เมนูย่อยระบบคำเชิญ">
+                  <a href="#invite-organizer-form" className="owner-section-subtab">
+                    <span>เชิญผู้จัดงานใหม่</span>
+                  </a>
+                </nav>
+              )}
+
               {activeSection === 'system' && (
                 <nav className="owner-section-subtabs" aria-label="เมนูย่อยระบบและข่าวสาร">
-                  <a href="#invite-organizer-form" className="owner-section-subtab">
+                  <a href="#invite-organizer-form" className="owner-section-subtab" style={{ display: 'none' }}>
                     <span>เชิญผู้จัดงานใหม่</span>
                   </a>
                   <a href="#owner-news-manager" className="owner-section-subtab">
@@ -333,9 +330,12 @@ export function OwnerWorkspaceView({ initialSection }: OwnerWorkspaceViewProps) 
                 </>
               )}
 
+              {activeSection === 'invitations' && (
+                <OwnerInvitationsView />
+              )}
+
               {activeSection === 'system' && (
                 <>
-                  <InviteOrganizerForm />
                   <OwnerNewsManager />
                   <OwnerSyncConflictManager />
                 </>

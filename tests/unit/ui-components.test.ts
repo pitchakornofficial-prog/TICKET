@@ -132,4 +132,112 @@ describe('Unified Atomic UI Design System (D-117)', () => {
     expect(css).toContain('.ui-tabs');
     expect(css).toContain('.ui-tab-trigger-active');
   });
+
+  it('verifies OrderSuccessView minimalist ticket pass parity with D-167', () => {
+    const content = readFileSync(join(rootDir, 'src/components/order-success-view.tsx'), 'utf8');
+
+    // 1. Pure white pass, no background image linear-gradient
+    expect(content).not.toContain('backgroundImage: linear-gradient');
+    expect(content).not.toContain('tkt.ticketTemplateUrl || tkt.eventPosterUrl');
+
+    // 2. Eliminates decorative noise and badges
+    expect(content).not.toContain('stub-number-tag');
+    expect(content).not.toContain('พร้อมใช้งาน');
+    expect(content).not.toContain('SCAN FOR ENTRY');
+    expect(content).not.toContain('stub-scan-instruction');
+
+    // 3. Zone name without price
+    expect(content).toContain('{tkt.ticketTypeName}');
+    expect(content).not.toContain('{tkt.ticketTypeName} · {formatBaht(tkt.ticketPrice)}');
+
+    // 4. Straight dashed divider with test-compatible classes
+    expect(content).toContain('stub-divider-straight stub-notch-divider');
+    expect(content).not.toContain('stub-notch-top');
+    expect(content).not.toContain('stub-notch-bottom');
+
+    // 5. Bilingual labels and metadata
+    expect(content).toContain('วันและเวลาแสดง (DATE & TIME)');
+    expect(content).toContain('สถานที่จัดงาน (VENUE)');
+    expect(content).toContain('ผู้สั่งซื้อ (BUYER)');
+    expect(content).toContain('รหัสบัตร (TICKET CODE)');
+    expect(content).toContain('หมายเลขคำสั่งซื้อ (ORDER ID)');
+
+    // 6. Direct image rendering from canvas data url (D-165, D-168)
+    expect(content).toContain('generateTicketDataUrl');
+    expect(content).toContain('ticketImageUrls');
+    expect(content).toContain('classic-ticket-img');
+
+    // 7. Zero Emojis (D-14)
+    expect(content).not.toMatch(/\p{Extended_Pictographic}/u);
+  });
+
+  describe('D-172: Long Buyer Flow Pages Universal Floating Back-to-Top Button', () => {
+    it('verifies FloatingBackToTop component implementation and properties', () => {
+      const rootDir = process.cwd();
+      const compPath = join(rootDir, 'src/components/floating-back-to-top.tsx');
+      expect(existsSync(compPath)).toBe(true);
+
+      const compSource = readFileSync(compPath, 'utf8');
+      expect(compSource).toContain('export function FloatingBackToTop');
+      expect(compSource).toContain('hasStickyBar');
+      expect(compSource).toContain('window.scrollTo');
+      expect(compSource).toContain("behavior: 'smooth'");
+      expect(compSource).toContain('title="กลับสู่ด้านบนสุด"');
+      expect(compSource).toContain('aria-label="กลับสู่ด้านบนสุด"');
+      expect(compSource).toContain('<line x1="12" y1="19" x2="12" y2="5" />');
+      expect(compSource).toContain('<polyline points="5 12 12 5 19 12" />');
+      expect(compSource).not.toMatch(/\p{Extended_Pictographic}/u);
+    });
+
+    it('verifies stylesheet rules for standard and sticky-bar offset Back-to-Top button', () => {
+      const rootDir = process.cwd();
+      const globalsCss = readFileSync(join(rootDir, 'src/app/globals.css'), 'utf8');
+
+      expect(globalsCss).toContain('.floating-back-to-top {');
+      expect(globalsCss).toContain('.floating-back-to-top.has-sticky-bar {');
+      expect(globalsCss).toContain('.floating-back-to-top-icon {');
+      expect(globalsCss).toMatch(/\.floating-back-to-top\.has-sticky-bar\s*\{[^}]*bottom:\s*6rem;/);
+      expect(globalsCss).toMatch(/@media\s*\(max-width:\s*768px\)\s*\{[\s\S]*\.floating-back-to-top\.has-sticky-bar\s*\{[^}]*bottom:\s*5\.25rem;/);
+      expect(globalsCss).not.toMatch(/\p{Extended_Pictographic}/u);
+    });
+
+    it('verifies integration across all four target buyer flow pages', () => {
+      const rootDir = process.cwd();
+
+      // 1. Event Detail Page (/events/[id])
+      const eventDetailSource = readFileSync(
+        join(rootDir, 'src/app/events/[id]/page.tsx'),
+        'utf8',
+      );
+      expect(eventDetailSource).toContain('FloatingBackToTop');
+      expect(eventDetailSource).toContain('hasStickyBar');
+      expect(eventDetailSource).toContain('event-detail-back-to-top-btn');
+
+      // 2. Event Checkout Flow (/events/[id]/checkout)
+      const checkoutSource = readFileSync(
+        join(rootDir, 'src/components/event-checkout-flow.tsx'),
+        'utf8',
+      );
+      expect(checkoutSource).toContain('FloatingBackToTop');
+      expect(checkoutSource).toContain('hasStickyBar');
+      expect(checkoutSource).toContain('checkout-back-to-top-btn');
+
+      // 3. Order Payment View (/orders/[id]/payment)
+      const paymentSource = readFileSync(
+        join(rootDir, 'src/components/order-payment-view.tsx'),
+        'utf8',
+      );
+      expect(paymentSource).toContain('FloatingBackToTop');
+      expect(paymentSource).toContain('hasStickyBar');
+      expect(paymentSource).toContain('payment-back-to-top-btn');
+
+      // 4. Guest Order Lookup View (/my-tickets)
+      const lookupSource = readFileSync(
+        join(rootDir, 'src/components/guest-order-lookup-view.tsx'),
+        'utf8',
+      );
+      expect(lookupSource).toContain('FloatingBackToTop');
+      expect(lookupSource).toContain('lookup-back-to-top-btn');
+    });
+  });
 });

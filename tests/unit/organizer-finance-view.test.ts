@@ -100,5 +100,85 @@ describe('Organizer Financial Reports & Payouts Workspace (D-113)', () => {
     expect(cssContent).toContain('.finance-payouts-card');
     expect(cssContent).toContain('@media print');
     expect(cssContent).toContain('.finance-header-actions');
+  });  it('implements D-180 and D-182: Financial Metric Tooltips ("i"), CSV Export, Payout Bank Account Card Removal & Payout History Filtering', () => {
+    const financeContent = readFileSync(
+      join(rootDir, 'src/components/organizer-finance-view.tsx'),
+      'utf8',
+    );
+
+    // 1. Tooltips ("i") (D-180)
+    expect(financeContent).toContain('FinanceTooltip');
+    expect(financeContent).toContain('finance-tooltip-wrap');
+    expect(financeContent).toContain('finance-tooltip-btn');
+    expect(financeContent).toContain('finance-tooltip-popover');
+    expect(financeContent).toContain('InfoIcon');
+
+    // 2. Export CSV (D-180)
+    expect(financeContent).toContain('finance-export-csv-btn');
+    expect(financeContent).toContain('handleExportCsv');
+    expect(financeContent).toContain('DownloadIcon');
+    expect(financeContent).toContain('text/csv;charset=utf-8');
+
+    // 3. D-182: Payout Bank Account Card Removal (to avoid duplication with Settings)
+    expect(financeContent).not.toContain('finance-bank-account-card');
+    expect(financeContent).not.toContain('บัญชีธนาคารสำหรับรับเงินโอน');
+    expect(financeContent).not.toContain('finance-bank-contact-btn');
+
+    // Verify Organizer Settings provides mature bank accounts management instead (D-78/D-79)
+    const settingsContent = readFileSync(
+      join(rootDir, 'src/components/organizer-settings-view.tsx'),
+      'utf8',
+    );
+    expect(settingsContent).toContain('บัญชีธนาคารสำหรับรับเงิน');
+    expect(settingsContent).toContain('payout-bank-name');
+
+    // 4. Payout Search & Filter (D-180)
+    expect(financeContent).toContain('payout-filter-toolbar');
+    expect(financeContent).toContain('payout-search-input');
+    expect(financeContent).toContain('payout-status-select');
+    expect(financeContent).toContain('filteredPayouts');
+
+    // Zero Emojis
+    expect(financeContent).not.toMatch(/\p{Extended_Pictographic}/u);
+
+    // CSS rules
+    const cssContent = readFileSync(join(rootDir, 'src/app/globals.css'), 'utf8');
+    expect(cssContent).toContain('.finance-tooltip-wrap');
+    expect(cssContent).toContain('.finance-tooltip-popover');
+    expect(cssContent).toContain('.btn-export-csv');
+    expect(cssContent).not.toContain('.finance-bank-account-card');
+    expect(cssContent).toContain('.finance-payout-filter-toolbar');
+    expect(cssContent).not.toMatch(/\p{Extended_Pictographic}/u);
+  });
+
+  it('implements D-183, D-184, and D-185: Latest Payout Card Removal, Sample Payouts Purge, Concert Filter & 2-Tab Proof Modal', () => {
+    const financeContent = readFileSync(
+      join(rootDir, 'src/components/organizer-finance-view.tsx'),
+      'utf8',
+    );
+    // D-183: Fee banner removal
+    expect(financeContent).not.toContain('finance-fee-info-banner');
+
+    // D-184: Latest payout card removed from Tab 1 to avoid duplication with Tab 2
+    expect(financeContent).not.toContain('finance-latest-payout-card');
+
+    // D-185: Tab 2 purges hardcoded fake payouts (DEFAULT_SAMPLE_PAYOUTS) for data integrity
+    expect(financeContent).not.toContain('DEFAULT_SAMPLE_PAYOUTS');
+
+    // D-184: Concert filter dropdown in Tab 2 toolbar
+    expect(financeContent).toContain('payout-concert-select');
+    expect(financeContent).toContain('payoutEventFilter');
+
+    // D-185: 2-Tab Segmented Control in Payout Modal (Slip vs Details)
+    expect(financeContent).toContain('finance-modal-tabs');
+    expect(financeContent).toContain('tab-payout-slip');
+    expect(financeContent).toContain('tab-payout-details');
+    expect(financeContent).toContain('ภาพสลิปจากแอดมิน');
+    expect(financeContent).toContain('รายละเอียด');
+
+    // Official slip card in Modal
+    expect(financeContent).toContain('finance-official-slip-card');
+    expect(financeContent).toContain('TICKET TRANSFER SLIP');
+    expect(financeContent).not.toMatch(/\p{Extended_Pictographic}/u);
   });
 });

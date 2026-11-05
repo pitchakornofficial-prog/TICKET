@@ -116,4 +116,15 @@ describe('Organizer News Management & Live Preview Modal (D-81)', () => {
     expect(cssContent).toContain('.placeholder-logo-lockup');
     expect(cssContent).toContain('.placeholder-logo-text');
   });
+
+  it('seeds 3 published UBU club news articles for UBU Freshy Music Fest (D-187)', () => {
+    const compContent = readFileSync(
+      join(rootDir, 'src/components/organizer-news-view.tsx'),
+      'utf8',
+    );
+    expect(compContent).toContain('news-ubu-freshy-ticket-open');
+    expect(compContent).toContain('news-ubu-freshy-lineup');
+    expect(compContent).toContain('news-ubu-freshy-entry-guidelines');
+    expect(compContent).not.toMatch(/\p{Extended_Pictographic}/u);
+  });
 });

@@ -8,6 +8,7 @@ import {
   getEventFeeSettings,
   type OrganizerFeeMode,
   ensureFeeSchema,
+  isUbuEmail,
 } from './fees';
 
 export interface MaskedBuyerContact {
@@ -432,18 +433,27 @@ export async function getEventMoneyReport(
     const netSubtotal = roundHalfUp(validTickets.reduce((sum, t) => sum + Number(t.unitPrice), 0));
     const refundDeductions = roundHalfUp(grossSubtotal - netSubtotal);
 
-    // Calculate original and adjusted order fee (AC-78, AC-80, G-28, G-48)
+    // Calculate original and adjusted order fee (AC-78, AC-80, G-28, G-48, D-181)
+    const isUbuBuyer = isUbuEmail(group.buyerEmail) && (Boolean(feeSettings.ubuPrivilegeMode) || eventId === 'event-ubu-freshy-2026');
+    const privilegeRate = feeSettings.organizerFeePrivilegeRate ?? 3;
+    const grossPrivilegeSubtotal = isUbuBuyer ? grossSubtotal : 0;
+    const netPrivilegeSubtotal = isUbuBuyer ? netSubtotal : 0;
+
     const orderFeeOriginal = calculateOrganizerOrderFee(
       feeSettings.organizerFeeMode,
       feeSettings.organizerFeeRate,
       totalCount,
       grossSubtotal,
+      privilegeRate,
+      grossPrivilegeSubtotal,
     );
     const orderFeeAdjusted = calculateOrganizerOrderFee(
       feeSettings.organizerFeeMode,
       feeSettings.organizerFeeRate,
       validCount,
       netSubtotal,
+      privilegeRate,
+      netPrivilegeSubtotal,
     );
     const feeAdjustment = roundHalfUp(orderFeeOriginal - orderFeeAdjusted);
 

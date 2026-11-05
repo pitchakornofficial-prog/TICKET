@@ -28,6 +28,7 @@ export interface GuestOrderSummary {
   buyerPhone: string;
   status: 'reserved' | 'paid' | 'expired' | 'cancelled' | 'payment_exception';
   subtotal: number;
+  discountAmount: number;
   customerFee: number;
   total: number;
   customerFeeMode: string;
@@ -107,6 +108,7 @@ export async function requestOrderLookupOtp(
   requestId?: string;
   cooldownSeconds?: number;
   expiresInSeconds?: number;
+  devOtpCode?: string;
   error?: string;
   code?: 'NOT_FOUND' | 'INVALID_INPUT' | 'COOLDOWN' | 'RATE_LIMITED' | 'BLOCKED';
 }> {
@@ -157,6 +159,7 @@ export async function requestOrderLookupOtp(
     requestId: otpResult.requestId,
     cooldownSeconds: otpResult.cooldownSeconds,
     expiresInSeconds: otpResult.expiresInSeconds,
+    ...(otpResult.devOtpCode ? { devOtpCode: otpResult.devOtpCode } : {}),
   };
 }
 
@@ -248,7 +251,7 @@ export async function lookupGuestOrders(
 
   const ordersRes = await pool.query(
     `SELECT o.id, o."eventId", o."sessionId", o."buyerName", o."buyerEmail", o."buyerPhone",
-            o.status, o.subtotal, o."customerFee", o.total, o."customerFeeMode", o."customerFeeRate",
+            o.status, o.subtotal, o."discountAmount", o."customerFee", o.total, o."customerFeeMode", o."customerFeeRate",
             o."reservedAt", o."expiresAt", o."createdAt",
             e.title as "eventTitle", e.location, e."posterUrl",
             es."startTime" as "sessionStartTime", es."endTime" as "sessionEndTime"
@@ -303,6 +306,7 @@ export async function lookupGuestOrders(
       buyerPhone: row.buyerPhone,
       status: row.status,
       subtotal: Number(row.subtotal),
+      discountAmount: Number(row.discountAmount) || 0,
       customerFee: Number(row.customerFee),
       total: Number(row.total),
       customerFeeMode: row.customerFeeMode,
@@ -360,7 +364,7 @@ export async function getGuestOrderDetail(
 
   const orderRes = await pool.query(
     `SELECT o.id, o."eventId", o."sessionId", o."buyerName", o."buyerEmail", o."buyerPhone",
-            o.status, o.subtotal, o."customerFee", o.total, o."customerFeeMode", o."customerFeeRate",
+            o.status, o.subtotal, o."discountAmount", o."customerFee", o.total, o."customerFeeMode", o."customerFeeRate",
             o."reservedAt", o."expiresAt", o."createdAt",
             e.title as "eventTitle", e.location, e."posterUrl",
             es."startTime" as "sessionStartTime", es."endTime" as "sessionEndTime"
@@ -432,6 +436,7 @@ export async function getGuestOrderDetail(
       buyerPhone: row.buyerPhone,
       status: row.status,
       subtotal: Number(row.subtotal),
+      discountAmount: Number(row.discountAmount) || 0,
       customerFee: Number(row.customerFee),
       total: Number(row.total),
       customerFeeMode: row.customerFeeMode,

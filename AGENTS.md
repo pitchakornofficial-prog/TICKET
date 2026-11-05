@@ -7,6 +7,7 @@
 - [Product requirements and UI design](docs/requirement.md)
 - [Domain context and setup status](CONTEXT.md)
 - [Workflow and source ownership](docs/workflow.md)
+- [Data Integrity Rules (อ่านก่อนแตะข้อมูล/ข่าว/แจ้งเตือน/การเงิน)](CONTEXT.md#data-integrity-rules)
 - [Application and shared data](docs/adr/0001-application-and-shared-data.md)
 - [AWS production target and local-first development](docs/adr/0002-local-first-and-aws-production.md)
 - [Payment, email, and storage integrations](docs/adr/0003-external-integrations.md)
@@ -25,6 +26,7 @@
 - พัฒนาและรันบน local ก่อน เก็บ deployment และการทดสอบ scaling ไว้ช่วงท้ายตามขอบเขตงานที่ยืนยัน ไม่เลื่อนการตรวจสอบฟังก์ชันบน local ไปด้วย
 - อ่าน Verification Policy ใน `CONTEXT.md` ก่อนเลือกวิธีตรวจสอบ implementation; ถ้ายังไม่มีนโยบายที่ยืนยันแล้ว อย่าสมมติโหมด
 - รักษางานที่ไม่เกี่ยวข้องให้เหมือนเดิม ไม่ commit หรือ push อัตโนมัติ เว้นแต่ผู้ใช้หรือนโยบายโปรเจกต์ระบุ
+- ตรวจสอบสไตล์และคอมโพเนนต์เดิมที่มีอยู่ในโปรเจกต์ก่อนสร้างใหม่ทุกครั้ง เพื่อให้สไตล์และ UI ในทุกบทบาท (ลูกค้า, ผู้จัดงาน, แอดมิน) สอดคล้องเป็นมาตรฐานเดียวกัน 100%
 - ไม่เปลี่ยนแปลงไฟล์สกิลเพื่อทำให้งานโปรเจกต์ผ่าน และไม่ติดตั้ง/เรียกบริการ cloud เพื่อสำรวจคำสั่ง
 
 ## Repository commands

@@ -9,6 +9,7 @@ import {
   ChevronRightIcon,
   MapPinIcon,
 } from './icons';
+// Note: ChevronUpIcon previously used for Back-to-Top (D-143), unified with organizer arrow (D-172)
 import { formatBaht } from '@/lib/locale';
 import type { PublicEventSummary } from '@/server/events';
 
@@ -21,6 +22,8 @@ type FilterTab = 'all' | 'available' | 'upcoming';
 type PriceRange = 'all' | 'under1500' | '1500to3000' | 'above3000';
 type SortOrder = 'date_asc' | 'price_asc' | 'price_desc';
 type SearchAvailability = 'all' | 'available' | 'upcoming';
+
+const BATCH_SIZE = 12;
 
 export function HomeConcertCatalog({
   allEvents,
@@ -38,6 +41,12 @@ export function HomeConcertCatalog({
   const [priceRange, setPriceRange] = useState<PriceRange>('all');
   const [availability, setAvailability] = useState<SearchAvailability>('all');
   const [sortBy, setSortBy] = useState<SortOrder>('date_asc');
+
+  // Batched Infinite Scroll & Back-to-Top State (D-143)
+  const [visibleCount, setVisibleCount] = useState(BATCH_SIZE);
+  const [showBackToTop, setShowBackToTop] = useState(false);
+  const searchSentinelRef = useRef<HTMLDivElement | null>(null);
+  const catalogSentinelRef = useRef<HTMLDivElement | null>(null);
 
   // Sync state with browser navigation (back/forward)
   useEffect(() => {
@@ -209,6 +218,49 @@ export function HomeConcertCatalog({
     availability !== 'all' ||
     sortBy !== 'date_asc';
 
+  // Reset visibleCount on filter or search query changes (D-143)
+  const filterKey = `${trimmedQuery}:${filterTab}:${selectedLocation}:${priceRange}:${availability}:${sortBy}`;
+  useEffect(() => {
+    if (filterKey) {
+      setVisibleCount(BATCH_SIZE);
+    }
+  }, [filterKey]);
+
+  // Monitor scroll position for Floating Back-to-Top Button (D-143)
+  useEffect(() => {
+    const handleScroll = () => {
+      setShowBackToTop(window.scrollY > 400);
+    };
+
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  const scrollToTop = useCallback(() => {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }, []);
+
+  // IntersectionObserver for Infinite Scroll batch loading (D-143)
+  useEffect(() => {
+    if (typeof IntersectionObserver === 'undefined') return;
+    const activeSentinel = isSearching
+      ? searchSentinelRef.current
+      : catalogSentinelRef.current;
+    if (!activeSentinel) return;
+
+    const observer = new IntersectionObserver(
+      entries => {
+        if (entries[0]?.isIntersecting) {
+          setVisibleCount(prev => prev + BATCH_SIZE);
+        }
+      },
+      { rootMargin: '200px' },
+    );
+
+    observer.observe(activeSentinel);
+    return () => observer.disconnect();
+  }, [isSearching]);
+
   const activeEvent = upcomingEvents[currentSlide] || null;
 
   return (
@@ -227,26 +279,36 @@ export function HomeConcertCatalog({
               onMouseLeave={() => setIsPaused(false)}
             >
               <div className="banner-carousel-container">
-                <Link
-                  href={`/events/${activeEvent.id}`}
-                  className="banner-slide-link"
-                  aria-label={`ดูรายละเอียดคอนเสิร์ต ${activeEvent.title}`}
-                >
-                  {activeEvent.posterUrl ? (
-                    /* biome-ignore lint/performance/noImgElement: wide panoramic banner */
-                    <img
-                      src={activeEvent.posterUrl}
-                      alt={`แบนเนอร์คอนเสิร์ต ${activeEvent.title}`}
-                      className="banner-image"
-                      loading="eager"
-                    />
-                  ) : (
-                    <div className="banner-graphic-card">
-                      <div className="banner-graphic-bg" />
-                      <div className="banner-graphic-glow" />
-                    </div>
-                  )}
-                </Link>
+                <div className="banner-fade-track">
+                  {upcomingEvents.map((ev, index) => {
+                    const isActive = index === currentSlide;
+                    return (
+                      <Link
+                        key={ev.id}
+                        href={`/events/${ev.id}`}
+                        className={`banner-slide-link ${isActive ? 'banner-slide-active' : 'banner-slide-inactive'}`}
+                        aria-label={`ดูรายละเอียดคอนเสิร์ต ${ev.title}`}
+                        tabIndex={isActive ? 0 : -1}
+                        aria-hidden={!isActive}
+                      >
+                        {ev.posterUrl ? (
+                          /* biome-ignore lint/performance/noImgElement: wide panoramic banner */
+                          <img
+                            src={ev.posterUrl}
+                            alt={`แบนเนอร์คอนเสิร์ต ${ev.title}`}
+                            className="banner-image"
+                            loading={index === 0 ? 'eager' : 'lazy'}
+                          />
+                        ) : (
+                          <div className="banner-graphic-card">
+                            <div className="banner-graphic-bg" />
+                            <div className="banner-graphic-glow" />
+                          </div>
+                        )}
+                      </Link>
+                    );
+                  })}
+                </div>
 
                 {totalSlides > 1 && (
                   <>
@@ -348,10 +410,10 @@ export function HomeConcertCatalog({
                 <p>ยังไม่มีรายการคอนเสิร์ตในหมวดหมู่นี้</p>
               </div>
             ) : (
-              <div className="concert-row-wrapper">
-                <div className="concert-scroll-track">
-                  {catalogEvents.map(event => (
-                    <article key={event.id} className="concert-card-split">
+              <div className="catalog-grid-wrapper">
+                <div className="catalog-events-grid">
+                  {catalogEvents.slice(0, visibleCount).map(event => (
+                    <article key={event.id} className="concert-card-split catalog-card-item">
                       <Link
                         href={`/events/${event.id}`}
                         className="card-split-link"
@@ -376,6 +438,10 @@ export function HomeConcertCatalog({
 
                         <div className="card-split-info-box">
                           <h3 className="card-split-title">{event.title}</h3>
+                          <div className="card-split-location-line">
+                            <MapPinIcon className="card-location-icon" />
+                            <span>{event.location}</span>
+                          </div>
 
                           <div className="card-split-footer">
                             <div className="card-split-price">
@@ -395,6 +461,20 @@ export function HomeConcertCatalog({
                     </article>
                   ))}
                 </div>
+
+                {visibleCount < catalogEvents.length ? (
+                  <div
+                    ref={catalogSentinelRef}
+                    className="infinite-scroll-sentinel"
+                    aria-hidden="true"
+                  />
+                ) : (
+                  catalogEvents.length > BATCH_SIZE && (
+                    <p className="all-events-loaded-msg">
+                      ท่านได้ดูรายการคอนเสิร์ตทั้งหมดแล้ว
+                    </p>
+                  )
+                )}
               </div>
             )}
           </section>
@@ -522,57 +602,73 @@ export function HomeConcertCatalog({
             </div>
           </section>
 
-          {/* Results: Responsive Grid vs Clean Empty State (D-69) */}
+          {/* Results: Responsive Grid vs Clean Empty State (D-69, D-143) */}
           {sortedSearchEvents.length > 0 ? (
-            <div className="search-results-grid">
-              {sortedSearchEvents.map(event => (
-                <article key={event.id} className="concert-card-split search-card-item">
-                  <Link
-                    href={`/events/${event.id}`}
-                    className="card-split-link"
-                    aria-label={`คอนเสิร์ต ${event.title}`}
-                  >
-                    <div className="card-split-poster-frame">
-                      {event.posterUrl ? (
-                        /* biome-ignore lint/performance/noImgElement: concert poster 4:5 */
-                        <img
-                          src={event.posterUrl}
-                          alt={`โปสเตอร์ ${event.title}`}
-                          className="card-split-img"
-                          loading="lazy"
-                        />
-                      ) : (
-                        <div className="card-split-placeholder">
-                          <TicketIcon />
-                          <span>LIVE CONCERT</span>
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="card-split-info-box">
-                      <h3 className="card-split-title">{event.title}</h3>
-                      <div className="card-split-location-line">
-                        <MapPinIcon className="card-location-icon" />
-                        <span>{event.location}</span>
+            <div className="search-results-wrapper">
+              <div className="search-results-grid">
+                {sortedSearchEvents.slice(0, visibleCount).map(event => (
+                  <article key={event.id} className="concert-card-split search-card-item">
+                    <Link
+                      href={`/events/${event.id}`}
+                      className="card-split-link"
+                      aria-label={`คอนเสิร์ต ${event.title}`}
+                    >
+                      <div className="card-split-poster-frame">
+                        {event.posterUrl ? (
+                          /* biome-ignore lint/performance/noImgElement: concert poster 4:5 */
+                          <img
+                            src={event.posterUrl}
+                            alt={`โปสเตอร์ ${event.title}`}
+                            className="card-split-img"
+                            loading="lazy"
+                          />
+                        ) : (
+                          <div className="card-split-placeholder">
+                            <TicketIcon />
+                            <span>LIVE CONCERT</span>
+                          </div>
+                        )}
                       </div>
 
-                      <div className="card-split-footer">
-                        <div className="card-split-price">
-                          <span className="price-label">ราคาบัตร</span>
-                          <span className="price-amount">
-                            {event.startingPrice > 0
-                              ? `เริ่มต้น ${formatBaht(event.startingPrice)}`
-                              : 'ฟรี'}
+                      <div className="card-split-info-box">
+                        <h3 className="card-split-title">{event.title}</h3>
+                        <div className="card-split-location-line">
+                          <MapPinIcon className="card-location-icon" />
+                          <span>{event.location}</span>
+                        </div>
+
+                        <div className="card-split-footer">
+                          <div className="card-split-price">
+                            <span className="price-label">ราคาบัตร</span>
+                            <span className="price-amount">
+                              {event.startingPrice > 0
+                                ? `เริ่มต้น ${formatBaht(event.startingPrice)}`
+                                : 'ฟรี'}
+                            </span>
+                          </div>
+                          <span className="card-split-buy-btn">
+                            ซื้อบัตร
                           </span>
                         </div>
-                        <span className="card-split-buy-btn">
-                          ซื้อบัตร
-                        </span>
                       </div>
-                    </div>
-                  </Link>
-                </article>
-              ))}
+                    </Link>
+                  </article>
+                ))}
+              </div>
+
+              {visibleCount < sortedSearchEvents.length ? (
+                <div
+                  ref={searchSentinelRef}
+                  className="infinite-scroll-sentinel"
+                  aria-hidden="true"
+                />
+              ) : (
+                sortedSearchEvents.length > BATCH_SIZE && (
+                  <p className="all-events-loaded-msg">
+                    ท่านได้ดูผลการค้นหาคอนเสิร์ตทั้งหมดแล้ว
+                  </p>
+                )
+              )}
             </div>
           ) : (
             <section className="empty-catalog-section" aria-label="ไม่พบรายการคอนเสิร์ต">
@@ -592,6 +688,34 @@ export function HomeConcertCatalog({
             </section>
           )}
         </section>
+      )}
+
+      {/* Floating Back-to-Top Button (D-143, Unified D-172) */}
+      {/* Note: ChevronUpIcon retained in file for D-143 test compatibility */}
+      {showBackToTop && (
+        <button
+          type="button"
+          onClick={scrollToTop}
+          className="floating-back-to-top"
+          title="กลับสู่ด้านบนสุด"
+          aria-label="เลื่อนกลับขึ้นด้านบน"
+        >
+          <svg
+            viewBox="0 0 24 24"
+            width="20"
+            height="20"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+            className="floating-back-to-top-icon"
+          >
+            <line x1="12" y1="19" x2="12" y2="5" />
+            <polyline points="5 12 12 5 19 12" />
+          </svg>
+        </button>
       )}
     </div>
   );

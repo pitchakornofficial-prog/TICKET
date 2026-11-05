@@ -11,11 +11,13 @@ import {
   CheckCircleIcon,
   ClockIcon,
   DownloadIcon,
+  MailIcon,
   MapPinIcon,
   ReceiptIcon,
+  XIcon,
 } from './icons';
 import { TicketIcon } from './ticket-icon';
-import { downloadTicketAsPng, downloadAllTicketsAsPng } from './ticket-canvas-download';
+import { downloadTicketAsPng, downloadAllTicketsAsPng, generateTicketDataUrl } from './ticket-canvas-download';
 
 interface OrderSuccessViewProps {
   orderId: string;
@@ -24,11 +26,64 @@ interface OrderSuccessViewProps {
 export function OrderSuccessView({ orderId }: OrderSuccessViewProps) {
   const [reservation, setReservation] = useState<OrderReservationDetail | null>(null);
   const [tickets, setTickets] = useState<TicketDetail[]>([]);
+  const [ticketImageUrls, setTicketImageUrls] = useState<Record<string, string>>({});
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [isDownloadingAll, setIsDownloadingAll] = useState(false);
   const [activeTab, setActiveTab] = useState<'receipt' | 'tickets'>('receipt');
+  const [devEmailModalOpen, setDevEmailModalOpen] = useState(false);
+  const [capturedEmail, setCapturedEmail] = useState<{
+    to: string;
+    subject: string;
+    html?: string;
+    text?: string;
+  } | null>(null);
+  const [isLoadingDevEmail, setIsLoadingDevEmail] = useState(false);
+
+  const handleOpenDevEmailModal = async () => {
+    setDevEmailModalOpen(true);
+    setIsLoadingDevEmail(true);
+    try {
+      const res = await fetch('/api/dev/captured-emails');
+      if (res.ok) {
+        const data = await res.json();
+        const emails: Array<{ to: string; subject: string; html?: string; text?: string }> = data?.emails || [];
+        const matched =
+          emails.slice().reverse().find(m => m.to === reservation?.buyerEmail || m.subject?.includes(orderId)) ||
+          emails[emails.length - 1] ||
+          null;
+        setCapturedEmail(matched);
+      }
+    } catch {
+      // ignore
+    } finally {
+      setIsLoadingDevEmail(false);
+    }
+  };
+
+  useEffect(() => {
+    // Generate image URLs for tickets to ensure 100% parity between on-screen view and downloaded file (D-165, D-168)
+    let active = true;
+    if (tickets && tickets.length > 0) {
+      for (const tkt of tickets) {
+        if (!ticketImageUrls[tkt.id]) {
+          generateTicketDataUrl(tkt)
+            .then(url => {
+              if (active) {
+                setTicketImageUrls(prev => ({ ...prev, [tkt.id]: url }));
+              }
+            })
+            .catch(() => {
+              // fallback to html render
+            });
+        }
+      }
+    }
+    return () => {
+      active = false;
+    };
+  }, [tickets, ticketImageUrls]);
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -281,9 +336,20 @@ export function OrderSuccessView({ orderId }: OrderSuccessViewProps) {
                     </div>
                   </div>
 
+                  {reservation.discountAmount != null && reservation.discountAmount > 0 && (
+                    <div className="slip-row" style={{ color: '#16a34a' }}>
+                      <span className="slip-label">ส่วนลดสิทธิพิเศษ ม.อุบลฯ (15%):</span>
+                      <strong className="slip-value" style={{ color: '#16a34a' }}>
+                        -{formatBaht(reservation.discountAmount)}
+                      </strong>
+                    </div>
+                  )}
+
                   {reservation.customerFee > 0 && (
                     <div className="slip-row">
-                      <span className="slip-label">ค่าบริการระบบ (5%):</span>
+                      <span className="slip-label">
+                        ค่าบริการระบบ {reservation.customerFeeMode === 'percentage' ? `(${reservation.customerFeeRate}%)` : ''}:
+                      </span>
                       <strong className="slip-value">{formatBaht(reservation.customerFee)}</strong>
                     </div>
                   )}
@@ -318,6 +384,31 @@ export function OrderSuccessView({ orderId }: OrderSuccessViewProps) {
                   <p className="slip-email-note">
                     * ระบบได้ส่งอีเมลยืนยันคำสั่งซื้อไปยัง <strong>{reservation.buyerEmail}</strong> เรียบร้อยแล้ว (AC-19)
                   </p>
+
+                  <div className="dev-mail-preview-wrap" style={{ marginTop: '0.85rem' }}>
+                    <button
+                      id="dev-mail-preview-btn"
+                      type="button"
+                      onClick={handleOpenDevEmailModal}
+                      className="button button-secondary dev-mail-btn"
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '0.45rem',
+                        padding: '0.45rem 0.9rem',
+                        borderRadius: '8px',
+                        fontSize: '0.82rem',
+                        fontWeight: 600,
+                        cursor: 'pointer',
+                        border: '1px dashed #94a3b8',
+                        background: '#f8fafc',
+                        color: '#0f172a',
+                      }}
+                    >
+                      <MailIcon style={{ width: '15px', height: '15px' }} />
+                      <span>เปิดดูอีเมลตั๋วที่ระบบส่งออก (Dev Preview)</span>
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
@@ -364,88 +455,89 @@ export function OrderSuccessView({ orderId }: OrderSuccessViewProps) {
                       className="ticket-card digital-ticket-pass classic-ticket-stub"
                       data-ticket-id={tkt.id}
                       style={
-                        tkt.ticketTemplateUrl || tkt.eventPosterUrl
-                          ? {
-                              backgroundImage: `linear-gradient(rgba(15, 23, 42, 0.88), rgba(15, 23, 42, 0.94)), url(${tkt.ticketTemplateUrl || tkt.eventPosterUrl})`,
-                              backgroundSize: 'cover',
-                              backgroundPosition: 'center',
-                            }
+                        ticketImageUrls[tkt.id]
+                          ? { padding: 0, border: 'none', background: 'transparent', boxShadow: 'none' }
                           : undefined
                       }
                     >
-                      {/* Left: Main Ticket Stub Area */}
-                      <div className="stub-main-body">
-                        <div className="stub-header-row">
-                          <span className="stub-number-tag">
-                            ใบที่ {idx + 1} จาก {tickets.length}
-                          </span>
-                          <span className="ticket-pass-badge">พร้อมใช้งาน</span>
-                        </div>
+                      {ticketImageUrls[tkt.id] ? (
+                        // biome-ignore lint/performance/noImgElement: Direct rendered ticket image (D-165, D-168)
+                        <img
+                          src={ticketImageUrls[tkt.id]}
+                          alt={`บัตรเข้างาน ${tkt.ticketCode} - ${tkt.eventTitle}`}
+                          className="classic-ticket-img"
+                          style={{
+                            width: '100%',
+                            height: 'auto',
+                            display: 'block',
+                            borderRadius: 0,
+                            boxShadow: '0 4px 18px rgba(15, 23, 42, 0.08)',
+                          }}
+                        />
+                      ) : (
+                        <>
+                          {/* Left: Main Ticket Stub Area */}
+                          <div className="stub-main-body">
+                            <h3 className="stub-event-title">{tkt.eventTitle}</h3>
+                            <div className="stub-zone-badge">
+                              {tkt.ticketTypeName}
+                            </div>
 
-                        <h3 className="stub-event-title">{tkt.eventTitle}</h3>
-                        <div className="stub-zone-badge">
-                          {tkt.ticketTypeName} · {formatBaht(tkt.ticketPrice)}
-                        </div>
+                            <div className="stub-meta-grid">
+                              <div className="stub-meta-item">
+                                <span className="stub-meta-label">วันและเวลาแสดง (DATE & TIME)</span>
+                                <strong className="stub-meta-value">
+                                  {formatDate(new Date(tkt.sessionStartTime))} เวลา {formatTime(new Date(tkt.sessionStartTime))}
+                                  {tkt.sessionEndTime ? ` - ${formatTime(new Date(tkt.sessionEndTime))}` : ''}
+                                </strong>
+                              </div>
+                              <div className="stub-meta-item">
+                                <span className="stub-meta-label">สถานที่จัดงาน (VENUE)</span>
+                                <strong className="stub-meta-value">{tkt.location}</strong>
+                              </div>
+                              <div className="stub-meta-item">
+                                <span className="stub-meta-label">ผู้สั่งซื้อ (BUYER)</span>
+                                <strong className="stub-meta-value">{tkt.buyerName}</strong>
+                              </div>
+                              <div className="stub-meta-item">
+                                <span className="stub-meta-label">รหัสบัตร (TICKET CODE)</span>
+                                <strong className="stub-meta-value stub-monospace">{tkt.ticketCode}</strong>
+                              </div>
+                              <div className="stub-meta-item">
+                                <span className="stub-meta-label">หมายเลขคำสั่งซื้อ (ORDER ID)</span>
+                                <strong className="stub-meta-value stub-monospace">{tkt.orderId}</strong>
+                              </div>
+                            </div>
 
-                        <div className="stub-meta-grid">
-                          <div className="stub-meta-item">
-                            <span className="stub-meta-label">วันและเวลาแสดง</span>
-                            <strong className="stub-meta-value">
-                              {new Date(tkt.sessionStartTime).toLocaleString('th-TH', {
-                                dateStyle: 'medium',
-                                timeStyle: 'short',
-                              })}
-                            </strong>
+                            <div className="stub-footer-note">
+                              * กรุณาแสดง QR Code ต่อเจ้าหน้าที่เพื่อสแกนเข้างาน · บัตรนี้สามารถสแกนได้ 1 ครั้ง
+                            </div>
                           </div>
-                          <div className="stub-meta-item">
-                            <span className="stub-meta-label">สถานที่จัดงาน</span>
-                            <strong className="stub-meta-value">{tkt.location}</strong>
+
+                          {/* Divider: Straight Dashed Line (D-163, D-167) */}
+                          <div className="stub-divider-straight stub-notch-divider" aria-hidden="true" />
+
+                          {/* Right: Scan Stub Area */}
+                          <div className="stub-scan-side">
+                            <div className="stub-qr-frame">
+                              {/* biome-ignore lint/performance/noImgElement: Data URL SVG QR representation */}
+                              <img
+                                id={`ticket-qr-${idx}`}
+                                src={tkt.qrCodeUrl}
+                                alt={`QR Code ${tkt.ticketCode}`}
+                                width={160}
+                                height={160}
+                                style={{ display: 'block', margin: '0 auto' }}
+                              />
+                            </div>
+
+                            <div className="stub-code-label">รหัสบัตรสำหรับเข้างาน</div>
+                            <div className="stub-code-value">
+                              <strong id={`ticket-code-${idx}`}>{tkt.ticketCode}</strong>
+                            </div>
                           </div>
-                          <div className="stub-meta-item">
-                            <span className="stub-meta-label">ผู้สั่งซื้อ (Buyer)</span>
-                            <strong className="stub-meta-value">{tkt.buyerName}</strong>
-                          </div>
-                          <div className="stub-meta-item">
-                            <span className="stub-meta-label">หมายเลขคำสั่งซื้อ</span>
-                            <strong className="stub-meta-value stub-monospace">{tkt.orderId}</strong>
-                          </div>
-                        </div>
-
-                        <div className="stub-footer-note">
-                          * กรุณาแสดง QR Code ต่อเจ้าหน้าที่เพื่อสแกนเข้างาน · บัตรนี้สามารถสแกนได้ 1 ครั้ง
-                        </div>
-                      </div>
-
-                      {/* Divider: Notch Cutouts & Dashed Line */}
-                      <div className="stub-notch-divider" aria-hidden="true">
-                        <div className="stub-notch-top" />
-                        <div className="stub-dash-vertical" />
-                        <div className="stub-notch-bottom" />
-                      </div>
-
-                      {/* Right: Scan Stub Area */}
-                      <div className="stub-scan-side">
-                        <div className="stub-qr-frame">
-                          {/* biome-ignore lint/performance/noImgElement: Data URL SVG QR representation */}
-                          <img
-                            id={`ticket-qr-${idx}`}
-                            src={tkt.qrCodeUrl}
-                            alt={`QR Code ${tkt.ticketCode}`}
-                            width={160}
-                            height={160}
-                            style={{ display: 'block', margin: '0 auto' }}
-                          />
-                        </div>
-
-                        <div className="stub-code-label">รหัสบัตรสำหรับเข้างาน</div>
-                        <div className="stub-code-value">
-                          <strong id={`ticket-code-${idx}`}>{tkt.ticketCode}</strong>
-                        </div>
-
-                        <div className="stub-scan-instruction">
-                          <span>SCAN FOR ENTRY</span>
-                        </div>
-                      </div>
+                        </>
+                      )}
                     </div>
 
                     {/* Individual Ticket Download Button (D-52) */}
@@ -489,6 +581,147 @@ export function OrderSuccessView({ orderId }: OrderSuccessViewProps) {
           </div>
         </div>
       </div>
+
+      {/* Dev Mailbox Modal Dialog */}
+      {devEmailModalOpen && (
+        <div
+          className="otp-modal-overlay"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="dev-email-modal-title"
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(15, 23, 42, 0.65)',
+            backdropFilter: 'blur(4px)',
+            zIndex: 9999,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '1.25rem',
+          }}
+        >
+          <div
+            className="dev-email-modal-card"
+            style={{
+              background: '#ffffff',
+              borderRadius: '16px',
+              maxWidth: '680px',
+              width: '100%',
+              maxHeight: '90vh',
+              display: 'flex',
+              flexDirection: 'column',
+              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
+              overflow: 'hidden',
+            }}
+          >
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                padding: '1rem 1.25rem',
+                borderBottom: '1px solid #e2e8f0',
+                background: '#f8fafc',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <MailIcon style={{ width: '20px', height: '20px', color: '#0f172a' }} />
+                <h3 id="dev-email-modal-title" style={{ margin: 0, fontSize: '1rem', fontWeight: 700, color: '#0f172a' }}>
+                  จำลองการส่งอีเมลตั๋ว (Dev Mail Preview)
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setDevEmailModalOpen(false)}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  cursor: 'pointer',
+                  padding: '0.25rem',
+                  color: '#64748b',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <XIcon style={{ width: '20px', height: '20px' }} />
+              </button>
+            </div>
+
+            <div style={{ padding: '1rem 1.25rem', overflowY: 'auto', flex: 1 }}>
+              {isLoadingDevEmail ? (
+                <div style={{ textAlign: 'center', padding: '2rem', color: '#64748b' }}>
+                  กำลังโหลดข้อมูลอีเมล...
+                </div>
+              ) : !capturedEmail ? (
+                <div style={{ textAlign: 'center', padding: '2rem', color: '#64748b' }}>
+                  ยังไม่พบข้อมูลอีเมลในระบบจำลอง (Captured Emails)
+                </div>
+              ) : (
+                <div>
+                  <div
+                    style={{
+                      background: '#f1f5f9',
+                      padding: '0.75rem 1rem',
+                      borderRadius: '8px',
+                      fontSize: '0.85rem',
+                      marginBottom: '1rem',
+                      lineHeight: 1.6,
+                    }}
+                  >
+                    <div>
+                      <strong>ผู้รับ (To):</strong> {capturedEmail.to}
+                    </div>
+                    <div>
+                      <strong>หัวข้อ (Subject):</strong> {capturedEmail.subject}
+                    </div>
+                  </div>
+
+                  <div
+                    style={{
+                      border: '1px solid #e2e8f0',
+                      borderRadius: '8px',
+                      padding: '1rem',
+                      background: '#ffffff',
+                    }}
+                  >
+                    {capturedEmail.html ? (
+                      <div
+                        // biome-ignore lint/security/noDangerouslySetInnerHtml: Dev email preview
+                        dangerouslySetInnerHTML={{ __html: capturedEmail.html }}
+                      />
+                    ) : (
+                      <pre style={{ whiteSpace: 'pre-wrap', margin: 0, fontFamily: 'inherit', fontSize: '0.9rem' }}>
+                        {capturedEmail.text}
+                      </pre>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div
+              style={{
+                padding: '0.75rem 1.25rem',
+                borderTop: '1px solid #e2e8f0',
+                background: '#f8fafc',
+                display: 'flex',
+                justifyContent: 'flex-end',
+              }}
+            >
+              <button
+                type="button"
+                onClick={() => setDevEmailModalOpen(false)}
+                className="button button-primary"
+                style={{ padding: '0.45rem 1.2rem', fontSize: '0.88rem' }}
+              >
+                ปิดหน้าต่าง
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

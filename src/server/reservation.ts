@@ -33,12 +33,17 @@ export interface OrderItemDetail {
   subtotal: number;
 }
 
+export function isUbuEmail(emailAddress: string): boolean {
+  return /@(?:[a-zA-Z0-9-]+\.)*ubu\.ac\.th$/i.test((emailAddress || '').trim());
+}
+
 export interface OrderReservationDetail {
   id: string;
   eventId: string;
   sessionId: string;
   eventTitle?: string;
   eventLocation?: string;
+  eventPosterUrl?: string;
   sessionStartTime?: string;
   sessionAdmissionStartTime?: string;
   buyerEmail: string;
@@ -47,6 +52,7 @@ export interface OrderReservationDetail {
   status: 'reserved' | 'paid' | 'expired' | 'cancelled' | 'payment_exception';
   items: OrderItemDetail[];
   subtotal: number;
+  discountAmount: number;
   customerFeeMode: CustomerFeeMode;
   customerFeeRate: number;
   customerFee: number;
@@ -67,6 +73,7 @@ export async function ensureReservationSchema(pool: Pool): Promise<void> {
       "buyerPhone" TEXT NOT NULL,
       status TEXT NOT NULL DEFAULT 'reserved',
       subtotal NUMERIC(12, 2) NOT NULL,
+      "discountAmount" NUMERIC(12, 2) NOT NULL DEFAULT 0,
       "customerFee" NUMERIC(12, 2) NOT NULL,
       total NUMERIC(12, 2) NOT NULL,
       "customerFeeMode" TEXT NOT NULL,
@@ -76,6 +83,7 @@ export async function ensureReservationSchema(pool: Pool): Promise<void> {
       "createdAt" TIMESTAMPTZ NOT NULL DEFAULT now(),
       "updatedAt" TIMESTAMPTZ NOT NULL DEFAULT now()
     );
+    ALTER TABLE orders ADD COLUMN IF NOT EXISTS "discountAmount" NUMERIC(12, 2) NOT NULL DEFAULT 0;
     CREATE INDEX IF NOT EXISTS idx_orders_event_session ON orders("eventId", "sessionId");
     CREATE INDEX IF NOT EXISTS idx_orders_buyer ON orders("buyerEmail");
     CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status);
@@ -303,27 +311,27 @@ export async function createReservation(
 
     // 5. Lock organizer fee atomically on first reservation (G-49, AC-111)
     const feeRes = await client.query(
-      `SELECT "organizerFeeMode", "organizerFeeRate", "customerFeeMode", "customerFeeRate", "organizerFeeLocked"
+      `SELECT "organizerFeeMode", "organizerFeeRate", "organizerFeePrivilegeRate", "ubuPrivilegeMode", "customerFeeMode", "customerFeeRate", "organizerFeeLocked"
        FROM event_fee_settings
        WHERE "eventId" = $1
        FOR UPDATE`,
       [input.eventId],
     );
 
-    let customerFeeMode: CustomerFeeMode = 'per_ticket';
-    let customerFeeRate = 0;
+    let customerFeeMode: CustomerFeeMode = 'percentage';
+    let customerFeeRate = 5;
 
     if (feeRes.rowCount === 0) {
       // Initialize default fee settings with organizerFeeLocked = true
       await client.query(
-        `INSERT INTO event_fee_settings ("eventId", "organizerFeeLocked", "updatedAt")
-         VALUES ($1, TRUE, now())`,
+        `INSERT INTO event_fee_settings ("eventId", "organizerFeeLocked", "customerFeeMode", "customerFeeRate", "updatedAt")
+         VALUES ($1, TRUE, 'percentage', 5, now())`,
         [input.eventId],
       );
     } else {
       const row = feeRes.rows[0];
-      customerFeeMode = (row.customerFeeMode || 'per_ticket') as CustomerFeeMode;
-      customerFeeRate = Number(row.customerFeeRate) || 0;
+      customerFeeMode = (row.customerFeeMode || 'percentage') as CustomerFeeMode;
+      customerFeeRate = row.customerFeeRate != null ? Number(row.customerFeeRate) : 5;
 
       if (!row.organizerFeeLocked) {
         await client.query(
@@ -335,25 +343,62 @@ export async function createReservation(
       }
     }
 
-    // 6. Calculate exact customer fee and total (AC-69)
-    const { fee: customerFee, total: orderTotal } = calculateCustomerFee(
+    // 6. Calculate UBU Privilege Discount (D-37, D-134, D-181)
+    const hasUbuPrivilege = isUbuEmail(verifiedSession.email);
+    let discountAmount = 0;
+    if (hasUbuPrivilege) {
+      const isUbuPrivilegeMode = Boolean(feeRes.rows[0]?.ubuPrivilegeMode);
+      const isUbuFreshyEvent = isUbuPrivilegeMode || input.eventId === 'event-ubu-freshy-2026';
+      if (isUbuFreshyEvent) {
+        // D-181: Reduce price to 99 THB for ALL tickets (51 THB discount per 150 THB ticket)
+        for (const item of orderItemsToInsert) {
+          if (item.unitPrice === 150) {
+            discountAmount = roundHalfUp(discountAmount + (150 - 99) * item.quantity);
+          } else {
+            discountAmount = roundHalfUp(discountAmount + Math.round(item.unitPrice * 0.15) * item.quantity);
+          }
+        }
+      } else {
+        // D-37: 15% discount on up to 2 tickets (applied to highest priced tickets first)
+        const ticketPrices: number[] = [];
+        for (const item of orderItemsToInsert) {
+          for (let i = 0; i < item.quantity; i++) {
+            ticketPrices.push(item.unitPrice);
+          }
+        }
+        ticketPrices.sort((a, b) => b - a);
+        const maxDiscountTickets = Math.min(ticketPrices.length, 2);
+        for (let i = 0; i < maxDiscountTickets; i++) {
+          discountAmount = roundHalfUp(discountAmount + Math.round(ticketPrices[i] * 0.15));
+        }
+      }
+    }
+
+    const discountedTicketSubtotal = Math.max(0, roundHalfUp(orderSubtotal - discountAmount));
+
+    // 7. Calculate exact customer fee and total (AC-69, D-134, D-135: 5% with Math.ceil whole Baht)
+    let { fee: customerFee, total: orderTotal } = calculateCustomerFee(
       customerFeeMode,
       customerFeeRate,
       totalTickets,
-      orderSubtotal,
+      discountedTicketSubtotal,
     );
+    if (customerFeeMode === 'percentage') {
+      customerFee = Math.ceil(customerFee);
+      orderTotal = roundHalfUp(discountedTicketSubtotal + customerFee);
+    }
 
-    // 7. Create Order with 15-minute deadline (AC-13)
+    // 8. Create Order with 15-minute deadline (AC-13)
     const orderId = `ORD-${Date.now().toString(36).toUpperCase()}-${randomUUID().slice(0, 6).toUpperCase()}`;
     const expiresAt = new Date(now.getTime() + RESERVATION_HOLD_SECONDS * 1000);
 
     await client.query(
       `INSERT INTO orders (
          id, "eventId", "sessionId", "buyerEmail", "buyerName", "buyerPhone",
-         status, subtotal, "customerFee", total, "customerFeeMode", "customerFeeRate",
+         status, subtotal, "discountAmount", "customerFee", total, "customerFeeMode", "customerFeeRate",
          "reservedAt", "expiresAt", "createdAt", "updatedAt"
        )
-       VALUES ($1, $2, $3, $4, $5, $6, 'reserved', $7, $8, $9, $10, $11, $12, $13, $14, $14)`,
+       VALUES ($1, $2, $3, $4, $5, $6, 'reserved', $7, $8, $9, $10, $11, $12, $13, $14, $15, $15)`,
       [
         orderId,
         input.eventId,
@@ -362,6 +407,7 @@ export async function createReservation(
         verifiedSession.name,
         verifiedSession.phone,
         orderSubtotal,
+        discountAmount,
         customerFee,
         orderTotal,
         customerFeeMode,
@@ -372,7 +418,7 @@ export async function createReservation(
       ],
     );
 
-    // 8. Insert Order Items
+    // 9. Insert Order Items
     for (const item of orderItemsToInsert) {
       await client.query(
         `INSERT INTO order_items (id, "orderId", "ticketTypeId", quantity, "unitPrice", subtotal)
@@ -391,6 +437,7 @@ export async function createReservation(
       status: 'reserved',
       items: orderItemsToInsert,
       subtotal: orderSubtotal,
+      discountAmount,
       customerFeeMode,
       customerFeeRate,
       customerFee,
@@ -463,9 +510,9 @@ export async function getOrderReservation(
 
   const orderRes = await pool.query(
     `SELECT o.id, o."eventId", o."sessionId", o."buyerEmail", o."buyerName", o."buyerPhone",
-            o.status, o.subtotal, o."customerFee", o.total, o."customerFeeMode", o."customerFeeRate",
+            o.status, o.subtotal, o."discountAmount", o."customerFee", o.total, o."customerFeeMode", o."customerFeeRate",
             o."reservedAt", o."expiresAt",
-            e.title as "eventTitle", e.location as "eventLocation",
+            e.title as "eventTitle", e.location as "eventLocation", e."posterUrl" as "eventPosterUrl",
             s."startTime" as "sessionStartTime", s."admissionStartTime" as "sessionAdmissionStartTime"
      FROM orders o
      JOIN events e ON o."eventId" = e.id
@@ -498,6 +545,7 @@ export async function getOrderReservation(
     sessionId: o.sessionId,
     eventTitle: o.eventTitle || undefined,
     eventLocation: o.eventLocation || undefined,
+    eventPosterUrl: o.eventPosterUrl || undefined,
     sessionStartTime: o.sessionStartTime ? new Date(o.sessionStartTime).toISOString() : undefined,
     sessionAdmissionStartTime: o.sessionAdmissionStartTime ? new Date(o.sessionAdmissionStartTime).toISOString() : undefined,
     buyerEmail: o.buyerEmail,
@@ -513,6 +561,7 @@ export async function getOrderReservation(
       subtotal: Number(r.subtotal),
     })),
     subtotal: Number(o.subtotal),
+    discountAmount: Number(o.discountAmount) || 0,
     customerFeeMode: o.customerFeeMode as CustomerFeeMode,
     customerFeeRate: Number(o.customerFeeRate),
     customerFee: Number(o.customerFee),

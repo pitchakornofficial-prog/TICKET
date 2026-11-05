@@ -165,8 +165,8 @@ test.describe('Multi-step purchase journey: Details -> Queue -> Checkout -> Paym
     ).toContainText('3');
 
     // Verify 15-minute countdown and price breakdown
-    await expect(page.getByText('กันบัตรสำเร็จ (Reserved)')).toBeVisible();
-    await expect(page.locator('#reservation-countdown')).toBeVisible();
+    await expect(page.locator('.checkout-compact-status-bar')).toBeVisible();
+    await expect(page.locator('#payment-sticky-countdown')).toBeVisible();
     await expect(page.locator('#payment-sticky-countdown')).toBeVisible();
     await expect(page.locator('.payment-sticky-bottom-bar')).toBeVisible();
     await expect(page.locator('#quote-subtotal')).toContainText('5,000');

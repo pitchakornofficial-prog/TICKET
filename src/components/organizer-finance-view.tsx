@@ -15,6 +15,8 @@ import {
   XIcon,
   EyeIcon,
   ChevronDownIcon,
+  InfoIcon,
+  DownloadIcon,
 } from '@/components/icons';
 import { TicketIcon } from '@/components/ticket-icon';
 import { Button, Badge } from '@/components/ui';
@@ -27,6 +29,31 @@ export interface OrganizerEventItem {
 }
 
 export type FinanceTab = 'breakdown' | 'payouts';
+
+export function FinanceTooltip({ text }: { text: string }) {
+  const [isOpen, setIsOpen] = useState(false);
+
+  return (
+    <span
+      className={`finance-tooltip-wrap ${isOpen ? 'is-open' : ''}`}
+      >
+      <button
+        type="button"
+        className="finance-tooltip-btn"
+        onClick={() => setIsOpen((prev) => !prev)}
+        onFocus={() => setIsOpen(true)}
+        onBlur={() => setIsOpen(false)}
+        aria-label={`คำอธิบาย: ${text}`}
+        title={text}
+      >
+        <InfoIcon width={13} height={13} />
+      </button>
+      <span className="finance-tooltip-popover" role="tooltip">
+        {text}
+      </span>
+    </span>
+  );
+}
 
 export function OrganizerFinanceView() {
   const [events, setEvents] = useState<OrganizerEventItem[]>([]);
@@ -55,9 +82,16 @@ export function OrganizerFinanceView() {
   const [selectedPayout, setSelectedPayout] = useState<
     (PayoutHistoryItem & { eventTitle?: string }) | null
   >(null);
+  const [payoutModalTab, setPayoutModalTab] = useState<'slip' | 'details'>('slip');
 
   // Scroll to top button
   const [showScrollTop, setShowScrollTop] = useState(false);
+
+  // Payouts search, status, and concert filter state (D-180, D-184)
+  const [payoutSearchQuery, setPayoutSearchQuery] = useState('');
+  const [payoutStatusFilter, setPayoutStatusFilter] = useState<'all' | 'completed' | 'failed'>('all');
+  const [payoutEventFilter, setPayoutEventFilter] = useState<string>('all');
+
 
   useEffect(() => {
     function handleScroll() {
@@ -79,6 +113,64 @@ export function OrganizerFinanceView() {
 
   const handleScrollToTop = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  // Export CSV Handler (D-180)
+  const handleExportCsv = () => {
+    const reportToExport = currentReport;
+    const eventName = selectedEvent ? selectedEvent.title : 'ทุกคอนเสิร์ต';
+    const lines: string[] = [];
+
+    lines.push(`"รายงานสรุปการเงิน TICKET - ${eventName}"`);
+    lines.push(`"วันที่ออกรายงาน: ${formatDate(new Date())}"`);
+    lines.push('');
+
+    lines.push('"หัวข้อสรุป","ยอดเงิน (บาท)","หมายเหตุ"');
+    if (reportToExport) {
+      lines.push(`"ยอดขายบัตรทั้งหมด (Gross)","${reportToExport.grossSales}","ออกบัตรแล้ว ${reportToExport.totalTicketsIssuedCount} ใบ"`);
+      lines.push(`"ยอดคืนเงินที่อนุมัติ (Refunds)","-${reportToExport.approvedRefundDeductions}","คืนเงินแล้ว ${reportToExport.totalTicketsRefundedCount} ใบ"`);
+      lines.push(`"ยอดขายสุทธิ (Net Sales)","${reportToExport.netSales}","บัตรที่ใช้งานได้ ${reportToExport.totalTicketsValidCount} ใบ"`);
+      lines.push(`"ค่าบริการระบบ (Platform Fee)","-${reportToExport.organizerFee}","โหมด: ${reportToExport.organizerFeeMode}"`);
+      lines.push(`"เงินสำรองที่กันไว้ (Reserve)","${reportToExport.actualHeldReserve}","อัตรา ${reportToExport.reservePercentage}%"`);
+      lines.push(`"ยอดเงินสุทธิพร้อมรับรอบถัดไป (Payable)","${reportToExport.payableAmount}","โอนรอบวันจันทร์"`);
+      lines.push(`"ยอดเงินที่โอนสำเร็จแล้ว (Total Paid Out)","${reportToExport.totalPaidOut}","เข้าบัญชีหลัก"`);
+    } else {
+      lines.push(`"ยอดขายบัตรทั้งหมด (Gross)","${aggregatedKPIs.grossSales}","รวมทุกคอนเสิร์ต"`);
+      lines.push(`"ค่าบริการและคืนเงิน","-${aggregatedKPIs.feesAndRefunds}","รวมทุกคอนเสิร์ต"`);
+      lines.push(`"ยอดเงินสุทธิพร้อมรับรอบถัดไป","${aggregatedKPIs.payableAmount}","รวมทุกคอนเสิร์ต"`);
+      lines.push(`"ยอดเงินที่โอนสำเร็จแล้ว","${aggregatedKPIs.totalPaidOut}","รวมทุกคอนเสิร์ต"`);
+    }
+
+    if (reportToExport?.sessions && reportToExport.sessions.length > 0) {
+      lines.push('');
+      lines.push('"รายละเอียดรอบการแสดง"');
+      lines.push('"รอบการแสดง","สถานะ","บัตรออกแล้ว (ใบ)","คืนเงินแล้ว (ใบ)","บัตรที่ใช้ได้ (ใบ)","ยอดขายรวม Gross (บาท)","ยอดขายสุทธิ Net (บาท)"');
+      for (const sess of reportToExport.sessions) {
+        const timeStr = `${formatDate(new Date(sess.sessionStartTime))} ${formatTime(new Date(sess.sessionStartTime))} - ${formatTime(new Date(sess.sessionEndTime))}`;
+        lines.push(`"${timeStr}","${sess.sessionStatus}","${sess.issuedTicketsCount}","${sess.refundedTicketsCount}","${sess.validTicketsCount}","${sess.grossSales}","${sess.netSales}"`);
+      }
+    }
+
+    if (allPayouts.length > 0) {
+      lines.push('');
+      lines.push('"ประวัติการโอนเงิน (Payouts)"');
+      lines.push('"วันที่โอน","คอนเสิร์ต","ยอดเงินโอนสุทธิ (บาท)","สถานะ","ผู้บันทึก","เลขอ้างอิง"');
+      for (const p of allPayouts) {
+        const dateStr = p.paidAt ? formatDate(new Date(p.paidAt)) : formatDate(new Date(p.createdAt));
+        lines.push(`"${dateStr}","${p.eventTitle || 'คอนเสิร์ต'}","${p.amount}","${p.status === 'completed' ? 'โอนสำเร็จแล้ว' : 'โอนไม่สำเร็จ'}","${p.recordedByName || 'Owner'}","${p.transferProofKey || '-'}"`);
+      }
+    }
+
+    const csvContent = `\uFEFF${lines.join('\r\n')}`;
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `ticket-finance-${selectedEventId || 'all'}-${Date.now()}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   };
 
   // 1. Load organizer's events list
@@ -222,6 +314,27 @@ export function OrganizerFinanceView() {
     return combined.sort((a, b) => new Date(b.paidAt || b.createdAt).getTime() - new Date(a.paidAt || a.createdAt).getTime());
   }, [allReports]);
 
+  // Filtered payouts based on search & status (D-180)
+  const filteredPayouts = useMemo(() => {
+    let result = allPayouts;
+    if (payoutStatusFilter !== 'all') {
+      result = result.filter((p) => p.status === payoutStatusFilter);
+    }
+    if (payoutEventFilter !== 'all') {
+      result = result.filter((p) => p.eventId === payoutEventFilter || p.eventTitle === payoutEventFilter);
+    }
+    const q = payoutSearchQuery.trim().toLowerCase();
+    if (q) {
+      result = result.filter((p) => {
+        const matchTitle = (p.eventTitle || '').toLowerCase().includes(q);
+        const matchRef = (p.transferProofKey || '').toLowerCase().includes(q);
+        const matchNote = (p.transferNote || '').toLowerCase().includes(q);
+        return matchTitle || matchRef || matchNote;
+      });
+    }
+    return result;
+  }, [allPayouts, payoutStatusFilter, payoutEventFilter, payoutSearchQuery]);
+
   // Filtered events for selector
   const filteredEventsForSelector = useMemo(() => {
     if (!concertSearchQuery.trim()) return events;
@@ -257,7 +370,7 @@ export function OrganizerFinanceView() {
         {/* KPI 1: Total Gross Sales */}
         <div className="finance-kpi-card" data-testid="finance-kpi-gross">
           <div className="finance-kpi-header">
-            <span className="finance-kpi-label">ยอดขายบัตรทั้งหมด</span>
+            <span className="finance-kpi-label">ยอดขายบัตรทั้งหมด<FinanceTooltip text="ยอดรวมจากคำสั่งซื้อบัตรคอนเสิร์ตทั้งหมดที่ชำระเงินสำเร็จ (ก่อนหักค่าธรรมเนียมและเงินคืน)" /></span>
             <div className="finance-kpi-icon-wrap" aria-hidden="true">
               <TicketIcon style={{ width: '18px', height: '18px' }} />
             </div>
@@ -271,7 +384,7 @@ export function OrganizerFinanceView() {
         {/* KPI 2: Fees & Refunds */}
         <div className="finance-kpi-card" data-testid="finance-kpi-fees">
           <div className="finance-kpi-header">
-            <span className="finance-kpi-label">ค่าบริการและคืนเงิน</span>
+            <span className="finance-kpi-label">ค่าบริการและคืนเงิน<FinanceTooltip text="ยอดรวมค่าบริการระบบแพลตฟอร์ม (3%/5% หรือเหมาจ่าย) และยอดเงินคืนที่อนุมัติให้ผู้ซื้อ" /></span>
             <div className="finance-kpi-icon-wrap" aria-hidden="true">
               <BanknotesIcon width={18} height={18} />
             </div>
@@ -285,7 +398,7 @@ export function OrganizerFinanceView() {
         {/* KPI 3: Net Ready for Payout (Highlight) */}
         <div className="finance-kpi-card highlight-payable" data-testid="finance-kpi-payable">
           <div className="finance-kpi-header">
-            <span className="finance-kpi-label">ยอดเงินสุทธิพร้อมรับ / รอบถัดไป</span>
+            <span className="finance-kpi-label">ยอดเงินสุทธิพร้อมรับ / รอบถัดไป<FinanceTooltip text="ยอดเงินสุทธิที่คำนวณแล้วว่าถึงเกณฑ์พร้อมโอนเข้าบัญชีผู้จัดงานในรอบวันจันทร์ถัดไป (ยอดขายสุทธิ - ค่าบริการ - เงินสำรอง - ยอดที่เคยโอนไปแล้ว)" /></span>
             <div className="finance-kpi-icon-wrap" aria-hidden="true">
               <CheckCircleIcon width={18} height={18} />
             </div>
@@ -299,7 +412,7 @@ export function OrganizerFinanceView() {
         {/* KPI 4: Total Paid Out */}
         <div className="finance-kpi-card" data-testid="finance-kpi-paidout">
           <div className="finance-kpi-header">
-            <span className="finance-kpi-label">ยอดเงินโอนแล้วทั้งหมด</span>
+            <span className="finance-kpi-label">ยอดเงินโอนแล้วทั้งหมด<FinanceTooltip text="ยอดเงินสะสมทั้งหมดที่ระบบได้ดำเนินการโอนเข้าบัญชีหลักของผู้จัดงานสำเร็จเรียบร้อยแล้ว" /></span>
             <div className="finance-kpi-icon-wrap" aria-hidden="true">
               <ShieldCheckIcon width={18} height={18} />
             </div>
@@ -335,6 +448,18 @@ export function OrganizerFinanceView() {
         </nav>
 
         <div className="finance-header-actions">
+          <Button
+            variant="outline"
+            size="md"
+            className="finance-action-btn btn-export-csv"
+            onClick={handleExportCsv}
+            data-testid="finance-export-csv-btn"
+            title="ส่งออกรายงานการเงินเป็นไฟล์ CSV"
+            aria-label="ส่งออกรายงานการเงินเป็นไฟล์ CSV"
+            icon={<DownloadIcon width={16} height={16} />}
+          >
+            ส่งออกไฟล์ CSV
+          </Button>
           <Button
             variant="outline"
             size="md"
@@ -451,21 +576,6 @@ export function OrganizerFinanceView() {
             </div>
           ) : currentReport ? (
             <div className="finance-report-details" data-testid="finance-report-details">
-              {/* Fee Mode & Reserve Settings Banner */}
-              <div className="finance-fee-info-banner">
-                <div className="finance-fee-info-item">
-                  <strong>โหมดค่าบริการผู้จัดงาน:</strong>{' '}
-                  {currentReport.organizerFeeMode === 'percentage'
-                    ? `คิดตามเปอร์เซ็นต์ (${currentReport.organizerFeeRate}%)`
-                    : currentReport.organizerFeeMode === 'per_ticket'
-                      ? `คิดตามจำนวนใบ (฿${currentReport.organizerFeeRate}/ใบ)`
-                      : `คิดแบบเหมาจ่ายต่อคอนเสิร์ต (฿${currentReport.organizerFeeRate})`}
-                </div>
-                <div className="finance-fee-info-item">
-                  <strong>เงินสำรองที่ต้องกันไว้ (Reserve):</strong> {currentReport.reservePercentage}% ของสิทธิ์สุทธิ
-                </div>
-              </div>
-
               {/* Debt Isolation Alert (AC-85, AC-86) */}
               {currentReport.isDebt && (
                 <div className="finance-debt-alert-banner" data-testid="debt-isolation-alert">
@@ -488,7 +598,7 @@ export function OrganizerFinanceView() {
               <div className="finance-event-metrics-grid">
                 {/* Gross Sales */}
                 <div className="finance-event-metric-card">
-                  <span className="finance-event-metric-label">ยอดขายบัตรทั้งหมด (Gross)</span>
+                  <span className="finance-event-metric-label">ยอดขายบัตรทั้งหมด (Gross)<FinanceTooltip text="รายรับรวมจากการจำหน่ายบัตรของคอนเสิร์ตนี้ทั้งหมด (ก่อนหักค่าธรรมเนียมและเงินคืน)" /></span>
                   <div className="finance-event-metric-num" data-testid="gross-sales-amount">
                     {formatBaht(currentReport.grossSales)}
                   </div>
@@ -499,7 +609,7 @@ export function OrganizerFinanceView() {
 
                 {/* Approved Refunds */}
                 <div className="finance-event-metric-card">
-                  <span className="finance-event-metric-label">ยอดคืนเงินที่อนุมัติ (Refunds)</span>
+                  <span className="finance-event-metric-label">ยอดคืนเงินที่อนุมัติ (Refunds)<FinanceTooltip text="ยอดเงินรวมที่คืนให้แก่ผู้ซื้อสำหรับบัตรที่ผ่านการอนุมัติการคืนเงินแล้ว" /></span>
                   <div className="finance-event-metric-num value-negative" data-testid="refund-deductions-amount">
                     -{formatBaht(currentReport.approvedRefundDeductions)}
                   </div>
@@ -510,7 +620,7 @@ export function OrganizerFinanceView() {
 
                 {/* Net Sales */}
                 <div className="finance-event-metric-card">
-                  <span className="finance-event-metric-label">ยอดขายสุทธิ (Net Sales)</span>
+                  <span className="finance-event-metric-label">ยอดขายสุทธิ (Net Sales)<FinanceTooltip text="ยอดขายคงเหลือจริงที่นำมาคำนวณสิทธิ์ (ยอดขายรวม Gross หักด้วยยอดคืนเงิน Refunds)" /></span>
                   <div className="finance-event-metric-num" data-testid="net-sales-amount">
                     {formatBaht(currentReport.netSales)}
                   </div>
@@ -521,7 +631,7 @@ export function OrganizerFinanceView() {
 
                 {/* Platform Fee */}
                 <div className="finance-event-metric-card">
-                  <span className="finance-event-metric-label">ค่าบริการระบบ (Platform Fee)</span>
+                  <span className="finance-event-metric-label">ค่าบริการระบบ (Platform Fee)<FinanceTooltip text="ค่าธรรมเนียมบริการแพลตฟอร์มตามสัญญา (คิดตาม % ยอดขาย, อัตราต่อใบ หรือเหมาจ่าย)" /></span>
                   <div className="finance-event-metric-num value-negative" data-testid="organizer-fee-amount">
                     -{formatBaht(currentReport.organizerFee)}
                   </div>
@@ -534,7 +644,7 @@ export function OrganizerFinanceView() {
 
                 {/* Reserve Amount */}
                 <div className="finance-event-metric-card">
-                  <span className="finance-event-metric-label">เงินสำรองกันไว้จริง (Reserve {currentReport.reservePercentage}%)</span>
+                  <span className="finance-event-metric-label">เงินสำรองกันไว้จริง (Reserve {currentReport.reservePercentage}%)<FinanceTooltip text="เงินที่ระบบกันไว้ตาม % ในสัญญาเพื่อเป็นหลักประกันรองรับการคืนเงิน โดยระบบจะโอนคืนให้หลังจบคอนเสิร์ตเสร็จสิ้น" /></span>
                   <div className="finance-event-metric-num" data-testid="reserve-amount">
                     {formatBaht(currentReport.actualHeldReserve)}
                   </div>
@@ -545,7 +655,7 @@ export function OrganizerFinanceView() {
 
                 {/* Ready for Payout */}
                 <div className="finance-event-metric-card highlight-payable">
-                  <span className="finance-event-metric-label">ยอดพร้อมรับ / โอนรอบถัดไป</span>
+                  <span className="finance-event-metric-label">ยอดพร้อมรับ / โอนรอบถัดไป<FinanceTooltip text="ยอดเงินสุทธิคงเหลือที่ระบบจะดำเนินการโอนเข้าบัญชีผู้จัดในรอบวันจันทร์ถัดไป" /></span>
                   <div className="finance-event-metric-num value-payable" data-testid="payable-amount">
                     {formatBaht(currentReport.payableAmount)}
                   </div>
@@ -599,7 +709,8 @@ export function OrganizerFinanceView() {
                   <p className="finance-empty-hint">ยังไม่มีข้อมูลรอบการแสดงสำหรับคอนเสิร์ตนี้</p>
                 )}
               </div>
-            </div>
+
+              </div>
           ) : (
             <div className="finance-empty-report-state">
               <TicketIcon style={{ width: '36px', height: '36px', color: '#94a3b8' }} />
@@ -623,8 +734,88 @@ export function OrganizerFinanceView() {
               </div>
               <span className="finance-payouts-count-badge">ทั้งหมด {allPayouts.length} รายการ</span>
             </div>
+            {/* Payout Search & Filter Toolbar (D-180) */}
+            <div className="finance-payout-filter-toolbar" data-testid="payout-filter-toolbar">
+              <div className="finance-payout-search-box">
+                <SearchIcon width={16} height={16} className="finance-payout-search-icon" />
+                <input
+                  id="payout-search-input"
+                  type="text"
+                  placeholder="ค้นหาตามชื่องาน หรือเลขอ้างอิงสลิป..."
+                  value={payoutSearchQuery}
+                  onChange={(e) => setPayoutSearchQuery(e.target.value)}
+                  className="finance-payout-search-input"
+                  data-testid="payout-search-input"
+                />
+                {payoutSearchQuery && (
+                  <button
+                    type="button"
+                    className="finance-payout-search-clear"
+                    onClick={() => setPayoutSearchQuery('')}
+                    aria-label="ล้างคำค้นหา"
+                  >
+                    <XIcon width={14} height={14} />
+                  </button>
+                )}
+              </div>
 
-            {allPayouts.length > 0 ? (
+              <div className="finance-payout-filter-controls">
+                <div className="finance-payout-filter-item">
+                  <label htmlFor="payout-concert-select" className="finance-payout-filter-label">
+                    คอนเสิร์ต:
+                  </label>
+                  <select
+                    id="payout-concert-select"
+                    value={payoutEventFilter}
+                    onChange={(e) => setPayoutEventFilter(e.target.value)}
+                    className="finance-payout-select"
+                    data-testid="payout-concert-select"
+                  >
+                    <option value="all">ทุกคอนเสิร์ต ({allPayouts.length})</option>
+                    {events.map((ev) => (
+                      <option key={ev.id} value={ev.id}>
+                        {ev.title}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="finance-payout-filter-item">
+                  <label htmlFor="payout-status-select" className="finance-payout-filter-label">
+                    สถานะการโอน:
+                  </label>
+                  <select
+                    id="payout-status-select"
+                    value={payoutStatusFilter}
+                    onChange={(e) => setPayoutStatusFilter(e.target.value as 'all' | 'completed' | 'failed')}
+                    className="finance-payout-select"
+                    data-testid="payout-status-select"
+                  >
+                    <option value="all">สถานะทั้งหมด</option>
+                    <option value="completed">โอนสำเร็จแล้ว</option>
+                    <option value="failed">โอนไม่สำเร็จ</option>
+                  </select>
+                </div>
+
+                {(payoutSearchQuery || payoutStatusFilter !== 'all' || payoutEventFilter !== 'all') && (
+                  <button
+                    type="button"
+                    className="search-reset-filters-btn finance-payout-reset-btn"
+                    onClick={() => {
+                      setPayoutSearchQuery('');
+                      setPayoutStatusFilter('all');
+                      setPayoutEventFilter('all');
+                    }}
+                    data-testid="payout-clear-filters-btn"
+                  >
+                    ล้างตัวกรอง
+                  </button>
+                )}
+              </div>
+            </div>
+
+
+            {filteredPayouts.length > 0 ? (
               <div className="finance-table-responsive">
                 <table className="finance-table payouts-table">
                   <thead>
@@ -638,7 +829,7 @@ export function OrganizerFinanceView() {
                     </tr>
                   </thead>
                   <tbody>
-                    {allPayouts.map((payout) => (
+                    {filteredPayouts.map((payout) => (
                       <tr key={payout.id} className="finance-table-row" data-testid={`payout-row-${payout.id}`}>
                         <td className="finance-table-td">
                           {payout.paidAt ? formatDate(new Date(payout.paidAt)) : formatDate(new Date(payout.createdAt))}
@@ -675,6 +866,24 @@ export function OrganizerFinanceView() {
                     ))}
                   </tbody>
                 </table>
+              </div>
+            ): allPayouts.length > 0 ? (
+              <div className="finance-payouts-empty-state" data-testid="payout-search-empty">
+                <SearchIcon width={32} height={32} className="finance-empty-icon" />
+                <h4>ไม่พบประวัติการโอนเงินที่ตรงกับเงื่อนไข</h4>
+                <p>ลองปรับคำค้นหา หรือล้างตัวกรองสถานะเพื่อดูรายการทั้งหมด</p>
+                <button
+                  type="button"
+                  className="search-reset-filters-btn"
+                  onClick={() => {
+                    setPayoutSearchQuery('');
+                    setPayoutStatusFilter('all');
+                    setPayoutEventFilter('all');
+                  }}
+                  data-testid="payout-empty-reset-btn"
+                >
+                  ล้างตัวกรองและแสดงทั้งหมด
+                </button>
               </div>
             ) : (
               <div className="finance-payouts-empty-state" data-testid="finance-payouts-empty">
@@ -717,43 +926,133 @@ export function OrganizerFinanceView() {
               </button>
             </div>
 
-            <div className="finance-modal-body">
-              <div className="finance-proof-summary-box">
-                <span className="finance-proof-amount-label">ยอดเงินที่โอนสำเร็จ</span>
-                <div className="finance-proof-amount-val">{formatBaht(selectedPayout.amount)}</div>
-                <Badge variant="success" size="md" className="finance-proof-status-pill">
-                  โอนเข้าบัญชีเรียบร้อย
-                </Badge>
+            {/* 2-Tab Segmented Control for Slip Image vs Details (D-185) */}
+            <div className="finance-modal-tabs-wrap" role="tablist" aria-label="เลือกมุมมองหลักฐานการโอน">
+              <div className="finance-modal-tabs">
+                <button
+                  type="button"
+                  role="tab"
+                  id="tab-payout-slip"
+                  aria-selected={payoutModalTab === 'slip'}
+                  aria-controls="panel-payout-slip"
+                  className={`finance-modal-tab-btn ${payoutModalTab === 'slip' ? 'is-active' : ''}`}
+                  onClick={() => setPayoutModalTab('slip')}
+                >
+                  ภาพสลิปจากแอดมิน
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  id="tab-payout-details"
+                  aria-selected={payoutModalTab === 'details'}
+                  aria-controls="panel-payout-details"
+                  className={`finance-modal-tab-btn ${payoutModalTab === 'details' ? 'is-active' : ''}`}
+                  onClick={() => setPayoutModalTab('details')}
+                >
+                  รายละเอียด
+                </button>
               </div>
+            </div>
 
-              <div className="finance-proof-details-list">
-                <div className="finance-proof-row">
-                  <span className="proof-label">คอนเสิร์ต:</span>
-                  <span className="proof-value"><strong>{selectedPayout.eventTitle || 'คอนเสิร์ต'}</strong></span>
-                </div>
-                <div className="finance-proof-row">
-                  <span className="proof-label">วันและเวลาที่โอน:</span>
-                  <span className="proof-value">
-                    {selectedPayout.paidAt ? formatDate(new Date(selectedPayout.paidAt)) : formatDate(new Date(selectedPayout.createdAt))}
-                  </span>
-                </div>
-                <div className="finance-proof-row">
-                  <span className="proof-label">ผู้บันทึกการโอน:</span>
-                  <span className="proof-value">{selectedPayout.recordedByName || 'เจ้าของระบบ TICKET'}</span>
-                </div>
-                {selectedPayout.transferNote && (
-                  <div className="finance-proof-row">
-                    <span className="proof-label">หมายเหตุการโอน:</span>
-                    <span className="proof-value">{selectedPayout.transferNote}</span>
+            <div className="finance-modal-body">
+              {payoutModalTab === 'slip' ? (
+                <div id="panel-payout-slip" role="tabpanel" aria-labelledby="tab-payout-slip">
+                  {/* Official Slip Card in Modal (D-183, D-185) */}
+                  <div className="finance-official-slip-card finance-modal-slip-card">
+                    <div className="finance-official-slip-head">
+                      <div className="slip-brand-logo">
+                        <BanknotesIcon width={16} height={16} />
+                        <span>TICKET TRANSFER SLIP</span>
+                      </div>
+                      <span className="slip-stamp-success">โอนเงินสำเร็จ</span>
+                    </div>
+                    {selectedPayout.transferProofUrl ? (
+                      <div className="finance-slip-img-container">
+                        {/* biome-ignore lint/performance/noImgElement: modal payout proof slip image */}
+                        <img
+                          src={selectedPayout.transferProofUrl}
+                          alt="รูปสลิปหลักฐานการโอนเงินจากแอดมิน"
+                          className="finance-slip-preview-img"
+                        />
+                      </div>
+                    ) : (
+                      <div className="finance-slip-digital-receipt">
+                        <div className="receipt-amount-row">
+                          <span className="receipt-label">ยอดโอนสุทธิ</span>
+                          <span className="receipt-val">{formatBaht(selectedPayout.amount)}</span>
+                        </div>
+                        <div className="receipt-divider" />
+                        <div className="receipt-info-row">
+                          <span>คอนเสิร์ต:</span>
+                          <strong>{selectedPayout.eventTitle || currentReport?.eventTitle || 'คอนเสิร์ต'}</strong>
+                        </div>
+                        <div className="receipt-info-row">
+                          <span>วันที่และเวลาที่โอน:</span>
+                          <span>
+                            {selectedPayout.paidAt ? formatDate(new Date(selectedPayout.paidAt)) : formatDate(new Date(selectedPayout.createdAt))}
+                          </span>
+                        </div>
+                        <div className="receipt-info-row">
+                          <span>ผู้บันทึกการโอน:</span>
+                          <span>{selectedPayout.recordedByName || 'เจ้าของระบบ TICKET'}</span>
+                        </div>
+                        <div className="receipt-info-row">
+                          <span>เลขอ้างอิงสลิป:</span>
+                          <span className="font-mono">{selectedPayout.transferProofKey || (`TXN-${selectedPayout.id.slice(0, 8).toUpperCase()}`)}</span>
+                        </div>
+                        {selectedPayout.transferNote && (
+                          <div className="receipt-info-row">
+                            <span>หมายเหตุการโอน:</span>
+                            <span>{selectedPayout.transferNote}</span>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    <div className="finance-official-slip-footer">
+                      <span>หลักฐานการโอนเงินโดยเจ้าของระบบ TICKET</span>
+                    </div>
                   </div>
-                )}
-                {selectedPayout.transferProofKey && (
-                  <div className="finance-proof-row">
-                    <span className="proof-label">เลขอ้างอิงสลิป:</span>
-                    <span className="proof-value font-mono">{selectedPayout.transferProofKey}</span>
+                </div>
+              ) : (
+                <div id="panel-payout-details" role="tabpanel" aria-labelledby="tab-payout-details">
+                  <div className="finance-proof-summary-box">
+                    <span className="finance-proof-amount-label">ยอดเงินที่โอนสำเร็จ</span>
+                    <div className="finance-proof-amount-val">{formatBaht(selectedPayout.amount)}</div>
+                    <Badge variant="success" size="md" className="finance-proof-status-pill">
+                      โอนเข้าบัญชีเรียบร้อย
+                    </Badge>
                   </div>
-                )}
-              </div>
+
+                  <div className="finance-proof-details-list">
+                    <div className="finance-proof-row">
+                      <span className="proof-label">คอนเสิร์ต:</span>
+                      <span className="proof-value"><strong>{selectedPayout.eventTitle || 'คอนเสิร์ต'}</strong></span>
+                    </div>
+                    <div className="finance-proof-row">
+                      <span className="proof-label">วันและเวลาที่โอน:</span>
+                      <span className="proof-value">
+                        {selectedPayout.paidAt ? formatDate(new Date(selectedPayout.paidAt)) : formatDate(new Date(selectedPayout.createdAt))}
+                      </span>
+                    </div>
+                    <div className="finance-proof-row">
+                      <span className="proof-label">ผู้บันทึกการโอน:</span>
+                      <span className="proof-value">{selectedPayout.recordedByName || 'เจ้าของระบบ TICKET'}</span>
+                    </div>
+                    {selectedPayout.transferNote && (
+                      <div className="finance-proof-row">
+                        <span className="proof-label">หมายเหตุการโอน:</span>
+                        <span className="proof-value">{selectedPayout.transferNote}</span>
+                      </div>
+                    )}
+                    {selectedPayout.transferProofKey && (
+                      <div className="finance-proof-row">
+                        <span className="proof-label">เลขอ้างอิงสลิป:</span>
+                        <span className="proof-value font-mono">{selectedPayout.transferProofKey}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="finance-modal-footer">

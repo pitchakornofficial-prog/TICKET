@@ -155,9 +155,10 @@ export async function handleAuthRequest(auth: TicketAuth, request: Request): Pro
     }
 
     const cloned = request.clone();
-    let body: { email?: string } = {};
+    let body: { email?: string; role?: string } = {};
     try { body = await cloned.json(); } catch {}
     const email = typeof body.email === 'string' ? body.email.trim() : '';
+    const invitedRole: 'organizer' | 'owner' = body.role === 'owner' ? 'owner' : 'organizer';
 
     if (!email) {
       return Response.json({ message: 'กรุณาระบุอีเมล' }, { status: 400, headers: { 'Cache-Control': 'no-store' } });
@@ -166,8 +167,8 @@ export async function handleAuthRequest(auth: TicketAuth, request: Request): Pro
     try {
       const pool = auth.options.database as import('pg').Pool;
       const { createOrganizerInvitation } = await import('./invitation.ts');
-      const inv = await createOrganizerInvitation(pool, email, auth.options.baseURL);
-      return Response.json({ message: 'ส่งคำเชิญสำเร็จ', id: inv.id, email: inv.email }, {
+      const inv = await createOrganizerInvitation(pool, email, auth.options.baseURL, new Date(), invitedRole);
+      return Response.json({ message: 'ส่งคำเชิญสำเร็จ', id: inv.id, email: inv.email, role: inv.role }, {
         status: 200,
         headers: { 'Cache-Control': 'no-store' },
       });
@@ -194,7 +195,7 @@ export async function handleAuthRequest(auth: TicketAuth, request: Request): Pro
       const pool = auth.options.database as import('pg').Pool;
       const { acceptOrganizerInvitation } = await import('./invitation.ts');
       const user = await acceptOrganizerInvitation(pool, token, { name, password });
-      return Response.json({ message: 'ตั้งบัญชีผู้จัดงานสำเร็จ', user }, {
+      return Response.json({ message: 'ตั้งบัญชีผู้ใช้สำเร็จ', user }, {
         status: 200,
         headers: { 'Cache-Control': 'no-store' },
       });

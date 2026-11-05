@@ -19,7 +19,7 @@ export function AcceptInvitationForm({ token, defaultEmail }: { token: string; d
     const confirmPassword = String(data.get('confirmPassword') || '');
 
     if (!name) {
-      setError('กรุณาระบุชื่อผู้จัดงาน');
+      setError('กรุณาระบุชื่อ');
       return;
     }
     if (password.length < 15 || password.length > 128) {
@@ -60,7 +60,7 @@ export function AcceptInvitationForm({ token, defaultEmail }: { token: string; d
     return (
       <div className="login-form">
         <p className="form-success" role="status">
-          ตั้งบัญชีผู้จัดงานสำเร็จ กำลังนำคุณไปยังหน้าเข้าสู่ระบบ…
+          ตั้งบัญชีผู้ใช้สำเร็จ กำลังนำคุณไปยังหน้าเข้าสู่ระบบ…
         </p>
         <div className="login-links">
           <a href="/login" className="login-forgot">ไปหน้าเข้าสู่ระบบ</a>
@@ -85,7 +85,7 @@ export function AcceptInvitationForm({ token, defaultEmail }: { token: string; d
       )}
 
       <div className="form-field">
-        <label htmlFor="invitation-name">ชื่อผู้จัดงาน / องค์กร</label>
+        <label htmlFor="invitation-name">ชื่อ-นามสกุล / องค์กร</label>
         <input
           id="invitation-name"
           name="name"
@@ -93,7 +93,7 @@ export function AcceptInvitationForm({ token, defaultEmail }: { token: string; d
           autoComplete="name"
           required
           disabled={pending}
-          placeholder="ชื่อผู้จัดงาน"
+          placeholder="ระบุชื่อของคุณ"
         />
       </div>
 

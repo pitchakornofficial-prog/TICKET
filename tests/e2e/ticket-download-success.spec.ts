@@ -148,15 +148,11 @@ test.describe('Dedicated Payment Success Page & Ticket Download (D-52)', () => {
     await expect(stubs).toHaveCount(2);
 
     const firstStub = stubs.first();
-    await expect(firstStub.locator('.stub-main-body')).toBeVisible();
-    await expect(firstStub.locator('.stub-notch-divider')).toBeVisible();
-    await expect(firstStub.locator('.stub-scan-side')).toBeVisible();
+    const directImg = firstStub.locator('.classic-ticket-img');
 
-    // Verify Stub metadata
-    await expect(firstStub.locator('.stub-event-title')).toContainText(eventTitle);
-    await expect(firstStub.locator('.stub-zone-badge')).toContainText('บัตร Gold Seating A');
-    await expect(page.locator('#ticket-code-0')).toBeVisible();
-    await expect(page.locator('#ticket-qr-0')).toBeVisible();
+    // Verify direct image is rendered and has event title alt attribute (D-165, D-168)
+    await expect(directImg).toBeVisible();
+    await expect(directImg).toHaveAttribute('alt', new RegExp(eventTitle));
 
     // Verify Download Buttons (Single and Bulk)
     const downloadBtns = page.locator('.stub-download-btn');

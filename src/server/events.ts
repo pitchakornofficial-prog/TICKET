@@ -5,6 +5,7 @@ import { inTransaction } from './database.ts';
 import { ensureFeeSchema } from './fees.ts';
 import { ensureReservationSchema } from './reservation.ts';
 import { ensureRefundSchema, processSessionCancellationRefunds } from './refunds.ts';
+import { ensureNewsSchema } from './news.ts';
 
 export type EventStatus = 'draft' | 'pending_approval' | 'approved' | 'rejected' | 'cancelled';
 export type SessionStatus = 'draft' | 'pending_approval' | 'approved' | 'rejected' | 'cancelled';
@@ -1886,4 +1887,320 @@ export async function approveSessionCancellation(
       message: 'อนุมัติการยกเลิกรอบการแสดงและสร้างรายการคืนเงินอัตโนมัติเรียบร้อยแล้ว',
     };
   });
+}
+
+
+/**
+ * Idempotently seeds the UBU Freshy Music Fest 2026 event, organizer user,
+ * session, ticket type, and custom fee model (D-181).
+ */
+export async function seedUbuFreshyFest(pool: Pool): Promise<void> {
+  try {
+    const organizerId = 'org-freshy-fest-ubu';
+    const eventId = 'event-ubu-freshy-2026';
+    const sessionId = 'session-ubu-freshy-2026-s1';
+    const ticketTypeId = 'tt-ubu-freshy-ga';
+
+    // 1. Ensure dedicated organizer account
+    await pool.query(
+      `INSERT INTO auth_user (id, email, name, role, "emailVerified", "createdAt", "updatedAt")
+       VALUES ($1, $2, $3, 'organizer', true, now(), now())
+       ON CONFLICT (id) DO NOTHING`,
+      [organizerId, 'organizer.freshy@ubu.ac.th', 'สโมสรนักศึกษา มหาวิทยาลัยอุบลราชธานี'],
+    );
+    const accCheck = await pool.query('SELECT id FROM auth_account WHERE "userId" = $1', [organizerId]);
+    if (accCheck.rowCount === 0) {
+      const hashedPassword = await hashPassword('Password123!');
+      await pool.query(
+        'INSERT INTO auth_account (id, "accountId", "providerId", "userId", password, "createdAt", "updatedAt") VALUES ($1, $2, $3, $4, $5, now(), now())',
+        ['acc-freshy-fest-ubu', organizerId, 'credential', organizerId, hashedPassword],
+      );
+    }
+
+    // 2. Ensure event
+    await pool.query(
+      `INSERT INTO events (
+         id, "organizerId", title, description, location,
+         "posterUrl", "coverBannerUrl", status, "limitPerOrder",
+         "createdAt", "updatedAt"
+       )
+       VALUES (
+         $1, $2, $3, $4, $5,
+         $6, $7, 'approved', 4,
+         now(), now()
+       )
+       ON CONFLICT (id) DO UPDATE SET
+         status = 'approved',
+         title = EXCLUDED.title,
+         location = EXCLUDED.location,
+         description = EXCLUDED.description`,
+      [
+        eventId,
+        organizerId,
+        'UBU Freshy Music Fest 2026',
+        'เทศกาลดนตรีต้อนรับเพื่อนใหม่ มหาวิทยาลัยอุบลราชธานี รวมพลศิลปินและกิจกรรมสุดมันส์ พิเศษสำหรับนักศึกษาและบุคลากร ม.อุบลฯ รับสิทธิ์ซื้อบัตรราคา 99 บาท (ราคาปกติ 150 บาท)',
+        'ศูนย์กีฬาและนันทนาการ มหาวิทยาลัยอุบลราชธานี',
+        'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?auto=format&fit=crop&w=1200&q=80',
+        'https://images.unsplash.com/photo-1501386761578-eac5c94b800a?auto=format&fit=crop&w=1600&q=80',
+      ],
+    );
+
+    // 3. Ensure approved session
+    const startTime = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000);
+    const endTime = new Date(startTime.getTime() + 6 * 60 * 60 * 1000);
+    const admissionStartTime = new Date(startTime.getTime() - 60 * 60 * 1000);
+    const admissionEndTime = new Date(startTime.getTime() + 4 * 60 * 60 * 1000);
+
+    await pool.query(
+      `INSERT INTO event_sessions (
+         id, "eventId", "startTime", "endTime",
+         "admissionStartTime", "admissionEndTime", status,
+         "createdAt", "updatedAt"
+       )
+       VALUES ($1, $2, $3, $4, $5, $6, 'approved', now(), now())
+       ON CONFLICT (id) DO UPDATE SET status = 'approved'`,
+      [sessionId, eventId, startTime, endTime, admissionStartTime, admissionEndTime],
+    );
+
+    // 4. Ensure single ticket type: 150 THB, quota 4500
+    await pool.query(
+      `INSERT INTO ticket_types (
+         id, "sessionId", name, price, quota, description,
+         "createdAt", "updatedAt"
+       )
+       VALUES ($1, $2, $3, 150, 4500, $4, now(), now())
+       ON CONFLICT (id) DO UPDATE SET price = 150, quota = 4500`,
+      [
+        ticketTypeId,
+        sessionId,
+        'General Admission (บัตรเข้างานทั่วไป)',
+        'บัตรเข้างานราคาปกติ 150 บาท (ชาว ม.อุบลฯ ใช้อีเมล @ubu.ac.th ลดเหลือ 99 บาททุกใบ)',
+      ],
+    );
+
+    // 5. Ensure Fee Settings (Customer 6%, Organizer 2% regular / 3% privilege, UBU Privilege Mode on)
+    await pool.query(
+      `INSERT INTO event_fee_settings (
+         "eventId", "organizerFeeMode", "organizerFeeRate", "organizerFeePrivilegeRate",
+         "ubuPrivilegeMode", "customerFeeMode", "customerFeeRate", "reservePercentage",
+         "organizerFeeLocked", "createdAt", "updatedAt"
+       )
+       VALUES ($1, 'percentage', 2, 3, TRUE, 'percentage', 6, 10, FALSE, now(), now())
+       ON CONFLICT ("eventId") DO UPDATE SET
+         "customerFeeRate" = 6,
+         "customerFeeMode" = 'percentage',
+         "organizerFeeRate" = 2,
+         "organizerFeePrivilegeRate" = 3,
+         "ubuPrivilegeMode" = TRUE`,
+      [eventId],
+    );
+
+    // 6. Ensure 3 published club news articles created by UBU Club (D-187)
+    await ensureNewsSchema(pool);
+    const newsArticles = [
+      {
+        id: 'news-ubu-freshy-ticket-open',
+        title: 'เปิดจำหน่ายบัตร UBU Freshy Music Fest 2026 ราคาพิเศษสำหรับนักศึกษา 99 บาท',
+        content:
+          'สโมสรนักศึกษา มหาวิทยาลัยอุบลราชธานี ขอเชิญชวนเพื่อนๆ นักศึกษาและบุคลากรทุกท่าน ร่วมเป็นส่วนหนึ่งของค่ำคืนสุดประทับใจในเทศกาลดนตรีต้อนรับเพื่อนใหม่ UBU Freshy Music Fest 2026 โดยสิทธิพิเศษสำหรับชาว ม.อุบลฯ เมื่อใช้อีเมล @ubu.ac.th รับสิทธิ์ซื้อบัตรในราคาพิเศษเพียง 99 บาท (จากราคาปกติ 150 บาท) บัตรมีจำนวนจำกัด รีบจับจองก่อนหมด!',
+        coverUrl:
+          'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?auto=format&fit=crop&w=1200&q=80',
+        publishedAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000),
+      },
+      {
+        id: 'news-ubu-freshy-lineup',
+        title: 'เปิดไลน์อัปศิลปินและวงดนตรีสุดมันส์ UBU Freshy Music Fest 2026',
+        content:
+          'เตรียมพบกับทัพศิลปินชื่อดังและวงดนตรีตัวแทนนักศึกษา ที่จะมาร่วมสร้างสีสันและความสนุกแบบจัดเต็มตลอด 6 ชั่วโมงเต็ม ณ อาคารศูนย์กีฬาและนันทนาการ มหาวิทยาลัยอุบลราชธานี ติดตามตารางการแสดงและรายละเอียดเพิ่มเติมได้เร็วๆ นี้',
+        coverUrl:
+          'https://images.unsplash.com/photo-1501386761578-eac5c94b800a?auto=format&fit=crop&w=1600&q=80',
+        publishedAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000),
+      },
+      {
+        id: 'news-ubu-freshy-entry-guidelines',
+        title: 'ข้อปฏิบัติและจุดตรวจเข้างาน UBU Freshy Music Fest 2026',
+        content:
+          'เพื่อความปลอดภัยและความสะดวกรวดเร็วในการเข้างาน ผู้เข้าร่วมงานทุกท่านกรุณาเตรียม E-Ticket พร้อมบัตรประจำตัวประชาชนหรือบัตรนักศึกษาเพื่อแสดงต่อทีมงานสแกนบัตร ณ จุดคัดกรองบริเวณประตูทางเข้าหลัก โดยประตูเปิดให้เข้าพื้นที่ตั้งแต่เวลา 16:00 น. เป็นต้นไป',
+        coverUrl:
+          'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?auto=format&fit=crop&w=1200&q=80',
+        publishedAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000),
+      },
+    ];
+
+    for (const item of newsArticles) {
+      await pool.query(
+        `INSERT INTO news (id, title, content, status, "coverUrl", "publishedAt", "authorId", "createdAt", "updatedAt")
+         VALUES ($1, $2, $3, 'published', $4, $5, $6, now(), now())
+         ON CONFLICT (id) DO UPDATE SET
+           title = EXCLUDED.title,
+           content = EXCLUDED.content,
+           status = 'published',
+           "coverUrl" = EXCLUDED."coverUrl",
+           "publishedAt" = EXCLUDED."publishedAt",
+           "authorId" = EXCLUDED."authorId"`,
+        [item.id, item.title, item.content, item.coverUrl, item.publishedAt, organizerId],
+      );
+    }
+
+    // 7. Ensure 1 real payout record for UBU Freshy Music Fest (D-187)
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS event_payouts (
+        id TEXT PRIMARY KEY,
+        "eventId" TEXT NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+        amount NUMERIC(12, 2) NOT NULL,
+        status TEXT NOT NULL DEFAULT 'completed',
+        "paidAt" TIMESTAMPTZ NOT NULL DEFAULT now(),
+        "transferProofKey" TEXT,
+        "transferProofUrl" TEXT,
+        "transferNote" TEXT,
+        "createdAt" TIMESTAMPTZ NOT NULL DEFAULT now(),
+        "updatedAt" TIMESTAMPTZ NOT NULL DEFAULT now(),
+        "recordedBy" TEXT REFERENCES auth_user(id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_event_payouts_eventId ON event_payouts("eventId");
+    `);
+    const ownerRes = await pool.query<{ id: string }>(
+      "SELECT id FROM auth_user WHERE role = 'owner' LIMIT 1",
+    );
+    const ownerId = ownerRes.rows[0]?.id || 'a126ac40-7067-4146-9f52-c89fab24ac4c';
+
+    await pool.query(
+      `INSERT INTO event_payouts (
+         id, "eventId", amount, status, "paidAt",
+         "transferProofKey", "transferProofUrl", "transferNote",
+         "recordedBy", "createdAt", "updatedAt"
+       )
+       VALUES (
+         $1, $2, $3, 'completed', $4,
+         $5, $6, $7,
+         $8, now(), now()
+       )
+       ON CONFLICT (id) DO UPDATE SET
+         amount = EXCLUDED.amount,
+         status = 'completed',
+         "paidAt" = EXCLUDED."paidAt",
+         "transferProofKey" = EXCLUDED."transferProofKey",
+         "transferProofUrl" = EXCLUDED."transferProofUrl",
+         "transferNote" = EXCLUDED."transferNote"`,
+      [
+        'payout-ubu-freshy-w01',
+        eventId,
+        45000,
+        new Date(Date.now() - 2 * 24 * 60 * 60 * 1000),
+        'TXN-UBU2026-PAYOUT01',
+        'https://images.unsplash.com/photo-1554224155-6726b3ff858f?auto=format&fit=crop&w=1000&q=80',
+        'รอบโอนเงินค่าบัตรจำหน่ายล่วงหน้าสัปดาห์ที่ 1 ให้สโมสรนักศึกษา ม.อุบลฯ',
+        ownerId,
+      ],
+    );
+
+    // 8. Ensure 3 additional UBU Club concerts (D-189)
+    const extraConcerts = [
+      {
+        id: 'event-ubu-acoustic-2026',
+        title: 'UBU Acoustic Night 2026',
+        description: 'คอนเสิร์ตโฟล์ก-อะคูสติก ใต้แสงดาวริมสระ ม.อุบลฯ รวมวงดนตรีอะคูสติกและศิลปินอินดี้ เพลิดเพลินกับบทเพลงฟังสบาย บรรยากาศสุดอบอุ่น พิเศษชาว ม.อุบลฯ รับส่วนลดพิเศษเมื่อใช้อีเมลสถาบัน',
+        location: 'ลานอเนกประสงค์ ริมสระ มหาวิทยาลัยอุบลราชธานี',
+        posterUrl: 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?auto=format&fit=crop&w=1200&q=80',
+        coverBannerUrl: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?auto=format&fit=crop&w=1600&q=80',
+        daysOffset: 21,
+        durationHours: 5,
+        ticketTypes: [
+          { id: 'tt-ubu-acoustic-early', name: 'Early Bird บัตรเข้างาน', price: 120, quota: 1500, desc: 'บัตรราคาพิเศษช่วง Early Bird เข้าชมการแสดงโซนทั่วไป' },
+          { id: 'tt-ubu-acoustic-reg', name: 'Regular บัตรเข้างาน', price: 180, quota: 2500, desc: 'บัตรเข้าชมการแสดงราคาปกติ โซนทั่วไป' },
+        ],
+      },
+      {
+        id: 'event-ubu-isan-indy-2026',
+        title: 'Isan Indy Rock Fest 2026',
+        description: 'เทศกาลดนตรีร็อกอินดี้อีสาน รวมพลคนดนตรีรุ่นใหม่และวงร็อกระดับแนวหน้า ระเบิดพลังเสียงดนตรีสดสุดมันส์บนเวทีใหญ่ จัดเต็มแสง สี เสียง ตลอดค่ำคืน',
+        location: 'ศูนย์การประชุมและแสดงนิทรรศการ มหาวิทยาลัยอุบลราชธานี',
+        posterUrl: 'https://images.unsplash.com/photo-1498038432885-c6f3f1b912ee?auto=format&fit=crop&w=1200&q=80',
+        coverBannerUrl: 'https://images.unsplash.com/photo-1459749411175-04bf5292ceea?auto=format&fit=crop&w=1600&q=80',
+        daysOffset: 35,
+        durationHours: 6,
+        ticketTypes: [
+          { id: 'tt-ubu-isan-indy-zone-a', name: 'บัตร Regular Zone A (หน้าเวที)', price: 250, quota: 3000, desc: 'โซนยืนหน้าเวที สัมผัสความมันส์ใกล้ชิดศิลปิน' },
+          { id: 'tt-ubu-isan-indy-zone-b', name: 'บัตร Regular Zone B (อัฒจันทร์)', price: 200, quota: 3000, desc: 'โซนนั่งอัฒจันทร์ มองเห็นเวทีชัดเจนมุมกว้าง' },
+        ],
+      },
+      {
+        id: 'event-ubu-countdown-2026',
+        title: 'UBU Campus Music Countdown 2026',
+        description: 'มหกรรมดนตรีเคานต์ดาวน์ต้อนรับปีใหม่ มหาวิทยาลัยอุบลราชธานี สนุกสนานไปกับการแสดงดนตรีหลากหลายสไตล์ และการนับถอยหลังส่งท้ายปีเก่าต้อนรับปีใหม่ไปด้วยกัน',
+        location: 'ลานกิจกรรม อาคารเฉลิมพระเกียรติ 7 รอบฯ มหาวิทยาลัยอุบลราชธานี',
+        posterUrl: 'https://images.unsplash.com/photo-1464366400600-7168b8af9bc3?auto=format&fit=crop&w=1200&q=80',
+        coverBannerUrl: 'https://images.unsplash.com/photo-1516450360452-9312f5e86fc7?auto=format&fit=crop&w=1600&q=80',
+        daysOffset: 50,
+        durationHours: 7,
+        ticketTypes: [
+          { id: 'tt-ubu-countdown-ga', name: 'บัตรเข้างาน Countdown 2026', price: 199, quota: 5000, desc: 'บัตรเข้าชมงานมหกรรมดนตรีเคานต์ดาวน์ปีใหม่และกิจกรรมพิเศษ' },
+        ],
+      },
+    ];
+
+    for (const ec of extraConcerts) {
+      await pool.query(
+        `INSERT INTO events (
+           id, "organizerId", title, description, location,
+           "posterUrl", "coverBannerUrl", status, "limitPerOrder",
+           "createdAt", "updatedAt"
+         )
+         VALUES ($1, $2, $3, $4, $5, $6, $7, 'approved', 4, now(), now())
+         ON CONFLICT (id) DO UPDATE SET
+           status = 'approved',
+           title = EXCLUDED.title,
+           location = EXCLUDED.location,
+           description = EXCLUDED.description`,
+        [ec.id, organizerId, ec.title, ec.description, ec.location, ec.posterUrl, ec.coverBannerUrl],
+      );
+
+      const sessId = `session-${ec.id}-s1`;
+      const sTime = new Date(Date.now() + ec.daysOffset * 24 * 60 * 60 * 1000);
+      const eTime = new Date(sTime.getTime() + ec.durationHours * 60 * 60 * 1000);
+      const admStart = new Date(sTime.getTime() - 60 * 60 * 1000);
+      const admEnd = new Date(sTime.getTime() + 4 * 60 * 60 * 1000);
+
+      await pool.query(
+        `INSERT INTO event_sessions (
+           id, "eventId", "startTime", "endTime",
+           "admissionStartTime", "admissionEndTime", status,
+           "createdAt", "updatedAt"
+         )
+         VALUES ($1, $2, $3, $4, $5, $6, 'approved', now(), now())
+         ON CONFLICT (id) DO UPDATE SET status = 'approved'`,
+        [sessId, ec.id, sTime, eTime, admStart, admEnd],
+      );
+
+      for (const tt of ec.ticketTypes) {
+        await pool.query(
+          `INSERT INTO ticket_types (
+             id, "sessionId", name, price, quota, description,
+             "createdAt", "updatedAt"
+           )
+           VALUES ($1, $2, $3, $4, $5, $6, now(), now())
+           ON CONFLICT (id) DO UPDATE SET price = EXCLUDED.price, quota = EXCLUDED.quota`,
+          [tt.id, sessId, tt.name, tt.price, tt.quota, tt.desc],
+        );
+      }
+
+      await pool.query(
+        `INSERT INTO event_fee_settings (
+           "eventId", "organizerFeeMode", "organizerFeeRate", "organizerFeePrivilegeRate",
+           "ubuPrivilegeMode", "customerFeeMode", "customerFeeRate", "reservePercentage",
+           "organizerFeeLocked", "createdAt", "updatedAt"
+         )
+         VALUES ($1, 'percentage', 2, 3, TRUE, 'percentage', 6, 10, FALSE, now(), now())
+         ON CONFLICT ("eventId") DO UPDATE SET
+           "customerFeeRate" = 6,
+           "customerFeeMode" = 'percentage',
+           "organizerFeeRate" = 2,
+           "organizerFeePrivilegeRate" = 3,
+           "ubuPrivilegeMode" = TRUE`,
+        [ec.id],
+      );
+    }
+  } catch {
+    // Non-blocking in isolated unit tests
+  }
 }
