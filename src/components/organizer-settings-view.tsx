@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useId, useMemo } from 'react';
+import { useState, useEffect, useId, useMemo } from 'react';
 import Image from 'next/image';
 import {
   UsersIcon,
@@ -12,8 +12,15 @@ import {
 } from '@/components/icons';
 import { Button } from '@/components/ui';
 import { HeaderInfoTooltip } from './header-info-tooltip';
+import {
+  loadPayoutAccounts,
+  savePayoutAccounts,
+  EVENT_PAYOUT_ACCOUNTS_CHANGED,
+  type PayoutBankAccount,
+} from '@/lib/organizer-payout-sync';
 
-interface BankAccount {
+export type BankAccount = PayoutBankAccount;
+interface _DeprecatedBankAccount {
   id: string;
   accountName: string;
   accountNumber: string;
@@ -76,16 +83,20 @@ export function OrganizerSettingsView() {
     return { text: 'ความปลอดภัยสูงมาก', colorClass: 'strength-strong' };
   }, [newPassword, strengthScore]);
 
-  // Bank Accounts State (Max 3 accounts as confirmed in D-78 & D-79)
-  const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([
-    {
-      id: 'acc-1',
-      accountName: 'บจก. สมชาย คอนเสิร์ต โปรดักชั่น',
-      accountNumber: '123-4-56789-0',
-      bankName: 'ธนาคารกสิกรไทย (KBANK)',
-      isPrimary: true,
-    },
-  ]);
+  // Bank Accounts State (Synced with Finance via loadPayoutAccounts D-206)
+  const [bankAccounts, setBankAccounts] = useState<BankAccount[]>(() => loadPayoutAccounts());
+
+  useEffect(() => {
+    const handleSync = () => {
+      setBankAccounts(loadPayoutAccounts());
+    };
+    window.addEventListener(EVENT_PAYOUT_ACCOUNTS_CHANGED, handleSync);
+    window.addEventListener('storage', handleSync);
+    return () => {
+      window.removeEventListener(EVENT_PAYOUT_ACCOUNTS_CHANGED, handleSync);
+      window.removeEventListener('storage', handleSync);
+    };
+  }, []);
 
   // Modal State for Add / Edit (D-79)
   const [showModal, setShowModal] = useState(false);
@@ -98,13 +109,6 @@ export function OrganizerSettingsView() {
   const [qrPreviewUrl, setQrPreviewUrl] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState('');
 
-  // Jump to section
-  const handleScrollToSection = (id: string) => {
-    const el = document.getElementById(id);
-    if (el) {
-      el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }
-  };
 
   // Back to top
   const handleScrollToTop = () => {
@@ -136,12 +140,14 @@ export function OrganizerSettingsView() {
   };
 
   const handleSetPrimaryAccount = (id: string) => {
-    setBankAccounts(prev =>
-      prev.map(acc => ({
+    setBankAccounts(prev => {
+      const updated = prev.map(acc => ({
         ...acc,
         isPrimary: acc.id === id,
-      }))
-    );
+      }));
+      savePayoutAccounts(updated);
+      return updated;
+    });
   };
 
   const handleDeleteAccount = (id: string) => {
@@ -157,6 +163,7 @@ export function OrganizerSettingsView() {
       if (!filtered.some(acc => acc.isPrimary) && filtered.length > 0) {
         filtered[0].isPrimary = true;
       }
+      savePayoutAccounts(filtered);
       return filtered;
     });
   };
@@ -226,8 +233,8 @@ export function OrganizerSettingsView() {
 
     if (editingAccountId) {
       // Edit existing account
-      setBankAccounts(prev =>
-        prev.map(acc => {
+      setBankAccounts(prev => {
+        const updated = prev.map(acc => {
           if (acc.id === editingAccountId) {
             return {
               ...acc,
@@ -238,8 +245,10 @@ export function OrganizerSettingsView() {
             };
           }
           return acc;
-        })
-      );
+        });
+        savePayoutAccounts(updated);
+        return updated;
+      });
     } else {
       // Add new account
       const newAcc: BankAccount = {
@@ -250,7 +259,11 @@ export function OrganizerSettingsView() {
         isPrimary: bankAccounts.length === 0,
         qrCodeUrl: qrPreviewUrl || undefined,
       };
-      setBankAccounts(prev => [...prev, newAcc]);
+      setBankAccounts(prev => {
+        const updated = [...prev, newAcc];
+        savePayoutAccounts(updated);
+        return updated;
+      });
     }
 
     setShowModal(false);
@@ -271,36 +284,7 @@ export function OrganizerSettingsView() {
         </div>
       </header>
 
-      {/* 1. Jump Toolbar (D-78) */}
-      <nav className="settings-jump-toolbar" aria-label="แถบปุ่มลัดไปยังส่วนต่าง ๆ">
-        <span className="jump-toolbar-label">ไปที่การ์ด:</span>
-        <div className="jump-toolbar-pills">
-          <button
-            type="button"
-            className="jump-pill-btn"
-            onClick={() => handleScrollToSection('section-profile')}
-          >
-            <UsersIcon style={{ width: '15px', height: '15px' }} />
-            <span>ข้อมูลผู้จัดงานและการติดต่อ</span>
-          </button>
-          <button
-            type="button"
-            className="jump-pill-btn"
-            onClick={() => handleScrollToSection('section-security')}
-          >
-            <LockIcon style={{ width: '15px', height: '15px' }} />
-            <span>ความปลอดภัยและรหัสผ่าน</span>
-          </button>
-          <button
-            type="button"
-            className="jump-pill-btn"
-            onClick={() => handleScrollToSection('section-payout')}
-          >
-            <BanknotesIcon style={{ width: '15px', height: '15px' }} />
-            <span>บัญชีธนาคารสำหรับรับเงิน ({bankAccounts.length}/3)</span>
-          </button>
-        </div>
-      </nav>
+      
 
       {/* 2. Main Content Stack (Max-width 1200px) */}
       <div className="settings-content-stack">

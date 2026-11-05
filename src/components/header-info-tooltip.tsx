@@ -15,7 +15,10 @@ export function HeaderInfoTooltip({ text }: HeaderInfoTooltipProps) {
       <button
         type="button"
         className="header-info-tooltip-btn"
-        onClick={() => setIsOpen((prev) => !prev)}
+        onClick={(e) => {
+          e.stopPropagation();
+          setIsOpen((prev) => !prev);
+        }}
         onFocus={() => setIsOpen(true)}
         onBlur={() => setIsOpen(false)}
         aria-label={`คำอธิบาย: ${text}`}

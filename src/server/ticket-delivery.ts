@@ -199,8 +199,10 @@ export async function sendOrderTicketsEmail(
     return existingDelivery;
   }
 
+  const baseUrl = options?.baseUrl || process.env.BETTER_AUTH_URL || (process.env.NODE_ENV === 'production' ? '' : 'http://127.0.0.1:3000');
   const deliveryId = `EML-${randomUUID().slice(0, 8).toUpperCase()}`;
-  const orderUrl = ticketOrderUrl(order.id, options?.baseUrl);
+  // Direct ticket view link without requiring redundant OTP verification (D-188)
+  const orderUrl = `${baseUrl}/orders/${order.id}/success?tab=tickets`;
 
   const { subject, html, text } = buildTicketEmailContent(
     orderId,

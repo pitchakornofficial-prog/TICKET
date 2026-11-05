@@ -26,6 +26,7 @@ import { AlertIcon } from './alert-icon';
 import { Button } from '@/components/ui';
 import { HeaderInfoTooltip } from './header-info-tooltip';
 import { OrganizerMoneyReportView } from './organizer-money-report-view';
+import { loadPayoutAccounts, getPrimaryPayoutAccount, type PayoutBankAccount } from '@/lib/organizer-payout-sync';
 import { formatBaht, formatDate, formatTime } from '@/lib/locale';
 
 interface TicketTypeDraft {
@@ -34,6 +35,7 @@ interface TicketTypeDraft {
   price: number;
   quota: number;
   description: string;
+  isStudentPrivilege?: boolean;
 }
 
 interface SessionDraft {
@@ -62,6 +64,14 @@ interface EventItem {
   lastSessionEndTime?: string;
   createdAt?: string;
   sessions?: { id: string; status?: string }[];
+  ageRestriction?: string | null;
+  refundPolicy?: string | null;
+  entryGuidelines?: string | null;
+  payoutAccountId?: string | null;
+  payoutBankName?: string | null;
+  payoutAccountNumber?: string | null;
+  payoutAccountName?: string | null;
+  ubuPrivilegeMode?: boolean;
 }
 
 interface EventDetailsSession {
@@ -86,12 +96,29 @@ interface EventDetails {
 export interface OrganizerEventsManagerProps {
   initialOpenCreate?: boolean;
   onCloseCreate?: () => void;
+  initialHighlightEventId?: string;
 }
 
 export function OrganizerEventsManager({
   initialOpenCreate = false,
   onCloseCreate,
+  initialHighlightEventId,
 }: OrganizerEventsManagerProps = {}) {
+  const [pulsingEventId, setPulsingEventId] = useState<string | null>(() => initialHighlightEventId || null);
+
+  useEffect(() => {
+    if (initialHighlightEventId) {
+      setPulsingEventId(initialHighlightEventId);
+      setTimeout(() => {
+        const el = document.getElementById(`organizer-event-card-${initialHighlightEventId}`);
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      }, 150);
+      const timer = setTimeout(() => setPulsingEventId(null), 2500);
+      return () => clearTimeout(timer);
+    }
+  }, [initialHighlightEventId]);
   const [events, setEvents] = useState<EventItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(initialOpenCreate);
@@ -128,6 +155,22 @@ export function OrganizerEventsManager({
   const [coverBannerPreviewUrl, setCoverBannerPreviewUrl] = useState<string | null>(null);
   const [ticketTemplateFile, setTicketTemplateFile] = useState<File | null>(null);
   const [ticketTemplatePreviewUrl, setTicketTemplatePreviewUrl] = useState<string | null>(null);
+
+  // Governance & Commercial States (D-217, D-218)
+  const [payoutAccounts, setPayoutAccounts] = useState<PayoutBankAccount[]>([]);
+  const [selectedPayoutAccountId, setSelectedPayoutAccountId] = useState<string>('');
+  const [refundPolicy, setRefundPolicy] = useState<'refundable_7d' | 'non_refundable' | 'custom'>('refundable_7d');
+  const [refundPolicyCustom, setRefundPolicyCustom] = useState('');
+  const [ageRestriction, setAgeRestriction] = useState<'all' | '18+' | '20+'>('all');
+  const [entryGuidelines, setEntryGuidelines] = useState('');
+  const [ubuPrivilegeMode, setUbuPrivilegeMode] = useState<boolean>(false);
+
+  useEffect(() => {
+    const accs = loadPayoutAccounts();
+    setPayoutAccounts(accs);
+    const primary = getPrimaryPayoutAccount(accs);
+    if (primary) setSelectedPayoutAccountId(primary.id);
+  }, []);
 
   // Clean initial session state (D-133: No mock data)
   const [sessions, setSessions] = useState<SessionDraft[]>([
@@ -176,6 +219,11 @@ export function OrganizerEventsManager({
     setCoverBannerPreviewUrl(null);
     setTicketTemplateFile(null);
     setTicketTemplatePreviewUrl(null);
+    setAgeRestriction('all');
+    setRefundPolicy('refundable_7d');
+    setRefundPolicyCustom('');
+    setEntryGuidelines('');
+    setUbuPrivilegeMode(false);
     const initialSessionId = `sess-${Date.now()}`;
     setSessions([
       {
@@ -223,6 +271,12 @@ export function OrganizerEventsManager({
       setPosterPreviewUrl(ev.posterUrl || null);
       setCoverBannerPreviewUrl(ev.coverBannerUrl || null);
       setTicketTemplatePreviewUrl(ev.ticketTemplateUrl || null);
+      setAgeRestriction(ev.ageRestriction || 'all');
+      setRefundPolicy(ev.refundPolicy?.includes('ไม่รับคืน') ? 'non_refundable' : ev.refundPolicy?.includes('7 วัน') ? 'refundable_7d' : ev.refundPolicy ? 'custom' : 'refundable_7d');
+      setRefundPolicyCustom(ev.refundPolicy || '');
+      setEntryGuidelines(ev.entryGuidelines || '');
+      setSelectedPayoutAccountId(ev.payoutAccountId || '');
+      setUbuPrivilegeMode(Boolean(ev.ubuPrivilegeMode));
       if (ev.sessions && ev.sessions.length > 0) {
         setSessions(ev.sessions.map((s: { id: string; startTime?: string; endTime?: string; admissionStartTime?: string; admissionEndTime?: string; ticketTypes?: TicketTypeDraft[] }) => ({
           id: s.id,
@@ -531,10 +585,12 @@ export function OrganizerEventsManager({
         price: Number(t.price),
         quota: Number(t.quota),
         description: t.description?.trim() || undefined,
+        isStudentPrivilege: Boolean(t.isStudentPrivilege),
       })),
     }));
 
     try {
+      const selectedAcc = payoutAccounts.find(a => a.id === selectedPayoutAccountId);
       const payload = {
         title,
         description,
@@ -543,6 +599,14 @@ export function OrganizerEventsManager({
         salesStartTime: salesStartTime ? new Date(salesStartTime).toISOString() : undefined,
         salesEndTime: salesEndTime ? new Date(salesEndTime).toISOString() : undefined,
         limitPerOrder,
+        ageRestriction,
+        refundPolicy: refundPolicy === 'custom' ? refundPolicyCustom.trim() : refundPolicy === 'non_refundable' ? 'ไม่รับคืนเงินทุกกรณี (ยกเว้นงานยกเลิกหรือเลื่อน)' : 'ขอคืนเงินได้ตามเงื่อนไขล่วงหน้าอย่างน้อย 7 วันก่อนวันแสดง',
+        entryGuidelines: entryGuidelines.trim() || undefined,
+        payoutAccountId: selectedPayoutAccountId || undefined,
+        payoutBankName: selectedAcc?.bankName || undefined,
+        payoutAccountNumber: selectedAcc?.accountNumber || undefined,
+        payoutAccountName: selectedAcc?.accountName || undefined,
+        ubuPrivilegeMode,
         posterUrl,
         coverBannerUrl,
         ticketTemplateUrl,
@@ -1438,6 +1502,152 @@ export function OrganizerEventsManager({
                       </strong>
                     </div>
                   </div>
+
+                  {/* Age Restriction & Refund Policy (D-218) */}
+                  <div className="form-row-two-col">
+                    <div className="form-group">
+                      <label htmlFor="event-age-restriction" style={{ fontWeight: 700, fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '0.35rem', marginBottom: '0.35rem' }}>
+                        <span>การจำกัดอายุผู้ชม (Age Restriction)</span>
+                        <HeaderInfoTooltip text="กำหนดเกณฑ์อายุขั้นต่ำของผู้เข้าชมคอนเสิร์ต" />
+                      </label>
+                      <select
+                        id="event-age-restriction"
+                        value={ageRestriction}
+                        onChange={e => {
+                          setAgeRestriction(e.target.value as 'all' | '18+' | '20+');
+                          setDraftSaved(false);
+                        }}
+                        className="form-input-text"
+                        style={{ padding: '0.55rem 0.75rem', fontSize: '0.88rem' }}
+                        data-testid="event-age-restriction-select"
+                      >
+                        <option value="all">ไม่จำกัดอายุ (All Ages)</option>
+                        <option value="18+">จำกัดอายุ 18 ปีบริบูรณ์ขึ้นไป (18+)</option>
+                        <option value="20+">จำกัดอายุ 20 ปีบริบูรณ์ขึ้นไป (20+)</option>
+                      </select>
+                      <small className="form-field-helper">
+                        * ระบบจะแสดงป้ายแจ้งเตือนอายุบนหน้ารายละเอียดคอนเสิร์ต
+                      </small>
+                    </div>
+
+                    <div className="form-group">
+                      <label htmlFor="event-refund-policy" style={{ fontWeight: 700, fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '0.35rem', marginBottom: '0.35rem' }}>
+                        <span>นโยบายการคืนเงิน (Refund Policy)</span>
+                        <HeaderInfoTooltip text="ข้อกำหนดการขอคืนเงินของคอนเสิร์ตนี้" />
+                      </label>
+                      <select
+                        id="event-refund-policy"
+                        value={refundPolicy}
+                        onChange={e => {
+                          setRefundPolicy(e.target.value as 'refundable_7d' | 'non_refundable' | 'custom');
+                          setDraftSaved(false);
+                        }}
+                        className="form-input-text"
+                        style={{ padding: '0.55rem 0.75rem', fontSize: '0.88rem' }}
+                        data-testid="event-refund-policy-select"
+                      >
+                        <option value="refundable_7d">ขอคืนเงินได้ตามเงื่อนไขล่วงหน้าอย่างน้อย 7 วันก่อนวันแสดง</option>
+                        <option value="non_refundable">ไม่รับคืนเงินทุกกรณี (ยกเว้นงานยกเลิกหรือเลื่อน)</option>
+                        <option value="custom">ระบุข้อกำหนดเฉพาะ</option>
+                      </select>
+                      <small className="form-field-helper">
+                        * นโยบายจะถูกบันทึกและแสดงให้ผู้ซื้อรับทราบก่อนยืนยันชำระเงิน
+                      </small>
+                    </div>
+                  </div>
+
+                  {refundPolicy === 'custom' && (
+                    <div className="form-group">
+                      <label htmlFor="event-refund-custom" style={{ fontWeight: 700, fontSize: '0.88rem', display: 'flex', alignItems: 'center', gap: '0.35rem', marginBottom: '0.35rem' }}>
+                        <span>ระบุรายละเอียดนโยบายการคืนเงินเฉพาะ</span>
+                      </label>
+                      <textarea
+                        id="event-refund-custom"
+                        rows={2}
+                        value={refundPolicyCustom}
+                        onChange={e => {
+                          setRefundPolicyCustom(e.target.value);
+                          setDraftSaved(false);
+                        }}
+                        placeholder="เช่น คืนเงินได้ 50% ภายใน 14 วันก่อนแสดง..."
+                        className="form-input-text"
+                        style={{ resize: 'vertical', fontSize: '0.85rem' }}
+                      />
+                    </div>
+                  )}
+
+                  {/* Entry Guidelines (D-218) */}
+                  <div className="form-group">
+                    <label htmlFor="event-entry-guidelines" style={{ fontWeight: 700, fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '0.35rem', marginBottom: '0.35rem' }}>
+                      <span>กติกาการเข้างานและมาตรการรักษาความปลอดภัย (Entry Guidelines)</span>
+                      <HeaderInfoTooltip text="คำแนะนำสำหรับผู้เข้าชม เช่น เอกสารที่ต้องเตรียม สิ่งของต้องห้าม การตรวจค้นสัมภาระ" />
+                    </label>
+                    <textarea
+                      id="event-entry-guidelines"
+                      rows={2}
+                      value={entryGuidelines}
+                      onChange={e => {
+                        setEntryGuidelines(e.target.value);
+                        setDraftSaved(false);
+                      }}
+                      placeholder="เช่น แสดงบัตรประชาชนตัวจริงพร้อม QR Code บัตร, ห้ามนำอาวุธ สารเสพติด กล้องโปร หรืออาหารเครื่องดื่มเข้าพื้นที่..."
+                      className="form-input-text"
+                      style={{ resize: 'vertical', fontSize: '0.85rem' }}
+                      data-testid="event-entry-guidelines-input"
+                    />
+                  </div>
+
+                  {/* Payout Bank Account Selection (D-218) */}
+                  <div className="form-group" data-testid="payout-account-selection-group">
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.35rem' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                        <span style={{ fontWeight: 700, fontSize: '0.9rem', margin: 0, color: '#0f172a' }}>
+                          บัญชีธนาคารสำหรับรับเงินโอน (Payout Bank Account) *
+                        </span>
+                        <HeaderInfoTooltip text="เลือกบัญชีธนาคารของคุณที่ต้องการให้ระบบโอนรายได้สุทธิหลังหักค่าบริการให้ตามรอบจ่ายเงิน" />
+                      </div>
+                      <span className="aspect-ratio-badge">
+                        {payoutAccounts.length} บัญชีที่ผูกไว้
+                      </span>
+                    </div>
+                    <p style={{ margin: '0 0 0.65rem', fontSize: '0.8rem', color: '#64748b' }}>
+                      เลือกบัญชีปลายทางสำหรับรับเงินรายได้จากการขายบัตรคอนเสิร์ตนี้ (ข้อมูลซิงก์จากหน้าการเงินและการตั้งค่า)
+                    </p>
+
+                    <div className="payout-account-select-grid">
+                      {payoutAccounts.map(acc => {
+                        const isSelected = (selectedPayoutAccountId || payoutAccounts[0]?.id) === acc.id;
+                        return (
+                          <button
+                            key={acc.id}
+                            type="button"
+                            onClick={() => {
+                              setSelectedPayoutAccountId(acc.id);
+                              setDraftSaved(false);
+                            }}
+                            className={`payout-account-select-card ${isSelected ? 'selected' : ''}`}
+                            data-testid={`payout-account-card-${acc.id}`}
+                          >
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+                              <strong style={{ fontSize: '0.88rem', color: '#0f172a' }}>{acc.bankName}</strong>
+                              {isSelected && (
+                                <span className="payout-selected-badge">
+                                  <CheckCircleIcon width={14} height={14} />
+                                  <span>เลือกบัญชีนี้</span>
+                                </span>
+                              )}
+                            </div>
+                            <span style={{ fontSize: '0.85rem', color: '#1e293b', fontFamily: 'monospace', fontWeight: 600 }}>
+                              {acc.accountNumber}
+                            </span>
+                            <span style={{ fontSize: '0.78rem', color: '#64748b' }}>
+                              ชื่อบัญชี: {acc.accountName}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
                 </div>
               )}
 
@@ -1719,86 +1929,113 @@ export function OrganizerEventsManager({
                                     <div
                                       key={tt.id}
                                       style={{
-                                        display: 'grid',
-                                        gridTemplateColumns: '2fr 1fr 1fr auto',
-                                        gap: '0.5rem',
-                                        alignItems: 'center',
-                                        background: '#ffffff',
+                                        display: 'flex',
+                                        flexDirection: 'column',
+                                        gap: '0.4rem',
+                                        background: tt.isStudentPrivilege ? '#f0f7ff' : '#ffffff',
                                         padding: '0.55rem 0.65rem',
                                         borderRadius: '8px',
-                                        border: '1px solid #e2e8f0',
+                                        border: tt.isStudentPrivilege ? '1px solid #93c5fd' : '1px solid #e2e8f0',
                                       }}
                                     >
-                                      <div>
-                                        <label htmlFor={`tt-name-${tt.id}`} className="sr-only">ชื่อประเภทบัตรหรือโซน</label>
-                                        <input
-                                          id={`tt-name-${tt.id}`}
-                                          type="text"
-                                          required
-                                          value={tt.name}
-                                          onChange={e => {
-                                            handleUpdateTicketType(sess.id, tt.id, { name: e.target.value });
-                                            setDraftSaved(false);
-                                          }}
-                                          placeholder="ชื่อโซน เช่น VIP Zone"
-                                          className="form-input-text"
-                                          style={{ padding: '0.45rem 0.65rem', fontSize: '0.82rem' }}
-                                        />
+                                      <div
+                                        style={{
+                                          display: 'grid',
+                                          gridTemplateColumns: '2fr 1fr 1fr auto',
+                                          gap: '0.5rem',
+                                          alignItems: 'center',
+                                        }}
+                                      >
+                                        <div>
+                                          <label htmlFor={`tt-name-${tt.id}`} className="sr-only">ชื่อประเภทบัตรหรือโซน</label>
+                                          <input
+                                            id={`tt-name-${tt.id}`}
+                                            type="text"
+                                            required
+                                            value={tt.name}
+                                            onChange={e => {
+                                              handleUpdateTicketType(sess.id, tt.id, { name: e.target.value });
+                                              setDraftSaved(false);
+                                            }}
+                                            placeholder="ชื่อโซน เช่น VIP Zone"
+                                            className="form-input-text"
+                                            style={{ padding: '0.45rem 0.65rem', fontSize: '0.82rem' }}
+                                          />
+                                        </div>
+                                        <div>
+                                          <label htmlFor={`tt-price-${tt.id}`} className="sr-only">ราคาบัตร (บาท)</label>
+                                          <input
+                                            id={`tt-price-${tt.id}`}
+                                            type="number"
+                                            required
+                                            min={0}
+                                            value={tt.price === 0 ? '' : tt.price}
+                                            onChange={e => {
+                                              const raw = e.target.value;
+                                              handleUpdateTicketType(sess.id, tt.id, {
+                                                price: raw === '' ? 0 : Math.max(0, Number(raw)),
+                                              });
+                                              setDraftSaved(false);
+                                            }}
+                                            placeholder="0"
+                                            className="form-input-text"
+                                            style={{ padding: '0.45rem 0.65rem', fontSize: '0.82rem' }}
+                                          />
+                                        </div>
+                                        <div>
+                                          <label htmlFor={`tt-quota-${tt.id}`} className="sr-only">จำนวนโควตาบัตร (ใบ)</label>
+                                          <input
+                                            id={`tt-quota-${tt.id}`}
+                                            type="number"
+                                            required
+                                            min={1}
+                                            value={tt.quota === 0 ? '' : tt.quota}
+                                            onChange={e => {
+                                              const raw = e.target.value;
+                                              handleUpdateTicketType(sess.id, tt.id, {
+                                                quota: raw === '' ? 0 : Math.max(0, Number(raw)),
+                                              });
+                                              setDraftSaved(false);
+                                            }}
+                                            placeholder="0"
+                                            className="form-input-text"
+                                            style={{ padding: '0.45rem 0.65rem', fontSize: '0.82rem' }}
+                                          />
+                                        </div>
+                                        {sess.ticketTypes.length > 1 && (
+                                          <button
+                                            type="button"
+                                            onClick={() => {
+                                              handleRemoveTicketType(sess.id, tt.id);
+                                              setDraftSaved(false);
+                                            }}
+                                            className="btn-form-cancel"
+                                            style={{ padding: '0.4rem 0.5rem', background: '#ffffff', border: '1px solid #cbd5e1' }}
+                                            title="ลบโซนนี้"
+                                          >
+                                            <TrashIcon width={14} height={14} />
+                                          </button>
+                                        )}
                                       </div>
-                                      <div>
-                                        <label htmlFor={`tt-price-${tt.id}`} className="sr-only">ราคาบัตร (บาท)</label>
-                                        <input
-                                          id={`tt-price-${tt.id}`}
-                                          type="number"
-                                          required
-                                          min={0}
-                                          value={tt.price === 0 ? '' : tt.price}
-                                          onChange={e => {
-                                            const raw = e.target.value;
-                                            handleUpdateTicketType(sess.id, tt.id, {
-                                              price: raw === '' ? 0 : Math.max(0, Number(raw)),
-                                            });
-                                            setDraftSaved(false);
-                                          }}
-                                          placeholder="0"
-                                          className="form-input-text"
-                                          style={{ padding: '0.45rem 0.65rem', fontSize: '0.82rem' }}
-                                        />
+                                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.15rem 0.2rem 0', borderTop: '1px dashed #e2e8f0' }}>
+                                        <label style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.76rem', color: tt.isStudentPrivilege ? '#1848ed' : '#64748b', cursor: 'pointer', fontWeight: tt.isStudentPrivilege ? 600 : 400 }}>
+                                          <input
+                                            type="checkbox"
+                                            checked={Boolean(tt.isStudentPrivilege)}
+                                            onChange={e => {
+                                              handleUpdateTicketType(sess.id, tt.id, { isStudentPrivilege: e.target.checked });
+                                              setDraftSaved(false);
+                                            }}
+                                            data-testid={`ticket-student-checkbox-${tt.id}`}
+                                          />
+                                          <span>กำหนดเป็นบัตรสิทธิ์พิเศษนักศึกษา ม.อุบล (@ubu.ac.th)</span>
+                                        </label>
+                                        {tt.isStudentPrivilege && (
+                                          <span style={{ fontSize: '0.72rem', background: '#eff6ff', color: '#1848ed', padding: '2px 6px', borderRadius: '4px', fontWeight: 600 }}>
+                                            สิทธิ์ ม.อุบล
+                                          </span>
+                                        )}
                                       </div>
-                                      <div>
-                                        <label htmlFor={`tt-quota-${tt.id}`} className="sr-only">จำนวนโควตาบัตร (ใบ)</label>
-                                        <input
-                                          id={`tt-quota-${tt.id}`}
-                                          type="number"
-                                          required
-                                          min={1}
-                                          value={tt.quota === 0 ? '' : tt.quota}
-                                          onChange={e => {
-                                            const raw = e.target.value;
-                                            handleUpdateTicketType(sess.id, tt.id, {
-                                              quota: raw === '' ? 0 : Math.max(0, Number(raw)),
-                                            });
-                                            setDraftSaved(false);
-                                          }}
-                                          placeholder="0"
-                                          className="form-input-text"
-                                          style={{ padding: '0.45rem 0.65rem', fontSize: '0.82rem' }}
-                                        />
-                                      </div>
-                                      {sess.ticketTypes.length > 1 && (
-                                        <button
-                                          type="button"
-                                          onClick={() => {
-                                            handleRemoveTicketType(sess.id, tt.id);
-                                            setDraftSaved(false);
-                                          }}
-                                          className="btn-form-cancel"
-                                          style={{ padding: '0.4rem 0.5rem', background: '#ffffff', border: '1px solid #cbd5e1' }}
-                                          title="ลบโซนนี้"
-                                        >
-                                          <TrashIcon width={14} height={14} />
-                                        </button>
-                                      )}
                                     </div>
                                   ))}
                                 </div>
@@ -1808,6 +2045,86 @@ export function OrganizerEventsManager({
                         </div>
                       );
                     })}
+                  </div>
+
+                  {/* UBU Student Privilege Mode Box (D-217) */}
+                  <div className="ubu-privilege-setting-card" data-testid="ubu-privilege-setting-card">
+                    <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap' }}>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', marginBottom: '0.35rem' }}>
+                          <ShieldCheckIcon width={18} height={18} style={{ color: '#1848ed' }} />
+                          <strong style={{ fontSize: '0.92rem', color: '#0f172a' }}>
+                            สิทธิ์พิเศษนักศึกษาและบุคลากร ม.อุบลราชธานี (UBU Privilege Mode)
+                          </strong>
+                          <HeaderInfoTooltip text="เปิดใช้งานการตรวจสิทธิ์นักศึกษาผ่านอีเมล @ubu.ac.th เพื่อรับสิทธิ์ซื้อบัตรราคาพิเศษหรือโควตานักศึกษา" />
+                        </div>
+                        <p style={{ margin: 0, fontSize: '0.82rem', color: '#475569' }}>
+                          เปิดรับผู้ซื้อสิทธิ์ ม.อุบล โดยระบบจะตรวจสอบยืนยันตัวตนด้วยอีเมล @ubu.ac.th ผ่าน OTP ในขั้นตอนการสั่งซื้อบัตรโดยอัตโนมัติ
+                        </p>
+                      </div>
+
+                      <label className="ubu-privilege-switch" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
+                        <input
+                          type="checkbox"
+                          checked={ubuPrivilegeMode}
+                          onChange={e => {
+                            setUbuPrivilegeMode(e.target.checked);
+                            setDraftSaved(false);
+                          }}
+                          data-testid="ubu-privilege-toggle"
+                          style={{ width: '18px', height: '18px', cursor: 'pointer' }}
+                        />
+                        <span style={{ fontSize: '0.85rem', fontWeight: 700, color: ubuPrivilegeMode ? '#1848ed' : '#64748b' }}>
+                          {ubuPrivilegeMode ? 'เปิดใช้งานสิทธิ์ ม.อุบล' : 'ปิดใช้งาน'}
+                        </span>
+                      </label>
+                    </div>
+
+                    {ubuPrivilegeMode && (
+                      <div style={{ marginTop: '0.85rem', paddingTop: '0.75rem', borderTop: '1px dashed #cbd5e1', fontSize: '0.82rem', color: '#1e293b' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', marginBottom: '0.25rem', color: '#1848ed', fontWeight: 600 }}>
+                          <CheckCircleIcon width={14} height={14} />
+                          <span>เปิดรับสิทธิ์ ม.อุบล แล้ว</span>
+                        </div>
+                        <p style={{ margin: 0, color: '#475569' }}>
+                          ท่านสามารถทำเครื่องหมาย [สำหรับสิทธิ์นักศึกษา ม.อุบล (@ubu.ac.th)] ที่โซนบัตรด้านบน เพื่อกำหนดเป็นบัตรราคาพิเศษหรือโควตาเฉพาะกลุ่มนักศึกษา ม.อุบล
+                        </p>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Standard Platform Fee Transparency Summary Card (D-217) */}
+                  <div className="platform-fee-transparency-card" data-testid="platform-fee-transparency-card">
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+                        <BanknotesIcon width={18} height={18} style={{ color: '#0f172a' }} />
+                        <strong style={{ fontSize: '0.92rem', color: '#0f172a' }}>
+                          สรุปข้อตกลงค่าบริการแพลตฟอร์ม TICKET (Platform Fee Agreement)
+                        </strong>
+                        <HeaderInfoTooltip text="อัตราค่าบริการมาตรฐานที่ระบบจะหักจากยอดขายบัตรที่ชำระเงินสำเร็จ และข้อตกลงทางการเงิน" />
+                      </div>
+                      <span className="fee-rate-pill">ค่าบริการมาตรฐาน: 3.00%</span>
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.75rem', marginTop: '0.65rem' }}>
+                      <div className="fee-calc-box">
+                        <span className="fee-calc-label">อัตราค่าบริการมาตรฐาน</span>
+                        <strong className="fee-calc-val">3.00%</strong>
+                        <small className="fee-calc-desc">คิดเฉพาะยอดคำสั่งซื้อที่ชำระเงินสำเร็จ</small>
+                      </div>
+
+                      <div className="fee-calc-box">
+                        <span className="fee-calc-label">สูตรการคำนวณหักยอดเงิน</span>
+                        <strong className="fee-calc-val">ยอดขายรวม − 3%</strong>
+                        <small className="fee-calc-desc">หักอัตโนมัติก่อนโอนเข้าบัญชีรับเงิน</small>
+                      </div>
+
+                      <div className="fee-calc-box">
+                        <span className="fee-calc-label">การพิจารณาอัตราพิเศษ</span>
+                        <strong className="fee-calc-val" style={{ color: '#1848ed' }}>โดยแอดมิน</strong>
+                        <small className="fee-calc-desc">แอดมินสามารถปรับอัตราพิเศษให้ในขั้นตอนอนุมัติ</small>
+                      </div>
+                    </div>
                   </div>
                 </div>
               )}
@@ -2336,7 +2653,7 @@ export function OrganizerEventsManager({
       ) : (
         <div className="events-cards-list">
           {filteredEvents.map(ev => (
-            <div key={ev.id} className="event-card events-editorial-card">
+            <div key={ev.id} id={`organizer-event-card-${ev.id}`} className={`event-card events-editorial-card ${pulsingEventId === ev.id ? 'soft-pulse-highlight' : ''}`}>
               {/* Body (Clean No-Thumbnail Layout - D-110) */}
               <div className="events-card-body">
                 <div className="events-card-badges-row">

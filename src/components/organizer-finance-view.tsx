@@ -22,6 +22,12 @@ import { TicketIcon } from '@/components/ticket-icon';
 import { Button, Badge } from '@/components/ui';
 import { HeaderInfoTooltip } from './header-info-tooltip';
 import { generateBankSlipSvgDataUrl } from '@/lib/bank-slip';
+import {
+  loadPayoutAccounts,
+  getPrimaryPayoutAccount,
+  EVENT_PAYOUT_ACCOUNTS_CHANGED,
+  type PayoutBankAccount,
+} from '@/lib/organizer-payout-sync';
 
 export interface OrganizerEventItem {
   id: string;
@@ -57,10 +63,29 @@ export function FinanceTooltip({ text }: { text: string }) {
   );
 }
 
-export function OrganizerFinanceView() {
+export interface OrganizerFinanceViewProps {
+  initialSelectedEventId?: string;
+  highlightEventId?: string;
+}
+
+export function OrganizerFinanceView({
+  initialSelectedEventId,
+  highlightEventId,
+}: OrganizerFinanceViewProps = {}) {
   const [events, setEvents] = useState<OrganizerEventItem[]>([]);
-  const [selectedEventId, setSelectedEventId] = useState<string>('');
+  const [selectedEventId, setSelectedEventId] = useState<string>(() => initialSelectedEventId || '');
   const selectedEventIdRef = useRef<string>('');
+  const [pulsingEventId, setPulsingEventId] = useState<string | null>(() => highlightEventId || null);
+
+  useEffect(() => {
+    if (highlightEventId) {
+      setSelectedEventId(highlightEventId);
+      setActiveTab('breakdown');
+      setPulsingEventId(highlightEventId);
+      const timer = setTimeout(() => setPulsingEventId(null), 2500);
+      return () => clearTimeout(timer);
+    }
+  }, [highlightEventId]);
   const [activeTab, setActiveTab] = useState<FinanceTab>('breakdown');
   const [loading, setLoading] = useState(true);
   const [reportLoading, setReportLoading] = useState(false);
@@ -90,6 +115,23 @@ export function OrganizerFinanceView() {
   const [showScrollTop, setShowScrollTop] = useState(false);
 
   // Payouts search, status, and concert filter state (D-180, D-184)
+  // Synced Payout Accounts (D-206)
+  const [payoutAccounts, setPayoutAccounts] = useState<PayoutBankAccount[]>(() => loadPayoutAccounts());
+
+  useEffect(() => {
+    const handleSync = () => {
+      setPayoutAccounts(loadPayoutAccounts());
+    };
+    window.addEventListener(EVENT_PAYOUT_ACCOUNTS_CHANGED, handleSync);
+    window.addEventListener('storage', handleSync);
+    return () => {
+      window.removeEventListener(EVENT_PAYOUT_ACCOUNTS_CHANGED, handleSync);
+      window.removeEventListener('storage', handleSync);
+    };
+  }, []);
+
+  const primaryPayoutAccount = useMemo(() => getPrimaryPayoutAccount(payoutAccounts), [payoutAccounts]);
+
   const [payoutSearchQuery, setPayoutSearchQuery] = useState('');
   const [payoutStatusFilter, setPayoutStatusFilter] = useState<'all' | 'completed' | 'failed'>('all');
   const [payoutEventFilter, setPayoutEventFilter] = useState<string>('all');
@@ -189,14 +231,14 @@ export function OrganizerFinanceView() {
       const loadedEvents: OrganizerEventItem[] = data.events || [];
       setEvents(loadedEvents);
       if (loadedEvents.length > 0) {
-        setSelectedEventId((prev) => (prev ? prev : loadedEvents[0].id));
+        setSelectedEventId((prev) => (prev ? prev : (initialSelectedEventId || loadedEvents[0].id)));
       }
     } catch {
       setError('เกิดข้อผิดพลาดในการเชื่อมต่อเพื่อดึงข้อมูลคอนเสิร์ต');
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [initialSelectedEventId]);
 
   useEffect(() => {
     loadEvents();
@@ -628,7 +670,7 @@ export function OrganizerFinanceView() {
               <span>กำลังคำนวณและประมวลผลรายงานการเงิน...</span>
             </div>
           ) : currentReport ? (
-            <div className="finance-report-details" data-testid="finance-report-details">
+            <div className={`finance-report-details ${pulsingEventId === selectedEventId ? 'soft-pulse-highlight' : ''}`} data-testid="finance-report-details">
               {/* Debt Isolation Alert (AC-85, AC-86) */}
               {currentReport.isDebt && (
                 <div className="finance-debt-alert-banner" data-testid="debt-isolation-alert">
@@ -777,6 +819,60 @@ export function OrganizerFinanceView() {
       {/* 5. TAB 2: PAYOUT HISTORY */}
       {activeTab === 'payouts' && (
         <div className="finance-payouts-view" data-testid="finance-payouts-view">
+          {/* Synced Primary Payout Account Card (D-206) */}
+          <section className="finance-payout-account-card" data-testid="finance-payout-account-card" aria-labelledby="finance-payout-account-title">
+            <div className="finance-payout-account-top">
+              <div className="finance-payout-account-info-header">
+                <div className="finance-payout-account-icon" aria-hidden="true">
+                  <BanknotesIcon width={22} height={22} />
+                </div>
+                <div>
+                  <h3 id="finance-payout-account-title" className="finance-payout-account-title">
+                    บัญชีธนาคารสำหรับรับเงิน (Payout Accounts)
+                  </h3>
+                  <p className="finance-payout-account-desc">
+                    ข้อมูลบัญชีธนาคารสำหรับรับเงินยอดขายบัตรสุทธิหลังหักค่าธรรมเนียม ซิงก์เรียลไทม์กับหน้าตั้งค่า
+                  </p>
+                </div>
+              </div>
+              <a
+                href="/back-office/organizer#settings"
+                className="finance-manage-payout-btn"
+                title="ไปจัดการบัญชีธนาคารที่หน้าตั้งค่า"
+              >
+                จัดการบัญชีในหน้าตั้งค่า →
+              </a>
+            </div>
+
+            <div className="finance-payout-account-content">
+              <div className="finance-payout-primary-box">
+                <div className="finance-payout-badge-row">
+                  <span className="finance-bank-tag">{primaryPayoutAccount.bankName}</span>
+                  <span className="finance-primary-badge">
+                    <ShieldCheckIcon width={13} height={13} />
+                    <span>บัญชีหลัก (Default)</span>
+                  </span>
+                </div>
+                <div className="finance-payout-fields">
+                  <div className="finance-payout-field">
+                    <span className="finance-payout-field-label">เลขที่บัญชี:</span>
+                    <span className="finance-payout-field-val font-mono">{primaryPayoutAccount.accountNumber}</span>
+                  </div>
+                  <div className="finance-payout-field">
+                    <span className="finance-payout-field-label">ชื่อบัญชี:</span>
+                    <span className="finance-payout-field-val">{primaryPayoutAccount.accountName}</span>
+                  </div>
+                </div>
+              </div>
+
+              {payoutAccounts.length > 1 && (
+                <div className="finance-secondary-accounts-note">
+                  มีบัญชีสำรองที่ผูกไว้เพิ่มเติมอีก {payoutAccounts.length - 1} บัญชี (สลับบัญชีหลักได้ที่หน้าตั้งค่า)
+                </div>
+              )}
+            </div>
+          </section>
+
           <div className="finance-payouts-card">
             <div className="finance-payouts-head-bar">
               <div>
