@@ -10,12 +10,47 @@ export async function POST(
   { params }: { params: Promise<{ id: string; sessionId: string }> },
 ) {
   try {
-    const { sessionId } = await params;
-    const actor = await readActor(getAuth(), await headers());
+    const { id: eventId, sessionId } = await params;
+    let actor = await readActor(getAuth(), request.headers);
+    if (!actor) {
+      try {
+        actor = await readActor(getAuth(), await headers());
+      } catch {
+        // Fallback
+      }
+    }
 
     if (actor?.role !== 'organizer') {
       return Response.json(
         { message: 'เฉพาะผู้จัดงาน (Organizer) เท่านั้นที่สามารถยื่นขอแก้ไขรอบการแสดงได้' },
+        { status: 403 },
+      );
+    }
+
+    const pool = getDatabasePool();
+    const sessRes = await pool.query<{ eventId: string; organizerId: string }>(
+      `SELECT s."eventId", e."organizerId"
+       FROM event_sessions s
+       JOIN events e ON e.id = s."eventId"
+       WHERE s.id = $1`,
+      [sessionId],
+    );
+
+    if (sessRes.rowCount === 0) {
+      return Response.json({ message: 'ไม่พบข้อมูลรอบการแสดงที่ระบุ' }, { status: 404 });
+    }
+
+    const sessionData = sessRes.rows[0];
+    if (sessionData.eventId !== eventId) {
+      return Response.json(
+        { message: 'รอบการแสดงนี้ไม่ได้อยู่ภายใต้คอนเสิร์ตที่ระบุใน URL' },
+        { status: 400 },
+      );
+    }
+
+    if (sessionData.organizerId !== actor.id) {
+      return Response.json(
+        { message: 'Forbidden: คุณไม่ใช่ผู้จัดงานคอนเสิร์ตนี้' },
         { status: 403 },
       );
     }
@@ -30,7 +65,7 @@ export async function POST(
       );
     }
 
-    const result = await submitSessionAmendment(getDatabasePool(), {
+    const result = await submitSessionAmendment(pool, {
       sessionId,
       organizerId: actor.id,
       startTime: body.startTime,
@@ -54,18 +89,53 @@ export async function POST(
 }
 
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string; sessionId: string }> },
 ) {
   try {
-    const { sessionId } = await params;
-    const actor = await readActor(getAuth(), await headers());
+    const { id: eventId, sessionId } = await params;
+    let actor = await readActor(getAuth(), request.headers);
+    if (!actor) {
+      try {
+        actor = await readActor(getAuth(), await headers());
+      } catch {
+        // Fallback
+      }
+    }
 
     if (!actor || (actor.role !== 'organizer' && actor.role !== 'owner')) {
       return Response.json({ message: 'ไม่อนุญาต' }, { status: 403 });
     }
 
-    const amendments = await listSessionAmendments(getDatabasePool(), sessionId);
+    const pool = getDatabasePool();
+    const sessRes = await pool.query<{ eventId: string; organizerId: string }>(
+      `SELECT s."eventId", e."organizerId"
+       FROM event_sessions s
+       JOIN events e ON e.id = s."eventId"
+       WHERE s.id = $1`,
+      [sessionId],
+    );
+
+    if (sessRes.rowCount === 0) {
+      return Response.json({ message: 'ไม่พบข้อมูลรอบการแสดงที่ระบุ' }, { status: 404 });
+    }
+
+    const sessionData = sessRes.rows[0];
+    if (sessionData.eventId !== eventId) {
+      return Response.json(
+        { message: 'รอบการแสดงนี้ไม่ได้อยู่ภายใต้คอนเสิร์ตที่ระบุใน URL' },
+        { status: 400 },
+      );
+    }
+
+    if (actor.role === 'organizer' && sessionData.organizerId !== actor.id) {
+      return Response.json(
+        { message: 'Forbidden: คุณไม่ใช่ผู้จัดงานคอนเสิร์ตนี้' },
+        { status: 403 },
+      );
+    }
+
+    const amendments = await listSessionAmendments(pool, sessionId);
     return Response.json({ amendments }, { status: 200 });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'เกิดข้อผิดพลาดในการโหลดรายการแก้ไขรอบ';

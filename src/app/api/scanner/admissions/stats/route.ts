@@ -5,7 +5,14 @@ import { getDatabasePool } from '@/server/database';
 import { getAdmissionStats, getRecentAdmissionLogs } from '@/server/admission';
 
 export async function GET(req: Request) {
-  const actor = await readActor(getAuth(), await headers());
+  let actor = await readActor(getAuth(), req.headers);
+  if (!actor) {
+    try {
+      actor = await readActor(getAuth(), await headers());
+    } catch {
+      // Ignore if headers() throws outside Next request context
+    }
+  }
   if (!actor) {
     return NextResponse.json({ error: 'UNAUTHORIZED', message: 'กรุณาเข้าสู่ระบบ' }, { status: 401 });
   }
@@ -29,6 +36,49 @@ export async function GET(req: Request) {
 
   try {
     const pool = getDatabasePool();
+
+    // Verify session existence and retrieve owning event and organizer
+    const sessRes = await pool.query<{ eventId: string; organizerId: string }>(
+      `SELECT s."eventId", e."organizerId"
+       FROM event_sessions s
+       JOIN events e ON e.id = s."eventId"
+       WHERE s.id = $1`,
+      [sessionId],
+    );
+
+    if (sessRes.rowCount === 0) {
+      return NextResponse.json(
+        { error: 'NOT_FOUND', message: 'ไม่พบข้อมูลรอบการแสดงที่ระบุ' },
+        { status: 404 },
+      );
+    }
+
+    const { eventId, organizerId } = sessRes.rows[0];
+
+    // Authorization checks:
+    // 1. Organizer can only view stats for their own event
+    if (actor.role === 'organizer' && organizerId !== actor.id) {
+      return NextResponse.json(
+        { error: 'FORBIDDEN', message: 'คุณไม่มีสิทธิ์เข้าถึงสถิติการสแกนของงานคอนเสิร์ตนี้' },
+        { status: 403 },
+      );
+    }
+
+    // 2. Scanner can only view stats if assigned to this event
+    if (actor.role === 'scanner') {
+      const scanRes = await pool.query(
+        'SELECT 1 FROM event_scanners WHERE "eventId" = $1 AND "scannerId" = $2',
+        [eventId, actor.id],
+      );
+      if (scanRes.rowCount === 0) {
+        return NextResponse.json(
+          { error: 'FORBIDDEN', message: 'คุณไม่ได้รับมอบหมายให้ปฏิบัติหน้าที่ในงานคอนเสิร์ตนี้' },
+          { status: 403 },
+        );
+      }
+    }
+
+    // 3. Scanner session scope cookie check (for direct-access links)
     const auth = getAuth();
     const secret =
       process.env.BETTER_AUTH_SECRET || (auth.options as { secret: string }).secret;
@@ -38,7 +88,7 @@ export async function GET(req: Request) {
       actor.role,
       req.headers.get('cookie'),
       secret,
-      { sessionId },
+      { sessionId, eventId },
     );
     if (!scopeCheck.allowed) {
       return NextResponse.json(
