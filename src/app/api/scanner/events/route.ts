@@ -1,5 +1,6 @@
 import { getAuth } from '@/server/auth';
 import { listEventsForScanner } from '@/server/events';
+import { getScannerEventScopeCookie } from '@/server/scanner-scope';
 import type { Pool } from 'pg';
 
 export const runtime = 'nodejs';
@@ -13,7 +14,17 @@ export async function GET(request: Request) {
 
   const pool = auth.options.database as Pool;
   try {
-    const events = await listEventsForScanner(pool, session.user.id, session.user.role);
+    let events = await listEventsForScanner(pool, session.user.id, session.user.role);
+
+    // If scanner session is constrained to a specific event scope, filter out other events
+    if (session.user.role === 'scanner') {
+      const secret = process.env.BETTER_AUTH_SECRET || (auth.options as { secret: string }).secret;
+      const scopedEventId = getScannerEventScopeCookie(request.headers.get('cookie'), secret);
+      if (scopedEventId) {
+        events = events.filter((e) => e.id === scopedEventId);
+      }
+    }
+
     return Response.json(
       {
         events,

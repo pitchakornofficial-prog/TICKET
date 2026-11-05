@@ -10,6 +10,10 @@ import {
   listEventsForScanner,
   resetScannerDeviceBinding,
 } from '../../src/server/events';
+import {
+  signScannerEventScopeCookie,
+  verifyScannerSessionEventScope,
+} from '../../src/server/scanner-scope';
 
 describe('Scanner account assignment and event-scoping integration (TASK-009, AC-09)', () => {
   let fixture: Awaited<ReturnType<typeof authFixture>>;
@@ -202,5 +206,99 @@ describe('Scanner account assignment and event-scoping integration (TASK-009, AC
     for (const ev of orgBEvents) {
       expect(orgAIds.has(ev.id)).toBe(false);
     }
+  });
+
+  it('Issue #3: requires password verification when assigning existing scanner to another event and enforces scope', async () => {
+    const orgA = fixture.ids.organizer;
+    const orgB = secondOrganizerId;
+
+    // 1. Org A creates Event A
+    const eventA = await createEventDraft(
+      fixture.pool,
+      orgA,
+      { title: 'งาน A ของผู้จัด 1', location: 'สถานที่ A' },
+      [
+        {
+          startTime: '2026-11-20T19:00:00.000Z',
+          endTime: '2026-11-20T22:00:00.000Z',
+          ticketTypes: [{ name: 'Standard', price: 1000, quota: 50 }],
+        },
+      ],
+    );
+
+    // 2. Org B creates Event B
+    const eventB = await createEventDraft(
+      fixture.pool,
+      orgB,
+      { title: 'งาน B ของผู้จัด 2', location: 'สถานที่ B' },
+      [
+        {
+          startTime: '2026-12-01T19:00:00.000Z',
+          endTime: '2026-12-01T22:00:00.000Z',
+          ticketTypes: [{ name: 'Standard', price: 1000, quota: 50 }],
+        },
+      ],
+    );
+
+    const sharedScannerEmail = 'shared-scanner@ticket.invalid';
+    const scannerPassword = 'Correct-Scanner-Password-1234!';
+
+    // Org A adds sharedScanner to Event A
+    const scannerA = await addScannerToEvent(fixture.pool, orgA, eventA.id, {
+      name: 'เจ้าหน้าที่แชร์งาน',
+      email: sharedScannerEmail,
+      password: scannerPassword,
+    });
+    expect(scannerA.scannerId).toBeDefined();
+
+    // Org B attempts to add existing scanner without password -> rejects
+    await expect(
+      addScannerToEvent(fixture.pool, orgB, eventB.id, {
+        name: 'สวมรอยแอดมิน',
+        email: sharedScannerEmail,
+      }),
+    ).rejects.toThrow('บัญชีทีมสแกนนี้มีอยู่ในระบบแล้ว กรุณาระบุรหัสผ่านที่ถูกต้องของบัญชีเพื่อยืนยันการเพิ่มเข้างาน');
+
+    // Org B attempts to add existing scanner with wrong password -> rejects
+    await expect(
+      addScannerToEvent(fixture.pool, orgB, eventB.id, {
+        name: 'สวมรอยแอดมิน',
+        email: sharedScannerEmail,
+        password: 'Wrong-Password-456!',
+      }),
+    ).rejects.toThrow('รหัสผ่านของบัญชีทีมสแกนเดิมไม่ถูกต้อง');
+
+    // Org B adds existing scanner with correct password -> succeeds
+    const scannerB = await addScannerToEvent(fixture.pool, orgB, eventB.id, {
+      name: 'เจ้าหน้าที่แชร์งาน',
+      email: sharedScannerEmail,
+      password: scannerPassword,
+    });
+    expect(scannerB.scannerId).toBe(scannerA.scannerId);
+
+    // Verify event scope enforcement with verifyScannerSessionEventScope
+    const secret = process.env.BETTER_AUTH_SECRET || 'dev-ticket-secret-32-bytes-minimum-length';
+    const cookieHeaderEventB = `scanner_event_scope=${signScannerEventScopeCookie(eventB.id, secret)}`;
+
+    // Access to event B with event B cookie -> allowed
+    const scopeCheckAllowed = await verifyScannerSessionEventScope(
+      fixture.pool,
+      'scanner',
+      cookieHeaderEventB,
+      secret,
+      { eventId: eventB.id },
+    );
+    expect(scopeCheckAllowed.allowed).toBe(true);
+
+    // Access to event A with event B cookie -> denied
+    const scopeCheckDenied = await verifyScannerSessionEventScope(
+      fixture.pool,
+      'scanner',
+      cookieHeaderEventB,
+      secret,
+      { eventId: eventA.id },
+    );
+    expect(scopeCheckDenied.allowed).toBe(false);
+    expect(scopeCheckDenied.reason).toContain('จำกัดสิทธิ์เฉพาะงานคอนเสิร์ตที่ได้รับมอบหมาย');
   });
 });

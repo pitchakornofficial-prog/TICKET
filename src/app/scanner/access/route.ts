@@ -142,6 +142,20 @@ export async function GET(request: Request) {
       maxAge: 8 * 60 * 60,
     });
 
+    // Security Fix: Bind scanner access session strictly to this event
+    const scopeSignature = createHmac('sha256', secret).update(eventId).digest('base64');
+    const signedScopeValue = `${eventId}.${scopeSignature}`;
+
+    response.cookies.set({
+      name: 'scanner_event_scope',
+      value: signedScopeValue,
+      httpOnly: true,
+      sameSite: 'lax',
+      path: '/',
+      secure: isSecure,
+      maxAge: 8 * 60 * 60,
+    });
+
     if (shouldSetDeviceCookie) {
       response.cookies.set({
         name: 'scanner_device_id',

@@ -29,6 +29,24 @@ export async function GET(req: Request) {
 
   try {
     const pool = getDatabasePool();
+    const auth = getAuth();
+    const secret =
+      process.env.BETTER_AUTH_SECRET || (auth.options as { secret: string }).secret;
+    const { verifyScannerSessionEventScope } = await import('@/server/scanner-scope');
+    const scopeCheck = await verifyScannerSessionEventScope(
+      pool,
+      actor.role,
+      req.headers.get('cookie'),
+      secret,
+      { sessionId },
+    );
+    if (!scopeCheck.allowed) {
+      return NextResponse.json(
+        { error: 'FORBIDDEN', message: scopeCheck.reason },
+        { status: 403 },
+      );
+    }
+
     const stats = await getAdmissionStats(pool, sessionId);
     const recentLogs = await getRecentAdmissionLogs(pool, sessionId, 20);
 
