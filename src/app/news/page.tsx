@@ -2,6 +2,8 @@ import { getDatabasePool } from '@/server/database';
 import { listPublishedNews, type PublicNewsSummary } from '@/server/news';
 import { NewsListClient, type NewsItemDisplay } from '@/components/news-list-client';
 
+export const dynamic = 'force-dynamic';
+
 export const metadata = {
   title: 'ข่าวสารและประกาศ — TICKET',
   description: 'ติดตามข่าวสาร ประกาศสำคัญ และข้อมูลความเคลื่อนไหวคอนเสิร์ตจาก TICKET',

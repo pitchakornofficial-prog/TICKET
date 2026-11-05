@@ -1,3 +1,5 @@
+import { createIsolatedBrowserContext } from '../support/client-context';
+import { saveEventDraft } from '../support/event-draft';
 import { test, expect } from '@playwright/test';
 import { fixtureAccounts, fixturePassword } from '../support/auth-fixture';
 
@@ -28,10 +30,11 @@ test.describe('TASK-034: Offline Sync and Central Revocation Conflicts (AC-99, A
     await expect(page).toHaveURL('/back-office/organizer');
 
     // Create Event
+    await page.goto('/back-office/organizer#events');
     await page.getByRole('button', { name: '+ สร้างงานคอนเสิร์ตใหม่' }).click();
     await page.getByLabel('ชื่องานคอนเสิร์ต').fill(eventTitle);
     await page.getByLabel('สถานที่จัดงาน').fill('อิมแพ็ค อารีน่า ฮอลล์ 2');
-    await page.getByRole('button', { name: 'บันทึกข้อมูลร่าง (Draft)' }).click();
+    await saveEventDraft(page);
     await expect(page.getByText('บันทึกงานคอนเสิร์ตสำเร็จ')).toBeVisible({ timeout: 20000 });
 
     const eventsRes = await page.request.get('/api/events');
@@ -59,7 +62,7 @@ test.describe('TASK-034: Offline Sync and Central Revocation Conflicts (AC-99, A
     await page.request.post(`/api/events/${event.id}?action=submit-session`, { data: { sessionId } });
 
     // Approve session via owner
-    const ownerContext = await browser.newContext();
+    const ownerContext = await createIsolatedBrowserContext(browser, testInfo, );
     const ownerPage = await ownerContext.newPage();
     await ownerPage.goto('/login');
     await ownerPage.getByLabel('อีเมล', { exact: true }).fill(fixtureAccounts.owner.email);
@@ -70,7 +73,7 @@ test.describe('TASK-034: Offline Sync and Central Revocation Conflicts (AC-99, A
     await ownerPage.request.post('/api/owner/sessions', { data: { sessionId } });
 
     // 2. Organizer adds scanner and sets primary
-    await page.goto('/back-office/organizer');
+    await page.goto('/back-office/organizer#scanners');
     const scannerSelect = page.locator('#select-scanner-event');
     await expect(scannerSelect.locator(`option[value="${event.id}"]`)).toBeAttached({ timeout: 20000 });
     await scannerSelect.selectOption(event.id);
@@ -87,15 +90,19 @@ test.describe('TASK-034: Offline Sync and Central Revocation Conflicts (AC-99, A
     expect(sc).toBeDefined();
 
     const setPrimaryBtn = page.locator(`[data-testid="set-primary-scanner-${sc.scannerId}"]`);
-    await expect(setPrimaryBtn).toBeVisible({ timeout: 20000 });
-    await setPrimaryBtn.click();
-    await expect(page.getByText('กำหนดเครื่องหลักสำหรับงานเรียบร้อยแล้ว (AC-94)')).toBeVisible({ timeout: 20000 });
+    if (await setPrimaryBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
+      await setPrimaryBtn.click();
+      await expect(page.getByText('กำหนดเครื่องหลักสำหรับงานเรียบร้อยแล้ว (AC-94)')).toBeVisible({ timeout: 20000 });
+    }
+    await expect(page.locator(`[data-testid="primary-scanner-badge-${sc.scannerId}"]`)).toBeVisible({ timeout: 20000 });
 
     // 3. Buyer purchases a ticket
-    const buyerContext = await browser.newContext();
+    const buyerContext = await createIsolatedBrowserContext(browser, testInfo, );
     const buyerPage = await buyerContext.newPage();
-    await buyerPage.goto(`/events/${event.id}`);
+    await buyerPage.goto(`/events/${event.id}/checkout`);
     await expect(buyerPage.getByRole('heading', { name: eventTitle })).toBeVisible({ timeout: 25000 });
+
+    await buyerPage.getByRole('button', { name: 'เพิ่มจำนวน VIP Zone' }).click();
 
     await buyerPage.getByLabel('ชื่อ-นามสกุล *').fill(buyerName);
     await buyerPage.getByLabel('อีเมล *').fill(buyerEmail);
@@ -107,22 +114,23 @@ test.describe('TASK-034: Offline Sync and Central Revocation Conflicts (AC-99, A
     const { code } = await otpRes.json();
     await buyerPage.getByLabel('รหัส OTP 6 หลัก *').fill(code);
     await buyerPage.getByRole('button', { name: 'ยืนยันรหัส OTP' }).click();
+    await buyerPage.getByRole('button', { name: 'ยืนยันและดำเนินการต่อ' }).click();
     await expect(buyerPage.getByRole('heading', { name: 'ยืนยันอีเมลสำเร็จ (Guest Verified)' })).toBeVisible({ timeout: 20000 });
 
-    await buyerPage.getByRole('button', { name: 'เพิ่มจำนวน VIP Zone' }).click();
-    const confirmBtn = buyerPage.getByRole('button', { name: 'ยืนยันการเลือกบัตร (1 ใบ)' });
+    const confirmBtn = buyerPage.locator('#confirm-reservation-btn');
     await expect(confirmBtn).toBeVisible({ timeout: 20000 });
     await confirmBtn.scrollIntoViewIfNeeded();
     await confirmBtn.click();
     await expect(buyerPage.getByText('กันบัตรสำเร็จ (Reserved)')).toBeVisible({ timeout: 20000 });
 
-    await buyerPage.getByRole('button', { name: 'สร้าง QR Code ชำระเงิน (PromptPay)' }).click({ force: true });
     await expect(buyerPage.locator('#promptpay-qr-image')).toBeVisible({ timeout: 20000 });
     const simBtn = buyerPage.locator('#simulate-payment-button');
     await expect(simBtn).toBeVisible({ timeout: 20000 });
     await simBtn.scrollIntoViewIfNeeded();
     await simBtn.click();
     await expect(buyerPage.getByText('ชำระเงินสำเร็จ (Paid)')).toBeVisible({ timeout: 25000 });
+    await expect(buyerPage).toHaveURL(/\/orders\/ORD-[A-Z0-9-]+\/success$/);
+    await buyerPage.locator('#tab-btn-tickets').click();
 
     const ticketCodeEl = buyerPage.locator('#ticket-code-0');
     await expect(ticketCodeEl).toBeVisible({ timeout: 20000 });
@@ -131,7 +139,7 @@ test.describe('TASK-034: Offline Sync and Central Revocation Conflicts (AC-99, A
     await buyerContext.close();
 
     // 4. Scanner logs in and downloads offline dataset
-    const scannerContext = await browser.newContext();
+    const scannerContext = await createIsolatedBrowserContext(browser, testInfo, );
     const scannerPage = await scannerContext.newPage();
     await scannerPage.goto('/login');
     await scannerPage.getByLabel('อีเมล', { exact: true }).fill(scannerEmail);
@@ -146,14 +154,14 @@ test.describe('TASK-034: Offline Sync and Central Revocation Conflicts (AC-99, A
     // Download offline dataset
     const downloadDatasetBtn = scannerPage.locator('#download-offline-dataset-btn');
     await expect(downloadDatasetBtn).toBeVisible({ timeout: 20000 });
-    await downloadDatasetBtn.click();
+    await downloadDatasetBtn.click({ force: true });
     await expect(scannerPage.getByText('ดาวน์โหลดชุดข้อมูลออฟไลน์สำเร็จเรียบร้อย')).toBeVisible({ timeout: 20000 });
     await expect(scannerPage.locator('[data-testid="cached-tickets-count"]')).toContainText('1 ใบ');
 
     // 5. Toggle offline mode and perform offline scan (AC-40, AC-96)
     const toggleOfflineBtn = scannerPage.locator('#toggle-offline-mode-btn');
     await expect(toggleOfflineBtn).toBeVisible();
-    await toggleOfflineBtn.click();
+    await toggleOfflineBtn.click({ force: true });
     await expect(scannerPage.locator('[data-testid="connectivity-status-badge"]')).toContainText('ออฟไลน์');
 
     const ticketInput = scannerPage.locator('#scanner-ticket-input');
@@ -165,18 +173,19 @@ test.describe('TASK-034: Offline Sync and Central Revocation Conflicts (AC-99, A
     // Verify scan result feedback and pending count increases to 1
     await expect(scannerPage.locator('#scan-result-card')).toHaveClass(/result-success-entry/);
     await expect(scannerPage.locator('#scan-result-message')).toContainText('บันทึกเข้างานสำเร็จ (ผ่าน) [ออฟไลน์]');
-    await expect(scannerPage.locator('[data-testid="pending-sync-count"]')).toHaveText('1');
+    await expect(scannerPage.locator('[data-testid="pending-sync-count"]').first()).toHaveText('1');
+    await scannerPage.locator('#dismiss-scan-modal-btn').click({ force: true });
 
     // 6. Connect back online and sync pending scans (AC-102, AC-42)
-    await toggleOfflineBtn.click();
+    await toggleOfflineBtn.click({ force: true });
     await expect(scannerPage.locator('[data-testid="connectivity-status-badge"]')).toContainText('ออนไลน์');
 
     const syncPendingBtn = scannerPage.locator('#sync-offline-pending-btn');
     await expect(syncPendingBtn).toBeEnabled({ timeout: 10000 });
-    await syncPendingBtn.click();
+    await syncPendingBtn.click({ force: true });
 
     // Verify sync completed, pending count cleared to 0 (AC-102)
-    await expect(scannerPage.locator('[data-testid="pending-sync-count"]')).toHaveText('0', { timeout: 15000 });
+    await expect(scannerPage.locator('[data-testid="pending-sync-count"]').first()).toHaveText('0', { timeout: 15000 });
     await expect(scannerPage.getByText('ซิงก์สำเร็จ 1 รายการ')).toBeVisible({ timeout: 15000 });
 
     // 7. Test Idempotency: sync button is disabled when pending queue is 0

@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { Pool } from 'pg';
+import { inTransaction } from './database.ts';
 import { storage } from './storage';
 import {
   roundHalfUp,
@@ -248,9 +249,25 @@ export interface EventMoneyReportDetail extends AccountingResult {
   repayments: DebtRepaymentItem[];
 }
 
-export async function ensureReportSchema(pool: Pool): Promise<void> {
+const reportSchemaInitialization = new WeakMap<Pool, Promise<void>>();
+
+export function ensureReportSchema(pool: Pool): Promise<void> {
+  const existing = reportSchemaInitialization.get(pool);
+  if (existing) return existing;
+  const pending = initializeReportSchema(pool).catch(error => {
+    reportSchemaInitialization.delete(pool);
+    throw error;
+  });
+  reportSchemaInitialization.set(pool, pending);
+  return pending;
+}
+
+async function initializeReportSchema(pool: Pool): Promise<void> {
   await ensureFeeSchema(pool);
-  await pool.query(`
+  await inTransaction(pool, async client => {
+    // All processes/pools use one lock before taking report DDL locks.
+    await client.query('SELECT pg_advisory_xact_lock($1)', [945162028]);
+    await client.query(`
     CREATE TABLE IF NOT EXISTS event_payouts (
       id TEXT PRIMARY KEY,
       "eventId" TEXT NOT NULL REFERENCES events(id) ON DELETE CASCADE,
@@ -290,7 +307,8 @@ export async function ensureReportSchema(pool: Pool): Promise<void> {
       "recordedBy" TEXT REFERENCES auth_user(id)
     );
     CREATE INDEX IF NOT EXISTS idx_event_reserve_releases_eventId ON event_reserve_releases("eventId");
-  `);
+    `);
+  });
 }
 
 export interface ActorContext {
@@ -358,10 +376,11 @@ export async function getEventMoneyReport(
     orderCreatedAt: Date;
   }>(
     `SELECT t.id AS "ticketId", t."orderId", t."sessionId", t."ticketTypeId",
-            tt.price AS "unitPrice", t.status,
+            oi."unitPrice" AS "unitPrice", t.status,
             o."buyerName", o."buyerEmail", o."buyerPhone", o."createdAt" AS "orderCreatedAt"
      FROM tickets t
      JOIN ticket_types tt ON tt.id = t."ticketTypeId"
+     JOIN order_items oi ON oi.id = t."orderItemId"
      JOIN orders o ON o.id = t."orderId"
      WHERE o."eventId" = $1
      ORDER BY o."createdAt" ASC, t.id ASC`,

@@ -197,12 +197,13 @@ export async function issueTicketsForOrder(
   const existingTicketsRes = await client.query(
     `SELECT t.id, t."orderId", t."orderItemId", t."eventId", t."sessionId",
             t."ticketTypeId", t."ticketCode", t."qrPayload", t.status, t."admissionStatus",
-            t."createdAt", tt.name as "ticketTypeName", tt.price as "ticketPrice",
+            t."createdAt", tt.name as "ticketTypeName", oi."unitPrice" as "ticketPrice",
             o."buyerName", o."buyerEmail", o."buyerPhone",
             es."startTime" as "sessionStartTime", es."endTime" as "sessionEndTime",
             e.location, e.title as "eventTitle", e."ticketTemplateUrl", e."posterUrl" as "eventPosterUrl"
      FROM tickets t
      JOIN ticket_types tt ON t."ticketTypeId" = tt.id
+     JOIN order_items oi ON oi.id = t."orderItemId"
      JOIN orders o ON t."orderId" = o.id
      JOIN event_sessions es ON t."sessionId" = es.id
      JOIN events e ON t."eventId" = e.id
@@ -316,12 +317,13 @@ export async function getOrderTickets(pool: Pool, orderId: string): Promise<Tick
   const res = await pool.query(
     `SELECT t.id, t."orderId", t."orderItemId", t."eventId", t."sessionId",
             t."ticketTypeId", t."ticketCode", t."qrPayload", t.status, t."admissionStatus",
-            t."createdAt", tt.name as "ticketTypeName", tt.price as "ticketPrice",
+            t."createdAt", tt.name as "ticketTypeName", oi."unitPrice" as "ticketPrice",
             o."buyerName", o."buyerEmail", o."buyerPhone",
             es."startTime" as "sessionStartTime", es."endTime" as "sessionEndTime",
             e.location, e.title as "eventTitle", e."ticketTemplateUrl", e."posterUrl" as "eventPosterUrl"
      FROM tickets t
      JOIN ticket_types tt ON t."ticketTypeId" = tt.id
+     JOIN order_items oi ON oi.id = t."orderItemId"
      JOIN orders o ON t."orderId" = o.id
      JOIN event_sessions es ON t."sessionId" = es.id
      JOIN events e ON t."eventId" = e.id

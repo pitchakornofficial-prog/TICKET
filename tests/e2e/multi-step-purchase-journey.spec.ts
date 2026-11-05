@@ -1,11 +1,11 @@
+import { testClientIp } from '../support/client-context';
+import { saveEventDraft } from '../support/event-draft';
 import { expect, test } from '@playwright/test';
 import { fixtureAccounts, fixturePassword } from '../support/auth-fixture';
 
-let nextIp = 1;
 test.beforeEach(async ({ context }, testInfo) => {
   test.setTimeout(60000);
-  const base = testInfo.project.name === 'desktop-chromium' ? 110 : 160;
-  await context.setExtraHTTPHeaders({ 'x-forwarded-for': `198.51.100.${base + (nextIp++ % 45)}` });
+  await context.setExtraHTTPHeaders({ 'x-forwarded-for': testClientIp(testInfo) });
 });
 
 test.describe('Multi-step purchase journey: Details -> Queue -> Checkout -> Payment (TASK-040, AC-117, D-27)', () => {
@@ -25,10 +25,11 @@ test.describe('Multi-step purchase journey: Details -> Queue -> Checkout -> Paym
     await page.getByRole('button', { name: 'เข้าสู่ระบบ', exact: true }).click();
     await expect(page).toHaveURL('/back-office/organizer');
 
+    await page.goto('/back-office/organizer#events');
     await page.getByRole('button', { name: '+ สร้างงานคอนเสิร์ตใหม่' }).click();
     await page.getByLabel('ชื่องานคอนเสิร์ต').fill(eventTitle);
     await page.getByLabel('สถานที่จัดงาน').fill('อิมแพ็ค อารีน่า เมืองทองธานี');
-    await page.getByRole('button', { name: 'บันทึกข้อมูลร่าง (Draft)' }).click();
+    await saveEventDraft(page);
     await expect(page.getByText('บันทึกงานคอนเสิร์ตสำเร็จ')).toBeVisible();
 
     const eventsRes = await page.request.get('/api/events');
@@ -172,10 +173,6 @@ test.describe('Multi-step purchase journey: Details -> Queue -> Checkout -> Paym
 
     // PromptPay QR Code (D-48: Auto-generated or manual fallback)
     const qrImage = page.locator('#promptpay-qr-image');
-    const generateQrBtn = page.locator('#generate-payment-qr-btn');
-    if (await generateQrBtn.isVisible()) {
-      await generateQrBtn.click({ force: true });
-    }
     await expect(qrImage).toBeVisible({ timeout: 10000 });
     const simulateBtn = page.locator('#simulate-payment-button');
     await expect(simulateBtn).toBeVisible();
@@ -185,6 +182,7 @@ test.describe('Multi-step purchase journey: Details -> Queue -> Checkout -> Paym
     // Verify Paid status and issued digital tickets
     await expect(page.getByText('ชำระเงินสำเร็จ (Paid)')).toBeVisible();
     await expect(page.getByText('ออกบัตรสำเร็จแล้ว (2 ใบ)')).toBeVisible();
+    await page.locator('#tab-btn-tickets').click();
     await expect(page.locator('.ticket-card')).toHaveCount(2);
     await expect(page.locator('.payment-sticky-bottom-bar')).toHaveCount(0);
 
@@ -213,10 +211,11 @@ test.describe('Multi-step purchase journey: Details -> Queue -> Checkout -> Paym
     await page.getByRole('button', { name: 'เข้าสู่ระบบ', exact: true }).click();
     await expect(page).toHaveURL('/back-office/organizer');
 
+    await page.goto('/back-office/organizer#events');
     await page.getByRole('button', { name: '+ สร้างงานคอนเสิร์ตใหม่' }).click();
     await page.getByLabel('ชื่องานคอนเสิร์ต').fill(eventTitle);
     await page.getByLabel('สถานที่จัดงาน').fill('อิมแพ็ค ชาเลนเจอร์ ฮอลล์');
-    await page.getByRole('button', { name: 'บันทึกข้อมูลร่าง (Draft)' }).click();
+    await saveEventDraft(page);
     await expect(page.getByText('บันทึกงานคอนเสิร์ตสำเร็จ')).toBeVisible();
 
     const eventsRes = await page.request.get('/api/events');
@@ -252,7 +251,9 @@ test.describe('Multi-step purchase journey: Details -> Queue -> Checkout -> Paym
     const sessionCard = page.locator('.pending-session-card', { hasText: eventTitle });
     await expect(sessionCard).toBeVisible();
     await sessionCard.getByRole('button', { name: 'อนุมัติรอบนี้' }).click();
+    await expect(page.getByText(`อนุมัติรอบการแสดงของ "${eventTitle}" สำเร็จ`)).toBeVisible();
     await page.getByRole('button', { name: 'ออกจากระบบ', exact: true }).click();
+    await expect(page).toHaveURL('/login');
 
     // Navigate to event page and enter queue
     await page.goto(`/events/${createdEvent.id}`);

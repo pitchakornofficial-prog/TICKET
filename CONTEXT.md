@@ -31,6 +31,8 @@ Implementation foundation (2026-10-20): ผู้ใช้เรียก implem
 ข้อความ Setup/Specification/Task planning ด้านบนเป็นหลักฐานตามช่วงเวลานั้น ไม่ใช่สถานะของ implementation ล่าสุด
 ยังไม่มีผล domain หลาย instance/benchmark/deployment และไม่ใช้ foundation ปิด AC-105 ทั้งข้อ
 
+Production planning update (2026-10-30): ผู้ใช้ยืนยัน baseline ลดต้นทุนใน [ADR-0002](docs/adr/0002-local-first-and-aws-production.md) และ provider readiness/cost assumptions ใน [ADR-0003](docs/adr/0003-external-integrations.md); supersedes เฉพาะข้อความเก่าที่ว่ายังไม่มี baseline ขนาด/topology/scaling/backup ทั้งหมด คง NQ-04/NQ-05 ส่วนที่ยังเปิด และไม่ใช่หลักฐาน deployment/capacity หรือการเปลี่ยนสถานะ task ที่ส่งมอบแล้ว
+
 ## Verification Policy
 
 - Status: confirmed
@@ -103,6 +105,13 @@ Implementation foundation (2026-10-20): ผู้ใช้เรียก implem
 - G-35=A (Agreed, 2026-10-20): เมื่อ provider ยืนยันว่าชำระจริงหลังเส้นตาย ไม่ออกบัตรแม้ยังมี quota เหลือ ให้ owner ตรวจและคืนเต็มยอดที่รับ; แยกจาก G-34 ที่ชำระจริงทันเวลาแต่ผลมาถึงช้า
 - G-50=ยืนยัน (Agreed, 2026-10-20): เมื่อ owner อนุมัติยกเลิกรอบ ให้ยุติ reservation ที่ยังไม่ยืนยันชำระทันที คืน quota ที่กันอยู่โดยไม่เปิดขายรอบที่ยกเลิก และหยุดแสดง QR ว่าชำระต่อได้ แต่ยังติดตามผลเงินจริงจากผู้ให้บริการต่อ ไม่ถือว่าการยุติ reservation ทำให้ provider รับเงินต่อไม่ได้โดยอัตโนมัติ
 - วิธีจัดการ callback ซ้ำ ผลชำระล่าช้า และการแย่งซื้อบัตรสุดท้ายต้องกำหนดและตรวจสอบใน spec/implementation ไม่ถือว่าทดสอบแล้วจากการเลือกเทคโนโลยี
+
+### Stripe payment decision time (2026-10-30)
+
+- G-53=ยืนยัน (Agreed, ผู้ใช้ 2026-10-30): สำหรับ Stripe PromptPay ใช้ `created` ของ Event ชนิด `payment_intent.succeeded` ที่ตรวจสอบว่าเป็นของ Stripe และจับคู่ PaymentIntent/order/amount/THB/mode ถูกต้อง เป็นเวลา T สำหรับตัดสินออกบัตรและยอดคืน แทนเกณฑ์เวลาจ่ายเงินจริงเดิมใน G-15/G-34/G-35/G-51/G-52 เฉพาะความหมายของ T; สูตร ผลต่อ quota และยอดคืนเดิมยังคงอยู่. ไม่ใช้เวลารับ webhook, เวลาบน browser, PaymentIntent/Charge `created` หรือ Event ชนิดอื่นแทน.
+- ค่า Event `created` เป็น Unix seconds; นำค่าตามที่ Stripe ให้มาเทียบกับ D/C เดิมโดยตรง (เทียบหน่วยเวลาเดียวกัน เช่น T*1000 กับ milliseconds) ไม่ปัด D/C ไม่เพิ่ม grace period และไม่ต่อ reservation. หาก Event เกิดหลัง D ถือว่าช้า แม้ลูกค้าอาจจ่ายธนาคารก่อน D; นี่เป็นเกณฑ์ธุรกิจที่ยืนยันใหม่ ไม่ใช่คำรับรองว่าเวลา Event เท่ากับเวลาจ่ายธนาคาร.
+- เมื่อยังไม่มี matching success Event/ตรวจความแท้จริงหรือ timestamp ไม่ได้ ให้รอตรวจ ไม่เดา T ไม่ issue/เลือกยอดคืนอัตโนมัติ; intent lookup ที่เป็น succeeded เพียงอย่างเดียวยังไม่ให้ T. Recovery ใช้ matching success Event ที่ตรวจได้และผลซ้ำไม่เปลี่ยนผลทางเงิน/บัตรที่ประมวลผลแล้ว; หลักฐานขัดแย้งให้ตรวจสอบโดยไม่เขียนผลใหม่ทับอัตโนมัติ.
+- G-15/G-34/G-35/G-51/G-52 ข้างต้น/ด้านล่างเป็นประวัติข้อตกลงเดิม; Stripe อ้าง G-53 สำหรับความหมายเวลา ส่วนการยกเลิกรอบ เส้นตาย 15 นาที และ manual refund คงเดิม. แหล่งพฤติกรรม/verification: [SPEC-001](docs/specs/SPEC-001-concert-ticket-lifecycle.md#stripe-success-event-time-2026-10-30).
 
 ## Fees and settlement rules
 

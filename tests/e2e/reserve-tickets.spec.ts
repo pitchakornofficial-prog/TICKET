@@ -1,10 +1,10 @@
+import { testClientIp } from '../support/client-context';
+import { saveEventDraft } from '../support/event-draft';
 import { expect, test } from '@playwright/test';
 import { fixtureAccounts, fixturePassword } from '../support/auth-fixture';
 
-let nextIp = 1;
 test.beforeEach(async ({ context }, testInfo) => {
-  const base = testInfo.project.name === 'desktop-chromium' ? 140 : 190;
-  await context.setExtraHTTPHeaders({ 'x-forwarded-for': `198.51.100.${base + (nextIp++ % 50)}` });
+  await context.setExtraHTTPHeaders({ 'x-forwarded-for': testClientIp(testInfo) });
 });
 
 test.describe('Ticket reservation and quotation flow (TASK-012, AC-10, AC-14, AC-61, AC-69, AC-106, AC-111, AC-13)', () => {
@@ -24,10 +24,11 @@ test.describe('Ticket reservation and quotation flow (TASK-012, AC-10, AC-14, AC
     await page.getByRole('button', { name: 'เข้าสู่ระบบ', exact: true }).click();
     await expect(page).toHaveURL('/back-office/organizer');
 
+    await page.goto('/back-office/organizer#events');
     await page.getByRole('button', { name: '+ สร้างงานคอนเสิร์ตใหม่' }).click();
     await page.getByLabel('ชื่องานคอนเสิร์ต').fill(eventTitle);
     await page.getByLabel('สถานที่จัดงาน').fill('อิมแพ็ค ชาเลนเจอร์ ฮอลล์');
-    await page.getByRole('button', { name: 'บันทึกข้อมูลร่าง (Draft)' }).click();
+    await saveEventDraft(page);
     await expect(page.getByText('บันทึกงานคอนเสิร์ตสำเร็จ')).toBeVisible();
 
     // Get event ID
@@ -92,8 +93,17 @@ test.describe('Ticket reservation and quotation flow (TASK-012, AC-10, AC-14, AC
     await expect(page).toHaveURL('/login');
 
     // 3. Guest opens the concert detail page
-    await page.goto(`/events/${createdEvent.id}`);
+    await page.goto(`/events/${createdEvent.id}/checkout`);
     await expect(page.getByRole('heading', { name: eventTitle })).toBeVisible();
+
+    // 5. Select ticket quantities
+    await expect(page.getByRole('heading', { name: 'เลือกรอบการแสดงและจำนวนบัตร' })).toBeVisible();
+
+    // Click + on VIP ticket twice -> qty 2
+    const addVipBtn = page.getByRole('button', { name: 'เพิ่มจำนวน บัตร VIP' });
+    await addVipBtn.click();
+    await addVipBtn.click();
+
 
     // 4. Guest completes OTP verification
     await page.getByLabel('ชื่อ-นามสกุล *').fill(guestName);
@@ -113,24 +123,14 @@ test.describe('Ticket reservation and quotation flow (TASK-012, AC-10, AC-14, AC
 
     await page.getByLabel('รหัส OTP 6 หลัก *').fill(code);
     await page.getByRole('button', { name: 'ยืนยันรหัส OTP' }).click();
+    await page.getByRole('button', { name: 'ยืนยันและดำเนินการต่อ' }).click();
     await expect(page.getByRole('heading', { name: 'ยืนยันอีเมลสำเร็จ (Guest Verified)' })).toBeVisible();
 
-    // 5. Select ticket quantities
-    await expect(page.getByRole('heading', { name: 'เลือกประเภทและจำนวนบัตร' })).toBeVisible();
-
-    // Click + on VIP ticket twice -> qty 2
-    const addVipBtn = page.getByRole('button', { name: 'เพิ่มจำนวน บัตร VIP' });
-    await addVipBtn.click();
-    await addVipBtn.click();
-
-    // Verify button text shows (2 ใบ)
-    await expect(page.getByRole('button', { name: 'ยืนยันการเลือกบัตร (2 ใบ)' })).toBeVisible();
-
     // Click confirm reservation
-    await page.getByRole('button', { name: 'ยืนยันการเลือกบัตร (2 ใบ)' }).click();
+    await page.locator('#confirm-reservation-btn').click();
 
     // 6. Verify Reservation Confirmed Card (AC-69, AC-13)
-    await expect(page.getByRole('heading', { name: 'หมายเลขคำสั่งซื้อ:', exact: false })).toBeVisible();
+    await expect(page.locator('#reservation-order-id')).toHaveText(/^ORD-/);
     await expect(page.getByText('กันบัตรสำเร็จ (Reserved)')).toBeVisible();
 
     // Check 15-minute countdown display
@@ -151,7 +151,8 @@ test.describe('Ticket reservation and quotation flow (TASK-012, AC-10, AC-14, AC
     await page.getByRole('button', { name: 'เข้าสู่ระบบ', exact: true }).click();
     await expect(page).toHaveURL('/back-office/owner');
 
-    const eventSelect = page.getByLabel('เลือกคอนเสิร์ต');
+    await page.goto('/back-office/owner#finance');
+    const eventSelect = page.locator('.owner-fee-settings-card').getByLabel('เลือกคอนเสิร์ต');
     const targetOption = eventSelect.locator('option', { hasText: eventTitle });
     const eventIdValue = (await targetOption.getAttribute('value')) ?? '';
     await eventSelect.selectOption(eventIdValue);

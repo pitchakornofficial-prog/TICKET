@@ -1,10 +1,9 @@
+import { testClientIp } from '../support/client-context';
 import { expect, test } from '@playwright/test';
 import { fixtureAccounts, fixturePassword } from '../support/auth-fixture';
 
-let nextIp = 600;
 test.beforeEach(async ({ context }, testInfo) => {
-  const offset = testInfo.project.name === 'desktop-chromium' ? 0 : 50;
-  await context.setExtraHTTPHeaders({ 'x-forwarded-for': `192.0.2.${offset + nextIp++}` });
+  await context.setExtraHTTPHeaders({ 'x-forwarded-for': testClientIp(testInfo) });
 });
 
 test('organizer views financial reports and payouts workspace, switches tabs, and checks KPIs', async ({

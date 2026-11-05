@@ -34,6 +34,7 @@ export function createResendTransport(apiKey = process.env.RESEND_API_KEY): Emai
         return customTransport.send(message);
       }
       if (!apiKey || apiKey === 'test-resend-key') {
+        if (process.env.NODE_ENV === 'production') throw new Error('RESEND_API_KEY is required in production');
         capturedEmails.push(structuredClone(message));
         return { id: `local-msg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}` };
       }
@@ -43,7 +44,7 @@ export function createResendTransport(apiKey = process.env.RESEND_API_KEY): Emai
           Authorization: `Bearer ${apiKey}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(message),
+        body: JSON.stringify({ ...message, from: process.env.EMAIL_FROM || message.from }),
       });
       if (!response.ok) {
         const errorText = await response.text();

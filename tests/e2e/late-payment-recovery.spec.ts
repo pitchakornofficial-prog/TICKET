@@ -1,10 +1,10 @@
+import { testClientIp } from '../support/client-context';
+import { saveEventDraft } from '../support/event-draft';
 import { expect, test } from '@playwright/test';
 import { fixtureAccounts, fixturePassword } from '../support/auth-fixture';
 
-let nextIp = 1;
 test.beforeEach(async ({ context }, testInfo) => {
-  const base = testInfo.project.name === 'desktop-chromium' ? 146 : 196;
-  await context.setExtraHTTPHeaders({ 'x-forwarded-for': `198.51.100.${base + (nextIp++ % 50)}` });
+  await context.setExtraHTTPHeaders({ 'x-forwarded-for': testClientIp(testInfo) });
 });
 
 test.describe('Late payment recovery & owner exception review (TASK-016, AC-72, AC-73, AC-74, G-23, G-35)', () => {
@@ -24,10 +24,11 @@ test.describe('Late payment recovery & owner exception review (TASK-016, AC-72, 
     await page.getByRole('button', { name: 'เข้าสู่ระบบ', exact: true }).click();
     await expect(page).toHaveURL('/back-office/organizer');
 
+    await page.goto('/back-office/organizer#events');
     await page.getByRole('button', { name: '+ สร้างงานคอนเสิร์ตใหม่' }).click();
     await page.getByLabel('ชื่องานคอนเสิร์ต').fill(eventTitle);
     await page.getByLabel('สถานที่จัดงาน').fill('อิมแพ็ค ชาเลนเจอร์');
-    await page.getByRole('button', { name: 'บันทึกข้อมูลร่าง (Draft)' }).click();
+    await saveEventDraft(page);
     await expect(page.getByText('บันทึกงานคอนเสิร์ตสำเร็จ')).toBeVisible();
 
     const eventsRes = await page.request.get('/api/events');
@@ -85,10 +86,14 @@ test.describe('Late payment recovery & owner exception review (TASK-016, AC-72, 
     await expect(page).toHaveURL('/login');
 
     // 3. Guest visits concert detail page
-    await page.goto(`/events/${createdEvent.id}`);
+    await page.goto(`/events/${createdEvent.id}/checkout`);
     await expect(page.getByRole('heading', { name: eventTitle })).toBeVisible();
 
     // 4. Guest completes OTP verification
+    const addBtn = page.getByRole('button', { name: 'เพิ่มจำนวน บัตร โซน A' });
+    await addBtn.click();
+    await addBtn.click();
+
     await page.getByLabel('ชื่อ-นามสกุล *').fill(guestName);
     await page.getByLabel('อีเมล *').fill(guestEmail);
     await page.getByLabel('เบอร์โทรศัพท์มือถือ *').fill(guestPhone);
@@ -104,22 +109,17 @@ test.describe('Late payment recovery & owner exception review (TASK-016, AC-72, 
 
     await page.getByLabel('รหัส OTP 6 หลัก *').fill(code);
     await page.getByRole('button', { name: 'ยืนยันรหัส OTP' }).click();
+    await page.getByRole('button', { name: 'ยืนยันและดำเนินการต่อ' }).click();
     await expect(page.getByRole('heading', { name: 'ยืนยันอีเมลสำเร็จ (Guest Verified)' })).toBeVisible();
 
     // 5. Select 2 tickets (subtotal = 3,600, fee = 100, total = 3,700 THB)
-    const addBtn = page.getByRole('button', { name: 'เพิ่มจำนวน บัตร โซน A' });
-    await addBtn.click();
-    await addBtn.click();
-    await page.getByRole('button', { name: 'ยืนยันการเลือกบัตร (2 ใบ)' }).click();
+    await page.locator('#confirm-reservation-btn').click();
 
     await expect(page.getByText('กันบัตรสำเร็จ (Reserved)')).toBeVisible();
     const orderId = (await page.locator('#reservation-order-id').innerText()).trim();
     expect(orderId).toMatch(/^ORD-/);
 
     // 6. Generate PromptPay QR
-    const generateQrBtn = page.getByRole('button', { name: 'สร้าง QR Code ชำระเงิน (PromptPay)' });
-    await expect(generateQrBtn).toBeVisible();
-    await generateQrBtn.click();
 
     await expect(page.locator('#promptpay-qr-image')).toBeVisible();
     const chargeId = (await page.locator('#payment-charge-id').innerText()).trim();
@@ -143,7 +143,7 @@ test.describe('Late payment recovery & owner exception review (TASK-016, AC-72, 
     // Verify Customer UI under-review notice
     await expect(page.locator('#payment-exception-banner')).toBeVisible();
     await expect(page.getByText('รอตรวจสอบเพื่อคืนเงิน (Under Review)')).toBeVisible();
-    await expect(page.getByText('เปิดเคสตรวจสอบคืนเงินเต็มจำนวนแล้ว')).toBeVisible();
+    await expect(page.getByText(/ได้เปิดเคสให้เจ้าหน้าที่ตรวจสอบเพื่อดำเนินการโอนเงินคืนเต็มจำนวน/)).toBeVisible();
 
     // Zero ticket cards must be issued
     expect(await page.locator('.ticket-card').count()).toBe(0);
@@ -155,6 +155,7 @@ test.describe('Late payment recovery & owner exception review (TASK-016, AC-72, 
     await page.getByRole('button', { name: 'เข้าสู่ระบบ', exact: true }).click();
     await expect(page).toHaveURL('/back-office/owner');
 
+    await page.goto('/back-office/owner#finance');
     const exceptionCard = page.locator('.payment-exception-card', { hasText: orderId });
     await expect(exceptionCard).toBeVisible();
     await expect(exceptionCard.getByText('ชำระเงินหลังหมดเวลา 15 นาที')).toBeVisible();

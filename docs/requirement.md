@@ -53,9 +53,21 @@
 - ต้องออกแบบให้รองรับ Horizontal Scaling; เป้าหมายเบื้องต้นประมาณ **200 ผู้ใช้พร้อมกัน** (C4=C) แทนประมาณการเดิม 200 ต่อนาที
 - ตัวเลข 200 เป็นเป้าหมาย ไม่ใช่ผล benchmark หรือการรับรอง capacity; workload และเกณฑ์เวลาตอบสนองยังต้องกำหนดก่อนทดสอบ
 - เทคโนโลยีที่ยืนยันและเป้าหมาย production อยู่ใน [ADRs](adr/0001-application-and-shared-data.md)
+- Production cost baseline (ผู้ใช้ยืนยัน 2026-10-30): วางแผน 4,500 ใบ ใช้กรอบรายรับค่าธรรมเนียมระบบ 27,000–40,500 บาทประกอบการวางแผน ไม่ใช่งบ cloud ต่อเดือน; เลือก ECS Fargate ARM64 + ALB, public tasks ที่รับเฉพาะ ALB, private RDS Single-AZ และ SSM Standard ตาม [ADR-0002](adr/0002-local-first-and-aws-production.md) โดยคง providers ใน [ADR-0003](adr/0003-external-integrations.md)
+- ขนาดเริ่มต้น/เพดาน scaling/backup/retention ยืนยันใน ADR-0002 แล้ว; ยังต้องตรวจ capacity, availability tradeoffs และ estimate ที่รวม IPv4/usage/ภาษีจริง ไม่รับรองส่วนลด 50–70% หรือราคา Free Tier โดยไม่มีหลักฐาน
 - หน้าเว็บต้องใช้งานได้ตามอุปกรณ์ที่ตกลงใน D-05 และให้ลูกค้าซื้อได้โดยไม่บังคับสมัครสมาชิก
 - การเข้าถึงข้อมูลของผู้จัดงาน/ทีมสแกนต้องอยู่ในขอบเขตงานของตนตาม domain context
 - G-47=ยืนยัน (Agreed, ผู้ใช้ 2026-10-20): รุ่นแรกใช้ภาษาไทย สกุลเงินบาท (THB) และแสดงวันเวลาตามประเทศไทย `Asia/Bangkok`
+
+## Payment provider change (2026-10-30)
+
+ใช้ Stripe PromptPay QR แทน Omise ตาม [ADR-0003/P1–P4](adr/0003-external-integrations.md#payment-provider-change--2026-10-30)
+แสดงในหน้าชำระเงินเดิม คง owner โอนคืนเอง และไม่มีรายการรับเงินจริง Omise เดิมที่ต้องย้าย
+บัญชีทดสอบมีแล้ว แต่ Live/PromptPay ยังไม่ยืนยัน; คง reservation 15 นาทีและกฎเงินจริงเดิม
+พฤติกรรมและ verification อยู่ใน [SPEC-001](specs/SPEC-001-concert-ticket-lifecycle.md)
+
+ผู้ใช้ยืนยันเปลี่ยนเกณฑ์เวลาวันที่ 2026-10-30: ใช้เวลาที่ Stripe สร้าง `payment_intent.succeeded` Event ที่ตรวจสอบแล้ว ตัดสินบัตร/ยอดคืน; Event เกิดหลังเส้นตายถือว่าช้า แม้ลูกค้าอาจจ่ายก่อนหน้า ไม่ใช้เวลาที่เว็บรับ webhook. ความหมายเวลา/เส้นตายอยู่ใน [G-53](../CONTEXT.md#stripe-payment-decision-time-2026-10-30) และ [ADR-0003/P5](adr/0003-external-integrations.md#stripe-success-event-time--2026-10-30); supersedes เฉพาะเกณฑ์เวลาจ่ายจริงเดิม ไม่เปลี่ยนยอดคืน/ระยะจอง/flow หน้าชำระ.
+
 
 ## Boundaries
 
@@ -282,6 +294,6 @@ References ที่เปิดตรวจทั้งข้อความแ
 
 - Pending configuration: อัตราค่าบริการจริง เงินสำรอง วันจ่ายรายสัปดาห์ และช่วงคืนเงินพิเศษ; รายละเอียดกติกาที่ต้องเขียนต่ออยู่ใน CONTEXT.md
 - Specification: [SPEC-001 เดิม](specs/SPEC-001-concert-ticket-lifecycle.md) reconcile ตาม G-01–G-52 แล้ววันที่ 2026-10-20 สถานะ ready สำหรับแตกงาน มี 114 AC พร้อม source/verification mapping ไม่มี blocking question; รายละเอียดที่ยังเปิดดู [Open questions](specs/SPEC-001-concert-ticket-lifecycle.md#open-questions)
-- Pending operation: งบรายเดือน ขนาด compute/database เพดาน autoscaling เกณฑ์โหลดและ latency ก่อนเปิดจริง
+- Pending operation: baseline compute/database/network/scaling/backup ยืนยันใน ADR-0002 ฉบับ 2026-10-30 แล้ว; ยังเปิดงบ cloud ต่อเดือน, estimate จริง, workload/duration/latency/error targets, cooldown/connection budget ระหว่าง rollout และ recovery/retention ก่อนเปิดจริง
 - Pending provider readiness: การอนุมัติ merchant สำหรับธุรกิจฝากขายบัตร การเปิด PromptPay บัญชีบริการและโดเมนอีเมล; ยังไม่ได้ตรวจ credential หรือ provision ทรัพยากร
 - G-47 ยืนยันภาษาไทย/THB/Asia/Bangkok แล้ว รูปแบบวันที่และรายละเอียดการจัดข้อความยังต้องระบุภายใน display contract โดยไม่ขยายเป็นหลายภาษา/หลายสกุล

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import type { EventMoneyReportDetail } from '@/server/reports';
 import { formatDate, formatTime } from '@/lib/locale';
 import { RefreshIcon, ClockIcon } from './icons';
@@ -14,10 +14,15 @@ export interface EventOption {
 export function OwnerReserveReleaseManager() {
   const [events, setEvents] = useState<EventOption[]>([]);
   const [selectedEventId, setSelectedEventId] = useState<string>('');
+  const selectedEventIdRef = useRef<string>('');
   const [report, setReport] = useState<EventMoneyReportDetail | null>(null);
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+
+  useEffect(() => {
+    selectedEventIdRef.current = selectedEventId;
+  }, [selectedEventId]);
 
   // Form states
   const [amount, setAmount] = useState<string>('');
@@ -30,7 +35,11 @@ export function OwnerReserveReleaseManager() {
       const data = await res.json();
       if (res.ok && data.events) {
         setEvents(data.events.map((e: { id: string; title: string }) => ({ id: e.id, title: e.title })));
-        setSelectedEventId(prev => prev || (data.events[0]?.id || ''));
+        setSelectedEventId(prev => {
+          const next = prev || (data.events[0]?.id || '');
+          selectedEventIdRef.current = next;
+          return next;
+        });
       }
     } catch {
       // Ignored
@@ -43,16 +52,20 @@ export function OwnerReserveReleaseManager() {
 
   // Fetch report detail
   const fetchReport = useCallback(async (preserveFeedback = false) => {
-    if (!selectedEventId) return;
+    const targetEventId = selectedEventId;
+    if (!targetEventId) return;
     setLoading(true);
     if (!preserveFeedback) {
       setFeedback(null);
     }
     try {
-      const res = await fetch(`/api/organizer/events/${selectedEventId}/money-report`, {
+      const res = await fetch(`/api/organizer/events/${targetEventId}/money-report`, {
         cache: 'no-store',
       });
       const data = await res.json();
+      if (selectedEventIdRef.current !== targetEventId) {
+        return;
+      }
       if (!res.ok) {
         setFeedback({ type: 'error', message: data.message || 'ไม่สามารถดึงข้อมูลรายงานการเงินได้' });
         setReport(null);
@@ -63,10 +76,14 @@ export function OwnerReserveReleaseManager() {
         }
       }
     } catch {
-      setFeedback({ type: 'error', message: 'เกิดข้อผิดพลาดในการเชื่อมต่อดึงรายงานการเงิน' });
-      setReport(null);
+      if (selectedEventIdRef.current === targetEventId) {
+        setFeedback({ type: 'error', message: 'เกิดข้อผิดพลาดในการเชื่อมต่อดึงรายงานการเงิน' });
+        setReport(null);
+      }
     } finally {
-      setLoading(false);
+      if (selectedEventIdRef.current === targetEventId) {
+        setLoading(false);
+      }
     }
   }, [selectedEventId]);
 
@@ -169,7 +186,11 @@ export function OwnerReserveReleaseManager() {
             id="owner-reserve-release-event-select"
             data-testid="owner-reserve-release-event-select"
             value={selectedEventId}
-            onChange={e => setSelectedEventId(e.target.value)}
+            onChange={e => {
+              const newId = e.target.value;
+              selectedEventIdRef.current = newId;
+              setSelectedEventId(newId);
+            }}
             style={{
               padding: '8px 12px',
               fontSize: '14px',

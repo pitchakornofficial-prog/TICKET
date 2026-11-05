@@ -1,11 +1,10 @@
+import { testClientIp } from '../support/client-context';
 import { expect, test } from '@playwright/test';
 import { fixtureAccounts, fixturePassword } from '../support/auth-fixture';
 import { clearCapturedEmails } from '../../src/server/email';
 
-let nextIp = 300;
 test.beforeEach(async ({ context }, testInfo) => {
-  const offset = testInfo.project.name === 'desktop-chromium' ? 0 : 50;
-  await context.setExtraHTTPHeaders({ 'x-forwarded-for': `192.0.2.${offset + nextIp++}` });
+  await context.setExtraHTTPHeaders({ 'x-forwarded-for': testClientIp(testInfo) });
 });
 
 test('owner invites organizer, recipient accepts invitation and logs in as organizer without owner privilege', async ({ page, request }, testInfo) => {
@@ -22,6 +21,7 @@ test('owner invites organizer, recipient accepts invitation and logs in as organ
   await expect(page).toHaveURL('/back-office/owner');
 
   // 2. Owner invites a new organizer
+  await page.goto('/back-office/owner#system');
   await expect(page.getByRole('heading', { name: 'เชิญผู้จัดงานใหม่' })).toBeVisible();
   await page.getByLabel('อีเมลผู้จัดงาน').fill(invitedEmail);
   await page.getByRole('button', { name: 'ส่งคำเชิญผู้จัดงาน' }).click();

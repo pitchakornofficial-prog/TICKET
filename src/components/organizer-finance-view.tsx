@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import type { EventMoneyReportDetail, PayoutHistoryItem } from '@/server/reports';
 import { formatBaht, formatDate, formatTime } from '@/lib/locale';
 import {
@@ -58,10 +58,15 @@ export function FinanceTooltip({ text }: { text: string }) {
 export function OrganizerFinanceView() {
   const [events, setEvents] = useState<OrganizerEventItem[]>([]);
   const [selectedEventId, setSelectedEventId] = useState<string>('');
+  const selectedEventIdRef = useRef<string>('');
   const [activeTab, setActiveTab] = useState<FinanceTab>('breakdown');
   const [loading, setLoading] = useState(true);
   const [reportLoading, setReportLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    selectedEventIdRef.current = selectedEventId;
+  }, [selectedEventId]);
 
   // Active event's report
   const [currentReport, setCurrentReport] = useState<EventMoneyReportDetail | null>(null);
@@ -205,13 +210,17 @@ export function OrganizerFinanceView() {
       });
       const data = await res.json();
       if (res.ok && data.report) {
-        setCurrentReport(data.report);
+        if (selectedEventIdRef.current === eventId) {
+          setCurrentReport(data.report);
+        }
         setAllReports((prev) => ({ ...prev, [eventId]: data.report }));
       }
     } catch {
       // Keep previous report if fetch fails
     } finally {
-      setReportLoading(false);
+      if (selectedEventIdRef.current === eventId) {
+        setReportLoading(false);
+      }
     }
   }, []);
 
