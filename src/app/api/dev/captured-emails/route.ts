@@ -3,6 +3,7 @@ import { getCapturedEmails, clearCapturedEmails } from '@/server/email';
 export const runtime = 'nodejs';
 
 export async function GET() {
+  if (process.env.NODE_ENV === 'production') return new Response(null, { status: 404 });
   const emails = getCapturedEmails();
   return Response.json(
     { emails },
@@ -16,6 +17,7 @@ export async function GET() {
 }
 
 export async function DELETE() {
+  if (process.env.NODE_ENV === 'production') return new Response(null, { status: 404 });
   clearCapturedEmails();
   return Response.json(
     { message: 'ล้างรายการอีเมลจำลองเรียบร้อยแล้ว' },

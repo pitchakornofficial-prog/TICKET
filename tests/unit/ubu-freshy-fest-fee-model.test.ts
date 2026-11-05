@@ -105,6 +105,10 @@ describe('D-181: UBU Freshy Music Fest 2026, 6% Customer Fee, 150B/99B UBU Email
     let capturedQuery = '';
     let capturedValues: unknown[] = [];
     const mockPool = {
+      connect: async () => ({
+        query: async () => ({ rowCount: 0, rows: [] }),
+        release: () => {},
+      }),
       query: async (queryText: string, values?: unknown[]) => {
         if (queryText.includes('CREATE TABLE') || queryText.includes('ALTER TABLE')) {
           return { rowCount: 0, rows: [] };
