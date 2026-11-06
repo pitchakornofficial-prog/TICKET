@@ -121,8 +121,8 @@ export async function createPaymentQr(
     throw new Error('กรุณาระบุหมายเลขคำสั่งซื้อ');
   }
 
-  // AC-12: Must validate OTP token before creating payment QR
-  const verifiedSession = await getVerifiedGuestSession(pool, input.verifiedToken, now);
+  // AC-12: Must validate OTP token before creating payment QR (checkout purpose)
+  const verifiedSession = await getVerifiedGuestSession(pool, input.verifiedToken, now, 'checkout');
   if (!verifiedSession) {
     throw new Error('กรุณายืนยันตัวตนผ่าน OTP ก่อนขอรับ QR ชำระเงิน (AC-12)');
   }
@@ -282,7 +282,7 @@ export async function getPaymentChargeForOrder(
     throw new Error('กรุณายืนยันตัวตนผ่าน OTP ก่อนเข้าถึงข้อมูลการชำระเงิน (AC-12)');
   }
 
-  const verifiedSession = await getVerifiedGuestSession(pool, verifiedToken, now);
+  const verifiedSession = await getVerifiedGuestSession(pool, verifiedToken, now, 'checkout');
   if (!verifiedSession) {
     throw new Error('กรุณายืนยันตัวตนผ่าน OTP ก่อนเข้าถึงข้อมูลการชำระเงิน (AC-12)');
   }

@@ -324,8 +324,8 @@ export async function submitRefundRequest(
 }> {
   await ensureRefundSchema(pool);
 
-  // 1. Validate verified guest session (AC-21)
-  const session = await getVerifiedGuestSession(pool, input.verifiedToken, input.now);
+  // 1. Validate verified guest session (AC-21: order_lookup purpose required)
+  const session = await getVerifiedGuestSession(pool, input.verifiedToken, input.now, 'order_lookup');
   if (!session) {
     return {
       success: false,

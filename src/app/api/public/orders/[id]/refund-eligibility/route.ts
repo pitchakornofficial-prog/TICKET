@@ -26,12 +26,23 @@ export async function GET(
     const pool = getDatabasePool();
 
     // Verify session
-    const session = await getVerifiedGuestSession(pool, token);
+    const session = await getVerifiedGuestSession(pool, token, new Date(), 'order_lookup');
     if (!session) {
       return Response.json(
         { message: 'เซสชันหมดอายุหรือไม่มีสิทธิ์ กรุณายืนยันตัวตนใหม่' },
         { status: 401 },
       );
+    }
+
+    const orderCheck = await pool.query<{ buyerEmail: string }>(
+      `SELECT "buyerEmail" FROM orders WHERE id = $1`,
+      [orderId],
+    );
+    if (orderCheck.rowCount === 0) {
+      return Response.json({ message: 'ไม่พบคำสั่งซื้อ' }, { status: 404 });
+    }
+    if (orderCheck.rows[0].buyerEmail.toLowerCase() !== session.email.toLowerCase()) {
+      return Response.json({ message: 'ท่านไม่มีสิทธิ์ในการเข้าถึงคำสั่งซื้อนี้' }, { status: 403 });
     }
 
     const eligibility = await getOrderRefundEligibility(pool, orderId);

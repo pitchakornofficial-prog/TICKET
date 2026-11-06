@@ -14,8 +14,17 @@ vi.mock('@/server/database', () => ({
 }));
 
 vi.mock('@/server/guest-otp', () => ({
-  getVerifiedGuestSession: async (_pool: unknown, token: string) => {
+  getVerifiedGuestSession: async (
+    _pool: unknown,
+    token: string,
+    _now?: Date,
+    expectedPurpose?: string | readonly string[],
+  ) => {
     if (token === 'valid-token') {
+      if (expectedPurpose) {
+        const allowed = Array.isArray(expectedPurpose) ? expectedPurpose : [expectedPurpose];
+        if (!mockSession || !allowed.includes(mockSession.purpose)) return null;
+      }
       return mockSession;
     }
     return null;

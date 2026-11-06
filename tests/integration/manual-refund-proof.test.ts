@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { randomUUID } from 'node:crypto';
 import { authFixture, fixtureAccounts } from '../support/auth-fixture';
 import { createEventDraft, approveSession, addScannerToEvent } from '../../src/server/events';
 import { requestGuestOtp, verifyGuestOtp } from '../../src/server/guest-otp';
@@ -133,10 +134,17 @@ describe('TASK-023: Manual Refund Transfer & Private Proof Integration Tests (AC
       [reservation.id],
     );
 
-    // Submit refund request
+    // Submit refund request (requires order_lookup session)
+    const refundLookupToken = randomUUID();
+    await fixture.pool.query(
+      `INSERT INTO guest_verified_sessions (token, email, name, phone, purpose, "verifiedAt", "expiresAt")
+       VALUES ($1, $2, $3, $4, 'order_lookup', now(), now() + interval '30 minutes')`,
+      [refundLookupToken, guestEmail, guestName, guestPhone],
+    );
+
     const ticketIdsToRefund = [tRes.rows[0].id];
     const refundSubmission = await submitRefundRequest(fixture.pool, {
-      verifiedToken: buyerToken,
+      verifiedToken: refundLookupToken,
       orderId: reservation.id,
       ticketIds: ticketIdsToRefund,
       reason: 'ไม่สะดวกเดินทางไปร่วมงาน',

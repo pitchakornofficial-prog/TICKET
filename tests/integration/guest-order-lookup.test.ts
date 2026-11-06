@@ -121,11 +121,12 @@ describe('TASK-018: Guest Order Lookup Integration Tests (AC-21, AC-22, AC-62, A
     );
 
     // Now test Lookup:
+    const tLookup = new Date(t0.getTime() + 65000);
     // Case 1: Mismatched phone with matching email is rejected (AC-62)
     const badPhoneRes = await requestOrderLookupOtp(fixture.pool, {
       email: buyerEmail,
       phone: '089-999-9999',
-      now: t0,
+      now: tLookup,
     });
     expect(badPhoneRes.success).toBe(false);
     expect(badPhoneRes.code).toBe('NOT_FOUND');
@@ -135,7 +136,7 @@ describe('TASK-018: Guest Order Lookup Integration Tests (AC-21, AC-22, AC-62, A
     const lookupReq = await requestOrderLookupOtp(fixture.pool, {
       email: buyerEmail,
       phone: buyerPhone,
-      now: t0,
+      now: tLookup,
     });
     expect(lookupReq.success).toBe(true);
     expect(lookupReq.requestId).toBeDefined();
@@ -155,7 +156,7 @@ describe('TASK-018: Guest Order Lookup Integration Tests (AC-21, AC-22, AC-62, A
       phone: buyerPhone,
       code: '000000',
       requestId: lookupReq.requestId ?? '',
-      now: t0,
+      now: tLookup,
     });
     expect(wrongVerify.success).toBe(false);
     expect(wrongVerify.code).toBe('INVALID_CODE');
@@ -166,7 +167,7 @@ describe('TASK-018: Guest Order Lookup Integration Tests (AC-21, AC-22, AC-62, A
       phone: buyerPhone,
       code: otpCode,
       requestId: lookupReq.requestId ?? '',
-      now: t0,
+      now: tLookup,
     });
     expect(goodVerify.success).toBe(true);
     expect(goodVerify.verifiedToken).toBeDefined();
@@ -174,7 +175,7 @@ describe('TASK-018: Guest Order Lookup Integration Tests (AC-21, AC-22, AC-62, A
     // Query orders with verified token
     const ordersResult = await lookupGuestOrders(fixture.pool, {
       verifiedToken: goodVerify.verifiedToken ?? '',
-      now: t0,
+      now: tLookup,
     });
 
     expect(ordersResult.success).toBe(true);
@@ -245,11 +246,12 @@ describe('TASK-018: Guest Order Lookup Integration Tests (AC-21, AC-22, AC-62, A
     );
 
     // Generate verified lookup session for Buyer A
+    const tLookupA = new Date(t0.getTime() + 65000);
     clearCapturedEmails();
     const reqA = await requestOrderLookupOtp(fixture.pool, {
       email: emailA,
       phone: phoneA,
-      now: t0,
+      now: tLookupA,
     });
     const otpCodeA = getCapturedEmails().at(-1)?.text?.match(/\b(\d{6})\b/)?.[1] ?? '';
     const verifyA = await verifyOrderLookupOtp(fixture.pool, {
@@ -257,7 +259,7 @@ describe('TASK-018: Guest Order Lookup Integration Tests (AC-21, AC-22, AC-62, A
       phone: phoneA,
       code: otpCodeA,
       requestId: reqA.requestId ?? '',
-      now: t0,
+      now: tLookupA,
     });
     const lookupTokenA = verifyA.verifiedToken ?? '';
 
@@ -265,7 +267,7 @@ describe('TASK-018: Guest Order Lookup Integration Tests (AC-21, AC-22, AC-62, A
     const tamperAttempt = await getGuestOrderDetail(fixture.pool, {
       verifiedToken: lookupTokenA,
       orderId: resB.id,
-      now: t0,
+      now: tLookupA,
     });
 
     expect(tamperAttempt.success).toBe(false);
@@ -355,7 +357,8 @@ describe('TASK-018: Guest Order Lookup Integration Tests (AC-21, AC-22, AC-62, A
     clearCapturedEmails();
 
     // Buyer did not get ticket email, but visits lookup page with email + phone
-    const req = await requestOrderLookupOtp(fixture.pool, { email, phone, now: t0 });
+    const tLookupRecovery = new Date(t0.getTime() + 65000);
+    const req = await requestOrderLookupOtp(fixture.pool, { email, phone, now: tLookupRecovery });
     expect(req.success).toBe(true);
 
     const otpCode = getCapturedEmails().at(-1)?.text?.match(/\b(\d{6})\b/)?.[1] ?? '';
@@ -364,13 +367,13 @@ describe('TASK-018: Guest Order Lookup Integration Tests (AC-21, AC-22, AC-62, A
       phone,
       code: otpCode,
       requestId: req.requestId ?? '',
-      now: t0,
+      now: tLookupRecovery,
     });
     expect(verify.success).toBe(true);
 
     const ordersResult = await lookupGuestOrders(fixture.pool, {
       verifiedToken: verify.verifiedToken ?? '',
-      now: t0,
+      now: tLookupRecovery,
     });
 
     expect(ordersResult.success).toBe(true);

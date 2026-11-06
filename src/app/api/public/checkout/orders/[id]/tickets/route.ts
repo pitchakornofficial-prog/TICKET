@@ -31,7 +31,7 @@ export async function GET(
   }
 
   try {
-    const verifiedSession = await getVerifiedGuestSession(pool, token);
+    const verifiedSession = await getVerifiedGuestSession(pool, token, new Date(), 'checkout');
     if (!verifiedSession) {
       return Response.json(
         { message: 'Session ยืนยันตัวตนไม่ถูกต้องหรือหมดอายุแล้ว กรุณายืนยัน OTP ใหม่' },

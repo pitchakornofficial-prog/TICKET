@@ -237,7 +237,7 @@ export async function lookupGuestOrders(
   await ensureTicketDeliverySchema(pool);
   await ensureGuestOtpSchema(pool);
 
-  const session = await getVerifiedGuestSession(pool, input.verifiedToken, input.now);
+  const session = await getVerifiedGuestSession(pool, input.verifiedToken, input.now, 'order_lookup');
   if (!session) {
     return {
       success: false,
@@ -353,7 +353,12 @@ export async function getGuestOrderDetail(
   await ensureTicketDeliverySchema(pool);
   await ensureGuestOtpSchema(pool);
 
-  const session = await getVerifiedGuestSession(pool, input.verifiedToken, input.now);
+  const session = await getVerifiedGuestSession(
+    pool,
+    input.verifiedToken,
+    input.now,
+    ['order_lookup', 'checkout'],
+  );
   if (!session) {
     return {
       success: false,

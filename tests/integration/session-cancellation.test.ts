@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { randomUUID } from 'node:crypto';
 import { authFixture, fixtureAccounts } from '../support/auth-fixture';
 import {
   createEventDraft,
@@ -127,13 +128,20 @@ describe('TASK-026: Session Cancellation Integration Tests (AC-35, AC-91, AC-108
       [reservation.id],
     );
 
+    const refundLookupToken = randomUUID();
+    await fixture.pool.query(
+      `INSERT INTO guest_verified_sessions (token, email, name, phone, purpose, "verifiedAt", "expiresAt")
+       VALUES ($1, $2, $3, $4, 'order_lookup', now(), now() + interval '30 minutes')`,
+      [refundLookupToken, buyerEmail, buyerName, buyerPhone],
+    );
+
     return {
       eventId,
       sessionId,
       sessionStartTime,
       ticketTypeId,
       orderId: reservation.id,
-      verifiedToken,
+      verifiedToken: refundLookupToken,
       buyerEmail,
       buyerPhone,
       buyerName,

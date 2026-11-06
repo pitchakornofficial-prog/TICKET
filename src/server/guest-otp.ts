@@ -528,6 +528,7 @@ export async function getVerifiedGuestSession(
   pool: Pool,
   token: string,
   now = new Date(),
+  expectedPurpose?: OtpPurpose | readonly OtpPurpose[],
 ): Promise<GuestVerifiedSession | null> {
   await ensureGuestOtpSchema(pool);
   const res = await pool.query(
@@ -539,6 +540,14 @@ export async function getVerifiedGuestSession(
 
   if (res.rowCount === 0) return null;
   const row = res.rows[0];
+
+  if (expectedPurpose) {
+    const allowed = Array.isArray(expectedPurpose) ? expectedPurpose : [expectedPurpose];
+    if (!allowed.includes(row.purpose as OtpPurpose)) {
+      return null;
+    }
+  }
+
   return {
     token: row.token,
     email: row.email,
