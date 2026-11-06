@@ -22,7 +22,7 @@ export async function POST(
 
   try {
     const body = await request.json();
-    const { ticketIds, reason, bankName, bankAccountNo, bankAccountName, now } = body;
+    const { ticketIds, reason, bankName, bankAccountNo, bankAccountName } = body;
 
     const pool = getDatabasePool();
     const result = await submitRefundRequest(pool, {
@@ -33,7 +33,6 @@ export async function POST(
       bankName,
       bankAccountNo,
       bankAccountName,
-      now: now ? new Date(now) : undefined,
     });
 
     if (!result.success) {
