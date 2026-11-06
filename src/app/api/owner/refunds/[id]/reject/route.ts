@@ -1,3 +1,4 @@
+import { assertSameOrigin } from '@/server/origin';
 import { getAuth } from '@/server/auth';
 import { getDatabasePool } from '@/server/database';
 import { rejectRefundRequest } from '@/server/refunds';
@@ -8,6 +9,9 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  const originError = assertSameOrigin(request);
+  if (originError) return originError;
+
   const { id: refundRequestId } = await params;
   const auth = getAuth();
   const session = await auth.api.getSession({ headers: request.headers });

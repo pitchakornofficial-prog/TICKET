@@ -1,3 +1,4 @@
+import { assertSameOrigin } from '@/server/origin';
 import { headers } from 'next/headers';
 import { getAuth, readActor } from '@/server/auth';
 import { getDatabasePool } from '@/server/database';
@@ -12,6 +13,9 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  const originError = assertSameOrigin(request);
+  if (originError) return originError;
+
   const { id: orderId } = await params;
   const actor = await readActor(getAuth(), await headers());
 

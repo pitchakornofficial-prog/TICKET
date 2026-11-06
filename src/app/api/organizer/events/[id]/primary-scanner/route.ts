@@ -1,3 +1,4 @@
+import { assertSameOrigin } from '@/server/origin';
 import { getAuth } from '@/server/auth';
 import {
   getEventPrimaryScanner,
@@ -54,6 +55,9 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  const originError = assertSameOrigin(request);
+  if (originError) return originError;
+
   const auth = getAuth();
   const session = await auth.api.getSession({ headers: request.headers });
   if (!session?.user) {
@@ -104,6 +108,9 @@ export async function DELETE(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  const originError = assertSameOrigin(request);
+  if (originError) return originError;
+
   const auth = getAuth();
   const session = await auth.api.getSession({ headers: request.headers });
   if (!session?.user) {

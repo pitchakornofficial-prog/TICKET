@@ -1,3 +1,4 @@
+import { assertSameOrigin } from '@/server/origin';
 import { getAuth } from '@/server/auth';
 import { getDatabasePool } from '@/server/database';
 import { listFailedEmailDeliveries, retryTicketEmailDelivery } from '@/server/ticket-delivery';
@@ -22,6 +23,9 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  const originError = assertSameOrigin(request);
+  if (originError) return originError;
+
   const auth = getAuth();
   const session = await auth.api.getSession({ headers: request.headers });
   if (session?.user.role !== 'owner') {

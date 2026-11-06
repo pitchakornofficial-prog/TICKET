@@ -1,3 +1,4 @@
+import { assertSameOrigin } from '@/server/origin';
 import { getAuth } from '@/server/auth';
 import {
   getEventDetails,
@@ -37,6 +38,9 @@ export async function PUT(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  const originError = assertSameOrigin(request);
+  if (originError) return originError;
+
   const { id } = await params;
   const auth = getAuth();
   const session = await auth.api.getSession({ headers: request.headers });
@@ -90,6 +94,9 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  const originError = assertSameOrigin(request);
+  if (originError) return originError;
+
   const { id } = await params;
   const auth = getAuth();
   const session = await auth.api.getSession({ headers: request.headers });
@@ -154,6 +161,9 @@ export async function DELETE(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  const originError = assertSameOrigin(request);
+  if (originError) return originError;
+
   const { id } = await params;
   const auth = getAuth();
   const session = await auth.api.getSession({ headers: request.headers });

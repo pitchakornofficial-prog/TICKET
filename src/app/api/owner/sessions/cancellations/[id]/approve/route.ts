@@ -1,3 +1,4 @@
+import { assertSameOrigin } from '@/server/origin';
 import { headers } from 'next/headers';
 import { getAuth, readActor } from '@/server/auth';
 import { getDatabasePool } from '@/server/database';
@@ -6,9 +7,12 @@ import { approveSessionCancellation } from '@/server/events';
 export const runtime = 'nodejs';
 
 export async function POST(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  const originError = assertSameOrigin(request);
+  if (originError) return originError;
+
   try {
     const { id } = await params;
     const actor = await readActor(getAuth(), await headers());

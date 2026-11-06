@@ -1,3 +1,4 @@
+import { assertSameOrigin } from '@/server/origin';
 import { getAuth } from '@/server/auth';
 import { getEventFeeSettings } from '@/server/fees';
 import type { Pool } from 'pg';
@@ -33,9 +34,12 @@ export async function GET(
 }
 
 export async function PUT(
-  _request: Request,
+  request: Request,
   _context: { params: Promise<{ id: string }> },
 ) {
+  const originError = assertSameOrigin(request);
+  if (originError) return originError;
+
   // Organizers are strictly forbidden from modifying fee settings!
   return Response.json(
     { message: 'ไม่อนุญาต: ผู้จัดงานไม่สามารถแก้ไขการตั้งค่าบริการและเงินสำรองได้' },
@@ -44,9 +48,12 @@ export async function PUT(
 }
 
 export async function POST(
-  _request: Request,
+  request: Request,
   _context: { params: Promise<{ id: string }> },
 ) {
+  const originError = assertSameOrigin(request);
+  if (originError) return originError;
+
   return Response.json(
     { message: 'ไม่อนุญาต: ผู้จัดงานไม่สามารถแก้ไขการตั้งค่าบริการและเงินสำรองได้' },
     { status: 403 },
