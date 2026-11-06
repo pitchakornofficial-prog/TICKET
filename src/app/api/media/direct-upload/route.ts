@@ -19,22 +19,23 @@ export async function PUT(request: Request) {
     return Response.json({ message: 'ลิงก์อัปโหลดไม่ถูกต้องหรือหมดอายุแล้ว' }, { status: 403 });
   }
 
-  // Pre-check Content-Length
+  // Pre-check Content-Length against token size bound
+  const allowedMax = tokenInfo.maxFileSizeBytes || MAX_FILE_SIZE;
   const contentLength = request.headers.get('content-length');
   if (contentLength) {
     const length = Number.parseInt(contentLength, 10);
-    if (!Number.isNaN(length) && length > MAX_FILE_SIZE) {
+    if (!Number.isNaN(length) && length > allowedMax) {
       return Response.json(
-        { message: 'ขนาดไฟล์เกินขีดจำกัดสูงสุด (Payload Too Large: สูงสุด 15MB)' },
+        { message: `ขนาดไฟล์เกินขีดจำกัดสูงสุด (Payload Too Large: สูงสุด ${allowedMax} ไบต์)` },
         { status: 413 },
       );
     }
   }
 
   const buffer = Buffer.from(await request.arrayBuffer());
-  if (buffer.length > MAX_FILE_SIZE) {
+  if (buffer.length > allowedMax) {
     return Response.json(
-      { message: 'ขนาดไฟล์เกินขีดจำกัดสูงสุด (Payload Too Large: สูงสุด 15MB)' },
+      { message: `ขนาดไฟล์เกินขีดจำกัดสูงสุด (Payload Too Large: สูงสุด ${allowedMax} ไบต์)` },
       { status: 413 },
     );
   }

@@ -110,6 +110,7 @@ export class R2StorageDriver implements StorageDriver {
     key: string,
     contentType: string,
     visibility: 'public' | 'private' = 'public',
+    maxFileSizeBytes = 15 * 1024 * 1024,
     expiresInSeconds = 900,
   ): Promise<PresignedUploadResult> {
     const { accessKeyId, secretAccessKey, bucket, endpoint } = this.config;
@@ -119,7 +120,9 @@ export class R2StorageDriver implements StorageDriver {
     const dateStamp = amzDate.slice(0, 8);
     const scope = `${dateStamp}/auto/s3/aws4_request`;
 
+    // Strictly enforce upload file size bound via signed content-length header
     const headers: Record<string, string> = {
+      'content-length': String(maxFileSizeBytes),
       'content-type': contentType,
       host,
       'x-amz-meta-visibility': visibility,
@@ -173,9 +176,11 @@ export class R2StorageDriver implements StorageDriver {
       publicUrl,
       method: 'PUT',
       headers: {
-        'content-type': contentType,
+        'Content-Type': contentType,
+        'Content-Length': String(maxFileSizeBytes),
         'x-amz-meta-visibility': visibility,
       },
+      maxFileSizeBytes,
       expiresInSeconds,
     };
   }

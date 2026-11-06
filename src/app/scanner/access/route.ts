@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { randomUUID, createHmac } from 'node:crypto';
 import { getAuth } from '@/server/auth';
+import { recordScannerSessionScope } from '@/server/scanner-scope';
 import type { Pool } from 'pg';
 
 export const runtime = 'nodejs';
@@ -138,6 +139,9 @@ export async function GET(request: Request) {
        VALUES ($1, $2, $3, $4, now(), now())`,
       [sessionId, sessionToken, scannerId, expiresAt],
     );
+
+    // Issue #3: Persist server-side event scope bound to this session token
+    await recordScannerSessionScope(pool, sessionToken, scannerId, eventId);
 
     // 4. Set cookies and redirect to /back-office/scanner?eventId=${eventId}
     const redirectUrl = new URL(`/back-office/scanner?eventId=${eventId}`, url.origin);

@@ -1,3 +1,4 @@
+import type { Pool } from 'pg';
 import { getAuth } from '@/server/auth';
 import { handlePresignedRequest } from '../route';
 
@@ -10,10 +11,17 @@ export async function POST(request: Request) {
     return Response.json({ message: 'ไม่อนุญาต' }, { status: 403 });
   }
 
+  let pool: Pool | undefined;
+  try {
+    pool = (auth.options as { database?: Pool }).database;
+  } catch {
+    //
+  }
+
   const body = await request.json().catch(() => null);
   if (!body) {
     return Response.json({ message: 'ข้อมูลคำขอไม่ถูกต้อง' }, { status: 400 });
   }
 
-  return handlePresignedRequest(session.user, body);
+  return handlePresignedRequest(session.user, body, pool);
 }
