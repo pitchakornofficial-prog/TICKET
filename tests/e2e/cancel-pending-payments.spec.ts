@@ -170,10 +170,15 @@ test.describe('Cancel session while payment is pending and refund timely amounts
     // 7. Verify late payment callback (AC-114, G-52)
     // When late payment arrives after cancellation (T >= C), full refund including customer fee is triggered
     // Simulate payment callback on cancelled session
+    const guestToken = await buyerPage.evaluate(() => sessionStorage.getItem('ticket_guest_otp_token'));
     const payRes = await request.post(`/api/public/checkout/orders/${orderId}/pay-test`, {
+      headers: guestToken ? { 'x-guest-token': guestToken } : {},
       // Stripe Event.created is second precision. Ensure T >= C even when
       // cancellation and this callback are processed within the same second.
-      data: { providerPaidAt: new Date(Date.now() + 1000).toISOString() },
+      data: {
+        providerPaidAt: new Date(Date.now() + 1000).toISOString(),
+        verifiedToken: guestToken || undefined,
+      },
     });
     expect(payRes.status()).toBe(200);
     const payData = await payRes.json();

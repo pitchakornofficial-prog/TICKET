@@ -94,7 +94,13 @@ export function OrderSuccessView({ orderId }: OrderSuccessViewProps) {
     }
 
     setIsLoading(true);
-    fetch(`/api/public/checkout/orders/${orderId}`)
+    const guestToken =
+      typeof window !== 'undefined'
+        ? sessionStorage.getItem('ticket_guest_otp_token') || ''
+        : '';
+    fetch(`/api/public/checkout/orders/${orderId}`, {
+      headers: guestToken ? { 'x-guest-token': guestToken } : {},
+    })
       .then(async res => {
         if (!res.ok) throw new Error('ไม่พบข้อมูลคำสั่งซื้อ');
         return res.json();
@@ -103,7 +109,9 @@ export function OrderSuccessView({ orderId }: OrderSuccessViewProps) {
         if (data?.reservation) {
           setReservation(data.reservation);
         }
-        return fetch(`/api/public/checkout/orders/${orderId}/tickets`);
+        return fetch(`/api/public/checkout/orders/${orderId}/tickets`, {
+          headers: guestToken ? { 'x-guest-token': guestToken } : {},
+        });
       })
       .then(async res => {
         if (res.ok) {
@@ -385,30 +393,33 @@ export function OrderSuccessView({ orderId }: OrderSuccessViewProps) {
                     * ระบบได้ส่งอีเมลยืนยันคำสั่งซื้อไปยัง <strong>{reservation.buyerEmail}</strong> เรียบร้อยแล้ว (AC-19)
                   </p>
 
-                  <div className="dev-mail-preview-wrap" style={{ marginTop: '0.85rem' }}>
-                    <button
-                      id="dev-mail-preview-btn"
-                      type="button"
-                      onClick={handleOpenDevEmailModal}
-                      className="button button-secondary dev-mail-btn"
-                      style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '0.45rem',
-                        padding: '0.45rem 0.9rem',
-                        borderRadius: '8px',
-                        fontSize: '0.82rem',
-                        fontWeight: 600,
-                        cursor: 'pointer',
-                        border: '1px dashed #94a3b8',
-                        background: '#f8fafc',
-                        color: '#0f172a',
-                      }}
-                    >
-                      <MailIcon style={{ width: '15px', height: '15px' }} />
-                      <span>เปิดดูอีเมลตั๋วที่ระบบส่งออก (Dev Preview)</span>
-                    </button>
-                  </div>
+                  {process.env.NODE_ENV !== 'production' &&
+                    process.env.NEXT_PUBLIC_ENABLE_DEV_MAIL_PREVIEW === 'true' && (
+                      <div className="dev-mail-preview-wrap" style={{ marginTop: '0.85rem' }}>
+                        <button
+                          id="dev-mail-preview-btn"
+                          type="button"
+                          onClick={handleOpenDevEmailModal}
+                          className="button button-secondary dev-mail-btn"
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '0.45rem',
+                            padding: '0.45rem 0.9rem',
+                            borderRadius: '8px',
+                            fontSize: '0.82rem',
+                            fontWeight: 600,
+                            cursor: 'pointer',
+                            border: '1px dashed #94a3b8',
+                            background: '#f8fafc',
+                            color: '#0f172a',
+                          }}
+                        >
+                          <MailIcon style={{ width: '15px', height: '15px' }} />
+                          <span>เปิดดูอีเมลตั๋วที่ระบบส่งออก (Dev Preview)</span>
+                        </button>
+                      </div>
+                    )}
                 </div>
               </div>
             </div>
@@ -525,15 +536,16 @@ export function OrderSuccessView({ orderId }: OrderSuccessViewProps) {
                                 id={`ticket-qr-${idx}`}
                                 src={tkt.qrCodeUrl}
                                 alt={`QR Code ${tkt.ticketCode}`}
+                                data-qr-payload={tkt.qrPayload}
                                 width={160}
                                 height={160}
                                 style={{ display: 'block', margin: '0 auto' }}
                               />
                             </div>
 
-                            <div className="stub-code-label">รหัสบัตรสำหรับเข้างาน</div>
+                            <div className="stub-code-label">รหัสอ้างอิงบัตร</div>
                             <div className="stub-code-value">
-                              <strong id={`ticket-code-${idx}`}>{tkt.ticketCode}</strong>
+                              <strong id={`ticket-code-${idx}`} data-qr-payload={tkt.qrPayload}>{tkt.ticketCode}</strong>
                             </div>
                           </div>
                         </>

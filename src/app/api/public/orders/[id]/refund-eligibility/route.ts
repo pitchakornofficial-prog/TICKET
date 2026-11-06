@@ -1,3 +1,4 @@
+import { createSafeErrorResponse } from '@/server/api-error';
 import { getDatabasePool } from '@/server/database';
 import { getOrderRefundEligibility, getOrderRefundRequests } from '@/server/refunds';
 import { getVerifiedGuestSession } from '@/server/guest-otp';
@@ -25,12 +26,23 @@ export async function GET(
     const pool = getDatabasePool();
 
     // Verify session
-    const session = await getVerifiedGuestSession(pool, token);
+    const session = await getVerifiedGuestSession(pool, token, new Date(), 'order_lookup');
     if (!session) {
       return Response.json(
         { message: 'เซสชันหมดอายุหรือไม่มีสิทธิ์ กรุณายืนยันตัวตนใหม่' },
         { status: 401 },
       );
+    }
+
+    const orderCheck = await pool.query<{ buyerEmail: string }>(
+      `SELECT "buyerEmail" FROM orders WHERE id = $1`,
+      [orderId],
+    );
+    if (orderCheck.rowCount === 0) {
+      return Response.json({ message: 'ไม่พบคำสั่งซื้อ' }, { status: 404 });
+    }
+    if (orderCheck.rows[0].buyerEmail.toLowerCase() !== session.email.toLowerCase()) {
+      return Response.json({ message: 'ท่านไม่มีสิทธิ์ในการเข้าถึงคำสั่งซื้อนี้' }, { status: 403 });
     }
 
     const eligibility = await getOrderRefundEligibility(pool, orderId);
@@ -44,8 +56,9 @@ export async function GET(
       { status: 200, headers: { 'Cache-Control': 'no-store' } },
     );
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'เกิดข้อผิดพลาดในการตรวจสอบสิทธิ์การคืนเงิน';
-    const status = message.includes('ไม่พบ') ? 404 : 500;
-    return Response.json({ message }, { status });
+    return createSafeErrorResponse(error, 'เกิดข้อผิดพลาดในการตรวจสอบสิทธิ์การคืนเงิน', {
+      defaultStatus: 500,
+      statusResolver: (msg) => (msg.includes('ไม่พบ') ? 404 : 500),
+    });
   }
 }

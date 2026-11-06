@@ -1,3 +1,4 @@
+import { createSafeErrorResponse } from '@/server/api-error';
 import { getDatabasePool } from '@/server/database';
 import { submitRefundRequest } from '@/server/refunds';
 
@@ -22,7 +23,7 @@ export async function POST(
 
   try {
     const body = await request.json();
-    const { ticketIds, reason, bankName, bankAccountNo, bankAccountName, now } = body;
+    const { ticketIds, reason, bankName, bankAccountNo, bankAccountName } = body;
 
     const pool = getDatabasePool();
     const result = await submitRefundRequest(pool, {
@@ -33,7 +34,6 @@ export async function POST(
       bankName,
       bankAccountNo,
       bankAccountName,
-      now: now ? new Date(now) : undefined,
     });
 
     if (!result.success) {
@@ -61,7 +61,6 @@ export async function POST(
       { status: 201 },
     );
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'เกิดข้อผิดพลาดในการยื่นคำขอคืนเงิน';
-    return Response.json({ message }, { status: 500 });
+    return createSafeErrorResponse(error, 'เกิดข้อผิดพลาดในการยื่นคำขอคืนเงิน', { defaultStatus: 500 });
   }
 }

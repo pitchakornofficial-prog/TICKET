@@ -1,3 +1,5 @@
+import { createSafeErrorResponse } from '@/server/api-error';
+import { assertSameOrigin } from '@/server/origin';
 import { headers } from 'next/headers';
 import { getAuth, readActor } from '@/server/auth';
 import { getDatabasePool } from '@/server/database';
@@ -12,6 +14,9 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  const originError = assertSameOrigin(request);
+  if (originError) return originError;
+
   const { id: orderId } = await params;
   const actor = await readActor(getAuth(), await headers());
 
@@ -53,8 +58,7 @@ export async function POST(
 
     return Response.json(result, { status: 200, headers: { 'Cache-Control': 'no-store' } });
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'เกิดข้อผิดพลาดในการแก้ไขข้อมูลติดต่อ';
-    return Response.json({ message }, { status: 500 });
+    return createSafeErrorResponse(error, 'เกิดข้อผิดพลาดในการแก้ไขข้อมูลติดต่อ', { defaultStatus: 500 });
   }
 }
 
@@ -81,7 +85,6 @@ export async function GET(
     const auditLogs = await getOrderContactAuditLogs(pool, orderId, actor);
     return Response.json({ auditLogs }, { status: 200, headers: { 'Cache-Control': 'no-store' } });
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'เกิดข้อผิดพลาดในการดึงประวัติการแก้ไข';
-    return Response.json({ message }, { status: 500 });
+    return createSafeErrorResponse(error, 'เกิดข้อผิดพลาดในการดึงประวัติการแก้ไข', { defaultStatus: 500 });
   }
 }

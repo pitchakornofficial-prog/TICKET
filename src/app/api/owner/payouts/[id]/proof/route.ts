@@ -37,10 +37,30 @@ export async function GET(
       return new Response(result.error || 'Not found', { status });
     }
 
+    const contentType = result.contentType || 'application/octet-stream';
+    const SAFE_INLINE_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
+    const safeExtension = contentType === 'application/pdf'
+      ? 'pdf'
+      : contentType === 'image/jpeg'
+        ? 'jpg'
+        : contentType === 'image/webp'
+          ? 'webp'
+          : contentType === 'image/png'
+            ? 'png'
+            : 'bin';
+    const safeFilename = `payout-proof-${payoutId.replace(/[^\w.-]/g, '_')}.${safeExtension}`;
+    const contentDisposition = SAFE_INLINE_IMAGE_TYPES.has(contentType)
+      ? `inline; filename="${safeFilename}"`
+      : `attachment; filename="${safeFilename}"`;
+
     return new Response(new Uint8Array(result.data), {
       status: 200,
       headers: {
-        'Content-Type': result.contentType || 'application/octet-stream',
+        'Content-Type': contentType,
+        'Content-Disposition': contentDisposition,
+        'Content-Security-Policy': "default-src 'none'; sandbox",
+        'X-Content-Type-Options': 'nosniff',
+        'X-Frame-Options': 'DENY',
         'Cache-Control': 'private, no-cache, no-store, must-revalidate',
       },
     });

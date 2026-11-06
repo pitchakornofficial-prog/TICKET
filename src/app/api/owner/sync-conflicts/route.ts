@@ -1,3 +1,4 @@
+import { createSafeErrorResponse } from '@/server/api-error';
 import { getAuth } from '@/server/auth';
 import { listAdmissionSyncConflicts } from '@/server/admission';
 import type { Pool } from 'pg';
@@ -25,7 +26,6 @@ export async function GET(request: Request) {
     const conflicts = await listAdmissionSyncConflicts(pool, eventId);
     return Response.json({ conflicts }, { status: 200, headers: { 'Cache-Control': 'no-store' } });
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'เกิดข้อผิดพลาดในการดึงรายการข้อขัดแย้งการซิงก์';
-    return Response.json({ message }, { status: 500 });
+    return createSafeErrorResponse(error, 'เกิดข้อผิดพลาดในการดึงรายการข้อขัดแย้งการซิงก์', { defaultStatus: 500 });
   }
 }

@@ -194,7 +194,7 @@ describe('Admission scan unit logic (TASK-020, AC-08, AC-39, AC-49, AC-95, AC-10
       scannerName: 'สแกนเนอร์',
       scannerRole: 'scanner',
       sessionId: 'sess-1',
-      qrPayloadOrCode: 'TK-SECRET-01',
+      qrPayloadOrCode: 'QR-SECRET-01',
       action: 'entry',
       now: new Date('2026-12-31T19:00:00Z'),
     });
@@ -211,5 +211,87 @@ describe('Admission scan unit logic (TASK-020, AC-08, AC-39, AC-49, AC-95, AC-10
     expect(ticketJson).not.toContain('นายผู้ซื้อ');
     expect(ticketJson).not.toContain('real-buyer@secret.invalid');
     expect(ticketJson).not.toContain('0899999999');
+  });
+
+  it('rejects scan using ticketCode and strictly requires authentic qrPayload (Issue 14)', async () => {
+    const mockClient = {
+      query: async (queryText: string, values?: unknown[]) => {
+        if (queryText === 'BEGIN' || queryText === 'COMMIT' || queryText === 'ROLLBACK') return { rows: [] };
+        if (queryText.includes('SELECT t.id')) {
+          // WHERE t."qrPayload" = $1: if values[0] is ticketCode, no matching row found
+          if (values && values[0] === 'TK-SECRET-01') {
+            return { rowCount: 0, rows: [] };
+          }
+          return {
+            rowCount: 1,
+            rows: [
+              {
+                id: 't-123',
+                orderId: 'ord-123',
+                eventId: 'ev-1',
+                sessionId: 'sess-1',
+                ticketTypeId: 'tt-1',
+                ticketCode: 'TK-SECRET-01',
+                qrPayload: 'QR-SECRET-01',
+                status: 'valid',
+                admissionStatus: 'outside',
+                ticketTypeName: 'VIP Zone A',
+                ticketPrice: 3500,
+                eventTitle: 'มหกรรมคอนเสิร์ตใหญ่',
+                sessionStartTime: new Date('2026-12-31T18:00:00Z'),
+                sessionEndTime: new Date('2026-12-31T22:00:00Z'),
+              },
+            ],
+          };
+        }
+        return { rowCount: 0, rows: [] };
+      },
+      release: () => {},
+    };
+
+    const mockPool = {
+      query: async (queryText: string) => {
+        if (queryText.includes('CREATE TABLE')) return { rows: [] };
+        if (queryText.includes('SELECT s.id')) {
+          return {
+            rowCount: 1,
+            rows: [
+              {
+                id: 'sess-1',
+                eventId: 'ev-1',
+                organizerId: 'org-1',
+                eventTitle: 'มหกรรมคอนเสิร์ตใหญ่',
+                startTime: new Date('2026-12-31T18:00:00Z'),
+                endTime: new Date('2026-12-31T22:00:00Z'),
+                admissionStartTime: null,
+                admissionEndTime: null,
+                sessionStatus: 'approved',
+              },
+            ],
+          };
+        }
+        if (queryText.includes('SELECT 1 FROM event_scanners')) {
+          return { rowCount: 1, rows: [{}] };
+        }
+        return { rowCount: 0, rows: [] };
+      },
+      connect: async () => mockClient,
+    } as unknown as Pool;
+
+    // Attempting scan with guessable ticketCode must fail
+    const res = await recordAdmissionScan(mockPool, {
+      scannerId: 'scanner-1',
+      scannerName: 'สแกนเนอร์',
+      scannerRole: 'scanner',
+      sessionId: 'sess-1',
+      qrPayloadOrCode: 'TK-SECRET-01',
+      action: 'entry',
+      now: new Date('2026-12-31T19:00:00Z'),
+    });
+
+    expect(res.success).toBe(false);
+    expect(res.status).toBe('rejected');
+    expect(res.reason).toBe('TICKET_NOT_FOUND');
+    expect(res.message).toContain('ไม่พบบัตรในระบบ');
   });
 });

@@ -1,3 +1,4 @@
+import { createSafeErrorResponse } from '@/server/api-error';
 import { getAuth } from '@/server/auth';
 import { getDatabasePool } from '@/server/database';
 import { listAllRefundRequests } from '@/server/refunds';
@@ -22,7 +23,6 @@ export async function GET(request: Request) {
       { status: 200, headers: { 'Cache-Control': 'no-store' } },
     );
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'เกิดข้อผิดพลาดในการโหลดรายการคำขอคืนเงิน';
-    return Response.json({ message }, { status: 500 });
+    return createSafeErrorResponse(error, 'เกิดข้อผิดพลาดในการโหลดรายการคำขอคืนเงิน', { defaultStatus: 500 });
   }
 }

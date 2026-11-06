@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { randomUUID } from 'node:crypto';
 import { Pool } from 'pg';
 import { authFixture } from '../support/auth-fixture';
 import { testDatabaseUrl } from '../support/test-database';
@@ -317,11 +318,18 @@ describe('Shared Instance Contract across Multiple Web Processes (TASK-037, AC-1
     const tickets = await getOrderTickets(instanceA, orderId);
     expect(tickets).toHaveLength(2);
 
+    const refundToken = randomUUID();
+    await instanceA.query(
+      `INSERT INTO guest_verified_sessions (token, email, name, phone, purpose, "verifiedAt", "expiresAt")
+       VALUES ($1, $2, $3, $4, 'order_lookup', $5, $6)`,
+      [refundToken, email, 'ผู้ซื้อ ขอคืนเงิน', '0812345678', now, new Date(now.getTime() + 1800 * 1000)],
+    );
+
     const refRes = await submitRefundRequest(instanceA, {
       orderId,
       ticketIds: [tickets[0].id],
       reason: 'ไม่สะดวกเดินทาง',
-      verifiedToken: token,
+      verifiedToken: refundToken,
       bankName: 'ธนาคารกสิกรไทย',
       bankAccountNo: '123-4-56789-0',
       bankAccountName: 'ผู้ซื้อขอคืนเงิน',

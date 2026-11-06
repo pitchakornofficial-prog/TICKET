@@ -1,7 +1,6 @@
 import { getDatabasePool } from '@/server/database';
 import { processStripeSuccessEvent } from '@/server/payment';
 import {
-  isStripeLiveMode,
   verifyStripeWebhookSignature,
   type StripeEvent,
   type StripePaymentIntent,
@@ -15,8 +14,14 @@ export async function POST(request: Request) {
   try {
     const rawBody = await request.text();
     const signatureHeader = request.headers.get('stripe-signature');
-    const webhookSecret =
-      process.env.STRIPE_WEBHOOK_SECRET || (isStripeLiveMode() ? '' : 'whsec_test_secret');
+    const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+
+    if (!webhookSecret) {
+      return Response.json(
+        { error: 'Stripe webhook secret is not configured' },
+        { status: 500 },
+      );
+    }
 
     // 1. Signature verification (AC-119)
     const verification = verifyStripeWebhookSignature(rawBody, signatureHeader, webhookSecret);
@@ -66,7 +71,7 @@ export async function POST(request: Request) {
       { status: 200 },
     );
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Internal server error in webhook handler';
-    return Response.json({ error: message }, { status: 500 });
+    console.error('Stripe webhook error:', error);
+    return Response.json({ error: 'Internal server error in webhook handler' }, { status: 500 });
   }
 }

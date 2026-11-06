@@ -25,13 +25,16 @@ describe('Stripe Verified Webhook Ticket Issuance Integration (TASK-043, AC-119,
   let fixture: Awaited<ReturnType<typeof authFixture>>;
   const baseURL = 'http://127.0.0.1:3100';
   const webhookSecret = 'whsec_test_secret';
+  const originalSecret = process.env.STRIPE_WEBHOOK_SECRET;
 
   beforeAll(async () => {
+    process.env.STRIPE_WEBHOOK_SECRET = webhookSecret;
     fixture = await authFixture('integration', baseURL);
     setDatabasePool(fixture.pool);
   }, 30000);
 
   afterAll(async () => {
+    process.env.STRIPE_WEBHOOK_SECRET = originalSecret;
     setDatabasePool(undefined);
     if (fixture) await fixture.cleanup();
   });
@@ -137,7 +140,7 @@ describe('Stripe Verified Webhook Ticket Issuance Integration (TASK-043, AC-119,
     expect(issuedTickets[1].status).toBe('valid');
 
     // Verify order status in DB is 'paid'
-    const updatedCharge = await getPaymentChargeForOrder(fixture.pool, reservation.id);
+    const updatedCharge = await getPaymentChargeForOrder(fixture.pool, reservation.id, buyerToken);
     expect(updatedCharge?.status).toBe('successful');
 
     // Verify confirmation email was sent

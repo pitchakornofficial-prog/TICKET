@@ -1,3 +1,5 @@
+import { createSafeErrorResponse } from '@/server/api-error';
+import { assertSameOrigin } from '@/server/origin';
 import { getAuth } from '@/server/auth';
 import {
   getEventPrimaryScanner,
@@ -45,8 +47,7 @@ export async function GET(
     const primary = await getEventPrimaryScanner(pool, eventId);
     return Response.json({ primaryScanner: primary }, { status: 200, headers: { 'Cache-Control': 'no-store' } });
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'เกิดข้อผิดพลาดในการดึงข้อมูลเครื่องหลัก';
-    return Response.json({ message }, { status: 500 });
+    return createSafeErrorResponse(error, 'เกิดข้อผิดพลาดในการดึงข้อมูลเครื่องหลัก', { defaultStatus: 500 });
   }
 }
 
@@ -54,6 +55,9 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  const originError = assertSameOrigin(request);
+  if (originError) return originError;
+
   const auth = getAuth();
   const session = await auth.api.getSession({ headers: request.headers });
   if (!session?.user) {
@@ -94,9 +98,10 @@ export async function POST(
       { status: 200 },
     );
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'เกิดข้อผิดพลาดในการกำหนดเครื่องหลัก';
-    const status = message.includes('ไม่อนุญาต') ? 403 : message.includes('ไม่พบ') ? 404 : 400;
-    return Response.json({ message }, { status });
+    return createSafeErrorResponse(error, 'เกิดข้อผิดพลาดในการกำหนดเครื่องหลัก', {
+      defaultStatus: 400,
+      statusResolver: (msg) => msg.includes('ไม่อนุญาต') ? 403 : msg.includes('ไม่พบ') ? 404 : 400,
+    });
   }
 }
 
@@ -104,6 +109,9 @@ export async function DELETE(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  const originError = assertSameOrigin(request);
+  if (originError) return originError;
+
   const auth = getAuth();
   const session = await auth.api.getSession({ headers: request.headers });
   if (!session?.user) {
@@ -121,8 +129,9 @@ export async function DELETE(
     await removeEventPrimaryScanner(pool, { id: session.user.id, role: session.user.role }, eventId);
     return Response.json({ message: 'ยกเลิกการกำหนดเครื่องหลักเรียบร้อยแล้ว' }, { status: 200 });
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'เกิดข้อผิดพลาด';
-    const status = message.includes('ไม่อนุญาต') ? 403 : 400;
-    return Response.json({ message }, { status });
+    return createSafeErrorResponse(error, 'เกิดข้อผิดพลาด', {
+      defaultStatus: 400,
+      statusResolver: (msg) => msg.includes('ไม่อนุญาต') ? 403 : 400,
+    });
   }
 }

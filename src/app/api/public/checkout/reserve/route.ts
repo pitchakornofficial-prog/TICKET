@@ -1,3 +1,4 @@
+import { createSafeErrorResponse } from '@/server/api-error';
 import { getDatabasePool } from '@/server/database';
 import { createReservation, type CreateReservationInput } from '@/server/reservation';
 
@@ -32,8 +33,9 @@ export async function POST(request: Request) {
       { status: 200 },
     );
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'เกิดข้อผิดพลาดในการกันบัตร';
-    const status = message.includes('OTP') ? 401 : 400;
-    return Response.json({ message }, { status });
+    return createSafeErrorResponse(error, 'เกิดข้อผิดพลาดในการกันบัตร', {
+      defaultStatus: 400,
+      statusResolver: (msg) => (msg.includes('OTP') ? 401 : 400),
+    });
   }
 }

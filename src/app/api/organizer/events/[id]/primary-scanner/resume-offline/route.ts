@@ -1,3 +1,5 @@
+import { createSafeErrorResponse } from '@/server/api-error';
+import { assertSameOrigin } from '@/server/origin';
 import { getAuth } from '@/server/auth';
 import { resumeOfflineAdmissionAfterReconciliation } from '@/server/primary-scanner';
 import type { Pool } from 'pg';
@@ -8,6 +10,9 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  const originError = assertSameOrigin(request);
+  if (originError) return originError;
+
   const auth = getAuth();
   const session = await auth.api.getSession({ headers: request.headers });
   if (!session?.user) {
@@ -47,8 +52,9 @@ export async function POST(
       { status: 200 },
     );
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'เกิดข้อผิดพลาดในการปลดระงับ';
-    const status = message.includes('ไม่อนุญาต') ? 403 : message.includes('ไม่พบ') ? 404 : 400;
-    return Response.json({ message }, { status });
+    return createSafeErrorResponse(error, 'เกิดข้อผิดพลาดในการปลดระงับ', {
+      defaultStatus: 400,
+      statusResolver: (msg) => msg.includes('ไม่อนุญาต') ? 403 : msg.includes('ไม่พบ') ? 404 : 400,
+    });
   }
 }

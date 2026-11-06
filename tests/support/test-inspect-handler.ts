@@ -49,13 +49,29 @@ export async function handleTestInspectRequest(
     if (otpRes.rowCount === 0) {
       return { status: 404, body: { code: null } };
     }
+
+    const { getCapturedEmails } = await import('../../src/server/email.ts');
+    const emails = getCapturedEmails().filter((e) => e.to === email);
+    const lastEmail = emails.at(-1);
+    const match = lastEmail?.text?.match(/\b(\d{6})\b/) || lastEmail?.subject?.match(/\b(\d{6})\b/);
+    const code = match ? match[1] : otpRes.rows[0].code;
+
     return {
       status: 200,
-      body: { code: otpRes.rows[0].code, requestId: otpRes.rows[0].requestId },
+      body: { code, requestId: otpRes.rows[0].requestId },
     };
   }
 
   if (type === 'invitation') {
+    const { getCapturedEmails } = await import('../../src/server/email.ts');
+    const captured = getCapturedEmails().filter((e) => e.to === email);
+    const lastEmail = captured[captured.length - 1];
+    if (lastEmail?.text) {
+      const match = lastEmail.text.match(/accept-invitation\?token=([a-zA-Z0-9_-]+)/);
+      if (match) {
+        return { status: 200, body: { token: match[1] } };
+      }
+    }
     const invRes = await pool.query(
       'SELECT token FROM organizer_invitations WHERE email = $1 ORDER BY "createdAt" DESC LIMIT 1',
       [email],

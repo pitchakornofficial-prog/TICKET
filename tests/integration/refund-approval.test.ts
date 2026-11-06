@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { randomUUID } from 'node:crypto';
 import { authFixture, fixtureAccounts } from '../support/auth-fixture';
 import { createEventDraft, approveSession, addScannerToEvent } from '../../src/server/events';
 import { requestGuestOtp, verifyGuestOtp } from '../../src/server/guest-otp';
@@ -139,13 +140,20 @@ describe('TASK-022: Refund Approval Integration Tests (AC-36, AC-88, AC-89, AC-9
       [reservation.id],
     );
 
+    const refundLookupToken = randomUUID();
+    await fixture.pool.query(
+      `INSERT INTO guest_verified_sessions (token, email, name, phone, purpose, "verifiedAt", "expiresAt")
+       VALUES ($1, $2, $3, $4, 'order_lookup', now(), now() + interval '30 minutes')`,
+      [refundLookupToken, guestEmail, guestName, guestPhone],
+    );
+
     return {
       eventId: eventDraft.id,
       sessionId,
       sessionStartTime,
       ticketTypeId,
       orderId: reservation.id,
-      buyerToken,
+      buyerToken: refundLookupToken,
       buyerEmail: guestEmail,
       tickets: tRes.rows,
     };
@@ -223,7 +231,7 @@ describe('TASK-022: Refund Approval Integration Tests (AC-36, AC-88, AC-89, AC-9
       scannerName: fixtureAccounts.scanner.name,
       scannerRole: 'scanner',
       sessionId: data.sessionId,
-      qrPayloadOrCode: t1.ticketCode,
+      qrPayloadOrCode: t1.qrPayload,
       action: 'entry',
       now: new Date(data.sessionStartTime.getTime() + 10 * 60 * 1000), // 10 min after start (within window)
     });

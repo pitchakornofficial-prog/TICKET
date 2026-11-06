@@ -102,7 +102,7 @@ export async function GET(req: Request) {
 
     return NextResponse.json({ stats, recentLogs });
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : 'เกิดข้อผิดพลาดในการโหลดสถิติ';
-    return NextResponse.json({ error: 'INTERNAL_ERROR', message: msg }, { status: 500 });
+    console.error('Error loading admission stats:', err);
+    return NextResponse.json({ error: 'INTERNAL_ERROR', message: 'เกิดข้อผิดพลาดในการโหลดสถิติ' }, { status: 500 });
   }
 }

@@ -120,7 +120,14 @@ describe('TASK-028: Organizer Money Report Integration Tests (AC-28, AC-64, AC-7
       providerPaidAt: new Date(),
     });
 
-    return { reservation, charge, payResult, buyerEmail, buyerPhone, buyerName, verifiedToken };
+    const refundLookupToken = randomUUID();
+    await fixture.pool.query(
+      `INSERT INTO guest_verified_sessions (token, email, name, phone, purpose, "verifiedAt", "expiresAt")
+       VALUES ($1, $2, $3, $4, 'order_lookup', now(), now() + interval '30 minutes')`,
+      [refundLookupToken, buyerEmail, buyerName, buyerPhone],
+    );
+
+    return { reservation, charge, payResult, buyerEmail, buyerPhone, buyerName, verifiedToken: refundLookupToken };
   }
 
   it('1. Generates accurate money report with ticket sales, per-order fees, approved refund deductions, and reserve (AC-28, AC-77, AC-78, AC-80, AC-81, AC-110)', async () => {

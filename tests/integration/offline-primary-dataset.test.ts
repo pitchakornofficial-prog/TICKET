@@ -266,7 +266,7 @@ describe('TASK-032: Offline Primary Dataset Integration Tests (AC-94, AC-65, G-4
       scannerName: 'เครื่องหลักออฟไลน์',
       scannerRole: 'scanner',
       action: 'entry',
-      qrPayloadOrCode: purchase.tickets[0].ticketCode,
+      qrPayloadOrCode: purchase.tickets[0].qrPayload,
       now: new Date('2026-11-28T19:00:00.000Z'),
     });
     expect(scanRes.success).toBe(true);

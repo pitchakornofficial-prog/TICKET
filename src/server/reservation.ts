@@ -165,8 +165,8 @@ export async function createReservation(
   input: CreateReservationInput,
   now = new Date(),
 ): Promise<OrderReservationDetail> {
-  // AC-12: Must provide valid OTP verified token
-  const verifiedSession = await getVerifiedGuestSession(pool, input.verifiedToken, now);
+  // AC-12: Must provide valid OTP verified token with checkout purpose
+  const verifiedSession = await getVerifiedGuestSession(pool, input.verifiedToken, now, 'checkout');
   if (!verifiedSession) {
     throw new Error('กรุณายืนยันตัวตนผ่าน OTP ก่อนดำเนินการกันบัตร');
   }
@@ -401,7 +401,7 @@ export async function createReservation(
     }
 
     // 8. Create Order with 15-minute deadline (AC-13)
-    const orderId = `ORD-${Date.now().toString(36).toUpperCase()}-${randomUUID().slice(0, 6).toUpperCase()}`;
+    const orderId = `ORD-${randomUUID().toUpperCase()}`;
     const expiresAt = new Date(now.getTime() + RESERVATION_HOLD_SECONDS * 1000);
 
     await client.query(

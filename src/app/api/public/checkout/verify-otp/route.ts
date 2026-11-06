@@ -1,3 +1,4 @@
+import { createSafeErrorResponse } from '@/server/api-error';
 import { getDatabasePool } from '@/server/database';
 import { verifyGuestOtp } from '@/server/guest-otp';
 import { getBuyerTicketCountForEvent } from '@/server/reservation';
@@ -94,7 +95,6 @@ export async function POST(request: Request) {
       { status: 200 },
     );
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'เกิดข้อผิดพลาดในการยืนยัน OTP';
-    return Response.json({ message }, { status: 500 });
+    return createSafeErrorResponse(error, 'เกิดข้อผิดพลาดในการยืนยัน OTP', { defaultStatus: 500 });
   }
 }

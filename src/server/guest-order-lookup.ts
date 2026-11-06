@@ -101,6 +101,7 @@ export async function requestOrderLookupOtp(
     email: string;
     phone: string;
     orderId?: string;
+    clientIp?: string;
     now?: Date;
   },
 ): Promise<{
@@ -142,6 +143,7 @@ export async function requestOrderLookupOtp(
   const otpResult = await requestGuestOtp(pool, {
     buyer,
     purpose: 'order_lookup',
+    clientIp: input.clientIp,
     now: input.now,
   });
 
@@ -237,7 +239,7 @@ export async function lookupGuestOrders(
   await ensureTicketDeliverySchema(pool);
   await ensureGuestOtpSchema(pool);
 
-  const session = await getVerifiedGuestSession(pool, input.verifiedToken, input.now);
+  const session = await getVerifiedGuestSession(pool, input.verifiedToken, input.now, 'order_lookup');
   if (!session) {
     return {
       success: false,
@@ -353,7 +355,12 @@ export async function getGuestOrderDetail(
   await ensureTicketDeliverySchema(pool);
   await ensureGuestOtpSchema(pool);
 
-  const session = await getVerifiedGuestSession(pool, input.verifiedToken, input.now);
+  const session = await getVerifiedGuestSession(
+    pool,
+    input.verifiedToken,
+    input.now,
+    ['order_lookup', 'checkout'],
+  );
   if (!session) {
     return {
       success: false,

@@ -1,5 +1,6 @@
+import { createSafeErrorResponse } from '@/server/api-error';
 import { getDatabasePool } from '@/server/database';
-import { requestGuestOtp } from '@/server/guest-otp';
+import { extractClientIp, requestGuestOtp } from '@/server/guest-otp';
 import { ensureReservationSchema, getBuyerTicketCountForEvent } from '@/server/reservation';
 
 export const runtime = 'nodejs';
@@ -81,9 +82,11 @@ export async function POST(request: Request) {
       }
     }
 
+    const clientIp = extractClientIp(request);
     const result = await requestGuestOtp(pool, {
       buyer: body.buyer,
       purpose: 'checkout',
+      clientIp,
     });
 
     if (!result.success) {
@@ -107,7 +110,6 @@ export async function POST(request: Request) {
       { status: 200 },
     );
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'เกิดข้อผิดพลาดในการส่งรหัส OTP';
-    return Response.json({ message }, { status: 500 });
+    return createSafeErrorResponse(error, 'เกิดข้อผิดพลาดในการส่งรหัส OTP', { defaultStatus: 500 });
   }
 }

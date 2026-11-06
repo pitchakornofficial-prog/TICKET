@@ -121,8 +121,8 @@ export async function createPaymentQr(
     throw new Error('กรุณาระบุหมายเลขคำสั่งซื้อ');
   }
 
-  // AC-12: Must validate OTP token before creating payment QR
-  const verifiedSession = await getVerifiedGuestSession(pool, input.verifiedToken, now);
+  // AC-12: Must validate OTP token before creating payment QR (checkout purpose)
+  const verifiedSession = await getVerifiedGuestSession(pool, input.verifiedToken, now, 'checkout');
   if (!verifiedSession) {
     throw new Error('กรุณายืนยันตัวตนผ่าน OTP ก่อนขอรับ QR ชำระเงิน (AC-12)');
   }
@@ -278,19 +278,21 @@ export async function getPaymentChargeForOrder(
 ): Promise<PaymentChargeDetail | null> {
   await ensurePaymentSchema(pool);
 
-  if (verifiedToken) {
-    const verifiedSession = await getVerifiedGuestSession(pool, verifiedToken, now);
-    if (!verifiedSession) {
-      throw new Error('กรุณายืนยันตัวตนผ่าน OTP ก่อนเข้าถึงข้อมูลการชำระเงิน (AC-12)');
-    }
-    const orderRes = await pool.query<{ buyerEmail: string }>(
-      `SELECT "buyerEmail" FROM orders WHERE id = $1`,
-      [orderId],
-    );
-    if (orderRes.rowCount === 0) return null;
-    if (orderRes.rows[0].buyerEmail.toLowerCase() !== verifiedSession.email.toLowerCase()) {
-      throw new Error('ท่านไม่มีสิทธิ์ในการเข้าถึงข้อมูลการชำระเงินสำหรับคำสั่งซื้อนี้');
-    }
+  if (!verifiedToken) {
+    throw new Error('กรุณายืนยันตัวตนผ่าน OTP ก่อนเข้าถึงข้อมูลการชำระเงิน (AC-12)');
+  }
+
+  const verifiedSession = await getVerifiedGuestSession(pool, verifiedToken, now, 'checkout');
+  if (!verifiedSession) {
+    throw new Error('กรุณายืนยันตัวตนผ่าน OTP ก่อนเข้าถึงข้อมูลการชำระเงิน (AC-12)');
+  }
+  const orderRes = await pool.query<{ buyerEmail: string }>(
+    `SELECT "buyerEmail" FROM orders WHERE id = $1`,
+    [orderId],
+  );
+  if (orderRes.rowCount === 0) return null;
+  if (orderRes.rows[0].buyerEmail.toLowerCase() !== verifiedSession.email.toLowerCase()) {
+    throw new Error('ท่านไม่มีสิทธิ์ในการเข้าถึงข้อมูลการชำระเงินสำหรับคำสั่งซื้อนี้');
   }
 
   const res = await pool.query(

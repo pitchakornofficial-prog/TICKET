@@ -133,7 +133,13 @@ export function OrderPaymentView({ orderId }: OrderPaymentViewProps) {
   // Load reservation & existing payment QR on mount
   useEffect(() => {
     setIsLoadingOrder(true);
-    fetch(`/api/public/checkout/orders/${orderId}`)
+    const guestToken =
+      typeof window !== 'undefined'
+        ? sessionStorage.getItem('ticket_guest_otp_token') || ''
+        : '';
+    fetch(`/api/public/checkout/orders/${orderId}`, {
+      headers: guestToken ? { 'x-guest-token': guestToken } : {},
+    })
       .then(async res => {
         if (!res.ok) {
           throw new Error('ไม่พบข้อมูลคำสั่งซื้อนี้');
@@ -150,10 +156,6 @@ export function OrderPaymentView({ orderId }: OrderPaymentViewProps) {
           if (data.reservation.status === 'expired') {
             setIsTimeoutModalOpen(true);
           } else {
-            const guestToken =
-              typeof window !== 'undefined'
-                ? sessionStorage.getItem('ticket_guest_otp_token') || ''
-                : '';
             fetch(`/api/public/checkout/orders/${orderId}/payment-qr`, {
               headers: guestToken ? { 'x-guest-token': guestToken } : {},
             })
@@ -184,7 +186,13 @@ export function OrderPaymentView({ orderId }: OrderPaymentViewProps) {
 
     const interval = setInterval(async () => {
       try {
-        const res = await fetch(`/api/public/checkout/orders/${orderId}`);
+        const guestToken =
+          typeof window !== 'undefined'
+            ? sessionStorage.getItem('ticket_guest_otp_token') || ''
+            : '';
+        const res = await fetch(`/api/public/checkout/orders/${orderId}`, {
+          headers: guestToken ? { 'x-guest-token': guestToken } : {},
+        });
         if (!res.ok) return;
         const data = await res.json();
         if (data?.reservation) {
@@ -207,7 +215,13 @@ export function OrderPaymentView({ orderId }: OrderPaymentViewProps) {
   // Fetch issued tickets when order is paid
   useEffect(() => {
     if (!reservation?.id || reservation.status !== 'paid') return;
-    fetch(`/api/public/checkout/orders/${reservation.id}/tickets`)
+    const guestToken =
+      typeof window !== 'undefined'
+        ? sessionStorage.getItem('ticket_guest_otp_token') || ''
+        : '';
+    fetch(`/api/public/checkout/orders/${reservation.id}/tickets`, {
+      headers: guestToken ? { 'x-guest-token': guestToken } : {},
+    })
       .then(res => (res.ok ? res.json() : null))
       .then(data => {
         if (data?.tickets) {
@@ -254,10 +268,21 @@ export function OrderPaymentView({ orderId }: OrderPaymentViewProps) {
     setIsVerifyingPayment(true);
     setPaymentError(null);
     try {
+      const guestToken =
+        typeof window !== 'undefined'
+          ? sessionStorage.getItem('ticket_guest_otp_token') || ''
+          : '';
       const res = await fetch(`/api/public/checkout/orders/${reservation.id}/pay-test`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ chargeId: charge?.id }),
+        headers: {
+          'Content-Type': 'application/json',
+          ...(guestToken ? { 'x-guest-token': guestToken } : {}),
+        },
+        body: JSON.stringify({
+          chargeId: charge?.id,
+          verifiedToken: guestToken,
+          orderToken: guestToken,
+        }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -488,17 +513,20 @@ export function OrderPaymentView({ orderId }: OrderPaymentViewProps) {
                   </div>
 
                   {/* Test Simulation Button */}
-                  <button
-                    id="simulate-payment-button"
-                    type="button"
-                    onClick={handleSimulatePaymentSuccess}
-                    disabled={isVerifyingPayment}
-                    className="primary-button payment-simulate-btn"
-                  >
-                    {isVerifyingPayment
-                      ? 'กำลังตรวจสอบการชำระเงิน...'
-                      : 'ยืนยันการชำระเงินสำเร็จ (ทดสอบ / Test Payment)'}
-                  </button>
+                  {process.env.NODE_ENV !== 'production' &&
+                    process.env.NEXT_PUBLIC_ENABLE_PAY_TEST === 'true' && (
+                      <button
+                        id="simulate-payment-button"
+                        type="button"
+                        onClick={handleSimulatePaymentSuccess}
+                        disabled={isVerifyingPayment}
+                        className="primary-button payment-simulate-btn"
+                      >
+                        {isVerifyingPayment
+                          ? 'กำลังตรวจสอบการชำระเงิน...'
+                          : 'ยืนยันการชำระเงินสำเร็จ (ทดสอบ / Test Payment)'}
+                      </button>
+                    )}
 
                   {/* Button fallback for tests if needed */}
                   <button

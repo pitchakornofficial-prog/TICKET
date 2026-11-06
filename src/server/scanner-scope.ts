@@ -1,5 +1,14 @@
-import { createHmac } from 'node:crypto';
+import { createHmac, timingSafeEqual } from 'node:crypto';
 import type { Pool } from 'pg';
+
+function safeCompare(a: string, b: string): boolean {
+  const bufA = Buffer.from(a, 'utf8');
+  const bufB = Buffer.from(b, 'utf8');
+  if (bufA.length !== bufB.length) {
+    return false;
+  }
+  return timingSafeEqual(bufA, bufB);
+}
 
 export function extractSessionTokenFromCookie(
   cookieHeader: string | null | undefined,
@@ -21,6 +30,8 @@ export function extractSessionTokenFromCookie(
 export function getScannerEventScopeCookie(
   cookieHeader: string | null | undefined,
   secret: string,
+  expectedSessionToken?: string | null,
+  now?: Date,
 ): string | null {
   if (!cookieHeader) return null;
   const cookieMap = Object.fromEntries(
@@ -31,18 +42,147 @@ export function getScannerEventScopeCookie(
   );
   const scopeVal = cookieMap.scanner_event_scope;
   if (!scopeVal) return null;
+
+  // New format: ${eventId}.${sessionToken}.${expiresAt}.${signature}
+  const parts = scopeVal.split('.');
+  if (parts.length >= 4) {
+    const sig = parts[parts.length - 1];
+    const expiresAtStr = parts[parts.length - 2];
+    const boundSessionToken = parts[parts.length - 3];
+    const eventId = parts.slice(0, parts.length - 3).join('.');
+
+    if (/^\d+$/.test(expiresAtStr) && boundSessionToken && eventId) {
+      const payload = `${eventId}.${boundSessionToken}.${expiresAtStr}`;
+      const expectedSig = createHmac('sha256', secret).update(payload).digest('base64');
+      if (!safeCompare(sig, expectedSig)) {
+        return null;
+      }
+
+      const expiresAt = Number(expiresAtStr);
+      const nowMs = (now ?? new Date()).getTime();
+      if (nowMs > expiresAt) {
+        return null;
+      }
+
+      const effectiveSessionToken =
+        expectedSessionToken !== undefined
+          ? expectedSessionToken
+          : extractSessionTokenFromCookie(cookieHeader);
+
+      if (!effectiveSessionToken || boundSessionToken !== effectiveSessionToken) {
+        return null;
+      }
+
+      return eventId;
+    }
+  }
+
+  // Backward compatibility: legacy format ${eventId}.${signature}
   const lastDot = scopeVal.lastIndexOf('.');
   if (lastDot === -1) return null;
   const eventId = scopeVal.slice(0, lastDot);
   const sig = scopeVal.slice(lastDot + 1);
   const expectedSig = createHmac('sha256', secret).update(eventId).digest('base64');
-  if (sig !== expectedSig) return null;
+  if (!safeCompare(sig, expectedSig)) return null;
   return eventId;
 }
 
-export function signScannerEventScopeCookie(eventId: string, secret: string): string {
+export function signScannerEventScopeCookie(
+  eventId: string,
+  secret: string,
+  options?: {
+    sessionToken?: string | null;
+    expiresAt?: Date | number | null;
+  },
+): string {
+  const sessionToken = options?.sessionToken?.trim();
+  const rawExpires = options?.expiresAt;
+  const expiresAt =
+    rawExpires instanceof Date
+      ? rawExpires.getTime()
+      : typeof rawExpires === 'number'
+        ? rawExpires
+        : null;
+
+  if (sessionToken && expiresAt !== null && Number.isFinite(expiresAt)) {
+    const payload = `${eventId}.${sessionToken}.${expiresAt}`;
+    const sig = createHmac('sha256', secret).update(payload).digest('base64');
+    return `${payload}.${sig}`;
+  }
+
   const sig = createHmac('sha256', secret).update(eventId).digest('base64');
   return `${eventId}.${sig}`;
+}
+
+export type ScannerScopeResolution =
+  | { status: 'scoped'; eventId: string }
+  | { status: 'unscoped' }
+  | { status: 'error'; statusCode: number; reason: string; error?: unknown };
+
+export async function resolveScannerSessionScope(
+  pool: Pool | null | undefined,
+  cookieHeader: string | null | undefined,
+  secret: string,
+): Promise<ScannerScopeResolution> {
+  const sessionToken = extractSessionTokenFromCookie(cookieHeader);
+
+  // 1. If scanner_event_scope cookie is provided, verify its signature, session binding, and expiry
+  let cookieScope: string | null = null;
+  if (cookieHeader?.includes('scanner_event_scope=')) {
+    cookieScope = getScannerEventScopeCookie(cookieHeader, secret, sessionToken);
+    if (!cookieScope) {
+      return {
+        status: 'error',
+        statusCode: 403,
+        reason: 'ไม่อนุญาต: ลายเซ็นขอบเขตงานคอนเสิร์ตไม่ถูกต้องหรือถูกดัดแปลง (Invalid Event Scope Signature)',
+      };
+    }
+  }
+
+  // 2. Check server-side session scope from database (authoritative source)
+  if (sessionToken && pool) {
+    try {
+      const serverScopeRes = await pool.query<{ eventId: string }>(
+        'SELECT "eventId" FROM scanner_session_scopes WHERE "sessionToken" = $1',
+        [sessionToken],
+      );
+      if (serverScopeRes.rowCount && serverScopeRes.rowCount > 0) {
+        return { status: 'scoped', eventId: serverScopeRes.rows[0].eventId };
+      }
+    } catch (error: unknown) {
+      // Database query failed (including missing table 42P01, timeout, or node down):
+      // Fail-closed with error status rather than assuming the session has no scope restrictions
+      return {
+        status: 'error',
+        statusCode: 500,
+        reason: 'เกิดข้อผิดพลาดในการตรวจสอบขอบเขตงานคอนเสิร์ต กรุณาลองใหม่อีกครั้ง',
+        error,
+      };
+    }
+  }
+
+  // 3. Fallback to verified signed cookie if database record was not present
+  if (cookieScope) {
+    return { status: 'scoped', eventId: cookieScope };
+  }
+
+  // 4. No scope record and no scope cookie -> unscoped
+  return { status: 'unscoped' };
+}
+
+export async function resolveScannerSessionScopedEventId(
+  pool: Pool | null | undefined,
+  cookieHeader: string | null | undefined,
+  secret: string,
+): Promise<string | null> {
+  const resolution = await resolveScannerSessionScope(pool, cookieHeader, secret);
+  if (resolution.status === 'error') {
+    throw new Error(resolution.reason);
+  }
+  if (resolution.status === 'scoped') {
+    return resolution.eventId;
+  }
+  return null;
 }
 
 export async function ensureScannerScopeSchema(pool: Pool): Promise<void> {
@@ -106,26 +246,18 @@ export async function verifyScannerSessionEventScope(
     };
   }
 
-  // 2. Resolve scoped eventId from server-side session scope first (Issue #3)
-  const sessionToken = extractSessionTokenFromCookie(cookieHeader);
-  let serverScopedEventId: string | null = null;
-  if (sessionToken && pool) {
-    try {
-      const serverScopeRes = await pool.query<{ eventId: string }>(
-        'SELECT "eventId" FROM scanner_session_scopes WHERE "sessionToken" = $1',
-        [sessionToken],
-      );
-      if (serverScopeRes.rowCount && serverScopeRes.rowCount > 0) {
-        serverScopedEventId = serverScopeRes.rows[0].eventId;
-      }
-    } catch {
-      // In case pool is double or table not yet created
-    }
+  // 2. Resolve scope using resolveScannerSessionScope (Fail-closed on error)
+  const scopeResolution = await resolveScannerSessionScope(pool, cookieHeader, secret);
+
+  if (scopeResolution.status === 'error') {
+    return {
+      allowed: false,
+      reason: scopeResolution.reason,
+    };
   }
 
-  // If server-side session scope is recorded, it strictly binds the session
-  if (serverScopedEventId) {
-    if (serverScopedEventId !== targetEventId) {
+  if (scopeResolution.status === 'scoped') {
+    if (scopeResolution.eventId !== targetEventId) {
       return {
         allowed: false,
         reason: 'ไม่อนุญาต: เซสชันการสแกนนี้ถูกจำกัดสิทธิ์เฉพาะงานคอนเสิร์ตที่ได้รับมอบหมายเท่านั้น',
@@ -133,25 +265,8 @@ export async function verifyScannerSessionEventScope(
     }
   }
 
-  // 3. Inspect cookie if scanner_event_scope cookie is provided
-  if (cookieHeader && cookieHeader.includes('scanner_event_scope=')) {
-    const cookieScope = getScannerEventScopeCookie(cookieHeader, secret);
-    if (!cookieScope) {
-      return {
-        allowed: false,
-        reason: 'ไม่อนุญาต: ลายเซ็นขอบเขตงานคอนเสิร์ตไม่ถูกต้องหรือถูกดัดแปลง (Invalid Event Scope Signature)',
-      };
-    }
-    if (cookieScope !== targetEventId) {
-      return {
-        allowed: false,
-        reason: 'ไม่อนุญาต: เซสชันการสแกนนี้ถูกจำกัดสิทธิ์เฉพาะงานคอนเสิร์ตที่ได้รับมอบหมายเท่านั้น',
-      };
-    }
-  }
-
-  // 4. Fail-closed: If cookies are sent (e.g. device/session cookies) but neither server scope nor valid cookie scope exists
-  if (cookieHeader && !serverScopedEventId && !getScannerEventScopeCookie(cookieHeader, secret)) {
+  // 3. Fail-closed: If cookies are sent (e.g. device/session cookies) but status is unscoped
+  if (cookieHeader && scopeResolution.status === 'unscoped') {
     return {
       allowed: false,
       reason: 'ไม่อนุญาต: ไม่พบคุกกี้หรือข้อมูลขอบเขตงานคอนเสิร์ตของเจ้าหน้าที่สแกน (Missing Event Scope)',

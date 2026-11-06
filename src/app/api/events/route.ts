@@ -1,3 +1,5 @@
+import { createSafeErrorResponse } from '@/server/api-error';
+import { assertSameOrigin } from '@/server/origin';
 import { getAuth } from '@/server/auth';
 import { createEventDraft, listAllEventsForOwner, listOrganizerEvents } from '@/server/events';
 import type { Pool } from 'pg';
@@ -19,6 +21,9 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  const originError = assertSameOrigin(request);
+  if (originError) return originError;
+
   const auth = getAuth();
   const session = await auth.api.getSession({ headers: request.headers });
   if (session?.user.role !== 'organizer') {
@@ -98,7 +103,6 @@ export async function POST(request: Request) {
     );
     return Response.json({ message: 'สร้างงานคอนเสิร์ตสำเร็จ', event }, { status: 201 });
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'เกิดข้อผิดพลาดในการบันทึกงาน';
-    return Response.json({ message }, { status: 400 });
+    return createSafeErrorResponse(error, 'เกิดข้อผิดพลาดในการบันทึกงาน', { defaultStatus: 400 });
   }
 }

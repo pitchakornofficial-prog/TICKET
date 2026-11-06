@@ -1,3 +1,5 @@
+import { createSafeErrorResponse } from '@/server/api-error';
+import { assertSameOrigin } from '@/server/origin';
 import { getAuth } from '@/server/auth';
 import { listOwnerNews, createNews } from '@/server/news';
 import type { Pool } from 'pg';
@@ -16,12 +18,14 @@ export async function GET(request: Request) {
     const news = await listOwnerNews(pool);
     return Response.json({ news }, { status: 200, headers: { 'Cache-Control': 'no-store' } });
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'เกิดข้อผิดพลาดในการดึงข้อมูลข่าวสาร';
-    return Response.json({ message }, { status: 500 });
+    return createSafeErrorResponse(error, 'เกิดข้อผิดพลาดในการดึงข้อมูลข่าวสาร', { defaultStatus: 500 });
   }
 }
 
 export async function POST(request: Request) {
+  const originError = assertSameOrigin(request);
+  if (originError) return originError;
+
   const auth = getAuth();
   const session = await auth.api.getSession({ headers: request.headers });
   if (session?.user.role !== 'owner') {
@@ -53,7 +57,6 @@ export async function POST(request: Request) {
     });
     return Response.json({ message: 'บันทึกข่าวสารสำเร็จ', newsItem }, { status: 201 });
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'เกิดข้อผิดพลาดในการบันทึกข่าว';
-    return Response.json({ message }, { status: 500 });
+    return createSafeErrorResponse(error, 'เกิดข้อผิดพลาดในการบันทึกข่าว', { defaultStatus: 500 });
   }
 }

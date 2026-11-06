@@ -16,7 +16,7 @@ export interface OrganizerInvitationItem {
   email: string;
   role: 'organizer' | 'owner';
   status: 'pending' | 'accepted' | 'replaced' | 'expired';
-  token: string;
+  token?: string;
   expiresAt: string;
   createdAt: string;
   acceptedAt?: string | null;
@@ -25,6 +25,7 @@ export interface OrganizerInvitationItem {
 export function OwnerInvitationsView() {
   const [email, setEmail] = useState('');
   const [role, setRole] = useState<'organizer' | 'owner'>('organizer');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [status, setStatus] = useState<'idle' | 'submitting' | 'success' | 'error'>('idle');
   const [message, setMessage] = useState('');
   const [lastInviteUrl, setLastInviteUrl] = useState<string | null>(null);
@@ -66,7 +67,11 @@ export function OwnerInvitationsView() {
       const res = await fetch('/api/owner/invitations', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, role }),
+        body: JSON.stringify({
+          email,
+          role,
+          confirmPassword: role === 'owner' ? confirmPassword : undefined,
+        }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -77,13 +82,16 @@ export function OwnerInvitationsView() {
 
       const roleText = role === 'owner' ? 'ผู้ดูแลระบบ (Admin)' : 'ผู้จัดงาน (Organizer)';
       setStatus('success');
-      setMessage(`ส่งคำเชิญบทบาท${roleText}ไปยัง ${email} สำเร็จ ลิงก์มีอายุ 48 ชั่วโมง`);
+      setMessage(`ส่งคำเชิญบทบาท${roleText}ไปยัง ${email} สำเร็จ ลิงก์ถูกจัดส่งไปยังอีเมลของผู้รับเรียบร้อยแล้ว (มีอายุ 48 ชั่วโมง)`);
       if (data.inviteUrl) {
         setLastInviteUrl(data.inviteUrl);
       } else if (data.token) {
         setLastInviteUrl(`${window.location.origin}/accept-invitation?token=${data.token}`);
+      } else {
+        setLastInviteUrl(null);
       }
       setEmail('');
+      setConfirmPassword('');
       loadInvitations();
     } catch {
       setStatus('error');
@@ -356,6 +364,40 @@ export function OwnerInvitationsView() {
             </span>
           </div>
 
+          {/* Owner Re-Authentication Confirmation (Step-Up Authentication) */}
+          {role === 'owner' && (
+            <div className="form-group" style={{ marginBottom: '1.25rem' }}>
+              <label
+                htmlFor="owner-confirm-password"
+                style={{ display: 'block', fontWeight: 600, fontSize: '0.9rem', color: '#0f172a', marginBottom: '0.4rem' }}
+              >
+                รหัสผ่านปัจจุบันของคุณเพื่อยืนยันสิทธิ์ผู้ดูแลระบบ (Step-Up Authentication)
+              </label>
+              <div style={{ position: 'relative' }}>
+                <input
+                  id="owner-confirm-password"
+                  type="password"
+                  value={confirmPassword}
+                  onChange={e => setConfirmPassword(e.target.value)}
+                  placeholder="ระบุรหัสผ่านของคุณเพื่อยืนยันการเชิญผู้ดูแลระบบ"
+                  required
+                  disabled={status === 'submitting'}
+                  style={{
+                    width: '100%',
+                    padding: '0.75rem 1rem',
+                    borderRadius: '8px',
+                    border: '1px solid #cbd5e1',
+                    fontSize: '0.95rem',
+                    boxSizing: 'border-box',
+                  }}
+                />
+              </div>
+              <span style={{ display: 'block', fontSize: '0.8rem', color: '#b91c1c', marginTop: '0.35rem' }}>
+                การเชิญผู้ดูแลระบบ (Owner) จะได้รับสิทธิ์สูงสุดในระบบ จึงจำเป็นต้องยืนยันรหัสผ่านของท่านเพื่อความปลอดภัย
+              </span>
+            </div>
+          )}
+
           {/* Error Message */}
           {status === 'error' && (
             <div
@@ -569,7 +611,9 @@ export function OwnerInvitationsView() {
               </thead>
               <tbody>
                 {invitations.map(inv => {
-                  const inviteUrl = `${typeof window !== 'undefined' ? window.location.origin : ''}/accept-invitation?token=${inv.token}`;
+                  const inviteUrl = inv.token
+                    ? `${typeof window !== 'undefined' ? window.location.origin : ''}/accept-invitation?token=${inv.token}`
+                    : '';
                   return (
                     <tr key={inv.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
                       <td style={{ padding: '0.85rem 1rem', fontWeight: 600, color: '#0f172a' }}>
@@ -668,19 +712,33 @@ export function OwnerInvitationsView() {
                       </td>
                       <td style={{ padding: '0.85rem 1rem', textAlign: 'right' }}>
                         {inv.status === 'pending' ? (
-                          <button
-                            type="button"
-                            onClick={() => handleCopy(inviteUrl)}
-                            className="button button-secondary"
-                            style={{
-                              padding: '0.3rem 0.65rem',
-                              fontSize: '0.78rem',
-                              borderRadius: '6px',
-                              cursor: 'pointer',
-                            }}
-                          >
-                            คัดลอกลิงก์
-                          </button>
+                          inviteUrl ? (
+                            <button
+                              type="button"
+                              onClick={() => handleCopy(inviteUrl)}
+                              className="button button-secondary"
+                              style={{
+                                padding: '0.3rem 0.65rem',
+                                fontSize: '0.78rem',
+                                borderRadius: '6px',
+                                cursor: 'pointer',
+                              }}
+                            >
+                              คัดลอกลิงก์
+                            </button>
+                          ) : (
+                            <span
+                              style={{
+                                fontSize: '0.78rem',
+                                color: '#64748b',
+                                background: '#f1f5f9',
+                                padding: '0.2rem 0.5rem',
+                                borderRadius: '4px',
+                              }}
+                            >
+                              ส่งทางอีเมลแล้ว
+                            </span>
+                          )
                         ) : (
                           <span style={{ fontSize: '0.78rem', color: '#94a3b8' }}>-</span>
                         )}

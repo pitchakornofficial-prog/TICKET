@@ -157,10 +157,17 @@ describe('TASK-034: Offline Sync Integration Tests (AC-99, AC-102)', () => {
     const ticket = payment.tickets?.[0];
     if (!ticket) throw new Error('Ticket was not issued');
 
+    const refundLookupToken = randomUUID();
+    await fixture.pool.query(
+      `INSERT INTO guest_verified_sessions (token, email, name, phone, purpose, "verifiedAt", "expiresAt")
+       VALUES ($1, $2, $3, $4, 'order_lookup', now(), now() + interval '30 minutes')`,
+      [refundLookupToken, email, name, '0812345678'],
+    );
+
     return {
       orderId: resv.id,
       ticket,
-      buyerToken: otpVerify.verifiedToken ?? '',
+      buyerToken: refundLookupToken,
     };
   }
 
@@ -184,7 +191,7 @@ describe('TASK-034: Offline Sync Integration Tests (AC-99, AC-102)', () => {
         scannerId: primaryScannerId,
         scannerName: 'หัวหน้าสแกน 1',
         isPrimary: true,
-        qrPayloadOrCode: ticket.ticketCode,
+        qrPayloadOrCode: ticket.qrPayload,
         action: 'entry',
         now: scanTime,
       },
@@ -280,7 +287,7 @@ describe('TASK-034: Offline Sync Integration Tests (AC-99, AC-102)', () => {
         scannerId: primaryScannerId,
         scannerName: 'หัวหน้าสแกน 1',
         isPrimary: true,
-        qrPayloadOrCode: ticket.ticketCode,
+        qrPayloadOrCode: ticket.qrPayload,
         action: 'entry',
         now: scanTime,
       },

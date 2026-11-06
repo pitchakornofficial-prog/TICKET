@@ -1,3 +1,4 @@
+import { createSafeErrorResponse } from '@/server/api-error';
 import { getDatabasePool } from '@/server/database';
 import { getPaymentChargeForOrder, processStripeSuccessEvent } from '@/server/payment';
 import {
@@ -23,23 +24,50 @@ export async function POST(
     );
   }
 
+  if (process.env.NODE_ENV === 'production') {
+    return Response.json(
+      { message: 'เส้นทางนี้ถูกปิดใช้งานในสภาพแวดล้อม Production' },
+      { status: 404 },
+    );
+  }
+
+  if (process.env.ENABLE_PAY_TEST !== 'true') {
+    return Response.json(
+      { message: 'เส้นทางทดสอบการชำระเงินถูกปิดใช้งาน (ENABLE_PAY_TEST ต้องเป็น true)' },
+      { status: 403 },
+    );
+  }
+
   try {
     const body = await request.json().catch(() => ({}));
+
+    const verifiedToken =
+      body.verifiedToken ||
+      body.orderToken ||
+      request.headers.get('x-guest-token') ||
+      request.headers.get('x-order-token') ||
+      request.headers.get('authorization')?.replace(/^Bearer\s+/i, '') ||
+      '';
+
+    if (!verifiedToken) {
+      return Response.json(
+        { message: 'กรุณาระบุ order token หรือยืนยันตัวตนผ่าน OTP ก่อนทดสอบการชำระเงิน (AC-12)' },
+        { status: 403 },
+      );
+    }
 
     // Find active charge if not explicitly supplied
     let chargeId = body.chargeId;
     let activeCharge: Awaited<ReturnType<typeof getPaymentChargeForOrder>> = null;
+    activeCharge = await getPaymentChargeForOrder(pool, orderId, verifiedToken);
+    if (!activeCharge) {
+      return Response.json({ message: 'ยังไม่มีรายการชำระเงินสำหรับคำสั่งซื้อนี้' }, { status: 404 });
+    }
     if (!chargeId) {
-      activeCharge = await getPaymentChargeForOrder(pool, orderId);
-      if (!activeCharge) {
-        return Response.json({ message: 'ยังไม่มีรายการชำระเงินสำหรับคำสั่งซื้อนี้' }, { status: 404 });
-      }
       chargeId = activeCharge.id;
-    } else {
-      activeCharge = await getPaymentChargeForOrder(pool, orderId);
     }
 
-    if (activeCharge?.livemode) {
+    if (activeCharge.livemode) {
       return Response.json(
         { message: 'ไม่อนุญาตให้ใช้เส้นทางทดสอบการชำระเงินสำหรับรายการ Live (AC-123)' },
         { status: 403 },
@@ -49,12 +77,6 @@ export async function POST(
     const stripe = getStripeClient();
     if (stripe instanceof StripeContractDouble) {
       stripe.setIntentStatus(chargeId, 'succeeded');
-      if (body.actualAmount !== undefined) {
-        stripe.setIntentAmount(chargeId, body.actualAmount);
-      }
-      if (body.actualCurrency !== undefined) {
-        stripe.setIntentCurrency(chargeId, body.actualCurrency as 'thb');
-      }
     }
 
     const intent = await stripe.retrievePaymentIntent(chargeId);
@@ -80,7 +102,9 @@ export async function POST(
     const status = isProcessed ? 200 : 400;
     return Response.json(result, { status, headers: { 'Cache-Control': 'no-store' } });
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'เกิดข้อผิดพลาดในการประมวลผลการชำระเงิน';
-    return Response.json({ message }, { status: 500 });
+    return createSafeErrorResponse(error, 'เกิดข้อผิดพลาดในการประมวลผลการชำระเงิน', {
+      defaultStatus: 500,
+      statusResolver: (msg) => (msg.includes('สิทธิ์') || msg.includes('OTP') ? 403 : 500),
+    });
   }
 }

@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { randomUUID } from 'node:crypto';
 import { authFixture } from '../support/auth-fixture';
 import { createEventDraft, approveSession } from '../../src/server/events';
 import { saveEventFeeSettings } from '../../src/server/fees';
@@ -120,10 +121,17 @@ describe('TASK-031: Event Debt & Repayment Integration Tests (AC-85, AC-86, G-33
       providerPaidAt: new Date(),
     });
 
+    const refundLookupToken = randomUUID();
+    await fixture.pool.query(
+      `INSERT INTO guest_verified_sessions (token, email, name, phone, purpose, "verifiedAt", "expiresAt")
+       VALUES ($1, $2, $3, $4, 'order_lookup', now(), now() + interval '30 minutes')`,
+      [refundLookupToken, buyerEmail, buyerName, buyerPhone],
+    );
+
     return {
       orderId: reservation.id,
       tickets: payResult.tickets || [],
-      buyerSessionToken: verifiedToken,
+      buyerSessionToken: refundLookupToken,
     };
   }
 

@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { randomUUID } from 'node:crypto';
 import { authFixture } from '../support/auth-fixture';
 import {
   createEventDraft,
@@ -113,13 +114,20 @@ describe('TASK-025: Reschedule and Special Refund Window Integration Tests (AC-3
     expect(payResult.success).toBe(true);
     expect(payResult.tickets?.length).toBe(2);
 
+    const refundLookupToken = randomUUID();
+    await fixture.pool.query(
+      `INSERT INTO guest_verified_sessions (token, email, name, phone, purpose, "verifiedAt", "expiresAt")
+       VALUES ($1, $2, $3, $4, 'order_lookup', now(), now() + interval '30 minutes')`,
+      [refundLookupToken, buyerEmail, buyer.name, buyer.phone],
+    );
+
     return {
       eventId: eventDraft.id,
       sessionId,
       ticketTypeId,
       originalStartTime: sessionStartTime,
       originalEndTime: sessionEndTime,
-      buyerToken: vRes.verifiedToken ?? '',
+      buyerToken: refundLookupToken,
       buyerEmail,
       buyerPhone: buyer.phone,
       orderId: reservation.id,

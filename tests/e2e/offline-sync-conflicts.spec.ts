@@ -136,6 +136,8 @@ test.describe('TASK-034: Offline Sync and Central Revocation Conflicts (AC-99, A
     await expect(ticketCodeEl).toBeVisible({ timeout: 20000 });
     const purchasedTicketCode = (await ticketCodeEl.textContent())?.trim() || '';
     expect(purchasedTicketCode).toMatch(/^TK-/);
+    const purchasedQrPayload = (await ticketCodeEl.getAttribute('data-qr-payload'))?.trim() || '';
+    expect(purchasedQrPayload).toMatch(/^TKT-QR-/);
     await buyerContext.close();
 
     // 4. Scanner logs in and downloads offline dataset
@@ -167,7 +169,7 @@ test.describe('TASK-034: Offline Sync and Central Revocation Conflicts (AC-99, A
     const ticketInput = scannerPage.locator('#scanner-ticket-input');
     const submitBtn = scannerPage.locator('#scanner-submit-btn');
 
-    await ticketInput.fill(purchasedTicketCode);
+    await ticketInput.fill(purchasedQrPayload);
     await submitBtn.click();
 
     // Verify scan result feedback and pending count increases to 1

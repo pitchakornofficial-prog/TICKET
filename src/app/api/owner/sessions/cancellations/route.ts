@@ -1,3 +1,4 @@
+import { createSafeErrorResponse } from '@/server/api-error';
 import { headers } from 'next/headers';
 import { getAuth, readActor } from '@/server/auth';
 import { getDatabasePool } from '@/server/database';
@@ -19,7 +20,6 @@ export async function GET() {
     const cancellations = await listPendingSessionCancellations(getDatabasePool());
     return Response.json({ cancellations }, { status: 200 });
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'เกิดข้อผิดพลาดในการดึงข้อมูลคำขอยกเลิกรอบการแสดง';
-    return Response.json({ message }, { status: 400 });
+    return createSafeErrorResponse(error, 'เกิดข้อผิดพลาดในการดึงข้อมูลคำขอยกเลิกรอบการแสดง', { defaultStatus: 400 });
   }
 }

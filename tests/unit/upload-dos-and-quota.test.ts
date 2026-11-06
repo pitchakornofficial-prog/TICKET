@@ -192,6 +192,17 @@ describe('Issue #10: Upload DoS Prevention, Quota & Presigned URL Direct Upload'
       expect(withinQuota.allowed).toBe(true);
     });
 
+    it('fails closed when database operation throws an error (preserves quota integrity)', async () => {
+      const mockBrokenPool = {
+        connect: vi.fn().mockRejectedValue(new Error('PostgreSQL connection timeout or node crashed')),
+      } as unknown as import('pg').Pool;
+
+      const res = await checkAndReserveUploadQuota(mockBrokenPool, currentUserId, 1024);
+      expect(res.allowed).toBe(false);
+      expect(res.reason).toContain('ระบบจัดเก็บข้อมูลไม่พร้อมให้บริการชั่วคราว');
+      expect(res.retryAfterSeconds).toBe(30);
+    });
+
     it('isolates upload quotas between different accounts', async () => {
       for (let i = 0; i < MAX_UPLOADS_PER_WINDOW; i++) {
         await checkAndReserveUploadQuota(null, 'user-A', 1024);
@@ -202,6 +213,40 @@ describe('Issue #10: Upload DoS Prevention, Quota & Presigned URL Direct Upload'
   });
 
   describe('3. Direct Upload with Presigned URL & Size Enforcement', () => {
+    it('rejects oversized JSON request body exceeding 1MB with 413 Payload Too Large on presigned endpoint', async () => {
+      // Create a 1.2MB JSON payload
+      const padding = 'x'.repeat(1.2 * 1024 * 1024);
+      const req = new Request('http://localhost:3000/api/upload/presigned', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Content-Length': String(Buffer.byteLength(JSON.stringify({ filename: 'test.png', padding }))),
+        },
+        body: JSON.stringify({ filename: 'test.png', padding }),
+      });
+
+      const res = await presignedUploadPost(req);
+      expect(res.status).toBe(413);
+      const body = await res.json();
+      expect(body.message).toContain('Payload Too Large: สูงสุด 1MB');
+    });
+
+    it('rejects oversized JSON request body exceeding 1MB with 413 Payload Too Large on /api/upload', async () => {
+      const padding = 'x'.repeat(1.2 * 1024 * 1024);
+      const req = new Request('http://localhost:3000/api/upload', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ filename: 'test.png', padding }),
+      });
+
+      const res = await uploadPost(req);
+      expect(res.status).toBe(413);
+      const body = await res.json();
+      expect(body.message).toContain('Payload Too Large: สูงสุด 1MB');
+    });
+
     it('creates presigned upload URL via POST /api/upload/presigned for organizer', async () => {
       const req = new Request('http://localhost:3000/api/upload/presigned', {
         method: 'POST',
@@ -401,6 +446,90 @@ describe('Issue #10: Upload DoS Prevention, Quota & Presigned URL Direct Upload'
       });
       const replayRes = await PUT(replayReq);
       expect(replayRes.status).toBe(403);
+    });
+
+    it('prevents concurrent direct upload race conditions by consuming token before write (Security Item 18)', async () => {
+      const { PUT } = await import('../../src/app/api/media/direct-upload/route');
+
+      const presigned = await storage.createPresignedUploadUrl(
+        'posters/concurrent-race-test.png',
+        'image/png',
+        'public',
+        validPngBuffer.length,
+      );
+
+      const makeRequest = () =>
+        new Request(`http://localhost:3000${presigned.uploadUrl}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'image/png',
+            'Content-Length': String(validPngBuffer.length),
+          },
+          body: new Uint8Array(validPngBuffer),
+        });
+
+      // Fire concurrent requests simultaneously
+      const [res1, res2] = await Promise.all([PUT(makeRequest()), PUT(makeRequest())]);
+
+      const statuses = [res1.status, res2.status].sort();
+      // Exactly one request must succeed (200), and the other must be rejected (403)
+      expect(statuses).toEqual([200, 403]);
+    });
+
+    it('rejects direct upload when request Content-Type header does not match presigned token contentType (Security Item 18)', async () => {
+      const { PUT } = await import('../../src/app/api/media/direct-upload/route');
+
+      const presigned = await storage.createPresignedUploadUrl(
+        'posters/content-type-mismatch.png',
+        'image/png',
+        'public',
+        validPngBuffer.length,
+      );
+
+      // Client sends Content-Type: image/jpeg instead of image/png
+      const mismatchedReq = new Request(`http://localhost:3000${presigned.uploadUrl}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'image/jpeg',
+          'Content-Length': String(validPngBuffer.length),
+        },
+        body: new Uint8Array(validPngBuffer),
+      });
+
+      const res = await PUT(mismatchedReq);
+      expect(res.status).toBe(400);
+      const data = await res.json();
+      expect(data.message).toContain('ประเภทไฟล์ในส่วนหัวคำขอไม่ตรงกับที่ระบุในคำขออัปโหลด');
+    });
+
+    it('rejects direct upload when detected magic bytes do not match presigned token contentType (Security Item 18)', async () => {
+      const { PUT } = await import('../../src/app/api/media/direct-upload/route');
+
+      // Presigned for image/jpeg
+      const presigned = await storage.createPresignedUploadUrl(
+        'posters/magic-bytes-mismatch.jpg',
+        'image/jpeg',
+        'public',
+        validPngBuffer.length,
+      );
+
+      // Client sends image/jpeg header but the actual body is PNG bytes
+      const mismatchedReq = new Request(`http://localhost:3000${presigned.uploadUrl}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'image/jpeg',
+          'Content-Length': String(validPngBuffer.length),
+        },
+        body: new Uint8Array(validPngBuffer),
+      });
+
+      const res = await PUT(mismatchedReq);
+      expect(res.status).toBe(400);
+      const data = await res.json();
+      expect(
+        data.message.includes('เนื้อหาไฟล์จริงไม่ตรงกับประเภทที่ได้รับอนุญาต') ||
+          data.message.includes('นามสกุลไฟล์ไม่ตรงกับเนื้อหาจริง'),
+      ).toBe(true);
     });
   });
 });

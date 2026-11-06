@@ -3,6 +3,7 @@ import type { Pool } from 'pg';
 import { inTransaction } from './database.ts';
 
 export const MAX_REQUEST_BODY_SIZE = 16 * 1024 * 1024; // 16MB limit for HTTP request body
+export const MAX_JSON_BODY_SIZE = 1 * 1024 * 1024; // 1MB limit for JSON requests
 export const MAX_FILE_SIZE = 15 * 1024 * 1024; // 15MB limit for single file payload
 export const MAX_UPLOADS_PER_WINDOW = 20; // 20 uploads per window
 export const MAX_BYTES_PER_WINDOW = 50 * 1024 * 1024; // 50MB cumulative quota per window
@@ -111,6 +112,49 @@ export async function readBoundedFormData(
 }
 
 /**
+ * Reads request body stream with a hard byte ceiling and parses as JSON.
+ * Throws PAYLOAD_TOO_LARGE if stream exceeds maxBytes.
+ */
+export async function readBoundedJson<T = unknown>(
+  request: Request,
+  maxBytes = MAX_JSON_BODY_SIZE,
+): Promise<T> {
+  // Pre-check Content-Length header
+  const cl = request.headers.get('content-length');
+  if (cl) {
+    const len = Number.parseInt(cl, 10);
+    if (!Number.isNaN(len) && len > maxBytes) {
+      throw new Error('PAYLOAD_TOO_LARGE');
+    }
+  }
+
+  if (!request.body) {
+    return (await request.json()) as T;
+  }
+
+  const reader = request.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let totalBytes = 0;
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      totalBytes += value.byteLength;
+      if (totalBytes > maxBytes) {
+        throw new Error('PAYLOAD_TOO_LARGE');
+      }
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+
+  const combined = Buffer.concat(chunks).toString('utf-8');
+  return JSON.parse(combined) as T;
+}
+
+/**
  * Ensures the PostgreSQL upload quotas table exists.
  */
 export async function ensureUploadQuotaSchema(pool: Pool): Promise<void> {
@@ -216,7 +260,13 @@ export async function checkAndReserveUploadQuota(
         };
       });
     } catch {
-      // Fallback to synchronized memory store if DB operation fails or pool not available
+      // Fail-closed when DB operation fails to preserve global quota integrity across instances
+      return {
+        allowed: false,
+        reason:
+          'ระบบจัดเก็บข้อมูลไม่พร้อมให้บริการชั่วคราว ไม่สามารถตรวจสอบโควตาได้ กรุณาลองใหม่อีกครั้งในภายหลัง',
+        retryAfterSeconds: 30,
+      };
     }
   }
 

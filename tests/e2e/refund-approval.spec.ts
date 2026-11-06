@@ -138,9 +138,11 @@ test.describe('Owner Refund Approval flow (TASK-022, AC-36, AC-88, AC-89, AC-90,
     await expect(page.getByText('ออกบัตรสำเร็จแล้ว (2 ใบ)')).toBeVisible();
     await page.locator('#tab-btn-tickets').click();
 
-    // Grab both ticket codes
+    // Grab both ticket codes and QR payloads
     const ticketCode0 = (await page.locator('#ticket-code-0').innerText()).trim();
     const ticketCode1 = (await page.locator('#ticket-code-1').innerText()).trim();
+    const qrPayload0 = (await page.locator('#ticket-qr-0').getAttribute('data-qr-payload')) || ticketCode0;
+    const qrPayload1 = (await page.locator('#ticket-qr-1').getAttribute('data-qr-payload')) || ticketCode1;
     expect(ticketCode0).toMatch(/^TK-/);
     expect(ticketCode1).toMatch(/^TK-/);
 
@@ -226,8 +228,8 @@ test.describe('Owner Refund Approval flow (TASK-022, AC-36, AC-88, AC-89, AC-90,
 
     await expect(scannerPage.locator('#admission-terminal-container')).toBeVisible();
 
-    // Scan refunded ticket ticketCode0 (AC-89)
-    await scannerPage.locator('#scanner-ticket-input').fill(ticketCode0);
+    // Scan refunded ticket qrPayload0 (AC-89)
+    await scannerPage.locator('#scanner-ticket-input').fill(qrPayload0);
     await scannerPage.locator('#scanner-submit-btn').click({ force: true });
 
     const resultCard = scannerPage.locator('#scan-result-card');
@@ -236,8 +238,8 @@ test.describe('Owner Refund Approval flow (TASK-022, AC-36, AC-88, AC-89, AC-90,
     await expect(scannerPage.locator('#scan-result-message')).toContainText('บัตรถูกคืนเงินแล้ว');
     await scannerPage.locator('#dismiss-scan-modal-btn').click();
 
-    // Scan valid ticket ticketCode1 (AC-36: sibling ticket remains valid)
-    await scannerPage.locator('#scanner-ticket-input').fill(ticketCode1);
+    // Scan valid ticket qrPayload1 (AC-36: sibling ticket remains valid)
+    await scannerPage.locator('#scanner-ticket-input').fill(qrPayload1);
     await scannerPage.locator('#scanner-submit-btn').click({ force: true });
 
     await expect(resultCard).toHaveClass(/result-success-entry/);

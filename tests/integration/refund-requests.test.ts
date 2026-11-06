@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { randomUUID } from 'node:crypto';
 import { authFixture } from '../support/auth-fixture';
 import { createEventDraft, approveSession } from '../../src/server/events';
 import { requestGuestOtp, verifyGuestOtp } from '../../src/server/guest-otp';
@@ -128,12 +129,20 @@ describe('TASK-021: Refund Requests Integration Tests (AC-32, AC-33, AC-34, AC-2
 
     expect(tRes.rows).toHaveLength(2);
 
+    const refundLookupToken = randomUUID();
+    await fixture.pool.query(
+      `INSERT INTO guest_verified_sessions (token, email, name, phone, purpose, "verifiedAt", "expiresAt")
+       VALUES ($1, $2, $3, $4, 'order_lookup', now(), now() + interval '30 minutes')`,
+      [refundLookupToken, guestEmail, guestName, guestPhone],
+    );
+
     return {
       eventId: eventDraft.id,
       sessionId,
       ticketTypeId,
       orderId: reservation.id,
-      buyerToken,
+      checkoutToken: buyerToken,
+      buyerToken: refundLookupToken,
       buyerEmail: guestEmail,
       buyerPhone: guestPhone,
       tickets: tRes.rows,
@@ -296,22 +305,12 @@ describe('TASK-021: Refund Requests Integration Tests (AC-32, AC-33, AC-34, AC-2
       email: `other-buyer-${Date.now()}@ticket.invalid`,
       phone: '0899999999',
     };
-    const reqRes = await requestGuestOtp(fixture.pool, {
-      buyer: otherBuyer,
-      purpose: 'checkout',
-      now: new Date(),
-    });
-    const match = getCapturedEmails().at(-1)?.text?.match(/\b(\d{6})\b/);
-    const code = match ? match[1] : '';
-    const vRes = await verifyGuestOtp(fixture.pool, {
-      email: otherBuyer.email,
-      code,
-      requestId: reqRes.requestId ?? '',
-      buyer: otherBuyer,
-      purpose: 'checkout',
-      now: new Date(),
-    });
-    const otherToken = vRes.verifiedToken ?? '';
+    const otherToken = randomUUID();
+    await fixture.pool.query(
+      `INSERT INTO guest_verified_sessions (token, email, name, phone, purpose, "verifiedAt", "expiresAt")
+       VALUES ($1, $2, $3, $4, 'order_lookup', now(), now() + interval '30 minutes')`,
+      [otherToken, otherBuyer.email, otherBuyer.name, otherBuyer.phone],
+    );
 
     // Buyer B attempts to refund Buyer A's order
     const tamperRes = await submitRefundRequest(fixture.pool, {
@@ -322,6 +321,16 @@ describe('TASK-021: Refund Requests Integration Tests (AC-32, AC-33, AC-34, AC-2
     });
     expect(tamperRes.success).toBe(false);
     expect(tamperRes.code).toBe('FORBIDDEN');
+
+    // Checkout token is rejected from submitting refund (Issue #15: purpose restriction)
+    const checkoutTokenRes = await submitRefundRequest(fixture.pool, {
+      verifiedToken: orderData.checkoutToken,
+      orderId: orderData.orderId,
+      ticketIds: [orderData.tickets[0].id],
+      reason: 'ใช้ checkout token ยื่นขอคืนเงิน',
+    });
+    expect(checkoutTokenRes.success).toBe(false);
+    expect(checkoutTokenRes.code).toBe('UNAUTHORIZED');
 
     // Invalid session token
     const fakeTokenRes = await submitRefundRequest(fixture.pool, {

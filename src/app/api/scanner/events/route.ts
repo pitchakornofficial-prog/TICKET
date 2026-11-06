@@ -1,6 +1,7 @@
+import { createSafeErrorResponse } from '@/server/api-error';
 import { getAuth } from '@/server/auth';
 import { listEventsForScanner } from '@/server/events';
-import { getScannerEventScopeCookie } from '@/server/scanner-scope';
+import { resolveScannerSessionScope } from '@/server/scanner-scope';
 import type { Pool } from 'pg';
 
 export const runtime = 'nodejs';
@@ -16,12 +17,24 @@ export async function GET(request: Request) {
   try {
     let events = await listEventsForScanner(pool, session.user.id, session.user.role);
 
-    // If scanner session is constrained to a specific event scope, filter out other events
+    // If scanner session is constrained to a specific event scope, filter out other events (Issue #3)
     if (session.user.role === 'scanner') {
       const secret = process.env.BETTER_AUTH_SECRET || (auth.options as { secret: string }).secret;
-      const scopedEventId = getScannerEventScopeCookie(request.headers.get('cookie'), secret);
-      if (scopedEventId) {
-        events = events.filter((e) => e.id === scopedEventId);
+      const scopeResolution = await resolveScannerSessionScope(
+        pool,
+        request.headers.get('cookie'),
+        secret,
+      );
+
+      if (scopeResolution.status === 'error') {
+        return Response.json(
+          { message: scopeResolution.reason },
+          { status: scopeResolution.statusCode },
+        );
+      }
+
+      if (scopeResolution.status === 'scoped') {
+        events = events.filter((e) => e.id === scopeResolution.eventId);
       }
     }
 
@@ -38,7 +51,6 @@ export async function GET(request: Request) {
       { status: 200, headers: { 'Cache-Control': 'no-store' } },
     );
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'เกิดข้อผิดพลาดในการดึงรายการงานที่ได้รับมอบหมาย';
-    return Response.json({ message }, { status: 500 });
+    return createSafeErrorResponse(error, 'เกิดข้อผิดพลาดในการดึงรายการงานที่ได้รับมอบหมาย', { defaultStatus: 500 });
   }
 }

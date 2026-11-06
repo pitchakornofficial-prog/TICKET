@@ -1,3 +1,4 @@
+import { createSafeErrorResponse } from '@/server/api-error';
 import { getAuth } from '@/server/auth';
 import type { Pool } from 'pg';
 
@@ -41,7 +42,6 @@ export async function GET(
 
     return Response.json({ logs: res.rows }, { status: 200, headers: { 'Cache-Control': 'no-store' } });
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'เกิดข้อผิดพลาดในการดึงประวัติการสแกน';
-    return Response.json({ message }, { status: 500 });
+    return createSafeErrorResponse(error, 'เกิดข้อผิดพลาดในการดึงประวัติการสแกน', { defaultStatus: 500 });
   }
 }

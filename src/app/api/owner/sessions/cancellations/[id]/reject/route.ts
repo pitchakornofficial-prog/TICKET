@@ -1,3 +1,5 @@
+import { createSafeErrorResponse } from '@/server/api-error';
+import { assertSameOrigin } from '@/server/origin';
 import { headers } from 'next/headers';
 import { getAuth, readActor } from '@/server/auth';
 import { getDatabasePool } from '@/server/database';
@@ -9,6 +11,9 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  const originError = assertSameOrigin(request);
+  if (originError) return originError;
+
   try {
     const { id } = await params;
     const actor = await readActor(getAuth(), await headers());
@@ -36,7 +41,6 @@ export async function POST(
 
     return Response.json(result, { status: 200 });
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'เกิดข้อผิดพลาดในการปฏิเสธการยกเลิกรอบการแสดง';
-    return Response.json({ message }, { status: 400 });
+    return createSafeErrorResponse(error, 'เกิดข้อผิดพลาดในการปฏิเสธการยกเลิกรอบการแสดง', { defaultStatus: 400 });
   }
 }

@@ -1,3 +1,5 @@
+import { createSafeErrorResponse } from '@/server/api-error';
+import { assertSameOrigin } from '@/server/origin';
 import { getAuth } from '@/server/auth';
 import { deleteNews } from '@/server/news';
 import type { Pool } from 'pg';
@@ -8,6 +10,9 @@ export async function DELETE(
   request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const originError = assertSameOrigin(request);
+  if (originError) return originError;
+
   const auth = getAuth();
   const session = await auth.api.getSession({ headers: request.headers });
   if (session?.user.role !== 'owner') {
@@ -27,7 +32,6 @@ export async function DELETE(
     }
     return Response.json({ message: 'ลบข่าวสารสำเร็จ' }, { status: 200 });
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'เกิดข้อผิดพลาดในการลบข่าว';
-    return Response.json({ message }, { status: 500 });
+    return createSafeErrorResponse(error, 'เกิดข้อผิดพลาดในการลบข่าว', { defaultStatus: 500 });
   }
 }

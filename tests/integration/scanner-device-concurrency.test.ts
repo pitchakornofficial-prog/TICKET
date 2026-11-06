@@ -210,11 +210,11 @@ describe('Issue #9: Scanner Atomic Device Binding Concurrency Tests (D-104)', ()
     );
     expect(payRes.success).toBe(true);
     expect(payRes.status).toBe('paid');
-    const ticketRes = await fixture.pool.query<{ ticketCode: string }>(
-      'SELECT "ticketCode" FROM tickets WHERE "orderId" = $1',
+    const ticketRes = await fixture.pool.query<{ qrPayload: string }>(
+      'SELECT "qrPayload" FROM tickets WHERE "orderId" = $1',
       [order.id],
     );
-    const ticketCode = ticketRes.rows[0].ticketCode;
+    const qrPayload = ticketRes.rows[0].qrPayload;
 
     const secret = fixture.settings.secret;
     const scopeCookie = signScannerEventScopeCookie(event.id, secret);
@@ -231,7 +231,7 @@ describe('Issue #9: Scanner Atomic Device Binding Concurrency Tests (D-104)', ()
       },
       body: JSON.stringify({
         sessionId,
-        qrPayloadOrCode: ticketCode,
+        qrPayloadOrCode: qrPayload,
         action: 'entry',
       }),
     });
@@ -250,7 +250,7 @@ describe('Issue #9: Scanner Atomic Device Binding Concurrency Tests (D-104)', ()
       },
       body: JSON.stringify({
         sessionId,
-        qrPayloadOrCode: ticketCode,
+        qrPayloadOrCode: qrPayload,
         action: 'entry',
       }),
     });

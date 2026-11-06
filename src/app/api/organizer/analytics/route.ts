@@ -1,3 +1,4 @@
+import { createSafeErrorResponse } from '@/server/api-error';
 import { getAuth } from '@/server/auth';
 import { getOrganizerAnalytics } from '@/server/organizer-analytics';
 import type { Pool } from 'pg';
@@ -33,7 +34,6 @@ export async function GET(request: Request) {
       headers: { 'Cache-Control': 'no-store' },
     });
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'เกิดข้อผิดพลาดในการโหลดข้อมูลสถิติภาพรวม';
-    return Response.json({ message }, { status: 500 });
+    return createSafeErrorResponse(error, 'เกิดข้อผิดพลาดในการโหลดข้อมูลสถิติภาพรวม', { defaultStatus: 500 });
   }
 }

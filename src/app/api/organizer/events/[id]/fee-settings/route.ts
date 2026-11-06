@@ -1,3 +1,5 @@
+import { createSafeErrorResponse } from '@/server/api-error';
+import { assertSameOrigin } from '@/server/origin';
 import { getAuth } from '@/server/auth';
 import { getEventFeeSettings } from '@/server/fees';
 import type { Pool } from 'pg';
@@ -27,15 +29,17 @@ export async function GET(
     const feeSettings = await getEventFeeSettings(pool, eventId);
     return Response.json({ feeSettings }, { status: 200, headers: { 'Cache-Control': 'no-store' } });
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'เกิดข้อผิดพลาด';
-    return Response.json({ message }, { status: 500 });
+    return createSafeErrorResponse(error, 'เกิดข้อผิดพลาด', { defaultStatus: 500 });
   }
 }
 
 export async function PUT(
-  _request: Request,
+  request: Request,
   _context: { params: Promise<{ id: string }> },
 ) {
+  const originError = assertSameOrigin(request);
+  if (originError) return originError;
+
   // Organizers are strictly forbidden from modifying fee settings!
   return Response.json(
     { message: 'ไม่อนุญาต: ผู้จัดงานไม่สามารถแก้ไขการตั้งค่าบริการและเงินสำรองได้' },
@@ -44,9 +48,12 @@ export async function PUT(
 }
 
 export async function POST(
-  _request: Request,
+  request: Request,
   _context: { params: Promise<{ id: string }> },
 ) {
+  const originError = assertSameOrigin(request);
+  if (originError) return originError;
+
   return Response.json(
     { message: 'ไม่อนุญาต: ผู้จัดงานไม่สามารถแก้ไขการตั้งค่าบริการและเงินสำรองได้' },
     { status: 403 },

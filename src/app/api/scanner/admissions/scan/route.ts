@@ -85,7 +85,7 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ result });
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : 'เกิดข้อผิดพลาดในการสแกนบัตร';
-    return NextResponse.json({ error: 'INTERNAL_ERROR', message: msg }, { status: 500 });
+    console.error('Error during ticket scan:', err);
+    return NextResponse.json({ error: 'INTERNAL_ERROR', message: 'เกิดข้อผิดพลาดในการสแกนบัตร' }, { status: 500 });
   }
 }

@@ -190,7 +190,7 @@ describe('TASK-020: Online Admission Scanning Integration Tests (AC-08, AC-39, A
       scannerName: fixtureAccounts.scanner.name,
       scannerRole: 'scanner',
       sessionId,
-      qrPayloadOrCode: targetTicket.ticketCode, // supports ticketCode or qrPayload
+      qrPayloadOrCode: targetTicket.qrPayload, // requires valid qrPayload
       action: 'exit',
       now: new Date('2026-12-31T20:00:00.000Z'),
     });
@@ -211,7 +211,7 @@ describe('TASK-020: Online Admission Scanning Integration Tests (AC-08, AC-39, A
       scannerName: fixtureAccounts.scanner.name,
       scannerRole: 'scanner',
       sessionId,
-      qrPayloadOrCode: targetTicket.ticketCode,
+      qrPayloadOrCode: targetTicket.qrPayload,
       action: 'exit',
       now: new Date('2026-12-31T20:02:00.000Z'),
     });

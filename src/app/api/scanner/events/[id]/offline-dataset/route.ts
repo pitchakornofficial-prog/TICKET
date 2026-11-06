@@ -1,3 +1,4 @@
+import { createSafeErrorResponse } from '@/server/api-error';
 import { getAuth } from '@/server/auth';
 import { getOfflineDataset } from '@/server/primary-scanner';
 import { verifyScannerSessionEventScope } from '@/server/scanner-scope';
@@ -44,8 +45,9 @@ export async function GET(
       },
     });
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'เกิดข้อผิดพลาดในการดึงชุดข้อมูลออฟไลน์';
-    const status = message.includes('ไม่อนุญาต') ? 403 : message.includes('ไม่พบ') ? 404 : 400;
-    return Response.json({ message }, { status });
+    return createSafeErrorResponse(error, 'เกิดข้อผิดพลาดในการดึงชุดข้อมูลออฟไลน์', {
+      defaultStatus: 400,
+      statusResolver: (msg) => (msg.includes('ไม่อนุญาต') ? 403 : msg.includes('ไม่พบ') ? 404 : 400),
+    });
   }
 }

@@ -125,7 +125,10 @@ test.describe('Paid ticket issuance flow (TASK-043, AC-119, AC-120, AC-123, AC-1
 
     // AC-16: Unverified payment does not show paid or issue tickets
     await expect(page.getByText('ชำระเงินสำเร็จ (Paid)')).not.toBeVisible();
-    const ticketsBeforePay = await request.get(`/api/public/checkout/orders/${orderId}/tickets`);
+    const guestToken = await page.evaluate(() => sessionStorage.getItem('ticket_guest_otp_token'));
+    const ticketsBeforePay = await request.get(`/api/public/checkout/orders/${orderId}/tickets`, {
+      headers: guestToken ? { 'x-guest-token': guestToken } : {},
+    });
     expect(ticketsBeforePay.status()).toBe(400);
 
     const simulateBtn = page.locator('#simulate-payment-button');

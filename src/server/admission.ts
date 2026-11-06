@@ -300,7 +300,7 @@ export async function recordAdmissionScan(
        JOIN ticket_types tt ON tt.id = t."ticketTypeId"
        JOIN event_sessions s ON s.id = t."sessionId"
        JOIN events e ON e.id = t."eventId"
-       WHERE (t."qrPayload" = $1 OR t."ticketCode" = $1)
+       WHERE t."qrPayload" = $1
        FOR UPDATE`,
       [cleanInput],
     );
@@ -312,7 +312,7 @@ export async function recordAdmissionScan(
         status: 'rejected',
         action: input.action,
         reason: 'TICKET_NOT_FOUND',
-        message: 'ไม่พบบัตรในระบบ กรุณาตรวจสอบรหัสบัตรหรือ QR Code (AC-101)',
+        message: 'ไม่พบบัตรในระบบ กรุณาตรวจสอบ QR Code บัตร (AC-101)',
       };
     }
 

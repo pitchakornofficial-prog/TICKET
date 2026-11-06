@@ -15,6 +15,8 @@ export async function migrateAuth(pool: Pool): Promise<void> {
     await ensureInvitationSchema(pool);
     const { ensureEventSchema } = await import('./events.ts');
     await ensureEventSchema(pool);
+    const { ensureScannerScopeSchema } = await import('./scanner-scope.ts');
+    await ensureScannerScopeSchema(pool);
   } finally {
     try { await lock.query('SELECT pg_advisory_unlock($1)', [945162001]); }
     finally { lock.release(); }

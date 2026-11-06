@@ -1,3 +1,5 @@
+import { createSafeErrorResponse } from '@/server/api-error';
+import { assertSameOrigin } from '@/server/origin';
 import { getAuth } from '@/server/auth';
 import { recordEventDebtRepayment } from '@/server/reports';
 import type { Pool } from 'pg';
@@ -8,6 +10,9 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  const originError = assertSameOrigin(request);
+  if (originError) return originError;
+
   const auth = getAuth();
   const session = await auth.api.getSession({ headers: request.headers });
 
@@ -67,7 +72,6 @@ export async function POST(
 
     return Response.json({ result }, { status: 200 });
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'เกิดข้อผิดพลาดในการบันทึกรับเงินคืนจากผู้จัดงาน';
-    return Response.json({ message }, { status: 500 });
+    return createSafeErrorResponse(error, 'เกิดข้อผิดพลาดในการบันทึกรับเงินคืนจากผู้จัดงาน', { defaultStatus: 500 });
   }
 }
