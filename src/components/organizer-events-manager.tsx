@@ -36,6 +36,7 @@ interface TicketTypeDraft {
   quota: number;
   description: string;
   isStudentPrivilege?: boolean;
+  studentPrice?: number | null;
 }
 
 interface SessionDraft {
@@ -472,7 +473,7 @@ export function OrganizerEventsManager({
           ...s,
           ticketTypes: [
             ...s.ticketTypes,
-            { id: `tt-${Date.now()}`, name: '', price: 0, quota: 0, description: '' },
+            { id: `tt-${Date.now()}`, name: '', price: 0, quota: 0, description: '', isStudentPrivilege: false, studentPrice: null },
           ],
         };
       }),
@@ -2017,23 +2018,52 @@ export function OrganizerEventsManager({
                                           </button>
                                         )}
                                       </div>
-                                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0.15rem 0.2rem 0', borderTop: '1px dashed #e2e8f0' }}>
-                                        <label style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.76rem', color: tt.isStudentPrivilege ? '#1848ed' : '#64748b', cursor: 'pointer', fontWeight: tt.isStudentPrivilege ? 600 : 400 }}>
-                                          <input
-                                            type="checkbox"
-                                            checked={Boolean(tt.isStudentPrivilege)}
-                                            onChange={e => {
-                                              handleUpdateTicketType(sess.id, tt.id, { isStudentPrivilege: e.target.checked });
-                                              setDraftSaved(false);
-                                            }}
-                                            data-testid={`ticket-student-checkbox-${tt.id}`}
-                                          />
-                                          <span>กำหนดเป็นบัตรสิทธิ์พิเศษนักศึกษา ม.อุบล (@ubu.ac.th)</span>
-                                        </label>
+                                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', padding: '0.15rem 0.2rem 0', borderTop: '1px dashed #e2e8f0' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                          <label style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.76rem', color: tt.isStudentPrivilege ? '#1848ed' : '#64748b', cursor: 'pointer', fontWeight: tt.isStudentPrivilege ? 600 : 400 }}>
+                                            <input
+                                              type="checkbox"
+                                              checked={Boolean(tt.isStudentPrivilege)}
+                                              onChange={e => {
+                                                handleUpdateTicketType(sess.id, tt.id, {
+                                                  isStudentPrivilege: e.target.checked,
+                                                  studentPrice: e.target.checked ? (tt.studentPrice ?? 99) : null,
+                                                });
+                                                setDraftSaved(false);
+                                              }}
+                                              data-testid={`ticket-student-checkbox-${tt.id}`}
+                                            />
+                                            <span>กำหนดเป็นบัตรสิทธิ์พิเศษนักศึกษา ม.อุบล (@ubu.ac.th)</span>
+                                          </label>
+                                          {tt.isStudentPrivilege && (
+                                            <span style={{ fontSize: '0.72rem', background: '#eff6ff', color: '#1848ed', padding: '2px 6px', borderRadius: '4px', fontWeight: 600 }}>
+                                              สิทธิ์ ม.อุบล
+                                            </span>
+                                          )}
+                                        </div>
                                         {tt.isStudentPrivilege && (
-                                          <span style={{ fontSize: '0.72rem', background: '#eff6ff', color: '#1848ed', padding: '2px 6px', borderRadius: '4px', fontWeight: 600 }}>
-                                            สิทธิ์ ม.อุบล
-                                          </span>
+                                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.2rem', paddingLeft: '1.25rem' }}>
+                                            <label htmlFor={`tt-student-price-${tt.id}`} style={{ fontSize: '0.78rem', color: '#1848ed', fontWeight: 500, whiteSpace: 'nowrap' }}>
+                                              ราคานักศึกษา (บาท):
+                                            </label>
+                                            <input
+                                              id={`tt-student-price-${tt.id}`}
+                                              data-testid={`ticket-student-price-${tt.id}`}
+                                              type="number"
+                                              min={0}
+                                              value={tt.studentPrice ?? ''}
+                                              onChange={e => {
+                                                const raw = e.target.value;
+                                                handleUpdateTicketType(sess.id, tt.id, {
+                                                  studentPrice: raw === '' ? null : Math.max(0, Number(raw)),
+                                                });
+                                                setDraftSaved(false);
+                                              }}
+                                              placeholder="99"
+                                              className="form-input-text"
+                                              style={{ width: '120px', padding: '0.35rem 0.55rem', fontSize: '0.8rem', borderColor: '#93c5fd' }}
+                                            />
+                                          </div>
                                         )}
                                       </div>
                                     </div>

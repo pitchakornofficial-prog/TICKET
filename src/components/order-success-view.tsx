@@ -173,9 +173,14 @@ export function OrderSuccessView({ orderId }: OrderSuccessViewProps) {
             <TicketIcon className="empty-icon" />
             <h2>ไม่พบข้อมูลคำสั่งซื้อ</h2>
             <p>{loadError || 'ไม่พบคำสั่งซื้อที่ระบุในระบบ'}</p>
-            <Link href="/" className="primary-button button-link">
-              กลับไปหน้าแรก
-            </Link>
+            <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center', flexWrap: 'wrap', marginTop: '1rem' }}>
+              <Link href={`/my-tickets?orderId=${orderId}`} className="primary-button button-link">
+                ยืนยัน OTP เพื่อเข้าดูบัตร
+              </Link>
+              <Link href="/" className="secondary-button button-link" style={{ textDecoration: 'none' }}>
+                กลับไปหน้าแรก
+              </Link>
+            </div>
           </div>
         </div>
       </div>

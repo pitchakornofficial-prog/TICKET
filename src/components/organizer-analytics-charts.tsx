@@ -32,21 +32,9 @@ export interface GateAdmissionDataPoint {
   speedPerHour: number;
 }
 
-const DEFAULT_SALES_TREND: SalesTrendDataPoint[] = [
-  { id: 'w1', period: 'สัปดาห์ 1', sales: 185000, tickets: 120 },
-  { id: 'w2', period: 'สัปดาห์ 2', sales: 320000, tickets: 210 },
-  { id: 'w3', period: 'สัปดาห์ 3', sales: 490000, tickets: 315 },
-  { id: 'w4', period: 'สัปดาห์ 4', sales: 740000, tickets: 480 },
-  { id: 'w5', period: 'สัปดาห์ 5', sales: 980000, tickets: 620 },
-  { id: 'w6', period: 'สัปดาห์ล่าสุด', sales: 1250000, tickets: 810 },
-];
+const DEFAULT_SALES_TREND: SalesTrendDataPoint[] = [];
 
-const DEFAULT_TIER_DATA: TicketTierDataPoint[] = [
-  { tierName: 'VIP Zone A (บัตรยืนติดเวที)', sold: 180, quota: 200, price: 3500, color: '#2563eb' },
-  { tierName: 'Regular Zone B (บัตรยืนทั่วไป)', sold: 450, quota: 600, price: 2000, color: '#0d9488' },
-  { tierName: 'Early Bird (สิทธิพิเศษเปิดจำหน่าย)', sold: 120, quota: 120, price: 1500, color: '#8b5cf6' },
-  { tierName: 'Balcony Zone C (บัตรชั้นลอย)', sold: 60, quota: 100, price: 1200, color: '#f59e0b' },
-];
+const DEFAULT_TIER_DATA: TicketTierDataPoint[] = [];
 
 /**
  * 1. Gross Sales Trend Chart (Pure SVG Bar Chart with Hover Tooltip)
@@ -59,7 +47,7 @@ export function GrossSalesTrendChart({ data = DEFAULT_SALES_TREND }: { data?: Sa
   const paddingY = 25;
   const availableWidth = chartWidth - paddingX * 2;
   const availableHeight = chartHeight - paddingY * 2;
-  const barWidth = Math.min(36, availableWidth / data.length - 12);
+  const barWidth = data.length > 0 ? Math.min(36, availableWidth / data.length - 12) : 36;
 
   return (
     <div className="analytics-card sales-trend-card">
@@ -79,62 +67,68 @@ export function GrossSalesTrendChart({ data = DEFAULT_SALES_TREND }: { data?: Sa
         </div>
       </div>
 
-      <div className="svg-chart-container">
-        <svg
-          viewBox={`0 0 ${chartWidth} ${chartHeight}`}
-          className="responsive-svg-chart"
-          role="img"
-          aria-label="กราฟแท่งแสดงแนวโน้มยอดขายรวม"
-        >
-          {/* Horizontal Grid lines */}
-          {[0, 0.25, 0.5, 0.75, 1].map((ratio) => {
-            const y = paddingY + availableHeight * (1 - ratio);
-            const val = Math.round((maxSales * ratio) / 1000) * 1000;
-            return (
-              <g key={ratio} className="chart-grid-line">
-                <line x1={paddingX} y1={y} x2={chartWidth - 10} y2={y} stroke="#e2e8f0" strokeDasharray="3 3" />
-                <text x={paddingX - 6} y={y + 3} textAnchor="end" fontSize="9" fill="#94a3b8">
-                  {val >= 1000000 ? `${(val / 1000000).toFixed(1)}M` : `${Math.round(val / 1000)}k`}
-                </text>
-              </g>
-            );
-          })}
+      {data.length === 0 ? (
+        <div className="analytics-empty-state" style={{ padding: '2.5rem 1rem', textAlign: 'center', color: '#64748b' }}>
+          <p>ยังไม่มีข้อมูลยอดขายสะสม</p>
+        </div>
+      ) : (
+        <div className="svg-chart-container">
+          <svg
+            viewBox={`0 0 ${chartWidth} ${chartHeight}`}
+            className="responsive-svg-chart"
+            role="img"
+            aria-label="กราฟแท่งแสดงแนวโน้มยอดขายรวม"
+          >
+            {/* Horizontal Grid lines */}
+            {[0, 0.25, 0.5, 0.75, 1].map((ratio) => {
+              const y = paddingY + availableHeight * (1 - ratio);
+              const val = Math.round((maxSales * ratio) / 1000) * 1000;
+              return (
+                <g key={ratio} className="chart-grid-line">
+                  <line x1={paddingX} y1={y} x2={chartWidth - 10} y2={y} stroke="#e2e8f0" strokeDasharray="3 3" />
+                  <text x={paddingX - 6} y={y + 3} textAnchor="end" fontSize="9" fill="#94a3b8">
+                    {val >= 1000000 ? `${(val / 1000000).toFixed(1)}M` : `${Math.round(val / 1000)}k`}
+                  </text>
+                </g>
+              );
+            })}
 
-          {/* Bars */}
-          {data.map((item, idx) => {
-            const stepX = availableWidth / data.length;
-            const x = paddingX + idx * stepX + (stepX - barWidth) / 2;
-            const barHeight = Math.max(4, (item.sales / maxSales) * availableHeight);
-            const y = paddingY + availableHeight - barHeight;
+            {/* Bars */}
+            {data.map((item, idx) => {
+              const stepX = availableWidth / data.length;
+              const x = paddingX + idx * stepX + (stepX - barWidth) / 2;
+              const barHeight = Math.max(4, (item.sales / maxSales) * availableHeight);
+              const y = paddingY + availableHeight - barHeight;
 
-            return (
-              <g key={item.id ?? item.period} className="chart-bar-group">
-                <rect
-                  x={x}
-                  y={y}
-                  width={barWidth}
-                  height={barHeight}
-                  rx="4"
-                  className="chart-bar-rect"
-                  fill="#3b82f6"
-                >
-                  <title>{`${item.period}: ${item.sales.toLocaleString('th-TH')} THB (${item.tickets} ใบ)`}</title>
-                </rect>
-                <text
-                  x={x + barWidth / 2}
-                  y={chartHeight - 6}
-                  textAnchor="middle"
-                  fontSize="10"
-                  fill="#64748b"
-                  fontWeight="600"
-                >
-                  {item.period}
-                </text>
-              </g>
-            );
-          })}
-        </svg>
-      </div>
+              return (
+                <g key={item.id ?? item.period} className="chart-bar-group">
+                  <rect
+                    x={x}
+                    y={y}
+                    width={barWidth}
+                    height={barHeight}
+                    rx="4"
+                    className="chart-bar-rect"
+                    fill="#3b82f6"
+                  >
+                    <title>{`${item.period}: ${item.sales.toLocaleString('th-TH')} THB (${item.tickets} ใบ)`}</title>
+                  </rect>
+                  <text
+                    x={x + barWidth / 2}
+                    y={chartHeight - 6}
+                    textAnchor="middle"
+                    fontSize="10"
+                    fill="#64748b"
+                    fontWeight="600"
+                  >
+                    {item.period}
+                  </text>
+                </g>
+              );
+            })}
+          </svg>
+        </div>
+      )}
     </div>
   );
 }
@@ -168,62 +162,68 @@ export function TicketDistributionChart({ data = DEFAULT_TIER_DATA }: { data?: T
         </div>
       </div>
 
-      <div className="donut-and-legend-layout">
-        <div className="donut-chart-wrap">
-          <svg viewBox={`0 0 ${size} ${size}`} className="donut-svg" role="img" aria-label="กราฟโดนัทสัดส่วนบัตร">
-            <circle
-              cx={center}
-              cy={center}
-              r={radius}
-              fill="transparent"
-              stroke="#f1f5f9"
-              strokeWidth={strokeWidth}
-            />
-            {data.map((tier) => {
-              const portion = totalSold > 0 ? tier.sold / totalSold : 0;
-              const strokeDasharray = `${portion * circumference} ${circumference}`;
-              const strokeDashoffset = -accumulatedPercent * circumference;
-              accumulatedPercent += portion;
+      {data.length === 0 ? (
+        <div className="analytics-empty-state" style={{ padding: '2.5rem 1rem', textAlign: 'center', color: '#64748b' }}>
+          <p>ยังไม่มีข้อมูลสัดส่วนประเภทบัตร</p>
+        </div>
+      ) : (
+        <div className="donut-and-legend-layout">
+          <div className="donut-chart-wrap">
+            <svg viewBox={`0 0 ${size} ${size}`} className="donut-svg" role="img" aria-label="กราฟโดนัทสัดส่วนบัตร">
+              <circle
+                cx={center}
+                cy={center}
+                r={radius}
+                fill="transparent"
+                stroke="#f1f5f9"
+                strokeWidth={strokeWidth}
+              />
+              {data.map((tier) => {
+                const portion = totalSold > 0 ? tier.sold / totalSold : 0;
+                const strokeDasharray = `${portion * circumference} ${circumference}`;
+                const strokeDashoffset = -accumulatedPercent * circumference;
+                accumulatedPercent += portion;
 
+                return (
+                  <circle
+                    key={tier.tierName}
+                    cx={center}
+                    cy={center}
+                    r={radius}
+                    fill="transparent"
+                    stroke={tier.color}
+                    strokeWidth={strokeWidth}
+                    strokeDasharray={strokeDasharray}
+                    strokeDashoffset={strokeDashoffset}
+                    className="donut-segment"
+                  />
+                );
+              })}
+            </svg>
+            <div className="donut-center-label">
+              <span className="donut-center-value">{soldPercentage}%</span>
+              <span className="donut-center-sub">ขายแล้ว</span>
+            </div>
+          </div>
+
+          <div className="donut-legend-list">
+            {data.map((tier) => {
+              const pct = totalSold > 0 ? Math.round((tier.sold / totalSold) * 100) : 0;
               return (
-                <circle
-                  key={tier.tierName}
-                  cx={center}
-                  cy={center}
-                  r={radius}
-                  fill="transparent"
-                  stroke={tier.color}
-                  strokeWidth={strokeWidth}
-                  strokeDasharray={strokeDasharray}
-                  strokeDashoffset={strokeDashoffset}
-                  className="donut-segment"
-                />
+                <div key={tier.tierName} className="donut-legend-item">
+                  <span className="legend-color-dot" style={{ backgroundColor: tier.color }} />
+                  <div className="legend-text-group">
+                    <span className="legend-tier-name">{tier.tierName}</span>
+                    <span className="legend-tier-stats">
+                      {tier.sold} / {tier.quota} ใบ ({pct}%)
+                    </span>
+                  </div>
+                </div>
               );
             })}
-          </svg>
-          <div className="donut-center-label">
-            <span className="donut-center-value">{soldPercentage}%</span>
-            <span className="donut-center-sub">ขายแล้ว</span>
           </div>
         </div>
-
-        <div className="donut-legend-list">
-          {data.map((tier) => {
-            const pct = totalSold > 0 ? Math.round((tier.sold / totalSold) * 100) : 0;
-            return (
-              <div key={tier.tierName} className="donut-legend-item">
-                <span className="legend-color-dot" style={{ backgroundColor: tier.color }} />
-                <div className="legend-text-group">
-                  <span className="legend-tier-name">{tier.tierName}</span>
-                  <span className="legend-tier-stats">
-                    {tier.sold} / {tier.quota} ใบ ({pct}%)
-                  </span>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
+      )}
     </div>
   );
 }
@@ -232,16 +232,16 @@ export function TicketDistributionChart({ data = DEFAULT_TIER_DATA }: { data?: T
  * 3. Admission & Event Velocity Gauge (Overview)
  */
 export function AdmissionRateGauge({
-  totalTickets = 1020,
-  admitted = 680,
-  approvedEvents = 3,
-  draftEvents = 1,
+  totalTickets = 0,
+  admitted = 0,
+  approvedEvents = 0,
+  draftEvents = 0,
 }: {
   totalTickets?: number;
   admitted?: number;
   approvedEvents?: number;
   draftEvents?: number;
-}) {
+} = {}) {
   const percent = totalTickets > 0 ? Math.round((admitted / totalTickets) * 100) : 0;
   const remaining = Math.max(0, totalTickets - admitted);
 
@@ -305,36 +305,42 @@ export function ConcertCapacityFillChart({ data = DEFAULT_TIER_DATA }: { data?: 
         <span className="sub-chart-badge">อัปเดตเรียลไทม์</span>
       </div>
 
-      <div className="tier-capacity-bars-grid">
-        {data.map((tier) => {
-          const fillPercent = tier.quota > 0 ? Math.round((tier.sold / tier.quota) * 100) : 0;
-          return (
-            <div key={tier.tierName} className="tier-capacity-item">
-              <div className="tier-item-header">
-                <span className="tier-item-name">{tier.tierName}</span>
-                <span className="tier-item-sold">
-                  {tier.sold} / {tier.quota} ใบ ({fillPercent}%)
-                </span>
+      {data.length === 0 ? (
+        <div className="analytics-empty-state" style={{ padding: '2rem 1rem', textAlign: 'center', color: '#64748b' }}>
+          <p>ยังไม่มีข้อมูลโควตาบัตรแต่ละประเภท</p>
+        </div>
+      ) : (
+        <div className="tier-capacity-bars-grid">
+          {data.map((tier) => {
+            const fillPercent = tier.quota > 0 ? Math.round((tier.sold / tier.quota) * 100) : 0;
+            return (
+              <div key={tier.tierName} className="tier-capacity-item">
+                <div className="tier-item-header">
+                  <span className="tier-item-name">{tier.tierName}</span>
+                  <span className="tier-item-sold">
+                    {tier.sold} / {tier.quota} ใบ ({fillPercent}%)
+                  </span>
+                </div>
+                <div className="tier-track">
+                  <div
+                    className="tier-fill"
+                    style={{
+                      width: `${fillPercent}%`,
+                      backgroundColor: tier.color,
+                    }}
+                  />
+                </div>
+                <div className="tier-item-footer">
+                  <span className="tier-price">{tier.price.toLocaleString('th-TH')} THB/ใบ</span>
+                  <span className="tier-revenue">
+                    รวม {(tier.sold * tier.price).toLocaleString('th-TH')} THB
+                  </span>
+                </div>
               </div>
-              <div className="tier-track">
-                <div
-                  className="tier-fill"
-                  style={{
-                    width: `${fillPercent}%`,
-                    backgroundColor: tier.color,
-                  }}
-                />
-              </div>
-              <div className="tier-item-footer">
-                <span className="tier-price">{tier.price.toLocaleString('th-TH')} THB/ใบ</span>
-                <span className="tier-revenue">
-                  รวม {(tier.sold * tier.price).toLocaleString('th-TH')} THB
-                </span>
-              </div>
-            </div>
-          );
-        })}
-      </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
@@ -342,13 +348,11 @@ export function ConcertCapacityFillChart({ data = DEFAULT_TIER_DATA }: { data?: 
 /**
  * 5. Sub-Menu: Live Scanner Admission Velocity (for Scanners view)
  */
-export function ScannerAdmissionVelocityChart() {
-  const gates: GateAdmissionDataPoint[] = [
-    { gate: 'ประตู A (VIP Gate)', admitted: 175, total: 200, speedPerHour: 120 },
-    { gate: 'ประตู B (Main Gate 1)', admitted: 290, total: 350, speedPerHour: 210 },
-    { gate: 'ประตู C (Main Gate 2)', admitted: 215, total: 300, speedPerHour: 180 },
-  ];
-
+export function ScannerAdmissionVelocityChart({
+  gates = [],
+}: {
+  gates?: GateAdmissionDataPoint[];
+} = {}) {
   return (
     <div className="sub-chart-banner scanner-velocity-banner">
       <div className="sub-chart-title-row">
@@ -359,28 +363,34 @@ export function ScannerAdmissionVelocityChart() {
         <span className="sub-chart-badge success">Live Gate Feeds</span>
       </div>
 
-      <div className="gates-velocity-grid">
-        {gates.map((g) => {
-          const pct = Math.round((g.admitted / g.total) * 100);
-          return (
-            <div key={g.gate} className="gate-card">
-              <div className="gate-card-header">
-                <span className="gate-title">{g.gate}</span>
-                <span className="gate-speed-tag">{g.speedPerHour} คน/ชม.</span>
+      {gates.length === 0 ? (
+        <div className="analytics-empty-state" style={{ padding: '2rem 1rem', textAlign: 'center', color: '#64748b' }}>
+          <p>ยังไม่มีข้อมูลการสแกนบัตรผ่านประตู</p>
+        </div>
+      ) : (
+        <div className="gates-velocity-grid">
+          {gates.map((g) => {
+            const pct = g.total > 0 ? Math.round((g.admitted / g.total) * 100) : 0;
+            return (
+              <div key={g.gate} className="gate-card">
+                <div className="gate-card-header">
+                  <span className="gate-title">{g.gate}</span>
+                  <span className="gate-speed-tag">{g.speedPerHour} คน/ชม.</span>
+                </div>
+                <div className="gate-metric-row">
+                  <span className="gate-count">
+                    {g.admitted} <span className="gate-unit">/ {g.total} คน</span>
+                  </span>
+                  <span className="gate-pct">{pct}%</span>
+                </div>
+                <div className="gate-progress-track">
+                  <div className="gate-progress-fill" style={{ width: `${pct}%` }} />
+                </div>
               </div>
-              <div className="gate-metric-row">
-                <span className="gate-count">
-                  {g.admitted} <span className="gate-unit">/ {g.total} คน</span>
-                </span>
-                <span className="gate-pct">{pct}%</span>
-              </div>
-              <div className="gate-progress-track">
-                <div className="gate-progress-fill" style={{ width: `${pct}%` }} />
-              </div>
-            </div>
-          );
-        })}
-      </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
@@ -388,7 +398,7 @@ export function ScannerAdmissionVelocityChart() {
 /**
  * 6. Sub-Menu: Financial Breakdown Chart (for Finance view)
  */
-export function FinancialBreakdownChart({ grossSales = 1250000 }: { grossSales?: number }) {
+export function FinancialBreakdownChart({ grossSales = 0 }: { grossSales?: number }) {
   const serviceFee = grossSales * 0.05; // 5%
   const reserveFund = grossSales * 0.10; // 10%
   const netPayout = grossSales - serviceFee - reserveFund; // 85%

@@ -222,7 +222,7 @@ export async function getOrderRefundEligibility(
     admissionStatus: string;
   }>(
     `SELECT t.id, t."ticketCode", t.status, t."admissionStatus",
-            tt.name AS "ticketTypeName", oi."unitPrice" AS "ticketPrice"
+            tt.name AS "ticketTypeName", COALESCE(t.price, oi."unitPrice") AS "ticketPrice"
      FROM tickets t
      JOIN ticket_types tt ON tt.id = t."ticketTypeId"
      JOIN order_items oi ON oi.id = t."orderItemId"
@@ -438,10 +438,10 @@ export async function submitRefundRequest(
       ticketPrice: number;
     }>(
       `SELECT t.id, t."orderId", t."ticketCode", t.status, t."admissionStatus",
-              oi."unitPrice" AS "ticketPrice"
+              COALESCE(t.price, oi."unitPrice") AS "ticketPrice"
        FROM tickets t
        JOIN ticket_types tt ON tt.id = t."ticketTypeId"
-     JOIN order_items oi ON oi.id = t."orderItemId"
+       JOIN order_items oi ON oi.id = t."orderItemId"
        WHERE t.id = ANY($1)
        FOR UPDATE`,
       [input.ticketIds],
@@ -979,7 +979,7 @@ export async function processSessionCancellationRefunds(
     orderStatus: string;
   }>(
     `SELECT t.id, t."orderId", t."ticketCode", t.status, t."admissionStatus",
-            oi."unitPrice" AS "ticketPrice",
+            COALESCE(t.price, oi."unitPrice") AS "ticketPrice",
             o."buyerEmail", o."buyerPhone", o."buyerName", o.status AS "orderStatus"
      FROM tickets t
      JOIN ticket_types tt ON tt.id = t."ticketTypeId"

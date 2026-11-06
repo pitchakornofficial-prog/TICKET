@@ -78,8 +78,15 @@ export function assertSameOrigin(request: Request): Response | null {
 
   // 4. In test/server environments without browser headers, check request.url origin
   try {
-    const urlOrigin = new URL(request.url).origin;
+    const urlObj = new URL(request.url);
+    const urlOrigin = urlObj.origin;
     if (isAllowedOrigin(urlOrigin)) {
+      return null;
+    }
+    const baseOrigin = getBaseOrigin();
+    const isLocalBase = ['127.0.0.1', 'localhost', '[::1]'].includes(baseOrigin.hostname);
+    const isLocalUrl = ['127.0.0.1', 'localhost', '[::1]'].includes(urlObj.hostname);
+    if (isLocalBase && isLocalUrl) {
       return null;
     }
   } catch {}

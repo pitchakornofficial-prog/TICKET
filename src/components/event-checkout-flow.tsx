@@ -35,6 +35,8 @@ export interface TicketTypeInfo {
   price: number;
   quota: number;
   description?: string;
+  isStudentPrivilege?: boolean;
+  studentPrice?: number | null;
 }
 
 export interface SessionInfo {
@@ -52,6 +54,12 @@ interface EventCheckoutFlowProps {
   eventPosterUrl?: string | null;
   limitPerOrder: number;
   sessions: SessionInfo[];
+  feeSettings?: {
+    customerFeeMode?: 'percentage' | 'per_ticket' | 'per_order';
+    customerFeeRate?: number;
+    ubuPrivilegeMode?: boolean;
+    organizerFeePrivilegeRate?: number;
+  };
 }
 
 const TOTAL_HOLD_SECONDS = 15 * 60; // 15-minute countdown (900 seconds)
@@ -63,6 +71,7 @@ export function EventCheckoutFlow({
   eventPosterUrl: _eventPosterUrl,
   limitPerOrder,
   sessions,
+  feeSettings,
 }: EventCheckoutFlowProps) {
   const router = useRouter();
   const [selectedSessionId, setSelectedSessionId] = useState<string>(
@@ -156,46 +165,66 @@ export function EventCheckoutFlow({
   const UBU_MAX_DISCOUNT_TICKETS = 2;
   const hasUbuPrivilege = isUbuEmail(buyer?.email || '');
 
-  // Check if event is UBU Freshy Fest or has ticket price 150 (D-181)
+  // Check if event has UBU privilege mode enabled or is UBU Freshy Fest (D-181)
   const isUbuFreshyEvent =
+    Boolean(feeSettings?.ubuPrivilegeMode) ||
     eventTitle?.includes('UBU Freshy') ||
     eventId?.includes('freshy') ||
     eventId === 'event-ubu-freshy-2026';
 
-  // Calculate UBU discount across selected tickets (highest priced first)
-  const selectedPrices: number[] = [];
-  for (const tt of ticketTypes) {
-    const count = quantities[tt.id] || 0;
-    for (let i = 0; i < count; i++) {
-      selectedPrices.push(Number(tt.price));
-    }
-  }
-  selectedPrices.sort((a, b) => b - a);
-
   let ubuDiscountAmount = 0;
   if (hasUbuPrivilege) {
-    if (isUbuFreshyEvent) {
-      // D-181: Discount all tickets priced at 150 to 99 THB (51 THB discount per ticket)
-      for (const price of selectedPrices) {
-        if (price === 150) {
-          ubuDiscountAmount += 150 - 99;
-        } else {
-          ubuDiscountAmount += Math.round(price * 0.15);
+    for (const tt of ticketTypes) {
+      const count = quantities[tt.id] || 0;
+      if (count === 0) continue;
+      const isStudentTicket = Boolean(tt.isStudentPrivilege) || isUbuFreshyEvent;
+      if (isStudentTicket) {
+        const studentPrice = tt.studentPrice != null
+          ? Number(tt.studentPrice)
+          : (Number(tt.price) === 150 ? 99 : Math.round(Number(tt.price) * 0.85));
+        let perTicketDiscount = Math.max(0, Number(tt.price) - studentPrice);
+        if (Number(tt.price) === 150 && studentPrice === 99) {
+          perTicketDiscount = 150 - 99;
+        }
+        ubuDiscountAmount += perTicketDiscount * count;
+      }
+    }
+
+    // D-37 general UBU discount fallback if not using per-ticket student privilege
+    if (ubuDiscountAmount === 0 && !isUbuFreshyEvent) {
+      const selectedPrices: number[] = [];
+      for (const tt of ticketTypes) {
+        const count = quantities[tt.id] || 0;
+        for (let i = 0; i < count; i++) {
+          selectedPrices.push(Number(tt.price));
         }
       }
-    } else {
+      selectedPrices.sort((a, b) => b - a);
       const discountedTicketCount = Math.min(selectedPrices.length, UBU_MAX_DISCOUNT_TICKETS);
       for (let i = 0; i < discountedTicketCount; i++) {
         ubuDiscountAmount += Math.round(selectedPrices[i] * (UBU_DISCOUNT_PERCENT / 100));
       }
     }
   }
+
   const finalTicketSubtotal = Math.max(0, selectedSubtotal - ubuDiscountAmount);
 
-  // Customer service fee calculation (D-40, D-135, D-181: 6% for UBU Freshy Fest, Math.ceil whole Baht)
-  const SERVICE_FEE_RATE = isUbuFreshyEvent ? 0.06 : 0.05;
+  // Customer service fee calculation (using feeSettings when available, 0.06 or 0.05 default)
+  const customerFeeMode = feeSettings?.customerFeeMode || 'percentage';
+  const customerFeeRate = feeSettings?.customerFeeRate != null
+    ? feeSettings.customerFeeRate
+    : (isUbuFreshyEvent ? 6 : 5);
+  const _SERVICE_FEE_RATE = customerFeeRate / 100 || 0.06;
   const baseTicketSubtotal = hasUbuPrivilege ? finalTicketSubtotal : selectedSubtotal;
-  const serviceFee = Math.ceil(baseTicketSubtotal * SERVICE_FEE_RATE);
+
+  let serviceFee = 0;
+  if (customerFeeMode === 'percentage') {
+    serviceFee = Math.ceil(baseTicketSubtotal * (customerFeeRate / 100));
+  } else if (customerFeeMode === 'per_ticket') {
+    serviceFee = Math.round(customerFeeRate * totalTickets);
+  } else if (customerFeeMode === 'per_order') {
+    serviceFee = Math.round(customerFeeRate);
+  }
   const grandTotal = baseTicketSubtotal + serviceFee;
 
   const effectiveLimit = buyerQuota ? buyerQuota.remainingQuota : limitPerOrder;
@@ -496,16 +525,38 @@ export function EventCheckoutFlow({
 
                   <div style={{ display: 'flex', alignItems: 'center', gap: '1.2rem' }}>
                     <div style={{ textAlign: 'right' }}>
-                      {hasUbuPrivilege ? (
+                      {hasUbuPrivilege && (Boolean(tt.isStudentPrivilege) || isUbuFreshyEvent) ? (
                         <>
                           <div style={{ fontSize: '0.8rem', textDecoration: 'line-through', color: 'var(--muted)' }}>
                             {formatBaht(tt.price)}
                           </div>
                           <div style={{ fontWeight: 700, fontSize: '1.15rem', color: 'var(--blue)' }}>
-                            {formatBaht(isUbuFreshyEvent && Number(tt.price) === 150 ? 99 : Math.round(Number(tt.price) * (1 - UBU_DISCOUNT_PERCENT / 100)))}
+                            {formatBaht(
+                              tt.studentPrice != null
+                                ? Number(tt.studentPrice)
+                                : (Number(tt.price) === 150 ? 99 : Math.round(Number(tt.price) * (1 - UBU_DISCOUNT_PERCENT / 100)))
+                            )}
                           </div>
                           <span className="ubu-ticket-pill">
-                            {isUbuFreshyEvent && Number(tt.price) === 150 ? 'สิทธิ์ ม.อุบลฯ 99฿' : `สิทธิ์ ม.อุบลฯ -${UBU_DISCOUNT_PERCENT}%`}
+                            {isUbuFreshyEvent && Number(tt.price) === 150 && tt.studentPrice == null
+                              ? 'สิทธิ์ ม.อุบลฯ 99฿'
+                              : `สิทธิ์ ม.อุบลฯ ${formatBaht(
+                                  tt.studentPrice != null
+                                    ? Number(tt.studentPrice)
+                                    : (Number(tt.price) === 150 ? 99 : Math.round(Number(tt.price) * (1 - UBU_DISCOUNT_PERCENT / 100)))
+                                )}`}
+                          </span>
+                        </>
+                      ) : hasUbuPrivilege ? (
+                        <>
+                          <div style={{ fontSize: '0.8rem', textDecoration: 'line-through', color: 'var(--muted)' }}>
+                            {formatBaht(tt.price)}
+                          </div>
+                          <div style={{ fontWeight: 700, fontSize: '1.15rem', color: 'var(--blue)' }}>
+                            {formatBaht(Math.round(Number(tt.price) * (1 - UBU_DISCOUNT_PERCENT / 100)))}
+                          </div>
+                          <span className="ubu-ticket-pill">
+                            {`สิทธิ์ ม.อุบลฯ -${UBU_DISCOUNT_PERCENT}%`}
                           </span>
                         </>
                       ) : (

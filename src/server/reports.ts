@@ -374,10 +374,12 @@ export async function getEventMoneyReport(
     buyerEmail: string;
     buyerPhone: string;
     orderCreatedAt: Date;
+    ubuPrivilegeApplied?: boolean;
   }>(
     `SELECT t.id AS "ticketId", t."orderId", t."sessionId", t."ticketTypeId",
-            oi."unitPrice" AS "unitPrice", t.status,
-            o."buyerName", o."buyerEmail", o."buyerPhone", o."createdAt" AS "orderCreatedAt"
+            COALESCE(t.price, oi."unitPrice") AS "unitPrice", t.status,
+            o."buyerName", o."buyerEmail", o."buyerPhone", o."createdAt" AS "orderCreatedAt",
+            COALESCE(o."ubuPrivilegeApplied", FALSE) AS "ubuPrivilegeApplied"
      FROM tickets t
      JOIN ticket_types tt ON tt.id = t."ticketTypeId"
      JOIN order_items oi ON oi.id = t."orderItemId"
@@ -434,7 +436,9 @@ export async function getEventMoneyReport(
     const refundDeductions = roundHalfUp(grossSubtotal - netSubtotal);
 
     // Calculate original and adjusted order fee (AC-78, AC-80, G-28, G-48, D-181)
-    const isUbuBuyer = isUbuEmail(group.buyerEmail) && (Boolean(feeSettings.ubuPrivilegeMode) || eventId === 'event-ubu-freshy-2026');
+    const isUbuBuyer =
+      group.tickets.some(t => t.ubuPrivilegeApplied) ||
+      (isUbuEmail(group.buyerEmail) && (Boolean(feeSettings.ubuPrivilegeMode) || eventId === 'event-ubu-freshy-2026'));
     const privilegeRate = feeSettings.organizerFeePrivilegeRate ?? 3;
     const grossPrivilegeSubtotal = isUbuBuyer ? grossSubtotal : 0;
     const netPrivilegeSubtotal = isUbuBuyer ? netSubtotal : 0;

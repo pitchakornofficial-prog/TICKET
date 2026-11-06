@@ -40,11 +40,13 @@ export async function ensureTicketSchema(pool: Pool): Promise<void> {
       "ticketTypeId" TEXT NOT NULL REFERENCES ticket_types(id) ON DELETE CASCADE,
       "ticketCode" TEXT NOT NULL UNIQUE,
       "qrPayload" TEXT NOT NULL UNIQUE,
+      price NUMERIC(12, 2),
       status TEXT NOT NULL DEFAULT 'valid',
       "admissionStatus" TEXT NOT NULL DEFAULT 'outside',
       "createdAt" TIMESTAMPTZ NOT NULL DEFAULT now(),
       "updatedAt" TIMESTAMPTZ NOT NULL DEFAULT now()
     );
+    ALTER TABLE tickets ADD COLUMN IF NOT EXISTS "price" NUMERIC(12, 2);
     CREATE INDEX IF NOT EXISTS idx_tickets_order ON tickets("orderId");
     CREATE INDEX IF NOT EXISTS idx_tickets_session ON tickets("sessionId");
     CREATE INDEX IF NOT EXISTS idx_tickets_type ON tickets("ticketTypeId");
@@ -197,7 +199,7 @@ export async function issueTicketsForOrder(
   const existingTicketsRes = await client.query(
     `SELECT t.id, t."orderId", t."orderItemId", t."eventId", t."sessionId",
             t."ticketTypeId", t."ticketCode", t."qrPayload", t.status, t."admissionStatus",
-            t."createdAt", tt.name as "ticketTypeName", oi."unitPrice" as "ticketPrice",
+            t."createdAt", tt.name as "ticketTypeName", COALESCE(t.price, oi."unitPrice") as "ticketPrice",
             o."buyerName", o."buyerEmail", o."buyerPhone",
             es."startTime" as "sessionStartTime", es."endTime" as "sessionEndTime",
             e.location, e.title as "eventTitle", e."ticketTemplateUrl", e."posterUrl" as "eventPosterUrl"
@@ -273,10 +275,10 @@ export async function issueTicketsForOrder(
       await client.query(
         `INSERT INTO tickets (
            id, "orderId", "orderItemId", "eventId", "sessionId", "ticketTypeId",
-           "ticketCode", "qrPayload", status, "admissionStatus", "createdAt", "updatedAt"
+           "ticketCode", "qrPayload", price, status, "admissionStatus", "createdAt", "updatedAt"
          )
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 'valid', 'outside', $9, $9)`,
-        [ticketId, orderId, item.id, item.eventId, item.sessionId, item.ticketTypeId, ticketCode, qrPayload, now],
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'valid', 'outside', $10, $10)`,
+        [ticketId, orderId, item.id, item.eventId, item.sessionId, item.ticketTypeId, ticketCode, qrPayload, Number(item.unitPrice), now],
       );
 
       issuedTickets.push({
@@ -318,7 +320,7 @@ export async function getOrderTickets(pool: Pool, orderId: string): Promise<Tick
   const res = await pool.query(
     `SELECT t.id, t."orderId", t."orderItemId", t."eventId", t."sessionId",
             t."ticketTypeId", t."ticketCode", t."qrPayload", t.status, t."admissionStatus",
-            t."createdAt", tt.name as "ticketTypeName", oi."unitPrice" as "ticketPrice",
+            t."createdAt", tt.name as "ticketTypeName", COALESCE(t.price, oi."unitPrice") as "ticketPrice",
             o."buyerName", o."buyerEmail", o."buyerPhone",
             es."startTime" as "sessionStartTime", es."endTime" as "sessionEndTime",
             e.location, e.title as "eventTitle", e."ticketTemplateUrl", e."posterUrl" as "eventPosterUrl"

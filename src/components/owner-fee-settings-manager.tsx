@@ -255,7 +255,7 @@ export function OwnerFeeSettingsManager() {
                     <span>เปิดใช้โหมดสิทธิพิเศษนักศึกษา UBU (คิดค่าบริการแบบผสมแยกตามราคาบัตร)</span>
                   </label>
                   <p style={{ margin: '0.35rem 0 0 1.8rem', fontSize: '0.82rem', color: 'var(--muted)' }}>
-                    เมื่อเปิดใช้งาน ผู้ซื้อที่ใช้อีเมล @ubu.ac.th จะได้รับสิทธิ์ซื้อบัตรราคา 99 บาท (จาก 150 บาท) และระบบจะคิดค่าบริการผู้จัดงานแยกอัตรา % ตามราคาบัตร
+                    เมื่อเปิดใช้งาน ผู้ซื้อที่ใช้อีเมล @ubu.ac.th จะได้รับสิทธิ์ซื้อบัตรในราคาสิทธิ์นักศึกษาตามที่กำหนดไว้ในแต่ละประเภทบัตร และระบบจะคิดค่าบริการผู้จัดงานแยกอัตรา % ตามสิทธิ์นักศึกษา
                   </p>
                 </div>
 
@@ -286,7 +286,7 @@ export function OwnerFeeSettingsManager() {
 
                   <div>
                     <label htmlFor="organizer-fee-rate" style={{ display: 'block', fontSize: '0.9rem', marginBottom: '0.3rem' }}>
-                      {ubuPrivilegeMode && organizerFeeMode === 'percentage' ? 'อัตราค่าบริการราคาปกติ (150฿) (%)' : `อัตราค่าบริการ ${organizerFeeMode === 'percentage' ? '(%)' : '(฿)'}`}
+                      {ubuPrivilegeMode && organizerFeeMode === 'percentage' ? 'อัตราค่าบริการราคาปกติ (%)' : `อัตราค่าบริการ ${organizerFeeMode === 'percentage' ? '(%)' : '(฿)'}`}
                     </label>
                     <input
                       id="organizer-fee-rate"
@@ -309,7 +309,7 @@ export function OwnerFeeSettingsManager() {
                   {ubuPrivilegeMode && organizerFeeMode === 'percentage' && (
                     <div>
                       <label htmlFor="organizer-fee-privilege-rate" style={{ display: 'block', fontSize: '0.9rem', marginBottom: '0.3rem' }}>
-                        อัตราค่าบริการราคานักศึกษา (99฿) (%)
+                        อัตราค่าบริการราคาสิทธิ์นักศึกษา (%)
                       </label>
                       <input
                         id="organizer-fee-privilege-rate"

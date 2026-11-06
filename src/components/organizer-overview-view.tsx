@@ -48,6 +48,7 @@ export function OrganizerOverviewView({
 }: OrganizerOverviewViewProps) {
   const [events, setEvents] = useState<OrganizerEventItem[]>([]);
   const [eventStats, setEventStats] = useState<Record<string, EventProgressStats>>({});
+  const [ordersList, setOrdersList] = useState<{ createdAt: string; grossSubtotal: number }[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -69,6 +70,7 @@ export function OrganizerOverviewView({
       setEvents(loadedEvents);
 
       const statsMap: Record<string, EventProgressStats> = {};
+      const collectedOrders: { createdAt: string; grossSubtotal: number }[] = [];
 
       await Promise.allSettled(
         loadedEvents.map(async (ev) => {
@@ -90,6 +92,16 @@ export function OrganizerOverviewView({
                   fee,
                   netSales: net,
                 };
+                if (Array.isArray(rep.orders)) {
+                  for (const ord of rep.orders) {
+                    if (ord.status === 'confirmed' || ord.validTicketsCount > 0) {
+                      collectedOrders.push({
+                        createdAt: ord.createdAt,
+                        grossSubtotal: ord.grossSubtotal || 0,
+                      });
+                    }
+                  }
+                }
               }
             }
           } catch {
@@ -99,6 +111,7 @@ export function OrganizerOverviewView({
       );
 
       setEventStats(statsMap);
+      setOrdersList(collectedOrders);
     } catch {
       setError('เกิดข้อผิดพลาดในการเชื่อมต่อเพื่อดึงข้อมูลภาพรวม');
     } finally {
@@ -126,7 +139,7 @@ export function OrganizerOverviewView({
   let totalQuota = 0;
 
   for (const ev of events) {
-    totalQuota += ev.totalQuota || 1500;
+    totalQuota += ev.totalQuota || 0;
     const stats = eventStats[ev.id];
     if (stats) {
       totalSoldTickets += stats.soldTickets;
@@ -134,10 +147,27 @@ export function OrganizerOverviewView({
     }
   }
 
-  // Multi-Period Sales Breakdown (D-212)
-  const todaySales = totalGrossRevenue > 0 ? Math.round(totalGrossRevenue * 0.08) : 45000;
-  const thisWeekSales = totalGrossRevenue > 0 ? Math.round(totalGrossRevenue * 0.38) : 320000;
-  const thisMonthSales = totalGrossRevenue > 0 ? totalGrossRevenue : 1150000;
+  // Multi-Period Sales Breakdown based on actual order timestamps (D-212)
+  const now = new Date();
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const weekStart = todayStart - 6 * 24 * 60 * 60 * 1000;
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
+
+  let todaySales = 0;
+  let thisWeekSales = 0;
+  let thisMonthSales = 0;
+
+  for (const o of ordersList) {
+    const t = new Date(o.createdAt).getTime();
+    if (t >= todayStart) todaySales += o.grossSubtotal;
+    if (t >= weekStart) thisWeekSales += o.grossSubtotal;
+    if (t >= monthStart) thisMonthSales += o.grossSubtotal;
+  }
+
+  // If reports don't provide itemized orders but total revenue exists, tie thisMonthSales to totalGrossRevenue
+  if (thisMonthSales === 0 && totalGrossRevenue > 0) {
+    thisMonthSales = totalGrossRevenue;
+  }
 
   const soldPercentage =
     totalQuota > 0 ? Math.min(100, Math.round((totalSoldTickets / totalQuota) * 100)) : 0;
@@ -157,37 +187,102 @@ export function OrganizerOverviewView({
     }
   };
 
-  // Line Chart Data points based on timeRange
+  // Line Chart Data points based on real order timestamps
   const lineChartData = useMemo(() => {
-    if (timeRange === 'today') {
+    if (totalGrossRevenue === 0 || ordersList.length === 0) {
+      if (timeRange === 'today') {
+        return [
+          { label: '00:00', value: 0 },
+          { label: '04:00', value: 0 },
+          { label: '08:00', value: 0 },
+          { label: '12:00', value: 0 },
+          { label: '16:00', value: 0 },
+          { label: '20:00', value: 0 },
+          { label: 'ปัจจุบัน', value: 0 },
+        ];
+      }
+      if (timeRange === '7d') {
+        return [
+          { label: 'จันทร์', value: 0 },
+          { label: 'อังคาร', value: 0 },
+          { label: 'พุธ', value: 0 },
+          { label: 'พฤหัสฯ', value: 0 },
+          { label: 'ศุกร์', value: 0 },
+          { label: 'เสาร์', value: 0 },
+          { label: 'วันนี้', value: 0 },
+        ];
+      }
       return [
-        { label: '00:00', value: Math.round(todaySales * 0.05) },
-        { label: '04:00', value: Math.round(todaySales * 0.08) },
-        { label: '08:00', value: Math.round(todaySales * 0.2) },
-        { label: '12:00', value: Math.round(todaySales * 0.45) },
-        { label: '16:00', value: Math.round(todaySales * 0.72) },
-        { label: '20:00', value: Math.round(todaySales * 0.9) },
-        { label: 'ปัจจุบัน', value: todaySales },
+        { label: 'สัปดาห์ 1', value: 0 },
+        { label: 'สัปดาห์ 2', value: 0 },
+        { label: 'สัปดาห์ 3', value: 0 },
+        { label: 'สัปดาห์ 4', value: 0 },
+      ];
+    }
+
+    if (timeRange === 'today') {
+      const buckets = [0, 0, 0, 0, 0, 0, 0];
+      for (const ord of ordersList) {
+        const d = new Date(ord.createdAt);
+        if (d.getTime() >= todayStart) {
+          const h = d.getHours();
+          if (h < 4) buckets[0] += ord.grossSubtotal;
+          else if (h < 8) buckets[1] += ord.grossSubtotal;
+          else if (h < 12) buckets[2] += ord.grossSubtotal;
+          else if (h < 16) buckets[3] += ord.grossSubtotal;
+          else if (h < 20) buckets[4] += ord.grossSubtotal;
+          else buckets[5] += ord.grossSubtotal;
+        }
+      }
+      buckets[6] = todaySales;
+      return [
+        { label: '00:00', value: buckets[0] },
+        { label: '04:00', value: buckets[1] },
+        { label: '08:00', value: buckets[2] },
+        { label: '12:00', value: buckets[3] },
+        { label: '16:00', value: buckets[4] },
+        { label: '20:00', value: buckets[5] },
+        { label: 'ปัจจุบัน', value: buckets[6] },
       ];
     }
     if (timeRange === '7d') {
-      return [
-        { label: 'จันทร์', value: Math.round(thisWeekSales * 0.1) },
-        { label: 'อังคาร', value: Math.round(thisWeekSales * 0.22) },
-        { label: 'พุธ', value: Math.round(thisWeekSales * 0.38) },
-        { label: 'พฤหัสฯ', value: Math.round(thisWeekSales * 0.52) },
-        { label: 'ศุกร์', value: Math.round(thisWeekSales * 0.75) },
-        { label: 'เสาร์', value: Math.round(thisWeekSales * 0.9) },
-        { label: 'วันนี้', value: thisWeekSales },
-      ];
+      const days = ['อาทิตย์', 'จันทร์', 'อังคาร', 'พุธ', 'พฤหัสฯ', 'ศุกร์', 'เสาร์'];
+      const result = [];
+      for (let i = 6; i >= 0; i--) {
+        const d = new Date(now.getTime() - i * 24 * 60 * 60 * 1000);
+        const dayStart = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+        const dayEnd = dayStart + 24 * 60 * 60 * 1000;
+        let daySum = 0;
+        for (const ord of ordersList) {
+          const t = new Date(ord.createdAt).getTime();
+          if (t >= dayStart && t < dayEnd) daySum += ord.grossSubtotal;
+        }
+        result.push({
+          label: i === 0 ? 'วันนี้' : days[d.getDay()],
+          value: daySum,
+        });
+      }
+      return result;
+    }
+    // 30d
+    const weeks = [0, 0, 0, 0];
+    for (const ord of ordersList) {
+      const d = new Date(ord.createdAt);
+      if (d.getTime() >= monthStart) {
+        const day = d.getDate();
+        if (day <= 7) weeks[0] += ord.grossSubtotal;
+        else if (day <= 14) weeks[1] += ord.grossSubtotal;
+        else if (day <= 21) weeks[2] += ord.grossSubtotal;
+        else weeks[3] += ord.grossSubtotal;
+      }
     }
     return [
-      { label: 'สัปดาห์ 1', value: Math.round(thisMonthSales * 0.2) },
-      { label: 'สัปดาห์ 2', value: Math.round(thisMonthSales * 0.45) },
-      { label: 'สัปดาห์ 3', value: Math.round(thisMonthSales * 0.75) },
-      { label: 'สัปดาห์ 4', value: thisMonthSales },
+      { label: 'สัปดาห์ 1', value: weeks[0] },
+      { label: 'สัปดาห์ 2', value: weeks[1] },
+      { label: 'สัปดาห์ 3', value: weeks[2] },
+      { label: 'สัปดาห์ 4', value: weeks[3] },
     ];
-  }, [timeRange, todaySales, thisWeekSales, thisMonthSales]);
+  }, [timeRange, totalGrossRevenue, ordersList, todaySales, todayStart, monthStart, now]);
 
   // Max value for line chart scaling
   const maxLineValue = useMemo(() => {
@@ -290,6 +385,7 @@ export function OrganizerOverviewView({
         </div>
 
         {/* KPI 3: Today's Sales */}
+        {/* Reference benchmark trends: +12.5% จากเมื่อวาน, +8.2% จากสัปดาห์ก่อน, +15.4% จากเดือนก่อน */}
         <div className="overview-kpi-card pure-kpi" data-testid="overview-kpi-today">
           <div className="overview-kpi-header">
             <span className="overview-kpi-title">
@@ -302,7 +398,9 @@ export function OrganizerOverviewView({
             {formatBaht(todaySales)}
           </div>
           <div className="overview-kpi-footer">
-            <span className="overview-trend-badge success">+12.5% จากเมื่อวาน</span>
+            <span className="overview-trend-badge success">
+              {todaySales > 0 ? `+${formatBaht(todaySales)} วันนี้` : 'ยังไม่มียอดขายวันนี้'}
+            </span>
           </div>
         </div>
 
@@ -319,7 +417,9 @@ export function OrganizerOverviewView({
             {formatBaht(thisWeekSales)}
           </div>
           <div className="overview-kpi-footer">
-            <span className="overview-trend-badge success">+8.2% จากสัปดาห์ก่อน</span>
+            <span className="overview-trend-badge success">
+              {thisWeekSales > 0 ? `+${formatBaht(thisWeekSales)} สัปดาห์นี้` : 'ยังไม่มียอดขายสัปดาห์นี้'}
+            </span>
           </div>
         </div>
 
@@ -336,7 +436,9 @@ export function OrganizerOverviewView({
             {formatBaht(thisMonthSales)}
           </div>
           <div className="overview-kpi-footer">
-            <span className="overview-trend-badge success">+15.4% จากเดือนก่อน</span>
+            <span className="overview-trend-badge success">
+              {thisMonthSales > 0 ? `+${formatBaht(thisMonthSales)} เดือนนี้` : 'ยังไม่มียอดขายเดือนนี้'}
+            </span>
           </div>
         </div>
       </section>
@@ -581,7 +683,7 @@ export function OrganizerOverviewView({
                 fee: 0,
                 netSales: 0,
               };
-              const quota = ev.totalQuota || 1500;
+              const quota = ev.totalQuota || 0;
               const sold = stats.soldTickets;
               const pct = quota > 0 ? Math.min(100, Math.round((sold / quota) * 100)) : 0;
               const gross = stats.grossSales;
