@@ -16,7 +16,7 @@ export interface OrganizerInvitationItem {
   email: string;
   role: 'organizer' | 'owner';
   status: 'pending' | 'accepted' | 'replaced' | 'expired';
-  token: string;
+  token?: string;
   expiresAt: string;
   createdAt: string;
   acceptedAt?: string | null;
@@ -77,11 +77,13 @@ export function OwnerInvitationsView() {
 
       const roleText = role === 'owner' ? 'ผู้ดูแลระบบ (Admin)' : 'ผู้จัดงาน (Organizer)';
       setStatus('success');
-      setMessage(`ส่งคำเชิญบทบาท${roleText}ไปยัง ${email} สำเร็จ ลิงก์มีอายุ 48 ชั่วโมง`);
+      setMessage(`ส่งคำเชิญบทบาท${roleText}ไปยัง ${email} สำเร็จ ลิงก์ถูกจัดส่งไปยังอีเมลของผู้รับเรียบร้อยแล้ว (มีอายุ 48 ชั่วโมง)`);
       if (data.inviteUrl) {
         setLastInviteUrl(data.inviteUrl);
       } else if (data.token) {
         setLastInviteUrl(`${window.location.origin}/accept-invitation?token=${data.token}`);
+      } else {
+        setLastInviteUrl(null);
       }
       setEmail('');
       loadInvitations();
@@ -569,7 +571,9 @@ export function OwnerInvitationsView() {
               </thead>
               <tbody>
                 {invitations.map(inv => {
-                  const inviteUrl = `${typeof window !== 'undefined' ? window.location.origin : ''}/accept-invitation?token=${inv.token}`;
+                  const inviteUrl = inv.token
+                    ? `${typeof window !== 'undefined' ? window.location.origin : ''}/accept-invitation?token=${inv.token}`
+                    : '';
                   return (
                     <tr key={inv.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
                       <td style={{ padding: '0.85rem 1rem', fontWeight: 600, color: '#0f172a' }}>
@@ -668,19 +672,33 @@ export function OwnerInvitationsView() {
                       </td>
                       <td style={{ padding: '0.85rem 1rem', textAlign: 'right' }}>
                         {inv.status === 'pending' ? (
-                          <button
-                            type="button"
-                            onClick={() => handleCopy(inviteUrl)}
-                            className="button button-secondary"
-                            style={{
-                              padding: '0.3rem 0.65rem',
-                              fontSize: '0.78rem',
-                              borderRadius: '6px',
-                              cursor: 'pointer',
-                            }}
-                          >
-                            คัดลอกลิงก์
-                          </button>
+                          inviteUrl ? (
+                            <button
+                              type="button"
+                              onClick={() => handleCopy(inviteUrl)}
+                              className="button button-secondary"
+                              style={{
+                                padding: '0.3rem 0.65rem',
+                                fontSize: '0.78rem',
+                                borderRadius: '6px',
+                                cursor: 'pointer',
+                              }}
+                            >
+                              คัดลอกลิงก์
+                            </button>
+                          ) : (
+                            <span
+                              style={{
+                                fontSize: '0.78rem',
+                                color: '#64748b',
+                                background: '#f1f5f9',
+                                padding: '0.2rem 0.5rem',
+                                borderRadius: '4px',
+                              }}
+                            >
+                              ส่งทางอีเมลแล้ว
+                            </span>
+                          )
                         ) : (
                           <span style={{ fontSize: '0.78rem', color: '#94a3b8' }}>-</span>
                         )}

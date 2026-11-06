@@ -50,16 +50,12 @@ export async function POST(request: Request) {
       invitedRole,
     );
 
-    const inviteUrl = `${new URL(auth.options.baseURL).origin}/accept-invitation?token=${invitation.token}`;
-
     return Response.json(
       {
         message: 'ส่งคำเชิญสำเร็จ',
         id: invitation.id,
         email: invitation.email,
         role: invitation.role,
-        token: invitation.token,
-        inviteUrl,
       },
       { status: 200, headers: { 'Cache-Control': 'no-store' } },
     );

@@ -1,4 +1,4 @@
-import { randomBytes, randomUUID } from 'node:crypto';
+import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import type { Pool } from 'pg';
 import { hashPassword } from 'better-auth/crypto';
 import { inTransaction } from './database.ts';
@@ -7,8 +7,13 @@ import { minimumPasswordLength, maximumPasswordLength } from '../lib/bootstrap-i
 
 // ADR-0004:
 // - Organizer invitation: ลิงก์สุ่มใช้ครั้งเดียว อายุ 48 ชั่วโมง คำเชิญใหม่แทนที่ลิงก์เก่าของคำเชิญเดียวกัน
+// - โค้ด/ลิงก์ต้องสุ่มอย่างปลอดภัย เก็บในรูปที่ไม่เปิดเผยค่าลับ (Hash)
 export const INVITATION_EXPIRATION_HOURS = 48;
 export const INVITATION_EXPIRATION_SECONDS = INVITATION_EXPIRATION_HOURS * 60 * 60; // 172800 seconds
+
+export function hashInvitationToken(token: string): string {
+  return createHash('sha256').update(token).digest('hex');
+}
 
 export type InvitationRecord = {
   id: string;
@@ -70,12 +75,13 @@ export async function createOrganizerInvitation(
 
     const id = randomUUID();
     const token = randomBytes(32).toString('base64url');
+    const tokenHash = hashInvitationToken(token);
     const expiresAt = new Date(now.getTime() + INVITATION_EXPIRATION_SECONDS * 1000);
 
     await client.query(
       `INSERT INTO organizer_invitations (id, email, token, status, "expiresAt", "createdAt", role)
        VALUES ($1, $2, $3, 'pending', $4, $5, $6)`,
-      [id, normalizedEmail, token, expiresAt, now, invitedRole],
+      [id, normalizedEmail, tokenHash, expiresAt, now, invitedRole],
     );
 
     const inviteUrl = `${new URL(baseURL).origin}/accept-invitation?token=${token}`;
@@ -99,9 +105,10 @@ export async function verifyInvitation(
   if (!token) return { valid: false, reason: 'not_found' };
   await ensureInvitationSchema(pool);
 
+  const tokenHash = hashInvitationToken(token);
   const res = await pool.query(
-    'SELECT id, email, status, "expiresAt", role FROM organizer_invitations WHERE token = $1',
-    [token],
+    'SELECT id, email, status, "expiresAt", role FROM organizer_invitations WHERE token = $1 OR token = $2',
+    [tokenHash, token],
   );
 
   if (res.rowCount === 0) {
@@ -141,12 +148,13 @@ export async function acceptOrganizerInvitation(
 
   return inTransaction(pool, async client => {
     // Lock invitation row
+    const tokenHash = hashInvitationToken(token);
     const res = await client.query(
       `SELECT id, email, status, "expiresAt", role 
        FROM organizer_invitations 
-       WHERE token = $1 
+       WHERE token = $1 OR token = $2 
        FOR UPDATE`,
-      [token],
+      [tokenHash, token],
     );
 
     if (res.rowCount === 0) {
@@ -209,7 +217,7 @@ export async function listOrganizerInvitations(
     email: string;
     role: 'organizer' | 'owner';
     status: 'pending' | 'accepted' | 'replaced' | 'expired';
-    token: string;
+    token?: string;
     expiresAt: string;
     createdAt: string;
     acceptedAt?: string | null;
@@ -217,7 +225,7 @@ export async function listOrganizerInvitations(
 > {
   await ensureInvitationSchema(pool);
   const result = await pool.query(
-    `SELECT id, email, role, status, token, "expiresAt", "createdAt", "acceptedAt"
+    `SELECT id, email, role, status, "expiresAt", "createdAt", "acceptedAt"
      FROM organizer_invitations
      ORDER BY "createdAt" DESC`,
   );
@@ -232,7 +240,6 @@ export async function listOrganizerInvitations(
       email: row.email,
       role: (row.role as 'organizer' | 'owner') || 'organizer',
       status: effectiveStatus,
-      token: row.token,
       expiresAt: new Date(row.expiresAt).toISOString(),
       createdAt: new Date(row.createdAt).toISOString(),
       acceptedAt: row.acceptedAt ? new Date(row.acceptedAt).toISOString() : null,

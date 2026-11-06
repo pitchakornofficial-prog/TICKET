@@ -15,7 +15,8 @@ try {
     console.log(`อีเมล: ${invite.email}`);
     console.log(`สถานะ: ${invite.status}`);
     console.log(`สร้างเมื่อ: ${new Date(invite.createdAt).toLocaleString('th-TH')}`);
-    console.log(`ลิงก์สำหรับตอบรับคำเชิญ:\nhttp://localhost:3000/accept-invitation?token=${invite.token}\n`);
+    console.log(`Token Hash (SHA-256): ${invite.token.slice(0, 16)}...`);
+    console.log(`(Token ถูกจัดเก็บแบบ Secure Hash ตาม ADR-0004 ลิงก์สำหรับยอมรับคำเชิญถูกส่งตรงไปยังอีเมล ${invite.email} เท่านั้น)\n`);
   }
 } catch (error) {
   console.error('เกิดข้อผิดพลาดในการดึงข้อมูลคำเชิญ:', error);
