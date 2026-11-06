@@ -1,5 +1,14 @@
-import { createHmac } from 'node:crypto';
+import { createHmac, timingSafeEqual } from 'node:crypto';
 import type { Pool } from 'pg';
+
+function safeCompare(a: string, b: string): boolean {
+  const bufA = Buffer.from(a, 'utf8');
+  const bufB = Buffer.from(b, 'utf8');
+  if (bufA.length !== bufB.length) {
+    return false;
+  }
+  return timingSafeEqual(bufA, bufB);
+}
 
 export function extractSessionTokenFromCookie(
   cookieHeader: string | null | undefined,
@@ -21,6 +30,8 @@ export function extractSessionTokenFromCookie(
 export function getScannerEventScopeCookie(
   cookieHeader: string | null | undefined,
   secret: string,
+  expectedSessionToken?: string | null,
+  now?: Date,
 ): string | null {
   if (!cookieHeader) return null;
   const cookieMap = Object.fromEntries(
@@ -31,16 +42,74 @@ export function getScannerEventScopeCookie(
   );
   const scopeVal = cookieMap.scanner_event_scope;
   if (!scopeVal) return null;
+
+  // New format: ${eventId}.${sessionToken}.${expiresAt}.${signature}
+  const parts = scopeVal.split('.');
+  if (parts.length >= 4) {
+    const sig = parts[parts.length - 1];
+    const expiresAtStr = parts[parts.length - 2];
+    const boundSessionToken = parts[parts.length - 3];
+    const eventId = parts.slice(0, parts.length - 3).join('.');
+
+    if (/^\d+$/.test(expiresAtStr) && boundSessionToken && eventId) {
+      const payload = `${eventId}.${boundSessionToken}.${expiresAtStr}`;
+      const expectedSig = createHmac('sha256', secret).update(payload).digest('base64');
+      if (!safeCompare(sig, expectedSig)) {
+        return null;
+      }
+
+      const expiresAt = Number(expiresAtStr);
+      const nowMs = (now ?? new Date()).getTime();
+      if (nowMs > expiresAt) {
+        return null;
+      }
+
+      const effectiveSessionToken =
+        expectedSessionToken !== undefined
+          ? expectedSessionToken
+          : extractSessionTokenFromCookie(cookieHeader);
+
+      if (!effectiveSessionToken || boundSessionToken !== effectiveSessionToken) {
+        return null;
+      }
+
+      return eventId;
+    }
+  }
+
+  // Backward compatibility: legacy format ${eventId}.${signature}
   const lastDot = scopeVal.lastIndexOf('.');
   if (lastDot === -1) return null;
   const eventId = scopeVal.slice(0, lastDot);
   const sig = scopeVal.slice(lastDot + 1);
   const expectedSig = createHmac('sha256', secret).update(eventId).digest('base64');
-  if (sig !== expectedSig) return null;
+  if (!safeCompare(sig, expectedSig)) return null;
   return eventId;
 }
 
-export function signScannerEventScopeCookie(eventId: string, secret: string): string {
+export function signScannerEventScopeCookie(
+  eventId: string,
+  secret: string,
+  options?: {
+    sessionToken?: string | null;
+    expiresAt?: Date | number | null;
+  },
+): string {
+  const sessionToken = options?.sessionToken?.trim();
+  const rawExpires = options?.expiresAt;
+  const expiresAt =
+    rawExpires instanceof Date
+      ? rawExpires.getTime()
+      : typeof rawExpires === 'number'
+        ? rawExpires
+        : null;
+
+  if (sessionToken && expiresAt !== null && Number.isFinite(expiresAt)) {
+    const payload = `${eventId}.${sessionToken}.${expiresAt}`;
+    const sig = createHmac('sha256', secret).update(payload).digest('base64');
+    return `${payload}.${sig}`;
+  }
+
   const sig = createHmac('sha256', secret).update(eventId).digest('base64');
   return `${eventId}.${sig}`;
 }
@@ -55,10 +124,12 @@ export async function resolveScannerSessionScope(
   cookieHeader: string | null | undefined,
   secret: string,
 ): Promise<ScannerScopeResolution> {
-  // 1. If scanner_event_scope cookie is provided, verify its signature first
+  const sessionToken = extractSessionTokenFromCookie(cookieHeader);
+
+  // 1. If scanner_event_scope cookie is provided, verify its signature, session binding, and expiry
   let cookieScope: string | null = null;
   if (cookieHeader?.includes('scanner_event_scope=')) {
-    cookieScope = getScannerEventScopeCookie(cookieHeader, secret);
+    cookieScope = getScannerEventScopeCookie(cookieHeader, secret, sessionToken);
     if (!cookieScope) {
       return {
         status: 'error',
@@ -69,7 +140,6 @@ export async function resolveScannerSessionScope(
   }
 
   // 2. Check server-side session scope from database (authoritative source)
-  const sessionToken = extractSessionTokenFromCookie(cookieHeader);
   if (sessionToken && pool) {
     try {
       const serverScopeRes = await pool.query<{ eventId: string }>(

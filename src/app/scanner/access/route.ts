@@ -1,7 +1,10 @@
 import { NextResponse } from 'next/server';
 import { randomUUID, createHmac } from 'node:crypto';
 import { getAuth } from '@/server/auth';
-import { recordScannerSessionScope } from '@/server/scanner-scope';
+import {
+  recordScannerSessionScope,
+  signScannerEventScopeCookie,
+} from '@/server/scanner-scope';
 import type { Pool } from 'pg';
 
 export const runtime = 'nodejs';
@@ -165,9 +168,11 @@ export async function GET(request: Request) {
       maxAge: 8 * 60 * 60,
     });
 
-    // Security Fix: Bind scanner access session strictly to this event
-    const scopeSignature = createHmac('sha256', secret).update(eventId).digest('base64');
-    const signedScopeValue = `${eventId}.${scopeSignature}`;
+    // Security Fix: Bind scanner access session strictly to this event and session
+    const signedScopeValue = signScannerEventScopeCookie(eventId, secret, {
+      sessionToken,
+      expiresAt,
+    });
 
     response.cookies.set({
       name: 'scanner_event_scope',
