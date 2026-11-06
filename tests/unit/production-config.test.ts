@@ -45,4 +45,8 @@ describe('production configuration gate', () => {
     expect(productionConfigErrors({ ...valid, STRIPE_SECRET_KEY: 'rk_test_fixture' }).join('\n')).toContain('Live mode');
     expect(productionConfigErrors({ ...staging, STRIPE_SECRET_KEY: 'rk_live_fixture' }).join('\n')).toContain('Test mode');
   });
+  it('rejects ENABLE_PAY_TEST=true in production environment', () => {
+    const errors = productionConfigErrors({ ...valid, ENABLE_PAY_TEST: 'true' });
+    expect(errors.join('\n')).toContain('ENABLE_PAY_TEST must not be true in production');
+  });
 });

@@ -254,10 +254,21 @@ export function OrderPaymentView({ orderId }: OrderPaymentViewProps) {
     setIsVerifyingPayment(true);
     setPaymentError(null);
     try {
+      const guestToken =
+        typeof window !== 'undefined'
+          ? sessionStorage.getItem('ticket_guest_otp_token') || ''
+          : '';
       const res = await fetch(`/api/public/checkout/orders/${reservation.id}/pay-test`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ chargeId: charge?.id }),
+        headers: {
+          'Content-Type': 'application/json',
+          ...(guestToken ? { 'x-guest-token': guestToken } : {}),
+        },
+        body: JSON.stringify({
+          chargeId: charge?.id,
+          verifiedToken: guestToken,
+          orderToken: guestToken,
+        }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -488,17 +499,20 @@ export function OrderPaymentView({ orderId }: OrderPaymentViewProps) {
                   </div>
 
                   {/* Test Simulation Button */}
-                  <button
-                    id="simulate-payment-button"
-                    type="button"
-                    onClick={handleSimulatePaymentSuccess}
-                    disabled={isVerifyingPayment}
-                    className="primary-button payment-simulate-btn"
-                  >
-                    {isVerifyingPayment
-                      ? 'กำลังตรวจสอบการชำระเงิน...'
-                      : 'ยืนยันการชำระเงินสำเร็จ (ทดสอบ / Test Payment)'}
-                  </button>
+                  {process.env.NODE_ENV !== 'production' &&
+                    process.env.NEXT_PUBLIC_ENABLE_PAY_TEST === 'true' && (
+                      <button
+                        id="simulate-payment-button"
+                        type="button"
+                        onClick={handleSimulatePaymentSuccess}
+                        disabled={isVerifyingPayment}
+                        className="primary-button payment-simulate-btn"
+                      >
+                        {isVerifyingPayment
+                          ? 'กำลังตรวจสอบการชำระเงิน...'
+                          : 'ยืนยันการชำระเงินสำเร็จ (ทดสอบ / Test Payment)'}
+                      </button>
+                    )}
 
                   {/* Button fallback for tests if needed */}
                   <button

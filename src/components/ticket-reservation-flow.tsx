@@ -148,10 +148,21 @@ export function TicketReservationFlow({
     setIsVerifyingPayment(true);
     setPaymentError(null);
     try {
+      const guestToken =
+        typeof window !== 'undefined'
+          ? sessionStorage.getItem('ticket_guest_otp_token') || ''
+          : '';
       const res = await fetch(`/api/public/checkout/orders/${reservation.id}/pay-test`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ chargeId: charge?.id }),
+        headers: {
+          'Content-Type': 'application/json',
+          ...(guestToken ? { 'x-guest-token': guestToken } : {}),
+        },
+        body: JSON.stringify({
+          chargeId: charge?.id,
+          verifiedToken: guestToken,
+          orderToken: guestToken,
+        }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -971,26 +982,31 @@ export function TicketReservationFlow({
                   </div>
 
                   {/* Test Payment Simulation Button for Local/Dev E2E */}
-                  <button
-                    id="simulate-payment-button"
-                    type="button"
-                    onClick={handleSimulatePaymentSuccess}
-                    disabled={isVerifyingPayment}
-                    className="action-button"
-                    style={{
-                      minHeight: '44px',
-                      padding: '0.6rem 1.8rem',
-                      background: '#16a34a',
-                      color: 'var(--white)',
-                      border: 'none',
-                      borderRadius: '4px',
-                      fontWeight: 600,
-                      fontSize: '0.95rem',
-                      cursor: isVerifyingPayment ? 'not-allowed' : 'pointer',
-                    }}
-                  >
-                    {isVerifyingPayment ? 'กำลังตรวจสอบการชำระเงิน...' : 'ยืนยันการชำระเงินสำเร็จ (ทดสอบ / Test Payment)'}
-                  </button>
+                  {process.env.NODE_ENV !== 'production' &&
+                    process.env.NEXT_PUBLIC_ENABLE_PAY_TEST === 'true' && (
+                      <button
+                        id="simulate-payment-button"
+                        type="button"
+                        onClick={handleSimulatePaymentSuccess}
+                        disabled={isVerifyingPayment}
+                        className="action-button"
+                        style={{
+                          minHeight: '44px',
+                          padding: '0.6rem 1.8rem',
+                          background: '#16a34a',
+                          color: 'var(--white)',
+                          border: 'none',
+                          borderRadius: '4px',
+                          fontWeight: 600,
+                          fontSize: '0.95rem',
+                          cursor: isVerifyingPayment ? 'not-allowed' : 'pointer',
+                        }}
+                      >
+                        {isVerifyingPayment
+                          ? 'กำลังตรวจสอบการชำระเงิน...'
+                          : 'ยืนยันการชำระเงินสำเร็จ (ทดสอบ / Test Payment)'}
+                      </button>
+                    )}
 
                   <p style={{ margin: '0.8rem 0 0', fontSize: '0.85rem', color: '#166534', fontWeight: 500 }}>
                     * กรุณาชำระเงินให้เสร็จสิ้นก่อนเวลานับถอยหลังสิ้นสุด (AC-13, AC-70)

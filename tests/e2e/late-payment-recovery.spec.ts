@@ -125,11 +125,14 @@ test.describe('Late payment recovery & owner exception review (TASK-016, AC-72, 
     const chargeId = (await page.locator('#payment-charge-id').innerText()).trim();
 
     // 7. Simulate payment provider reporting late payment: paidAt 16 minutes after reservation (deadline was 15 mins)
+    const guestToken = await page.evaluate(() => sessionStorage.getItem('ticket_guest_otp_token'));
     const latePaidAt = new Date(Date.now() + 16 * 60 * 1000).toISOString();
     const payRes = await request.post(`/api/public/checkout/orders/${orderId}/pay-test`, {
+      headers: guestToken ? { 'x-guest-token': guestToken } : {},
       data: {
         chargeId,
         providerPaidAt: latePaidAt,
+        verifiedToken: guestToken || undefined,
       },
     });
     expect(payRes.status()).toBe(200);
