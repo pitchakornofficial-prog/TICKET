@@ -99,7 +99,7 @@ export async function GET(
       },
     });
   } catch (error) {
-    const msg = error instanceof Error ? error.message : 'Internal server error';
-    return new Response(msg, { status: 500 });
+    console.error('Error generating payout slip:', error);
+    return new Response('Internal server error', { status: 500 });
   }
 }

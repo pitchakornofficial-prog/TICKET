@@ -1,3 +1,4 @@
+import { createSafeErrorResponse } from '@/server/api-error';
 import { getAuth } from '@/server/auth';
 import { listEventsForScanner } from '@/server/events';
 import { resolveScannerSessionScope } from '@/server/scanner-scope';
@@ -50,7 +51,6 @@ export async function GET(request: Request) {
       { status: 200, headers: { 'Cache-Control': 'no-store' } },
     );
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'เกิดข้อผิดพลาดในการดึงรายการงานที่ได้รับมอบหมาย';
-    return Response.json({ message }, { status: 500 });
+    return createSafeErrorResponse(error, 'เกิดข้อผิดพลาดในการดึงรายการงานที่ได้รับมอบหมาย', { defaultStatus: 500 });
   }
 }

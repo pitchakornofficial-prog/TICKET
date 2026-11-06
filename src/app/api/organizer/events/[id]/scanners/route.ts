@@ -1,3 +1,4 @@
+import { createSafeErrorResponse } from '@/server/api-error';
 import { assertSameOrigin } from '@/server/origin';
 import { getAuth } from '@/server/auth';
 import { listScannersForEvent, addScannerToEvent } from '@/server/events';
@@ -24,9 +25,10 @@ export async function GET(
     const scanners = await listScannersForEvent(pool, session.user.id, eventId);
     return Response.json({ scanners }, { status: 200, headers: { 'Cache-Control': 'no-store' } });
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'เกิดข้อผิดพลาดในการดึงรายชื่อทีมสแกน';
-    const status = message.includes('ไม่มีสิทธิ์') ? 403 : 400;
-    return Response.json({ message }, { status });
+    return createSafeErrorResponse(error, 'เกิดข้อผิดพลาดในการดึงรายชื่อทีมสแกน', {
+      defaultStatus: 400,
+      statusResolver: (msg) => msg.includes('ไม่มีสิทธิ์') ? 403 : 400,
+    });
   }
 }
 
@@ -102,8 +104,9 @@ export async function POST(
       { status: 201 },
     );
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'เกิดข้อผิดพลาดในการเพิ่มทีมสแกน';
-    const status = message.includes('ไม่มีสิทธิ์') ? 403 : 400;
-    return Response.json({ message }, { status });
+    return createSafeErrorResponse(error, 'เกิดข้อผิดพลาดในการเพิ่มทีมสแกน', {
+      defaultStatus: 400,
+      statusResolver: (msg) => msg.includes('ไม่มีสิทธิ์') ? 403 : 400,
+    });
   }
 }

@@ -1,3 +1,4 @@
+import { createSafeErrorResponse } from '@/server/api-error';
 import { getAuth } from '@/server/auth';
 import { getDatabasePool } from '@/server/database';
 import { getEventOfflineControl } from '@/server/primary-scanner';
@@ -42,7 +43,6 @@ export async function GET(
     const data = await getEventOfflineControl(pool, eventId);
     return Response.json(data, { status: 200, headers: { 'Cache-Control': 'no-store' } });
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'เกิดข้อผิดพลาดในการดึงสถานะออฟไลน์';
-    return Response.json({ message }, { status: 500 });
+    return createSafeErrorResponse(error, 'เกิดข้อผิดพลาดในการดึงสถานะออฟไลน์', { defaultStatus: 500 });
   }
 }

@@ -1,3 +1,4 @@
+import { createSafeErrorResponse } from '@/server/api-error';
 import { getAuth } from '@/server/auth';
 import { getEventMoneyReport } from '@/server/reports';
 import type { Pool } from 'pg';
@@ -29,8 +30,9 @@ export async function GET(
 
     return Response.json({ report }, { status: 200, headers: { 'Cache-Control': 'no-store' } });
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'เกิดข้อผิดพลาดในการดึงรายงานการเงิน';
-    const status = message.includes('ไม่พบ') ? 404 : 500;
-    return Response.json({ message }, { status });
+    return createSafeErrorResponse(error, 'เกิดข้อผิดพลาดในการดึงรายงานการเงิน', {
+      defaultStatus: 500,
+      statusResolver: (msg) => msg.includes('ไม่พบ') ? 404 : 500,
+    });
   }
 }

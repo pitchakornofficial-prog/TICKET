@@ -71,7 +71,7 @@ export async function POST(request: Request) {
       { status: 200 },
     );
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'Internal server error in webhook handler';
-    return Response.json({ error: message }, { status: 500 });
+    console.error('Stripe webhook error:', error);
+    return Response.json({ error: 'Internal server error in webhook handler' }, { status: 500 });
   }
 }

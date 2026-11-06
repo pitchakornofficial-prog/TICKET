@@ -1,3 +1,4 @@
+import { createSafeErrorResponse } from '@/server/api-error';
 import { getDatabasePool } from '@/server/database';
 import { createPaymentQr, getPaymentChargeForOrder } from '@/server/payment';
 
@@ -38,9 +39,10 @@ export async function POST(
     const charge = await createPaymentQr(pool, { orderId, verifiedToken });
     return Response.json({ charge }, { status: 200, headers: { 'Cache-Control': 'no-store' } });
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'เกิดข้อผิดพลาดในการสร้าง QR ชำระเงิน';
-    const status = message.includes('สิทธิ์') ? 403 : message.includes('OTP') ? 401 : 400;
-    return Response.json({ message }, { status });
+    return createSafeErrorResponse(error, 'เกิดข้อผิดพลาดในการสร้าง QR ชำระเงิน', {
+      defaultStatus: 400,
+      statusResolver: (msg) => (msg.includes('สิทธิ์') ? 403 : msg.includes('OTP') ? 401 : 400),
+    });
   }
 }
 
@@ -66,8 +68,9 @@ export async function GET(
     }
     return Response.json({ charge }, { status: 200, headers: { 'Cache-Control': 'no-store' } });
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'เกิดข้อผิดพลาด';
-    const status = message.includes('สิทธิ์') ? 403 : message.includes('OTP') ? 401 : 500;
-    return Response.json({ message }, { status });
+    return createSafeErrorResponse(error, 'เกิดข้อผิดพลาดในการดึงข้อมูล QR ชำระเงิน', {
+      defaultStatus: 500,
+      statusResolver: (msg) => (msg.includes('สิทธิ์') ? 403 : msg.includes('OTP') ? 401 : 500),
+    });
   }
 }

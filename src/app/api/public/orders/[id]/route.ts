@@ -1,3 +1,4 @@
+import { createSafeErrorResponse } from '@/server/api-error';
 import { getDatabasePool } from '@/server/database';
 import { getGuestOrderDetail } from '@/server/guest-order-lookup';
 
@@ -45,7 +46,6 @@ export async function GET(
       { status: 200, headers: { 'Cache-Control': 'no-store' } },
     );
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'เกิดข้อผิดพลาดในการดึงข้อมูลคำสั่งซื้อ';
-    return Response.json({ message }, { status: 500 });
+    return createSafeErrorResponse(error, 'เกิดข้อผิดพลาดในการดึงข้อมูลคำสั่งซื้อ', { defaultStatus: 500 });
   }
 }

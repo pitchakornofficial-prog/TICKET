@@ -1,3 +1,4 @@
+import { createSafeErrorResponse } from '@/server/api-error';
 import { assertSameOrigin } from '@/server/origin';
 import { headers } from 'next/headers';
 import { getAuth, readActor } from '@/server/auth';
@@ -43,7 +44,6 @@ export async function POST(
 
     return Response.json(result, { status: 200 });
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'เกิดข้อผิดพลาดในการอนุมัติการแก้ไขรอบการแสดง';
-    return Response.json({ message }, { status: 400 });
+    return createSafeErrorResponse(error, 'เกิดข้อผิดพลาดในการอนุมัติการแก้ไขรอบการแสดง', { defaultStatus: 400 });
   }
 }

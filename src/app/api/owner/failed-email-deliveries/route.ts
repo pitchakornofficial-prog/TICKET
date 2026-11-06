@@ -1,3 +1,4 @@
+import { createSafeErrorResponse } from '@/server/api-error';
 import { assertSameOrigin } from '@/server/origin';
 import { getAuth } from '@/server/auth';
 import { getDatabasePool } from '@/server/database';
@@ -17,8 +18,7 @@ export async function GET(request: Request) {
     const failedDeliveries = await listFailedEmailDeliveries(pool);
     return Response.json({ deliveries: failedDeliveries }, { status: 200, headers: { 'Cache-Control': 'no-store' } });
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'เกิดข้อผิดพลาดในการโหลดรายการจัดส่งที่ล้มเหลว';
-    return Response.json({ message }, { status: 500 });
+    return createSafeErrorResponse(error, 'เกิดข้อผิดพลาดในการโหลดรายการจัดส่งที่ล้มเหลว', { defaultStatus: 500 });
   }
 }
 
@@ -42,7 +42,6 @@ export async function POST(request: Request) {
     const result = await retryTicketEmailDelivery(pool, body.deliveryId);
     return Response.json({ result }, { status: 200, headers: { 'Cache-Control': 'no-store' } });
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'เกิดข้อผิดพลาดในการลองส่งอีเมลใหม่';
-    return Response.json({ message }, { status: 500 });
+    return createSafeErrorResponse(error, 'เกิดข้อผิดพลาดในการลองส่งอีเมลใหม่', { defaultStatus: 500 });
   }
 }

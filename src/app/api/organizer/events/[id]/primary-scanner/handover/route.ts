@@ -1,3 +1,4 @@
+import { createSafeErrorResponse } from '@/server/api-error';
 import { assertSameOrigin } from '@/server/origin';
 import { getAuth } from '@/server/auth';
 import {
@@ -50,8 +51,7 @@ export async function GET(
     const readiness = await checkHandoverReadiness(pool, eventId, scannerId, oldPendingCount);
     return Response.json({ readiness }, { status: 200, headers: { 'Cache-Control': 'no-store' } });
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'เกิดข้อผิดพลาดในการตรวจสอบความพร้อมการสลับเครื่อง';
-    return Response.json({ message }, { status: 500 });
+    return createSafeErrorResponse(error, 'เกิดข้อผิดพลาดในการตรวจสอบความพร้อมการสลับเครื่อง', { defaultStatus: 500 });
   }
 }
 
@@ -111,8 +111,9 @@ export async function POST(
       { status: 200 },
     );
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'เกิดข้อผิดพลาดในการสลับเครื่องหลัก';
-    const status = message.includes('ไม่อนุญาต') ? 403 : message.includes('ไม่พบ') ? 404 : 400;
-    return Response.json({ message }, { status });
+    return createSafeErrorResponse(error, 'เกิดข้อผิดพลาดในการสลับเครื่องหลัก', {
+      defaultStatus: 400,
+      statusResolver: (msg) => msg.includes('ไม่อนุญาต') ? 403 : msg.includes('ไม่พบ') ? 404 : 400,
+    });
   }
 }

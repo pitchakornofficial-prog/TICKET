@@ -1,3 +1,4 @@
+import { createSafeErrorResponse } from '@/server/api-error';
 import { getAuth } from '@/server/auth';
 import { syncOfflineAdmissionScans } from '@/server/admission';
 import { verifyScannerSessionEventScope } from '@/server/scanner-scope';
@@ -50,8 +51,9 @@ export async function POST(
 
     return Response.json(result, { status: 200, headers: { 'Cache-Control': 'no-store' } });
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'เกิดข้อผิดพลาดในการซิงก์ข้อมูลออฟไลน์';
-    const status = message.includes('ไม่อนุญาต') ? 403 : 500;
-    return Response.json({ message }, { status });
+    return createSafeErrorResponse(error, 'เกิดข้อผิดพลาดในการซิงก์ข้อมูลออฟไลน์', {
+      defaultStatus: 500,
+      statusResolver: (msg) => (msg.includes('ไม่อนุญาต') ? 403 : 500),
+    });
   }
 }

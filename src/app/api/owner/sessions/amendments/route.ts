@@ -1,3 +1,4 @@
+import { createSafeErrorResponse } from '@/server/api-error';
 import { headers } from 'next/headers';
 import { getAuth, readActor } from '@/server/auth';
 import { getDatabasePool } from '@/server/database';
@@ -19,7 +20,6 @@ export async function GET(_request: Request) {
     const pendingAmendments = await listPendingSessionAmendments(getDatabasePool());
     return Response.json({ amendments: pendingAmendments }, { status: 200 });
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'เกิดข้อผิดพลาดในการโหลดคำขอแก้ไขรอบ';
-    return Response.json({ message }, { status: 500 });
+    return createSafeErrorResponse(error, 'เกิดข้อผิดพลาดในการโหลดคำขอแก้ไขรอบ', { defaultStatus: 500 });
   }
 }

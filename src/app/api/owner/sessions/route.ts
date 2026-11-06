@@ -1,3 +1,4 @@
+import { createSafeErrorResponse } from '@/server/api-error';
 import { assertSameOrigin } from '@/server/origin';
 import { getAuth } from '@/server/auth';
 import { listPendingSessionsForOwner, approveSession, rejectSession } from '@/server/events';
@@ -97,7 +98,6 @@ export async function POST(request: Request) {
 
     return Response.json({ message: 'อนุมัติรอบการแสดงและบันทึกข้อตกลงค่าบริการสำเร็จ', result }, { status: 200 });
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'เกิดข้อผิดพลาด';
-    return Response.json({ message }, { status: 400 });
+    return createSafeErrorResponse(error, 'เกิดข้อผิดพลาด', { defaultStatus: 400 });
   }
 }

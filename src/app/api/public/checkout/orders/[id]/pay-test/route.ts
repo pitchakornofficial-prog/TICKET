@@ -1,3 +1,4 @@
+import { createSafeErrorResponse } from '@/server/api-error';
 import { getDatabasePool } from '@/server/database';
 import { getPaymentChargeForOrder, processStripeSuccessEvent } from '@/server/payment';
 import {
@@ -101,8 +102,9 @@ export async function POST(
     const status = isProcessed ? 200 : 400;
     return Response.json(result, { status, headers: { 'Cache-Control': 'no-store' } });
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'เกิดข้อผิดพลาดในการประมวลผลการชำระเงิน';
-    const status = message.includes('สิทธิ์') || message.includes('OTP') ? 403 : 500;
-    return Response.json({ message }, { status });
+    return createSafeErrorResponse(error, 'เกิดข้อผิดพลาดในการประมวลผลการชำระเงิน', {
+      defaultStatus: 500,
+      statusResolver: (msg) => (msg.includes('สิทธิ์') || msg.includes('OTP') ? 403 : 500),
+    });
   }
 }

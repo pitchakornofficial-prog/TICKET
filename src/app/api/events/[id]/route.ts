@@ -1,3 +1,4 @@
+import { createSafeErrorResponse } from '@/server/api-error';
 import { assertSameOrigin } from '@/server/origin';
 import { getAuth } from '@/server/auth';
 import {
@@ -29,8 +30,7 @@ export async function GET(
     if (!event) return Response.json({ message: 'ไม่พบงานคอนเสิร์ต' }, { status: 404 });
     return Response.json({ event }, { status: 200, headers: { 'Cache-Control': 'no-store' } });
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'เกิดข้อผิดพลาด';
-    return Response.json({ message }, { status: 403 });
+    return createSafeErrorResponse(error, 'เกิดข้อผิดพลาดในการดึงข้อมูลงานคอนเสิร์ต', { defaultStatus: 403 });
   }
 }
 
@@ -85,8 +85,7 @@ export async function PUT(
     );
     return Response.json({ message: 'อัปเดตงานคอนเสิร์ตสำเร็จ', event: updated }, { status: 200 });
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'เกิดข้อผิดพลาด';
-    return Response.json({ message }, { status: 400 });
+    return createSafeErrorResponse(error, 'เกิดข้อผิดพลาดในการอัปเดตงานคอนเสิร์ต', { defaultStatus: 400 });
   }
 }
 
@@ -123,8 +122,7 @@ export async function POST(
       );
       return Response.json({ message: 'ส่งงานคอนเสิร์ตเพื่อขออนุมัติสำเร็จ' }, { status: 200 });
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : 'เกิดข้อผิดพลาด';
-      return Response.json({ message }, { status: 400 });
+      return createSafeErrorResponse(error, 'เกิดข้อผิดพลาดในการส่งงานเพื่อขออนุมัติ', { defaultStatus: 400 });
     }
   }
 
@@ -138,8 +136,7 @@ export async function POST(
       await submitSessionForApproval(pool, body.sessionId, session.user.id);
       return Response.json({ message: 'ส่งรอบการแสดงเพื่อขออนุมัติสำเร็จ' }, { status: 200 });
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : 'เกิดข้อผิดพลาด';
-      return Response.json({ message }, { status: 400 });
+      return createSafeErrorResponse(error, 'เกิดข้อผิดพลาดในการส่งรอบการแสดงเพื่อขออนุมัติ', { defaultStatus: 400 });
     }
   }
 
@@ -149,8 +146,7 @@ export async function POST(
       await revertEventToDraft(pool, id, session.user.id);
       return Response.json({ message: 'ดึงงานคอนเสิร์ตกลับมาเป็นฉบับร่างเรียบร้อยแล้ว' }, { status: 200 });
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : 'เกิดข้อผิดพลาดในการดึงกลับเป็นฉบับร่าง';
-      return Response.json({ message }, { status: 400 });
+      return createSafeErrorResponse(error, 'เกิดข้อผิดพลาดในการดึงกลับเป็นฉบับร่าง', { defaultStatus: 400 });
     }
   }
 
@@ -176,7 +172,6 @@ export async function DELETE(
     await deleteEventDraft(pool, id, session.user.id);
     return Response.json({ message: 'ลบงานคอนเสิร์ตเรียบร้อยแล้ว' }, { status: 200 });
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'เกิดข้อผิดพลาดในการลบ';
-    return Response.json({ message }, { status: 400 });
+    return createSafeErrorResponse(error, 'เกิดข้อผิดพลาดในการลบงาน', { defaultStatus: 400 });
   }
 }

@@ -1,3 +1,4 @@
+import { createSafeErrorResponse } from '@/server/api-error';
 import { getDatabasePool } from '@/server/database';
 import { lookupGuestOrders } from '@/server/guest-order-lookup';
 
@@ -32,7 +33,6 @@ export async function GET(request: Request) {
       { status: 200, headers: { 'Cache-Control': 'no-store' } },
     );
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'เกิดข้อผิดพลาดในการค้นหาคำสั่งซื้อ';
-    return Response.json({ message }, { status: 500 });
+    return createSafeErrorResponse(error, 'เกิดข้อผิดพลาดในการค้นหาคำสั่งซื้อ', { defaultStatus: 500 });
   }
 }

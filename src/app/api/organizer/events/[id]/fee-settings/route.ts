@@ -1,3 +1,4 @@
+import { createSafeErrorResponse } from '@/server/api-error';
 import { assertSameOrigin } from '@/server/origin';
 import { getAuth } from '@/server/auth';
 import { getEventFeeSettings } from '@/server/fees';
@@ -28,8 +29,7 @@ export async function GET(
     const feeSettings = await getEventFeeSettings(pool, eventId);
     return Response.json({ feeSettings }, { status: 200, headers: { 'Cache-Control': 'no-store' } });
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'เกิดข้อผิดพลาด';
-    return Response.json({ message }, { status: 500 });
+    return createSafeErrorResponse(error, 'เกิดข้อผิดพลาด', { defaultStatus: 500 });
   }
 }
 

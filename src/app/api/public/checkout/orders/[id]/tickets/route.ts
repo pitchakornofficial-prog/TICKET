@@ -1,3 +1,4 @@
+import { createSafeErrorResponse } from '@/server/api-error';
 import { getDatabasePool } from '@/server/database';
 import { getOrderTickets } from '@/server/tickets';
 import { getOrderReservation } from '@/server/reservation';
@@ -60,7 +61,6 @@ export async function GET(
     const tickets = await getOrderTickets(pool, orderId);
     return Response.json({ tickets }, { status: 200, headers: { 'Cache-Control': 'no-store' } });
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'เกิดข้อผิดพลาด';
-    return Response.json({ message }, { status: 500 });
+    return createSafeErrorResponse(error, 'เกิดข้อผิดพลาด', { defaultStatus: 500 });
   }
 }

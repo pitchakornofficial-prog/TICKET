@@ -1,3 +1,4 @@
+import { createSafeErrorResponse } from '@/server/api-error';
 import { getDatabasePool } from '@/server/database';
 import { getOrderRefundEligibility, getOrderRefundRequests } from '@/server/refunds';
 import { getVerifiedGuestSession } from '@/server/guest-otp';
@@ -44,8 +45,9 @@ export async function GET(
       { status: 200, headers: { 'Cache-Control': 'no-store' } },
     );
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'เกิดข้อผิดพลาดในการตรวจสอบสิทธิ์การคืนเงิน';
-    const status = message.includes('ไม่พบ') ? 404 : 500;
-    return Response.json({ message }, { status });
+    return createSafeErrorResponse(error, 'เกิดข้อผิดพลาดในการตรวจสอบสิทธิ์การคืนเงิน', {
+      defaultStatus: 500,
+      statusResolver: (msg) => (msg.includes('ไม่พบ') ? 404 : 500),
+    });
   }
 }

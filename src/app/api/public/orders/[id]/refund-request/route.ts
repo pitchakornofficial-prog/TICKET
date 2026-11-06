@@ -1,3 +1,4 @@
+import { createSafeErrorResponse } from '@/server/api-error';
 import { getDatabasePool } from '@/server/database';
 import { submitRefundRequest } from '@/server/refunds';
 
@@ -60,7 +61,6 @@ export async function POST(
       { status: 201 },
     );
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'เกิดข้อผิดพลาดในการยื่นคำขอคืนเงิน';
-    return Response.json({ message }, { status: 500 });
+    return createSafeErrorResponse(error, 'เกิดข้อผิดพลาดในการยื่นคำขอคืนเงิน', { defaultStatus: 500 });
   }
 }

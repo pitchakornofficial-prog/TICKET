@@ -1,3 +1,4 @@
+import { createSafeErrorResponse } from '@/server/api-error';
 import { assertSameOrigin } from '@/server/origin';
 import { headers } from 'next/headers';
 import { getAuth, readActor } from '@/server/auth';
@@ -87,8 +88,7 @@ export async function POST(
       { status: 201 },
     );
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'เกิดข้อผิดพลาดในการยื่นแก้ไขรอบการแสดง';
-    return Response.json({ message }, { status: 400 });
+    return createSafeErrorResponse(error, 'เกิดข้อผิดพลาดในการยื่นแก้ไขรอบการแสดง', { defaultStatus: 400 });
   }
 }
 
@@ -142,7 +142,6 @@ export async function GET(
     const amendments = await listSessionAmendments(pool, sessionId);
     return Response.json({ amendments }, { status: 200 });
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'เกิดข้อผิดพลาดในการโหลดรายการแก้ไขรอบ';
-    return Response.json({ message }, { status: 500 });
+    return createSafeErrorResponse(error, 'เกิดข้อผิดพลาดในการโหลดรายการแก้ไขรอบ', { defaultStatus: 500 });
   }
 }

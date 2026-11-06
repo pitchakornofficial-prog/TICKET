@@ -1,3 +1,4 @@
+import { createSafeErrorResponse } from '@/server/api-error';
 import { assertSameOrigin } from '@/server/origin';
 import { getAuth } from '@/server/auth';
 import { removeScannerFromEvent, updateScannerName } from '@/server/events';
@@ -37,9 +38,10 @@ export async function PATCH(
     const updated = await updateScannerName(pool, session.user.id, eventId, scannerId, name);
     return Response.json({ message: 'แก้ไขชื่อทีมสแกนเรียบร้อยแล้ว', scanner: updated }, { status: 200 });
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'เกิดข้อผิดพลาดในการแก้ไขชื่อทีมสแกน';
-    const status = message.includes('ไม่มีสิทธิ์') ? 403 : 400;
-    return Response.json({ message }, { status });
+    return createSafeErrorResponse(error, 'เกิดข้อผิดพลาดในการแก้ไขชื่อทีมสแกน', {
+      defaultStatus: 400,
+      statusResolver: (msg) => msg.includes('ไม่มีสิทธิ์') ? 403 : 400,
+    });
   }
 }
 
@@ -66,8 +68,9 @@ export async function DELETE(
     }
     return Response.json({ message: 'นำทีมสแกนออกจากงานสำเร็จ' }, { status: 200 });
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'เกิดข้อผิดพลาดในการลบทีมสแกน';
-    const status = message.includes('ไม่มีสิทธิ์') ? 403 : 400;
-    return Response.json({ message }, { status });
+    return createSafeErrorResponse(error, 'เกิดข้อผิดพลาดในการลบทีมสแกน', {
+      defaultStatus: 400,
+      statusResolver: (msg) => msg.includes('ไม่มีสิทธิ์') ? 403 : 400,
+    });
   }
 }

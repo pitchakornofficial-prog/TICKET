@@ -1,3 +1,4 @@
+import { createSafeErrorResponse } from '@/server/api-error';
 import { assertSameOrigin } from '@/server/origin';
 import { getAuth } from '@/server/auth';
 import { publishNews } from '@/server/news';
@@ -31,7 +32,6 @@ export async function POST(
     }
     return Response.json({ message: 'เผยแพร่ข่าวสารสำเร็จ', newsItem: updated }, { status: 200 });
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'เกิดข้อผิดพลาดในการเผยแพร่ข่าว';
-    return Response.json({ message }, { status: 500 });
+    return createSafeErrorResponse(error, 'เกิดข้อผิดพลาดในการเผยแพร่ข่าว', { defaultStatus: 500 });
   }
 }

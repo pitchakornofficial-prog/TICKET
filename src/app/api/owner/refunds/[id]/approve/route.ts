@@ -1,3 +1,4 @@
+import { createSafeErrorResponse } from '@/server/api-error';
 import { assertSameOrigin } from '@/server/origin';
 import { getAuth } from '@/server/auth';
 import { getDatabasePool } from '@/server/database';
@@ -55,7 +56,6 @@ export async function POST(
       { status: 200 },
     );
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'เกิดข้อผิดพลาดในการอนุมัติการคืนเงิน';
-    return Response.json({ message }, { status: 500 });
+    return createSafeErrorResponse(error, 'เกิดข้อผิดพลาดในการอนุมัติการคืนเงิน', { defaultStatus: 500 });
   }
 }

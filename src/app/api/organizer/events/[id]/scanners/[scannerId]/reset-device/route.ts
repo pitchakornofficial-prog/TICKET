@@ -1,3 +1,4 @@
+import { createSafeErrorResponse } from '@/server/api-error';
 import { assertSameOrigin } from '@/server/origin';
 import { getAuth } from '@/server/auth';
 import { resetScannerDeviceBinding } from '@/server/events';
@@ -28,8 +29,9 @@ export async function POST(
     const result = await resetScannerDeviceBinding(pool, session.user.id, eventId, scannerId);
     return Response.json(result, { status: 200 });
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'เกิดข้อผิดพลาดในการรีเซ็ตอุปกรณ์';
-    const status = message.includes('ไม่มีสิทธิ์') ? 403 : 400;
-    return Response.json({ message }, { status });
+    return createSafeErrorResponse(error, 'เกิดข้อผิดพลาดในการรีเซ็ตอุปกรณ์', {
+      defaultStatus: 400,
+      statusResolver: (msg) => msg.includes('ไม่มีสิทธิ์') ? 403 : 400,
+    });
   }
 }

@@ -1,3 +1,4 @@
+import { createSafeErrorResponse } from '@/server/api-error';
 import { assertSameOrigin } from '@/server/origin';
 import { getAuth } from '@/server/auth';
 import { getDatabasePool } from '@/server/database';
@@ -22,8 +23,7 @@ export async function GET(request: Request) {
     const invitations = await listOrganizerInvitations(pool);
     return Response.json({ invitations }, { status: 200, headers: { 'Cache-Control': 'no-store' } });
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'เกิดข้อผิดพลาดในการโหลดรายการคำเชิญ';
-    return Response.json({ message }, { status: 500 });
+    return createSafeErrorResponse(error, 'เกิดข้อผิดพลาดในการโหลดรายการคำเชิญ', { defaultStatus: 500 });
   }
 }
 
@@ -107,7 +107,6 @@ export async function POST(request: Request) {
       { status: 200, headers: { 'Cache-Control': 'no-store' } },
     );
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'เกิดข้อผิดพลาดในการส่งคำเชิญ';
-    return Response.json({ message }, { status: 400 });
+    return createSafeErrorResponse(error, 'เกิดข้อผิดพลาดในการส่งคำเชิญ', { defaultStatus: 400 });
   }
 }

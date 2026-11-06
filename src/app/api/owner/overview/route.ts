@@ -1,3 +1,4 @@
+import { createSafeErrorResponse } from '@/server/api-error';
 import { getAuth } from '@/server/auth';
 import { getDatabasePool } from '@/server/database';
 import { getOwnerOverviewCounts } from '@/server/overview';
@@ -24,7 +25,6 @@ export async function GET(request: Request) {
       headers: { 'Cache-Control': 'no-store' },
     });
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'เกิดข้อผิดพลาดในการโหลดตัวเลขภาพรวม';
-    return Response.json({ message }, { status: 500 });
+    return createSafeErrorResponse(error, 'เกิดข้อผิดพลาดในการโหลดตัวเลขภาพรวม', { defaultStatus: 500 });
   }
 }

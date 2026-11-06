@@ -1,3 +1,4 @@
+import { createSafeErrorResponse } from '@/server/api-error';
 import { getAuth } from '@/server/auth';
 import { getDatabasePool } from '@/server/database';
 import { listPaymentRecoveryCases } from '@/server/payment';
@@ -16,7 +17,6 @@ export async function GET(request: Request) {
     const cases = await listPaymentRecoveryCases(pool);
     return Response.json({ cases }, { status: 200, headers: { 'Cache-Control': 'no-store' } });
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : 'เกิดข้อผิดพลาดในการโหลดรายการตรวจสอบ';
-    return Response.json({ message }, { status: 500 });
+    return createSafeErrorResponse(error, 'เกิดข้อผิดพลาดในการโหลดรายการตรวจสอบ', { defaultStatus: 500 });
   }
 }
