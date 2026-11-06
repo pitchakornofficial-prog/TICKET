@@ -63,7 +63,9 @@ export interface OrderReservationDetail {
 
 export async function ensureReservationSchema(pool: Pool): Promise<void> {
   await ensureFeeSchema(pool);
-  await pool.query(`
+  await inTransaction(pool, async client => {
+    await client.query('SELECT pg_advisory_xact_lock($1)', [945162031]);
+    await client.query(`
     CREATE TABLE IF NOT EXISTS orders (
       id TEXT PRIMARY KEY,
       "eventId" TEXT NOT NULL REFERENCES events(id) ON DELETE CASCADE,
@@ -119,6 +121,7 @@ export async function ensureReservationSchema(pool: Pool): Promise<void> {
     CREATE INDEX IF NOT EXISTS idx_tickets_code ON tickets("ticketCode");
     CREATE INDEX IF NOT EXISTS idx_tickets_qr_payload ON tickets("qrPayload");
   `);
+  });
 }
 
 export async function getBuyerTicketCountForEvent(
@@ -186,6 +189,15 @@ export async function createReservation(
   await ensureReservationSchema(pool);
 
   return inTransaction(pool, async (client: PoolClient) => {
+    const emailNorm = verifiedSession.email.trim().toLowerCase();
+
+    // D-59, AC-10: Acquire transaction-level advisory lock on (eventId, buyerEmail)
+    // to serialize concurrent reservation requests for the same buyer and event.
+    await client.query(
+      'SELECT pg_advisory_xact_lock(hashtext($1), hashtext($2))',
+      [input.eventId, emailNorm],
+    );
+
     // 1. Verify Event existence and status
     const eventRes = await client.query(
       'SELECT id, title, "limitPerOrder", status FROM events WHERE id = $1',

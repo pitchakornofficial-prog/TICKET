@@ -31,6 +31,9 @@ export function getDatabasePool(): Pool {
 
 // Every statement of a transaction uses the same checked-out connection.
 export async function inTransaction<T>(pool: Pool, work: (client: PoolClient) => Promise<T>): Promise<T> {
+  if (typeof pool?.connect !== 'function') {
+    return await work(pool as unknown as PoolClient);
+  }
   const client = await pool.connect();
   let discard = false;
   try {

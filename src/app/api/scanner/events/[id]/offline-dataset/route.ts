@@ -1,5 +1,6 @@
 import { getAuth } from '@/server/auth';
 import { getOfflineDataset } from '@/server/primary-scanner';
+import { verifyScannerSessionEventScope } from '@/server/scanner-scope';
 import type { Pool } from 'pg';
 
 export const runtime = 'nodejs';
@@ -18,6 +19,19 @@ export async function GET(
   const pool = auth.options.database as Pool;
 
   try {
+    const secret =
+      process.env.BETTER_AUTH_SECRET || (auth.options as { secret: string }).secret;
+    const scopeCheck = await verifyScannerSessionEventScope(
+      pool,
+      session.user.role,
+      request.headers.get('cookie'),
+      secret,
+      { eventId, scannerId: session.user.id },
+    );
+    if (!scopeCheck.allowed) {
+      return Response.json({ message: scopeCheck.reason }, { status: 403 });
+    }
+
     const dataset = await getOfflineDataset(
       pool,
       { id: session.user.id, role: session.user.role },

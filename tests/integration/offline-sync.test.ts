@@ -341,4 +341,101 @@ describe('TASK-034: Offline Sync Integration Tests (AC-99, AC-102)', () => {
       ),
     ).rejects.toThrow(/เฉพาะเครื่องหลักประจำงานเท่านั้น/);
   });
+
+  it('4. Cross-event isolation: primary scanner of event A cannot mutate tickets of event B and audit identity is enforced', async () => {
+    const org = fixture.ids.organizer;
+    const now = Date.now();
+    const sessionStartTimeMsB = now + 200 * 3600 * 1000;
+    const draftB = await createEventDraft(
+      fixture.pool,
+      org,
+      {
+        title: 'คอนเสิร์ต งาน B',
+        location: 'อิมแพ็ค อารีน่า',
+      },
+      [
+        {
+          startTime: new Date(sessionStartTimeMsB).toISOString(),
+          endTime: new Date(sessionStartTimeMsB + 4 * 3600 * 1000).toISOString(),
+          ticketTypes: [{ name: 'VIP Zone', price: 2500, quota: 50 }],
+        },
+      ],
+    );
+    const sessionIdB = draftB.sessions[0].id;
+    const ticketTypeIdB = draftB.sessions[0].ticketTypes[0].id;
+    await approveSession(fixture.pool, sessionIdB, fixture.ids.owner);
+
+    // Purchase ticket in Event B
+    const buyerEmailB = `sync-buyer-b-${randomUUID().slice(0, 8)}@ticket.invalid`;
+    clearCapturedEmails();
+    const otpReq = await requestGuestOtp(fixture.pool, {
+      buyer: { name: 'ผู้ซื้อ บัตรงาน B', email: buyerEmailB, phone: '0899999999' },
+      purpose: 'checkout',
+      now: new Date(),
+    });
+    const match = getCapturedEmails().at(-1)?.text?.match(/\b(\d{6})\b/);
+    const code = match ? match[1] : '';
+    const otpVerify = await verifyGuestOtp(fixture.pool, {
+      requestId: otpReq.requestId ?? '',
+      code,
+      email: buyerEmailB,
+      buyer: { name: 'ผู้ซื้อ บัตรงาน B', email: buyerEmailB, phone: '0899999999' },
+      purpose: 'checkout',
+      now: new Date(),
+    });
+    const resv = await createReservation(fixture.pool, {
+      eventId: draftB.id,
+      sessionId: sessionIdB,
+      verifiedToken: otpVerify.verifiedToken ?? '',
+      items: [{ ticketTypeId: ticketTypeIdB, quantity: 1 }],
+    });
+    const charge = await createPaymentQr(fixture.pool, {
+      orderId: resv.id,
+      verifiedToken: otpVerify.verifiedToken ?? '',
+    });
+    const payment = await verifyAndProcessPayment(fixture.pool, {
+      chargeId: charge.id,
+      providerPaidAt: new Date(),
+    });
+    const ticketB = payment.tickets?.[0];
+    if (!ticketB) throw new Error('Ticket in event B was not issued');
+    expect(ticketB.admissionStatus).toBe('outside');
+
+    // Primary scanner of Event A attempts to sync a scan for ticketB under eventId (Event A)
+    const maliciousScanId = `scan-cross-${randomUUID()}`;
+    const syncRes = await syncOfflineAdmissionScans(
+      fixture.pool,
+      { id: primaryScannerId, role: 'scanner', name: 'หัวหน้าสแกน 1' },
+      eventId, // Event A!
+      {
+        scans: [
+          {
+            id: maliciousScanId,
+            ticketId: ticketB.id,
+            ticketCode: ticketB.ticketCode,
+            sessionId: sessionIdB,
+            eventId: eventId,
+            scannerId: 'attacker-spoofed-id',
+            scannerName: 'Attacker Fake Name',
+            action: 'entry',
+            status: 'success',
+            reason: null,
+            deviceMode: 'offline',
+            scannedAt: new Date().toISOString(),
+          },
+        ],
+      },
+    );
+
+    // Should NOT mutate or count as synced
+    expect(syncRes.syncedCount).toBe(0);
+
+    // Verify ticket in Event B remains outside
+    const ticketCheckB = await fixture.pool.query('SELECT "admissionStatus" FROM tickets WHERE id = $1', [ticketB.id]);
+    expect(ticketCheckB.rows[0].admissionStatus).toBe('outside');
+
+    // Verify no admission log was created for ticketB
+    const logCheck = await fixture.pool.query('SELECT * FROM ticket_admission_logs WHERE "ticketId" = $1', [ticketB.id]);
+    expect(logCheck.rows).toHaveLength(0);
+  });
 });

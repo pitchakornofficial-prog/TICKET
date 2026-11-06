@@ -5,8 +5,7 @@ export async function handleAuthRequest(auth: TicketAuth, request: Request): Pro
   const path = new URL(request.url).pathname;
   const isResetTokenGet = request.method === 'GET' && path.startsWith('/api/auth/reset-password/');
   const isVerifyInvitationGet = request.method === 'GET' && path === '/api/auth/verify-invitation';
-  const isTestInspectToken = request.method === 'GET' && path === '/api/auth/test-inspect-reset-token';
-  const allowed = (request.method === 'GET' && (path === '/api/auth/get-session' || isResetTokenGet || isVerifyInvitationGet || isTestInspectToken))
+  const allowed = (request.method === 'GET' && (path === '/api/auth/get-session' || isResetTokenGet || isVerifyInvitationGet))
     || (request.method === 'POST' && [
       '/api/auth/sign-in/email',
       '/api/auth/sign-out',
@@ -16,81 +15,6 @@ export async function handleAuthRequest(auth: TicketAuth, request: Request): Pro
       '/api/auth/accept-invitation',
     ].includes(path));
   if (!allowed) return Response.json({ message: 'ไม่พบเส้นทางที่ร้องขอ' }, { status: 404, headers: { 'Cache-Control': 'no-store' } });
-
-  // Test inspection endpoint for E2E runner (only available on loopback test setups)
-  if (isTestInspectToken) {
-    const url = new URL(request.url);
-    const email = url.searchParams.get('email') || '';
-    const pool = auth.options.database as import('pg').Pool;
-    const clearCooldown = url.searchParams.get('clearCooldown') === 'true';
-    if (clearCooldown && email) {
-      const uRes = await pool.query('SELECT id FROM auth_user WHERE email = $1', [email]);
-      if (uRes.rowCount && uRes.rowCount > 0) {
-        await pool.query('DELETE FROM auth_rate_limit WHERE key = $1', [`reset_pwd:${uRes.rows[0].id}`]);
-      }
-      return Response.json({ cleared: true }, { status: 200, headers: { 'Cache-Control': 'no-store' } });
-    }
-    const type = url.searchParams.get('type') || 'reset';
-    if (type === 'clear_guest_cooldown' && email) {
-      await pool.query('DELETE FROM guest_otp_tracking WHERE key LIKE $1', [`${email}:%`]);
-      return Response.json({ cleared: true }, { status: 200, headers: { 'Cache-Control': 'no-store' } });
-    }
-    if (type === 'expire_order') {
-      const orderId = url.searchParams.get('orderId') || '';
-      if (orderId) {
-        await pool.query(
-          `UPDATE orders
-           SET "expiresAt" = now() - interval '1 second', status = 'expired', "updatedAt" = now()
-           WHERE id = $1`,
-          [orderId],
-        );
-        return Response.json({ expired: true }, { status: 200, headers: { 'Cache-Control': 'no-store' } });
-      }
-    }
-    if (type === 'guest_otp') {
-      try {
-        const { ensureGuestOtpSchema } = await import('./guest-otp.ts');
-        await ensureGuestOtpSchema(pool);
-      } catch {
-        // ignore schema error
-      }
-      const otpRes = await pool.query(
-        'SELECT code, "requestId" FROM guest_otp WHERE email = $1 AND "consumedAt" IS NULL ORDER BY "createdAt" DESC LIMIT 1',
-        [email],
-      );
-      if (otpRes.rowCount === 0) {
-        return Response.json({ code: null }, { status: 404 });
-      }
-      return Response.json(
-        { code: otpRes.rows[0].code, requestId: otpRes.rows[0].requestId },
-        { status: 200, headers: { 'Cache-Control': 'no-store' } },
-      );
-    }
-    if (type === 'invitation') {
-      const invRes = await pool.query(
-        'SELECT token FROM organizer_invitations WHERE email = $1 ORDER BY "createdAt" DESC LIMIT 1',
-        [email],
-      );
-      if (invRes.rowCount === 0) {
-        return Response.json({ token: null }, { status: 404 });
-      }
-      return Response.json({ token: invRes.rows[0].token }, { status: 200, headers: { 'Cache-Control': 'no-store' } });
-    }
-    const userRes = await pool.query('SELECT id FROM auth_user WHERE email = $1', [email]);
-    if (userRes.rowCount === 0) {
-      return Response.json({ token: null }, { status: 404 });
-    }
-    const userId = userRes.rows[0].id;
-    const tokenRes = await pool.query(
-      'SELECT identifier FROM auth_verification WHERE value = $1 ORDER BY "createdAt" DESC LIMIT 1',
-      [userId],
-    );
-    if (tokenRes.rowCount === 0) {
-      return Response.json({ token: null }, { status: 404 });
-    }
-    const token = tokenRes.rows[0].identifier.replace('reset-password:', '');
-    return Response.json({ token }, { status: 200, headers: { 'Cache-Control': 'no-store' } });
-  }
   // Require our configured origin even for a first login with no cookie/Fetch Metadata.
   // Do not infer trust from the incoming Host header or a supplied callback URL.
   const reqOrigin = request.headers.get('origin');

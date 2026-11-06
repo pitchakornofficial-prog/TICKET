@@ -19,6 +19,9 @@ export const OTP_MAX_FAILS_IN_WINDOW = 5;
 export const OTP_LOCKOUT_SECONDS = 15 * 60; // 900s
 export const VERIFIED_SESSION_EXPIRATION_SECONDS = 30 * 60; // 1800s
 
+export const ALLOWED_OTP_PURPOSES = ['checkout', 'order_lookup'] as const;
+export type OtpPurpose = (typeof ALLOWED_OTP_PURPOSES)[number];
+
 export interface GuestBuyerDetails {
   name: string;
   email: string;
@@ -120,7 +123,15 @@ export async function requestGuestOtp(
 }> {
   const now = input.now ?? new Date();
   const nowMs = now.getTime();
-  const purpose = input.purpose?.trim() || 'checkout';
+  const rawPurpose = input.purpose?.trim() || 'checkout';
+  if (!ALLOWED_OTP_PURPOSES.includes(rawPurpose as OtpPurpose)) {
+    return {
+      success: false,
+      error: 'วัตถุประสงค์ (purpose) ในการขอรหัส OTP ไม่ถูกต้อง',
+      code: 'MISSING_FIELDS',
+    };
+  }
+  const purpose: OtpPurpose = rawPurpose as OtpPurpose;
 
   const validation = validateBuyerDetails(input.buyer);
   if (!validation.valid || !validation.data) {
@@ -131,9 +142,51 @@ export async function requestGuestOtp(
   await ensureGuestOtpSchema(pool);
 
   return inTransaction(pool, async client => {
+    const globalTrackKey = `${email}:global`;
     const trackKey = `${email}:${purpose}`;
+
+    // 1. Global Email-level rate limit & cooldown checks (Issue #6: anti-purpose switching bypass)
+    const globalTrackRes = await client.query(
+      'SELECT "requestCount", "lastRequestAt" FROM guest_otp_tracking WHERE key = $1 FOR UPDATE',
+      [globalTrackKey],
+    );
+
+    let globalRequestCount = 0;
+    if (globalTrackRes.rowCount && globalTrackRes.rowCount > 0) {
+      const gRow = globalTrackRes.rows[0];
+      const gLastRequestAt = new Date(gRow.lastRequestAt);
+      const gDiffMs = nowMs - gLastRequestAt.getTime();
+
+      // Cooldown across any OTP request for this email
+      if (gDiffMs < OTP_RESEND_COOLDOWN_SECONDS * 1000) {
+        const remainingSec = Math.ceil((OTP_RESEND_COOLDOWN_SECONDS * 1000 - gDiffMs) / 1000);
+        return {
+          success: false,
+          error: `กรุณารอ ${remainingSec} วินาทีก่อนขอรหัส OTP ใหม่`,
+          cooldownSeconds: remainingSec,
+          code: 'COOLDOWN',
+        };
+      }
+
+      // 15-minute global ceiling for this email across all purposes
+      if (gDiffMs < OTP_WINDOW_SECONDS * 1000) {
+        if (gRow.requestCount >= OTP_MAX_REQUESTS_IN_WINDOW) {
+          return {
+            success: false,
+            error: 'คุณขอรหัส OTP เกินจำนวนที่กำหนด (สูงสุด 5 ครั้งใน 15 นาที)',
+            code: 'RATE_LIMITED',
+          };
+        }
+        globalRequestCount = gRow.requestCount + 1;
+      } else {
+        globalRequestCount = 1;
+      }
+    } else {
+      globalRequestCount = 1;
+    }
+
     const trackRes = await client.query(
-      'SELECT "requestCount", "lastRequestAt", "failCount", "lastFailAt", "blockedUntil" FROM guest_otp_tracking WHERE key = $1',
+      'SELECT "requestCount", "lastRequestAt", "failCount", "lastFailAt", "blockedUntil" FROM guest_otp_tracking WHERE key = $1 FOR UPDATE',
       [trackKey],
     );
 
@@ -204,6 +257,22 @@ export async function requestGuestOtp(
         `INSERT INTO guest_otp_tracking (key, "requestCount", "lastRequestAt", "failCount", "lastFailAt", "blockedUntil")
          VALUES ($1, 1, $2, 0, NULL, NULL)`,
         [trackKey, now],
+      );
+    }
+
+    // Persist global email tracking
+    if (globalTrackRes.rowCount && globalTrackRes.rowCount > 0) {
+      await client.query(
+        `UPDATE guest_otp_tracking
+         SET "requestCount" = $1, "lastRequestAt" = $2
+         WHERE key = $3`,
+        [globalRequestCount, now, globalTrackKey],
+      );
+    } else {
+      await client.query(
+        `INSERT INTO guest_otp_tracking (key, "requestCount", "lastRequestAt", "failCount", "lastFailAt", "blockedUntil")
+         VALUES ($1, 1, $2, 0, NULL, NULL)`,
+        [globalTrackKey, now],
       );
     }
 
@@ -284,7 +353,15 @@ export async function verifyGuestOtp(
   const now = input.now ?? new Date();
   const nowMs = now.getTime();
   const email = input.email?.trim().toLowerCase();
-  const purpose = input.purpose?.trim() || 'checkout';
+  const rawPurpose = input.purpose?.trim() || 'checkout';
+  if (!ALLOWED_OTP_PURPOSES.includes(rawPurpose as OtpPurpose)) {
+    return {
+      success: false,
+      error: 'วัตถุประสงค์ (purpose) ในการตรวจสอบรหัส OTP ไม่ถูกต้อง',
+      code: 'INVALID_CODE',
+    };
+  }
+  const purpose: OtpPurpose = rawPurpose as OtpPurpose;
   const submittedCode = input.code?.trim();
   const requestId = input.requestId?.trim();
 
@@ -302,10 +379,23 @@ export async function verifyGuestOtp(
 
   return inTransaction(pool, async client => {
     const trackKey = `${email}:${purpose}`;
-    const trackRes = await client.query(
-      'SELECT "failCount", "lastFailAt", "blockedUntil" FROM guest_otp_tracking WHERE key = $1',
+    let trackRes = await client.query(
+      'SELECT "failCount", "lastFailAt", "blockedUntil" FROM guest_otp_tracking WHERE key = $1 FOR UPDATE',
       [trackKey],
     );
+
+    if (!trackRes.rowCount || trackRes.rowCount === 0) {
+      await client.query(
+        `INSERT INTO guest_otp_tracking (key, "requestCount", "lastRequestAt", "failCount", "lastFailAt", "blockedUntil")
+         VALUES ($1, 0, $2, 0, NULL, NULL)
+         ON CONFLICT (key) DO NOTHING`,
+        [trackKey, now],
+      );
+      trackRes = await client.query(
+        'SELECT "failCount", "lastFailAt", "blockedUntil" FROM guest_otp_tracking WHERE key = $1 FOR UPDATE',
+        [trackKey],
+      );
+    }
 
     let failCount = 0;
     let lastFailAt: Date | null = null;
@@ -334,10 +424,10 @@ export async function verifyGuestOtp(
       }
     }
 
-    // Look up OTP record by requestId, email, and purpose (AC-57: scope bound)
+    // Look up OTP record by requestId, email, and purpose with row lock (AC-57: scope bound & serialized)
     const otpRes = await client.query(
       `SELECT id, code, "expiresAt", "consumedAt" FROM guest_otp
-       WHERE "requestId" = $1 AND email = $2 AND purpose = $3`,
+       WHERE "requestId" = $1 AND email = $2 AND purpose = $3 FOR UPDATE`,
       [requestId, email, purpose],
     );
 
@@ -392,8 +482,15 @@ export async function verifyGuestOtp(
       };
     }
 
-    // AC-57: Mark OTP as consumed (one-time use)
-    await client.query(`UPDATE guest_otp SET "consumedAt" = $1 WHERE id = $2`, [now, otpRow.id]);
+    // AC-57: Mark OTP as consumed (one-time use) atomically
+    const consumeRes = await client.query(
+      `UPDATE guest_otp SET "consumedAt" = $1 WHERE id = $2 AND "consumedAt" IS NULL`,
+      [now, otpRow.id],
+    );
+
+    if (consumeRes.rowCount === 0) {
+      return { success: false, error: 'รหัส OTP นี้ถูกใช้งานไปแล้ว', code: 'REPLAY' };
+    }
 
     // Reset fail count on successful verification
     await client.query(

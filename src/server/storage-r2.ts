@@ -1,6 +1,6 @@
 // ADR-0003: Cloudflare R2 driver (S3-compatible, AWS SigV4 ด้วย node:crypto ไม่เพิ่ม dependency)
 import { createHash, createHmac } from 'node:crypto';
-import type { StorageDriver, StorageItem } from './storage';
+import type { PresignedUploadResult, StorageDriver, StorageItem } from './storage';
 
 export type R2Config = {
   accessKeyId: string;
@@ -104,5 +104,79 @@ export class R2StorageDriver implements StorageDriver {
   async delete(key: string): Promise<void> {
     const res = await this.request('DELETE', key);
     if (!res.ok && res.status !== 404) throw new Error(`R2 delete failed: ${res.status}`);
+  }
+
+  async createPresignedUploadUrl(
+    key: string,
+    contentType: string,
+    visibility: 'public' | 'private' = 'public',
+    expiresInSeconds = 900,
+  ): Promise<PresignedUploadResult> {
+    const { accessKeyId, secretAccessKey, bucket, endpoint } = this.config;
+    const host = new URL(endpoint).host;
+    const path = `/${bucket}/${encodeKey(key)}`;
+    const amzDate = new Date().toISOString().replace(/[:-]|\.\d{3}/g, '');
+    const dateStamp = amzDate.slice(0, 8);
+    const scope = `${dateStamp}/auto/s3/aws4_request`;
+
+    const headers: Record<string, string> = {
+      'content-type': contentType,
+      host,
+      'x-amz-meta-visibility': visibility,
+    };
+    const names = Object.keys(headers).sort();
+    const canonicalHeaders = names.map((n) => `${n}:${headers[n]}\n`).join('');
+    const signedHeaders = names.join(';');
+
+    const queryParams: Record<string, string> = {
+      'X-Amz-Algorithm': 'AWS4-HMAC-SHA256',
+      'X-Amz-Credential': `${accessKeyId}/${scope}`,
+      'X-Amz-Date': amzDate,
+      'X-Amz-Expires': String(expiresInSeconds),
+      'X-Amz-SignedHeaders': signedHeaders,
+    };
+
+    const sortedQueryKeys = Object.keys(queryParams).sort();
+    const canonicalQueryString = sortedQueryKeys
+      .map((k) => `${encodeURIComponent(k)}=${encodeURIComponent(queryParams[k])}`)
+      .join('&');
+
+    const payloadHash = 'UNSIGNED-PAYLOAD';
+    const canonicalRequest = [
+      'PUT',
+      path,
+      canonicalQueryString,
+      canonicalHeaders,
+      signedHeaders,
+      payloadHash,
+    ].join('\n');
+
+    const stringToSign = [
+      'AWS4-HMAC-SHA256',
+      amzDate,
+      scope,
+      sha256Hex(canonicalRequest),
+    ].join('\n');
+
+    const kSigning = hmac(
+      hmac(hmac(hmac(`AWS4${secretAccessKey}`, dateStamp), 'auto'), 's3'),
+      'aws4_request',
+    );
+    const signature = createHmac('sha256', kSigning).update(stringToSign).digest('hex');
+
+    const uploadUrl = `${endpoint}${path}?${canonicalQueryString}&X-Amz-Signature=${signature}`;
+    const publicUrl = `/api/media/${encodeURIComponent(key)}`;
+
+    return {
+      uploadUrl,
+      key,
+      publicUrl,
+      method: 'PUT',
+      headers: {
+        'content-type': contentType,
+        'x-amz-meta-visibility': visibility,
+      },
+      expiresInSeconds,
+    };
   }
 }

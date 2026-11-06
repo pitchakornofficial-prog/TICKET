@@ -714,6 +714,9 @@ export async function syncOfflineAdmissionScans(
     }
   }
 
+  const effectiveScannerId = actor.id;
+  const effectiveScannerName = actor.name?.trim() || actor.id;
+
   const acknowledgedIds: string[] = [];
   let conflictsCount = 0;
   let syncedCount = 0;
@@ -729,7 +732,7 @@ export async function syncOfflineAdmissionScans(
       continue;
     }
 
-    // 2. Fetch ticket with SELECT ... FOR UPDATE
+    // 2. Fetch ticket with SELECT ... FOR UPDATE strictly scoped to eventId
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
@@ -744,19 +747,26 @@ export async function syncOfflineAdmissionScans(
       }>(
         `SELECT id, "ticketCode", "sessionId", "eventId", status, "admissionStatus"
          FROM tickets
-         WHERE id = $1 OR "ticketCode" = $2
+         WHERE (id = $1 OR "ticketCode" = $2) AND "eventId" = $3
          FOR UPDATE`,
-        [scan.ticketId, scan.ticketCode],
+        [scan.ticketId, scan.ticketCode, eventId],
       );
 
       if ((tRes.rowCount ?? 0) === 0) {
-        // Ticket unknown centrally, still acknowledge to clear unresolvable pending
+        // Ticket unknown centrally in this event scope, still acknowledge to clear unresolvable pending
         await client.query('ROLLBACK');
         acknowledgedIds.push(scan.id);
         continue;
       }
 
       const ticket = tRes.rows[0];
+
+      // Scope validation: verify ticket belongs to this event and matching session if specified
+      if (ticket.eventId !== eventId || (scan.sessionId && ticket.sessionId !== scan.sessionId)) {
+        await client.query('ROLLBACK');
+        acknowledgedIds.push(scan.id);
+        continue;
+      }
 
       // 3. Central Revocation Conflict Detection (AC-99, G-44)
       // If ticket is refunded, cancelled, or revoked centrally, offline admission creates conflict case
@@ -770,12 +780,12 @@ export async function syncOfflineAdmissionScans(
            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'pending_review', now())`,
           [
             conflictId,
-            ticket.eventId,
+            eventId,
             ticket.sessionId,
             ticket.id,
             ticket.ticketCode,
-            scan.scannerId,
-            scan.scannerName,
+            effectiveScannerId,
+            effectiveScannerName,
             scan.id,
             scan.action,
             new Date(scan.scannedAt),
@@ -794,10 +804,10 @@ export async function syncOfflineAdmissionScans(
             scan.id,
             ticket.id,
             ticket.ticketCode,
-            ticket.eventId,
+            eventId,
             ticket.sessionId,
-            scan.scannerId,
-            scan.scannerName,
+            effectiveScannerId,
+            effectiveScannerName,
             scan.action,
             new Date(scan.scannedAt),
           ],
@@ -812,8 +822,8 @@ export async function syncOfflineAdmissionScans(
       // 4. Normal valid state transition sync
       const targetAdmissionStatus = scan.action === 'entry' ? 'inside' : 'outside';
       await client.query(
-        `UPDATE tickets SET "admissionStatus" = $1, "updatedAt" = now() WHERE id = $2`,
-        [targetAdmissionStatus, ticket.id],
+        `UPDATE tickets SET "admissionStatus" = $1, "updatedAt" = now() WHERE id = $2 AND "eventId" = $3`,
+        [targetAdmissionStatus, ticket.id, eventId],
       );
 
       await client.query(
@@ -825,10 +835,10 @@ export async function syncOfflineAdmissionScans(
           scan.id,
           ticket.id,
           ticket.ticketCode,
-          ticket.eventId,
+          eventId,
           ticket.sessionId,
-          scan.scannerId,
-          scan.scannerName,
+          effectiveScannerId,
+          effectiveScannerName,
           scan.action,
           new Date(scan.scannedAt),
         ],

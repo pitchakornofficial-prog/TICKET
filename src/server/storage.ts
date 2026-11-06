@@ -1,6 +1,7 @@
 // ADR-0003: Cloudflare R2 สำหรับเก็บภาพและหลักฐาน
 // Local substitute ที่ปลอดภัย ใช้ in-memory store หรือ loopback serving โดยไม่ใช้ instance-local persistent disk เป็น shared production storage
 
+import { randomUUID } from 'node:crypto';
 import { R2StorageDriver, readR2Config } from './storage-r2.ts';
 
 export interface StorageItem {
@@ -9,16 +10,53 @@ export interface StorageItem {
   visibility: 'public' | 'private';
 }
 
-export interface StorageDriver {
-  put(key: string, data: Uint8Array | Buffer, contentType: string, visibility?: 'public' | 'private'): Promise<{ url: string; key: string }>;
-  get(key: string): Promise<StorageItem | null>;
-  delete(key: string): Promise<void>;
+export interface PresignedUploadResult {
+  uploadUrl: string;
+  key: string;
+  publicUrl: string;
+  method: 'PUT';
+  headers: Record<string, string>;
+  expiresInSeconds: number;
 }
 
-class MemoryStorageDouble implements StorageDriver {
-  private files = new Map<string, { data: Buffer; contentType: string; visibility: 'public' | 'private' }>();
+export interface StorageDriver {
+  put(
+    key: string,
+    data: Uint8Array | Buffer,
+    contentType: string,
+    visibility?: 'public' | 'private',
+  ): Promise<{ url: string; key: string }>;
+  get(key: string): Promise<StorageItem | null>;
+  delete(key: string): Promise<void>;
+  createPresignedUploadUrl(
+    key: string,
+    contentType: string,
+    visibility?: 'public' | 'private',
+    expiresInSeconds?: number,
+  ): Promise<PresignedUploadResult>;
+}
 
-  async put(key: string, data: Uint8Array | Buffer, contentType: string, visibility: 'public' | 'private' = 'public'): Promise<{ url: string; key: string }> {
+export class MemoryStorageDouble implements StorageDriver {
+  private files = new Map<
+    string,
+    { data: Buffer; contentType: string; visibility: 'public' | 'private' }
+  >();
+  private presignedTokens = new Map<
+    string,
+    {
+      key: string;
+      contentType: string;
+      visibility: 'public' | 'private';
+      expiresAt: number;
+    }
+  >();
+
+  async put(
+    key: string,
+    data: Uint8Array | Buffer,
+    contentType: string,
+    visibility: 'public' | 'private' = 'public',
+  ): Promise<{ url: string; key: string }> {
     const buf = Buffer.isBuffer(data) ? data : Buffer.from(data);
     this.files.set(key, { data: buf, contentType, visibility });
     // In local development / testing, assets can be read via /api/media/[...key]
@@ -36,8 +74,55 @@ class MemoryStorageDouble implements StorageDriver {
     this.files.delete(key);
   }
 
+  async createPresignedUploadUrl(
+    key: string,
+    contentType: string,
+    visibility: 'public' | 'private' = 'public',
+    expiresInSeconds = 900,
+  ): Promise<PresignedUploadResult> {
+    const token = randomUUID();
+    this.presignedTokens.set(token, {
+      key,
+      contentType,
+      visibility,
+      expiresAt: Date.now() + expiresInSeconds * 1000,
+    });
+    const uploadUrl = `/api/media/direct-upload?key=${encodeURIComponent(key)}&token=${token}`;
+    const publicUrl = `/api/media/${encodeURIComponent(key)}`;
+    return {
+      uploadUrl,
+      key,
+      publicUrl,
+      method: 'PUT',
+      headers: {
+        'content-type': contentType,
+        'x-amz-meta-visibility': visibility,
+      },
+      expiresInSeconds,
+    };
+  }
+
+  verifyPresignedToken(
+    token: string,
+    key: string,
+  ): { valid: boolean; contentType?: string; visibility?: 'public' | 'private' } {
+    const entry = this.presignedTokens.get(token);
+    if (!entry) return { valid: false };
+    if (entry.expiresAt < Date.now()) {
+      this.presignedTokens.delete(token);
+      return { valid: false };
+    }
+    if (entry.key !== key) return { valid: false };
+    return { valid: true, contentType: entry.contentType, visibility: entry.visibility };
+  }
+
+  consumePresignedToken(token: string): void {
+    this.presignedTokens.delete(token);
+  }
+
   clear(): void {
     this.files.clear();
+    this.presignedTokens.clear();
   }
 }
 
@@ -53,14 +138,28 @@ function resolveDriver(): StorageDriver {
     return r2Storage;
   }
   if (process.env.NODE_ENV === 'production') {
-    throw new Error('R2 storage is not configured (R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET, R2_ENDPOINT)');
+    throw new Error(
+      'R2 storage is not configured (R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET, R2_ENDPOINT)',
+    );
   }
   return memoryStorage;
 }
 
-export const storage: StorageDriver & { clear(): void } = {
-  put: (key, data, contentType, visibility) => resolveDriver().put(key, data, contentType, visibility),
+export const storage: StorageDriver & {
+  clear(): void;
+  verifyPresignedToken?(
+    token: string,
+    key: string,
+  ): { valid: boolean; contentType?: string; visibility?: 'public' | 'private' };
+  consumePresignedToken?(token: string): void;
+} = {
+  put: (key, data, contentType, visibility) =>
+    resolveDriver().put(key, data, contentType, visibility),
   get: (key) => resolveDriver().get(key),
   delete: (key) => resolveDriver().delete(key),
+  createPresignedUploadUrl: (key, contentType, visibility, expiresInSeconds) =>
+    resolveDriver().createPresignedUploadUrl(key, contentType, visibility, expiresInSeconds),
+  verifyPresignedToken: (token, key) => memoryStorage.verifyPresignedToken(token, key),
+  consumePresignedToken: (token) => memoryStorage.consumePresignedToken(token),
   clear: () => memoryStorage.clear(),
 };

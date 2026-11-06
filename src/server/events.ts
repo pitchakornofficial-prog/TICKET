@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { Pool } from 'pg';
-import { hashPassword } from 'better-auth/crypto';
+import { hashPassword, verifyPassword } from 'better-auth/crypto';
 import { inTransaction } from './database.ts';
 import { ensureFeeSchema } from './fees.ts';
 import { ensureReservationSchema } from './reservation.ts';
@@ -738,6 +738,26 @@ export async function addScannerToEvent(
         if (existing.role !== 'scanner') {
           throw new Error('อีเมลนี้เป็นของผู้ใช้บทบาทอื่น ไม่สามารถเพิ่มเป็นทีมสแกนได้');
         }
+
+        // Security check: verify password for existing scanner to prevent unauthorized account hijacking
+        if (!data.password) {
+          throw new Error('บัญชีทีมสแกนนี้มีอยู่ในระบบแล้ว กรุณาระบุรหัสผ่านที่ถูกต้องของบัญชีเพื่อยืนยันการเพิ่มเข้างาน');
+        }
+        const accRes = await client.query<{ password: string }>(
+          'SELECT password FROM auth_account WHERE "userId" = $1 AND "providerId" = $2',
+          [existing.id, 'credential'],
+        );
+        if (accRes.rowCount === 0 || !accRes.rows[0].password) {
+          throw new Error('ไม่พบข้อมูลรหัสผ่านสำหรับบัญชีเดิม');
+        }
+        const isMatch = await verifyPassword({
+          hash: accRes.rows[0].password,
+          password: data.password,
+        });
+        if (!isMatch) {
+          throw new Error('รหัสผ่านของบัญชีทีมสแกนเดิมไม่ถูกต้อง');
+        }
+
         targetScannerId = existing.id;
         targetName = existing.name;
       } else {

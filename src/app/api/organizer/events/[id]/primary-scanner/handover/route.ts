@@ -30,6 +30,22 @@ export async function GET(
   const pool = auth.options.database as Pool;
 
   try {
+    if (session.user.role === 'organizer') {
+      const evCheck = await pool.query<{ organizerId: string }>(
+        'SELECT "organizerId" FROM events WHERE id = $1',
+        [eventId],
+      );
+      if (evCheck.rowCount === 0) {
+        return Response.json({ message: 'ไม่พบคอนเสิร์ตที่ระบุ' }, { status: 404 });
+      }
+      if (evCheck.rows[0].organizerId !== session.user.id) {
+        return Response.json(
+          { message: 'Forbidden: คุณไม่มีสิทธิ์ดูความพร้อมการสลับเครื่องของคอนเสิร์ตนี้' },
+          { status: 403 },
+        );
+      }
+    }
+
     const readiness = await checkHandoverReadiness(pool, eventId, scannerId, oldPendingCount);
     return Response.json({ readiness }, { status: 200, headers: { 'Cache-Control': 'no-store' } });
   } catch (error: unknown) {
