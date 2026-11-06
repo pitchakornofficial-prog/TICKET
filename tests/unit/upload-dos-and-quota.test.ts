@@ -447,5 +447,89 @@ describe('Issue #10: Upload DoS Prevention, Quota & Presigned URL Direct Upload'
       const replayRes = await PUT(replayReq);
       expect(replayRes.status).toBe(403);
     });
+
+    it('prevents concurrent direct upload race conditions by consuming token before write (Security Item 18)', async () => {
+      const { PUT } = await import('../../src/app/api/media/direct-upload/route');
+
+      const presigned = await storage.createPresignedUploadUrl(
+        'posters/concurrent-race-test.png',
+        'image/png',
+        'public',
+        validPngBuffer.length,
+      );
+
+      const makeRequest = () =>
+        new Request(`http://localhost:3000${presigned.uploadUrl}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'image/png',
+            'Content-Length': String(validPngBuffer.length),
+          },
+          body: new Uint8Array(validPngBuffer),
+        });
+
+      // Fire concurrent requests simultaneously
+      const [res1, res2] = await Promise.all([PUT(makeRequest()), PUT(makeRequest())]);
+
+      const statuses = [res1.status, res2.status].sort();
+      // Exactly one request must succeed (200), and the other must be rejected (403)
+      expect(statuses).toEqual([200, 403]);
+    });
+
+    it('rejects direct upload when request Content-Type header does not match presigned token contentType (Security Item 18)', async () => {
+      const { PUT } = await import('../../src/app/api/media/direct-upload/route');
+
+      const presigned = await storage.createPresignedUploadUrl(
+        'posters/content-type-mismatch.png',
+        'image/png',
+        'public',
+        validPngBuffer.length,
+      );
+
+      // Client sends Content-Type: image/jpeg instead of image/png
+      const mismatchedReq = new Request(`http://localhost:3000${presigned.uploadUrl}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'image/jpeg',
+          'Content-Length': String(validPngBuffer.length),
+        },
+        body: new Uint8Array(validPngBuffer),
+      });
+
+      const res = await PUT(mismatchedReq);
+      expect(res.status).toBe(400);
+      const data = await res.json();
+      expect(data.message).toContain('ประเภทไฟล์ในส่วนหัวคำขอไม่ตรงกับที่ระบุในคำขออัปโหลด');
+    });
+
+    it('rejects direct upload when detected magic bytes do not match presigned token contentType (Security Item 18)', async () => {
+      const { PUT } = await import('../../src/app/api/media/direct-upload/route');
+
+      // Presigned for image/jpeg
+      const presigned = await storage.createPresignedUploadUrl(
+        'posters/magic-bytes-mismatch.jpg',
+        'image/jpeg',
+        'public',
+        validPngBuffer.length,
+      );
+
+      // Client sends image/jpeg header but the actual body is PNG bytes
+      const mismatchedReq = new Request(`http://localhost:3000${presigned.uploadUrl}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'image/jpeg',
+          'Content-Length': String(validPngBuffer.length),
+        },
+        body: new Uint8Array(validPngBuffer),
+      });
+
+      const res = await PUT(mismatchedReq);
+      expect(res.status).toBe(400);
+      const data = await res.json();
+      expect(
+        data.message.includes('เนื้อหาไฟล์จริงไม่ตรงกับประเภทที่ได้รับอนุญาต') ||
+          data.message.includes('นามสกุลไฟล์ไม่ตรงกับเนื้อหาจริง'),
+      ).toBe(true);
+    });
   });
 });
