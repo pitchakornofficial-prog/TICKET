@@ -41,7 +41,54 @@ export async function ensureInvitationSchema(pool: Pool): Promise<void> {
     ALTER TABLE organizer_invitations ADD COLUMN IF NOT EXISTS role TEXT NOT NULL DEFAULT 'organizer';
     CREATE INDEX IF NOT EXISTS idx_organizer_invitations_email ON organizer_invitations(email);
     CREATE INDEX IF NOT EXISTS idx_organizer_invitations_token ON organizer_invitations(token);
+
+    CREATE TABLE IF NOT EXISTS invitation_audit_logs (
+      id TEXT PRIMARY KEY,
+      "invitationId" TEXT NOT NULL,
+      "invitedEmail" TEXT NOT NULL,
+      "invitedRole" TEXT NOT NULL,
+      "issuedByUserId" TEXT NOT NULL,
+      "issuedByName" TEXT,
+      "issuedByEmail" TEXT,
+      "ipAddress" TEXT,
+      "createdAt" TIMESTAMPTZ NOT NULL DEFAULT now()
+    );
+    CREATE INDEX IF NOT EXISTS idx_invitation_audit_invitation ON invitation_audit_logs("invitationId");
+    CREATE INDEX IF NOT EXISTS idx_invitation_audit_issued_by ON invitation_audit_logs("issuedByUserId");
   `);
+}
+
+export async function recordInvitationAuditLog(
+  pool: Pool,
+  data: {
+    invitationId: string;
+    invitedEmail: string;
+    invitedRole: 'organizer' | 'owner';
+    issuedByUserId: string;
+    issuedByName?: string | null;
+    issuedByEmail?: string | null;
+    ipAddress?: string | null;
+    now?: Date;
+  },
+): Promise<void> {
+  await ensureInvitationSchema(pool);
+  const id = `AUDIT-${randomUUID()}`;
+  await pool.query(
+    `INSERT INTO invitation_audit_logs (
+      id, "invitationId", "invitedEmail", "invitedRole", "issuedByUserId", "issuedByName", "issuedByEmail", "ipAddress", "createdAt"
+    ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+    [
+      id,
+      data.invitationId,
+      data.invitedEmail,
+      data.invitedRole,
+      data.issuedByUserId,
+      data.issuedByName || null,
+      data.issuedByEmail || null,
+      data.ipAddress || null,
+      data.now || new Date(),
+    ],
+  );
 }
 
 export async function createOrganizerInvitation(

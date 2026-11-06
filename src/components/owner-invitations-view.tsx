@@ -25,6 +25,7 @@ export interface OrganizerInvitationItem {
 export function OwnerInvitationsView() {
   const [email, setEmail] = useState('');
   const [role, setRole] = useState<'organizer' | 'owner'>('organizer');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [status, setStatus] = useState<'idle' | 'submitting' | 'success' | 'error'>('idle');
   const [message, setMessage] = useState('');
   const [lastInviteUrl, setLastInviteUrl] = useState<string | null>(null);
@@ -66,7 +67,11 @@ export function OwnerInvitationsView() {
       const res = await fetch('/api/owner/invitations', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, role }),
+        body: JSON.stringify({
+          email,
+          role,
+          confirmPassword: role === 'owner' ? confirmPassword : undefined,
+        }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -86,6 +91,7 @@ export function OwnerInvitationsView() {
         setLastInviteUrl(null);
       }
       setEmail('');
+      setConfirmPassword('');
       loadInvitations();
     } catch {
       setStatus('error');
@@ -357,6 +363,40 @@ export function OwnerInvitationsView() {
               หากเคยส่งคำเชิญไปยังอีเมลนี้แล้ว การส่งครั้งใหม่จะยกเลิกลิงก์เดิมและออกลิงก์ใหม่ให้อัตโนมัติ
             </span>
           </div>
+
+          {/* Owner Re-Authentication Confirmation (Step-Up Authentication) */}
+          {role === 'owner' && (
+            <div className="form-group" style={{ marginBottom: '1.25rem' }}>
+              <label
+                htmlFor="owner-confirm-password"
+                style={{ display: 'block', fontWeight: 600, fontSize: '0.9rem', color: '#0f172a', marginBottom: '0.4rem' }}
+              >
+                รหัสผ่านปัจจุบันของคุณเพื่อยืนยันสิทธิ์ผู้ดูแลระบบ (Step-Up Authentication)
+              </label>
+              <div style={{ position: 'relative' }}>
+                <input
+                  id="owner-confirm-password"
+                  type="password"
+                  value={confirmPassword}
+                  onChange={e => setConfirmPassword(e.target.value)}
+                  placeholder="ระบุรหัสผ่านของคุณเพื่อยืนยันการเชิญผู้ดูแลระบบ"
+                  required
+                  disabled={status === 'submitting'}
+                  style={{
+                    width: '100%',
+                    padding: '0.75rem 1rem',
+                    borderRadius: '8px',
+                    border: '1px solid #cbd5e1',
+                    fontSize: '0.95rem',
+                    boxSizing: 'border-box',
+                  }}
+                />
+              </div>
+              <span style={{ display: 'block', fontSize: '0.8rem', color: '#b91c1c', marginTop: '0.35rem' }}>
+                การเชิญผู้ดูแลระบบ (Owner) จะได้รับสิทธิ์สูงสุดในระบบ จึงจำเป็นต้องยืนยันรหัสผ่านของท่านเพื่อความปลอดภัย
+              </span>
+            </div>
+          )}
 
           {/* Error Message */}
           {status === 'error' && (
