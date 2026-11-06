@@ -32,7 +32,7 @@ export async function POST(
       role,
       request.headers.get('cookie'),
       secret,
-      { eventId },
+      { eventId, scannerId: id },
     );
     if (!scopeCheck.allowed) {
       return Response.json({ message: scopeCheck.reason }, { status: 403 });

@@ -5,7 +5,13 @@ import { getDatabasePool } from '@/server/database';
 import { recordAdmissionScan } from '@/server/admission';
 
 export async function POST(req: Request) {
-  const actor = await readActor(getAuth(), await headers());
+  let requestHeaders: Headers;
+  try {
+    requestHeaders = await headers();
+  } catch {
+    requestHeaders = new Headers(req.headers);
+  }
+  const actor = await readActor(getAuth(), requestHeaders);
   if (!actor) {
     return NextResponse.json({ error: 'UNAUTHORIZED', message: 'กรุณาเข้าสู่ระบบ' }, { status: 401 });
   }
@@ -52,7 +58,7 @@ export async function POST(req: Request) {
       actor.role,
       req.headers.get('cookie'),
       secret,
-      { sessionId },
+      { sessionId, scannerId: actor.id },
     );
     if (!scopeCheck.allowed) {
       return NextResponse.json(

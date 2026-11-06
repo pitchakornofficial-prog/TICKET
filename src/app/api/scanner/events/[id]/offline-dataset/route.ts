@@ -26,7 +26,7 @@ export async function GET(
       session.user.role,
       request.headers.get('cookie'),
       secret,
-      { eventId },
+      { eventId, scannerId: session.user.id },
     );
     if (!scopeCheck.allowed) {
       return Response.json({ message: scopeCheck.reason }, { status: 403 });

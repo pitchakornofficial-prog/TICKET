@@ -88,7 +88,7 @@ export async function GET(req: Request) {
       actor.role,
       req.headers.get('cookie'),
       secret,
-      { sessionId, eventId },
+      { sessionId, eventId, scannerId: actor.id },
     );
     if (!scopeCheck.allowed) {
       return NextResponse.json(

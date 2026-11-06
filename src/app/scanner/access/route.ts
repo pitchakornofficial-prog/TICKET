@@ -79,16 +79,35 @@ export async function GET(request: Request) {
       shouldSetDeviceCookie = true;
     }
 
-    // Check device binding
+    // Check device binding atomically (D-104)
+    let isAuthorizedDevice = false;
+
     if (!scannerRow.boundDeviceId) {
-      // First access: bind this device
-      await pool.query(
+      // First access: attempt atomic binding only if still unbound
+      const bindRes = await pool.query(
         `UPDATE event_scanners
          SET "boundDeviceId" = $1, "boundAt" = now()
-         WHERE "eventId" = $2 AND "scannerId" = $3`,
+         WHERE "eventId" = $2 AND "scannerId" = $3 AND "boundDeviceId" IS NULL
+         RETURNING "boundDeviceId"`,
         [deviceId, eventId, scannerId],
       );
-    } else if (scannerRow.boundDeviceId !== deviceId) {
+
+      if ((bindRes.rowCount ?? 0) > 0) {
+        // Successfully bound this device
+        isAuthorizedDevice = true;
+      } else {
+        // Another concurrent request bound first: re-fetch current boundDeviceId
+        const recheckRes = await pool.query<{ boundDeviceId: string | null }>(
+          `SELECT "boundDeviceId" FROM event_scanners WHERE "eventId" = $1 AND "scannerId" = $2`,
+          [eventId, scannerId],
+        );
+        isAuthorizedDevice = recheckRes.rows[0]?.boundDeviceId === deviceId;
+      }
+    } else {
+      isAuthorizedDevice = scannerRow.boundDeviceId === deviceId;
+    }
+
+    if (!isAuthorizedDevice) {
       // Different device attempted: Reject!
       const rejectedUrl = new URL(
         `/scanner/access-rejected?scannerName=${encodeURIComponent(scannerRow.name)}&eventId=${eventId}`,
