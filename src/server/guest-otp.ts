@@ -147,7 +147,7 @@ export async function requestGuestOtp(
 
     // 1. Global Email-level rate limit & cooldown checks (Issue #6: anti-purpose switching bypass)
     const globalTrackRes = await client.query(
-      'SELECT "requestCount", "lastRequestAt" FROM guest_otp_tracking WHERE key = $1',
+      'SELECT "requestCount", "lastRequestAt" FROM guest_otp_tracking WHERE key = $1 FOR UPDATE',
       [globalTrackKey],
     );
 
@@ -186,7 +186,7 @@ export async function requestGuestOtp(
     }
 
     const trackRes = await client.query(
-      'SELECT "requestCount", "lastRequestAt", "failCount", "lastFailAt", "blockedUntil" FROM guest_otp_tracking WHERE key = $1',
+      'SELECT "requestCount", "lastRequestAt", "failCount", "lastFailAt", "blockedUntil" FROM guest_otp_tracking WHERE key = $1 FOR UPDATE',
       [trackKey],
     );
 
@@ -379,10 +379,23 @@ export async function verifyGuestOtp(
 
   return inTransaction(pool, async client => {
     const trackKey = `${email}:${purpose}`;
-    const trackRes = await client.query(
-      'SELECT "failCount", "lastFailAt", "blockedUntil" FROM guest_otp_tracking WHERE key = $1',
+    let trackRes = await client.query(
+      'SELECT "failCount", "lastFailAt", "blockedUntil" FROM guest_otp_tracking WHERE key = $1 FOR UPDATE',
       [trackKey],
     );
+
+    if (!trackRes.rowCount || trackRes.rowCount === 0) {
+      await client.query(
+        `INSERT INTO guest_otp_tracking (key, "requestCount", "lastRequestAt", "failCount", "lastFailAt", "blockedUntil")
+         VALUES ($1, 0, $2, 0, NULL, NULL)
+         ON CONFLICT (key) DO NOTHING`,
+        [trackKey, now],
+      );
+      trackRes = await client.query(
+        'SELECT "failCount", "lastFailAt", "blockedUntil" FROM guest_otp_tracking WHERE key = $1 FOR UPDATE',
+        [trackKey],
+      );
+    }
 
     let failCount = 0;
     let lastFailAt: Date | null = null;
@@ -411,10 +424,10 @@ export async function verifyGuestOtp(
       }
     }
 
-    // Look up OTP record by requestId, email, and purpose (AC-57: scope bound)
+    // Look up OTP record by requestId, email, and purpose with row lock (AC-57: scope bound & serialized)
     const otpRes = await client.query(
       `SELECT id, code, "expiresAt", "consumedAt" FROM guest_otp
-       WHERE "requestId" = $1 AND email = $2 AND purpose = $3`,
+       WHERE "requestId" = $1 AND email = $2 AND purpose = $3 FOR UPDATE`,
       [requestId, email, purpose],
     );
 
@@ -469,8 +482,15 @@ export async function verifyGuestOtp(
       };
     }
 
-    // AC-57: Mark OTP as consumed (one-time use)
-    await client.query(`UPDATE guest_otp SET "consumedAt" = $1 WHERE id = $2`, [now, otpRow.id]);
+    // AC-57: Mark OTP as consumed (one-time use) atomically
+    const consumeRes = await client.query(
+      `UPDATE guest_otp SET "consumedAt" = $1 WHERE id = $2 AND "consumedAt" IS NULL`,
+      [now, otpRow.id],
+    );
+
+    if (consumeRes.rowCount === 0) {
+      return { success: false, error: 'รหัส OTP นี้ถูกใช้งานไปแล้ว', code: 'REPLAY' };
+    }
 
     // Reset fail count on successful verification
     await client.query(
