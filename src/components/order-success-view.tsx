@@ -393,30 +393,33 @@ export function OrderSuccessView({ orderId }: OrderSuccessViewProps) {
                     * ระบบได้ส่งอีเมลยืนยันคำสั่งซื้อไปยัง <strong>{reservation.buyerEmail}</strong> เรียบร้อยแล้ว (AC-19)
                   </p>
 
-                  <div className="dev-mail-preview-wrap" style={{ marginTop: '0.85rem' }}>
-                    <button
-                      id="dev-mail-preview-btn"
-                      type="button"
-                      onClick={handleOpenDevEmailModal}
-                      className="button button-secondary dev-mail-btn"
-                      style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: '0.45rem',
-                        padding: '0.45rem 0.9rem',
-                        borderRadius: '8px',
-                        fontSize: '0.82rem',
-                        fontWeight: 600,
-                        cursor: 'pointer',
-                        border: '1px dashed #94a3b8',
-                        background: '#f8fafc',
-                        color: '#0f172a',
-                      }}
-                    >
-                      <MailIcon style={{ width: '15px', height: '15px' }} />
-                      <span>เปิดดูอีเมลตั๋วที่ระบบส่งออก (Dev Preview)</span>
-                    </button>
-                  </div>
+                  {process.env.NODE_ENV !== 'production' &&
+                    process.env.NEXT_PUBLIC_ENABLE_DEV_MAIL_PREVIEW === 'true' && (
+                      <div className="dev-mail-preview-wrap" style={{ marginTop: '0.85rem' }}>
+                        <button
+                          id="dev-mail-preview-btn"
+                          type="button"
+                          onClick={handleOpenDevEmailModal}
+                          className="button button-secondary dev-mail-btn"
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '0.45rem',
+                            padding: '0.45rem 0.9rem',
+                            borderRadius: '8px',
+                            fontSize: '0.82rem',
+                            fontWeight: 600,
+                            cursor: 'pointer',
+                            border: '1px dashed #94a3b8',
+                            background: '#f8fafc',
+                            color: '#0f172a',
+                          }}
+                        >
+                          <MailIcon style={{ width: '15px', height: '15px' }} />
+                          <span>เปิดดูอีเมลตั๋วที่ระบบส่งออก (Dev Preview)</span>
+                        </button>
+                      </div>
+                    )}
                 </div>
               </div>
             </div>

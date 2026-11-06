@@ -49,4 +49,8 @@ describe('production configuration gate', () => {
     const errors = productionConfigErrors({ ...valid, ENABLE_PAY_TEST: 'true' });
     expect(errors.join('\n')).toContain('ENABLE_PAY_TEST must not be true in production');
   });
+  it('rejects ENABLE_DEV_MAIL_PREVIEW=true in production environment', () => {
+    const errors = productionConfigErrors({ ...valid, ENABLE_DEV_MAIL_PREVIEW: 'true' });
+    expect(errors.join('\n')).toContain('ENABLE_DEV_MAIL_PREVIEW must not be true in production');
+  });
 });

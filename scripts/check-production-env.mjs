@@ -31,6 +31,7 @@ export function productionConfigErrors(env) {
   if (!env.STRIPE_PUBLISHABLE_KEY?.startsWith(`pk_${stripeMode}_`)) errors.push(`STRIPE_PUBLISHABLE_KEY must be ${staging ? 'Test' : 'Live'} mode`);
   if (staging && env.STRIPE_LIVE_MODE === 'true') errors.push('STRIPE_LIVE_MODE must not be true in staging');
   if (!staging && env.ENABLE_PAY_TEST === 'true') errors.push('ENABLE_PAY_TEST must not be true in production');
+  if (!staging && env.ENABLE_DEV_MAIL_PREVIEW === 'true') errors.push('ENABLE_DEV_MAIL_PREVIEW must not be true in production');
   if (!env.STRIPE_WEBHOOK_SECRET?.startsWith('whsec_') || env.STRIPE_WEBHOOK_SECRET === 'whsec_test_secret') errors.push('STRIPE_WEBHOOK_SECRET must be the production endpoint signing secret');
   try {
     const url = new URL(env.R2_ENDPOINT || `https://${env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`);
