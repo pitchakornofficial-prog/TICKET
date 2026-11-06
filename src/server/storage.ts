@@ -16,6 +16,7 @@ export interface PresignedUploadResult {
   publicUrl: string;
   method: 'PUT';
   headers: Record<string, string>;
+  maxFileSizeBytes: number;
   expiresInSeconds: number;
 }
 
@@ -32,6 +33,7 @@ export interface StorageDriver {
     key: string,
     contentType: string,
     visibility?: 'public' | 'private',
+    maxFileSizeBytes?: number,
     expiresInSeconds?: number,
   ): Promise<PresignedUploadResult>;
 }
@@ -47,6 +49,7 @@ export class MemoryStorageDouble implements StorageDriver {
       key: string;
       contentType: string;
       visibility: 'public' | 'private';
+      maxFileSizeBytes: number;
       expiresAt: number;
     }
   >();
@@ -78,6 +81,7 @@ export class MemoryStorageDouble implements StorageDriver {
     key: string,
     contentType: string,
     visibility: 'public' | 'private' = 'public',
+    maxFileSizeBytes = 15 * 1024 * 1024,
     expiresInSeconds = 900,
   ): Promise<PresignedUploadResult> {
     const token = randomUUID();
@@ -85,6 +89,7 @@ export class MemoryStorageDouble implements StorageDriver {
       key,
       contentType,
       visibility,
+      maxFileSizeBytes,
       expiresAt: Date.now() + expiresInSeconds * 1000,
     });
     const uploadUrl = `/api/media/direct-upload?key=${encodeURIComponent(key)}&token=${token}`;
@@ -95,9 +100,11 @@ export class MemoryStorageDouble implements StorageDriver {
       publicUrl,
       method: 'PUT',
       headers: {
-        'content-type': contentType,
+        'Content-Type': contentType,
+        'Content-Length': String(maxFileSizeBytes),
         'x-amz-meta-visibility': visibility,
       },
+      maxFileSizeBytes,
       expiresInSeconds,
     };
   }
@@ -105,7 +112,12 @@ export class MemoryStorageDouble implements StorageDriver {
   verifyPresignedToken(
     token: string,
     key: string,
-  ): { valid: boolean; contentType?: string; visibility?: 'public' | 'private' } {
+  ): {
+    valid: boolean;
+    contentType?: string;
+    visibility?: 'public' | 'private';
+    maxFileSizeBytes?: number;
+  } {
     const entry = this.presignedTokens.get(token);
     if (!entry) return { valid: false };
     if (entry.expiresAt < Date.now()) {
@@ -113,7 +125,12 @@ export class MemoryStorageDouble implements StorageDriver {
       return { valid: false };
     }
     if (entry.key !== key) return { valid: false };
-    return { valid: true, contentType: entry.contentType, visibility: entry.visibility };
+    return {
+      valid: true,
+      contentType: entry.contentType,
+      visibility: entry.visibility,
+      maxFileSizeBytes: entry.maxFileSizeBytes,
+    };
   }
 
   consumePresignedToken(token: string): void {
@@ -150,15 +167,26 @@ export const storage: StorageDriver & {
   verifyPresignedToken?(
     token: string,
     key: string,
-  ): { valid: boolean; contentType?: string; visibility?: 'public' | 'private' };
+  ): {
+    valid: boolean;
+    contentType?: string;
+    visibility?: 'public' | 'private';
+    maxFileSizeBytes?: number;
+  };
   consumePresignedToken?(token: string): void;
 } = {
   put: (key, data, contentType, visibility) =>
     resolveDriver().put(key, data, contentType, visibility),
   get: (key) => resolveDriver().get(key),
   delete: (key) => resolveDriver().delete(key),
-  createPresignedUploadUrl: (key, contentType, visibility, expiresInSeconds) =>
-    resolveDriver().createPresignedUploadUrl(key, contentType, visibility, expiresInSeconds),
+  createPresignedUploadUrl: (key, contentType, visibility, maxFileSizeBytes, expiresInSeconds) =>
+    resolveDriver().createPresignedUploadUrl(
+      key,
+      contentType,
+      visibility,
+      maxFileSizeBytes,
+      expiresInSeconds,
+    ),
   verifyPresignedToken: (token, key) => memoryStorage.verifyPresignedToken(token, key),
   consumePresignedToken: (token) => memoryStorage.consumePresignedToken(token),
   clear: () => memoryStorage.clear(),

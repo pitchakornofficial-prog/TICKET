@@ -1,11 +1,14 @@
 import { randomUUID } from 'node:crypto';
+import type { Pool } from 'pg';
 import { getAuth } from '@/server/auth';
 import { validateUploadedFile } from '@/server/file-validator';
 import { storage } from '@/server/storage';
 import {
   MAX_FILE_SIZE,
-  checkUploadQuota,
-  recordUploadUsage,
+  MAX_REQUEST_BODY_SIZE,
+  checkAndReserveUploadQuota,
+  readBoundedFormData,
+  releaseUploadQuota,
   validateUploadContentLength,
 } from '@/server/upload-quota';
 
@@ -14,6 +17,7 @@ export const runtime = 'nodejs';
 export async function handlePresignedRequest(
   user: { id: string; role: string },
   body: unknown,
+  pool?: Pool,
 ): Promise<Response> {
   if (!body || typeof body !== 'object') {
     return Response.json({ message: 'ข้อมูลคำขอไม่ถูกต้อง' }, { status: 400 });
@@ -68,7 +72,8 @@ export async function handlePresignedRequest(
     return Response.json({ message: 'ขนาดไฟล์เกินขีดจำกัด (สูงสุด 15MB)' }, { status: 400 });
   }
 
-  const quota = checkUploadQuota(user.id, size);
+  // Atomic quota reservation in shared store
+  const quota = await checkAndReserveUploadQuota(pool, user.id, size);
   if (!quota.allowed) {
     return Response.json(
       { message: quota.reason },
@@ -84,8 +89,13 @@ export async function handlePresignedRequest(
   const prefix = visibility === 'private' ? 'proofs' : 'posters';
   const key = `${prefix}/${randomUUID()}.${ext}`;
 
-  const presigned = await storage.createPresignedUploadUrl(key, normalizedContentType, visibility);
-  recordUploadUsage(user.id, size);
+  // Bound the presigned upload URL strictly to the reserved size
+  const presigned = await storage.createPresignedUploadUrl(
+    key,
+    normalizedContentType,
+    visibility,
+    size,
+  );
 
   return Response.json(
     {
@@ -103,6 +113,13 @@ export async function POST(request: Request) {
     return Response.json({ message: 'ไม่อนุญาต' }, { status: 403 });
   }
 
+  let pool: Pool | undefined;
+  try {
+    pool = (auth.options as { database?: Pool }).database;
+  } catch {
+    //
+  }
+
   // 1. Early request size check via Content-Length header (DoS / OOM Prevention)
   const contentLength = request.headers.get('content-length');
   const lengthCheck = validateUploadContentLength(contentLength);
@@ -110,49 +127,47 @@ export async function POST(request: Request) {
     return Response.json({ message: lengthCheck.error }, { status: lengthCheck.status ?? 400 });
   }
 
-  // 2. Account rate limit / upload quota check before reading body
-  const quotaCheck = checkUploadQuota(session.user.id);
-  if (!quotaCheck.allowed) {
-    return Response.json(
-      { message: quotaCheck.reason },
-      {
-        status: 429,
-        headers: quotaCheck.retryAfterSeconds
-          ? { 'Retry-After': String(quotaCheck.retryAfterSeconds) }
-          : undefined,
-      },
-    );
-  }
-
-  // 3. Check for Presigned URL request mode (JSON payload)
+  // 2. Check for Presigned URL request mode (JSON payload)
   const contentTypeHeader = request.headers.get('content-type') || '';
   if (contentTypeHeader.includes('application/json')) {
     const body = await request.json().catch(() => null);
-    return handlePresignedRequest(session.user, body);
+    return handlePresignedRequest(session.user, body, pool);
   }
 
-  // 4. Multipart form data parsing
-  const formData = await request.formData();
-  const file = formData.get('file');
+  // 3. Read body stream with a hard byte ceiling (stops infinite/chunked memory exhaustion)
+  let formData: FormData;
+  try {
+    formData = await readBoundedFormData(request, MAX_REQUEST_BODY_SIZE);
+  } catch (err) {
+    const errorMsg = (err as Error)?.message;
+    if (errorMsg === 'PAYLOAD_TOO_LARGE') {
+      return Response.json(
+        { message: 'ขนาดคำขอเกินขีดจำกัดสูงสุด (Payload Too Large: สูงสุด 16MB)' },
+        { status: 413 },
+      );
+    }
+    return Response.json({ message: 'เกิดข้อผิดพลาดในการอ่านข้อมูลคำขอ' }, { status: 400 });
+  }
 
+  const file = formData.get('file');
   if (!file || !(file instanceof Blob)) {
     return Response.json({ message: 'ไม่พบไฟล์' }, { status: 400 });
   }
 
-  // Blob size pre-check
+  // Pre-check Blob size against single-file limit
   if (file.size > MAX_FILE_SIZE) {
     return Response.json({ message: 'ขนาดไฟล์เกินขีดจำกัด (สูงสุด 15MB)' }, { status: 400 });
   }
 
-  // Account quota check with file size
-  const sizeQuotaCheck = checkUploadQuota(session.user.id, file.size);
-  if (!sizeQuotaCheck.allowed) {
+  // 4. Atomically check and reserve upload quota in shared store
+  const quota = await checkAndReserveUploadQuota(pool, session.user.id, file.size);
+  if (!quota.allowed) {
     return Response.json(
-      { message: sizeQuotaCheck.reason },
+      { message: quota.reason },
       {
         status: 429,
-        headers: sizeQuotaCheck.retryAfterSeconds
-          ? { 'Retry-After': String(sizeQuotaCheck.retryAfterSeconds) }
+        headers: quota.retryAfterSeconds
+          ? { 'Retry-After': String(quota.retryAfterSeconds) }
           : undefined,
       },
     );
@@ -163,6 +178,7 @@ export async function POST(request: Request) {
 
   // Only owner can upload private proof documents
   if (visibility === 'private' && session.user.role !== 'owner') {
+    await releaseUploadQuota(pool, quota.reservationId);
     return Response.json(
       { message: 'เฉพาะผู้ดูแลระบบ (Owner) เท่านั้นที่สามารถอัปโหลดไฟล์หลักฐานส่วนตัวได้ (AC-92)' },
       { status: 403 },
@@ -175,6 +191,7 @@ export async function POST(request: Request) {
 
   const validation = validateUploadedFile(buffer, claimedContentType, originalFilename, visibility);
   if (!validation.valid) {
+    await releaseUploadQuota(pool, quota.reservationId);
     return Response.json({ message: validation.error }, { status: 400 });
   }
 
@@ -184,9 +201,6 @@ export async function POST(request: Request) {
   const key = `${prefix}/${randomUUID()}.${finalExt}`;
 
   const { url } = await storage.put(key, buffer, finalContentType, visibility);
-
-  // Record upload usage against quota
-  recordUploadUsage(session.user.id, buffer.length);
 
   return Response.json({ url, key }, { status: 201 });
 }

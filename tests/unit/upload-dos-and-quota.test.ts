@@ -6,8 +6,7 @@ import { storage } from '../../src/server/storage';
 import {
   MAX_REQUEST_BODY_SIZE,
   MAX_UPLOADS_PER_WINDOW,
-  checkUploadQuota,
-  recordUploadUsage,
+  checkAndReserveUploadQuota,
   resetUploadUsage,
   validateUploadContentLength,
 } from '../../src/server/upload-quota';
@@ -31,6 +30,9 @@ vi.mock('@/server/auth', () => ({
           role: currentRole,
         },
       }),
+    },
+    options: {
+      secret: 'test-secret-at-least-32-chars-long-xxx',
     },
   }),
   readActor: async () => ({
@@ -64,14 +66,14 @@ describe('Issue #10: Upload DoS Prevention, Quota & Presigned URL Direct Upload'
     });
   }
 
-  beforeEach(() => {
+  beforeEach(async () => {
     currentRole = 'organizer';
     currentUserId = 'user-org-1';
-    resetUploadUsage();
+    await resetUploadUsage();
     storage.clear();
   });
 
-  describe('1. Early Request Size Pre-check (Content-Length Validation)', () => {
+  describe('1. Early Request Size Pre-check (Content-Length Validation) & Bounded Stream Reading', () => {
     it('validates Content-Length header correctly', () => {
       expect(validateUploadContentLength(null).valid).toBe(true);
       expect(validateUploadContentLength('1024').valid).toBe(true);
@@ -113,18 +115,34 @@ describe('Issue #10: Upload DoS Prevention, Quota & Presigned URL Direct Upload'
       const body = await res.json();
       expect(body.message).toContain('Content-Length ไม่ถูกต้อง');
     });
+
+    it('aborts body stream reading with 413 Payload Too Large when payload bytes exceed 16MB', async () => {
+      // Simulate a request without Content-Length header whose stream sends 17MB
+      const largeBuffer = Buffer.alloc(17 * 1024 * 1024);
+      const req = new Request('http://localhost:3000/api/upload', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/octet-stream',
+        },
+        body: largeBuffer,
+      });
+
+      const res = await uploadPost(req);
+      expect(res.status).toBe(413);
+      const body = await res.json();
+      expect(body.message).toContain('Payload Too Large');
+    });
   });
 
-  describe('2. Account Upload Quota & Rate Limiting', () => {
+  describe('2. Account Upload Quota & Atomic Reservation', () => {
     it('enforces maximum 20 uploads per 10-minute sliding window', async () => {
       for (let i = 0; i < MAX_UPLOADS_PER_WINDOW; i++) {
-        const quota = checkUploadQuota(currentUserId, 1024);
+        const quota = await checkAndReserveUploadQuota(null, currentUserId, 1024);
         expect(quota.allowed).toBe(true);
-        recordUploadUsage(currentUserId, 1024);
       }
 
       // 21st upload attempt should be blocked
-      const quota = checkUploadQuota(currentUserId, 1024);
+      const quota = await checkAndReserveUploadQuota(null, currentUserId, 1024);
       expect(quota.allowed).toBe(false);
       expect(quota.reason).toContain('สูงสุด 20 ไฟล์ต่อ 10 นาที');
       expect(quota.retryAfterSeconds).toBeGreaterThan(0);
@@ -138,30 +156,52 @@ describe('Issue #10: Upload DoS Prevention, Quota & Presigned URL Direct Upload'
       expect(res.headers.get('Retry-After')).toBeDefined();
     });
 
-    it('enforces 50MB cumulative size quota per 10-minute sliding window', async () => {
-      // Simulate 45MB uploaded
-      recordUploadUsage(currentUserId, 45 * 1024 * 1024);
+    it('guarantees atomic quota reservation under concurrent requests (rejects 21st concurrent call)', async () => {
+      // Launch 25 concurrent quota reservation requests
+      const testUser = 'user-race-test';
+      const results = await Promise.all(
+        Array.from({ length: 25 }, () => checkAndReserveUploadQuota(null, testUser, 1024)),
+      );
 
-      // Uploading 10MB more exceeds 50MB window ceiling
-      const quota = checkUploadQuota(currentUserId, 10 * 1024 * 1024);
+      const successCount = results.filter((r) => r.allowed).length;
+      const failureCount = results.filter((r) => !r.allowed).length;
+
+      // Exactly 20 must pass, exactly 5 must be rejected with no race window
+      expect(successCount).toBe(20);
+      expect(failureCount).toBe(5);
+    });
+
+    it('enforces 50MB cumulative size quota per 10-minute sliding window', async () => {
+      // Reserve 4 x 12MB = 48MB (each file <= 15MB MAX_FILE_SIZE)
+      for (let i = 0; i < 4; i++) {
+        const res = await checkAndReserveUploadQuota(null, currentUserId, 12 * 1024 * 1024);
+        expect(res.allowed).toBe(true);
+      }
+
+      // Uploading 5MB more (48MB + 5MB = 53MB) exceeds 50MB window ceiling
+      const quota = await checkAndReserveUploadQuota(null, currentUserId, 5 * 1024 * 1024);
       expect(quota.allowed).toBe(false);
       expect(quota.reason).toContain('สูงสุด 50MB ต่อ 10 นาที');
 
-      // Uploading 2MB is within quota
-      const withinQuota = checkUploadQuota(currentUserId, 2 * 1024 * 1024);
+      // Uploading 1MB is within quota (48MB + 1MB = 49MB <= 50MB)
+      const withinQuota = await checkAndReserveUploadQuota(
+        null,
+        currentUserId,
+        1 * 1024 * 1024,
+      );
       expect(withinQuota.allowed).toBe(true);
     });
 
-    it('isolates upload quotas between different accounts', () => {
+    it('isolates upload quotas between different accounts', async () => {
       for (let i = 0; i < MAX_UPLOADS_PER_WINDOW; i++) {
-        recordUploadUsage('user-A', 1024);
+        await checkAndReserveUploadQuota(null, 'user-A', 1024);
       }
-      expect(checkUploadQuota('user-A', 1024).allowed).toBe(false);
-      expect(checkUploadQuota('user-B', 1024).allowed).toBe(true);
+      expect((await checkAndReserveUploadQuota(null, 'user-A', 1024)).allowed).toBe(false);
+      expect((await checkAndReserveUploadQuota(null, 'user-B', 1024)).allowed).toBe(true);
     });
   });
 
-  describe('3. Direct Upload with Presigned URL', () => {
+  describe('3. Direct Upload with Presigned URL & Size Enforcement', () => {
     it('creates presigned upload URL via POST /api/upload/presigned for organizer', async () => {
       const req = new Request('http://localhost:3000/api/upload/presigned', {
         method: 'POST',
@@ -180,7 +220,8 @@ describe('Issue #10: Upload DoS Prevention, Quota & Presigned URL Direct Upload'
       expect(body.uploadUrl).toBeDefined();
       expect(body.key).toMatch(/^posters\/.*\.webp$/);
       expect(body.method).toBe('PUT');
-      expect(body.headers['content-type']).toBe('image/webp');
+      expect(body.headers['Content-Type']).toBe('image/webp');
+      expect(body.headers['Content-Length']).toBe(String(2 * 1024 * 1024));
       expect(body.headers['x-amz-meta-visibility']).toBe('public');
     });
 
@@ -265,7 +306,7 @@ describe('Issue #10: Upload DoS Prevention, Quota & Presigned URL Direct Upload'
       expect(svgRes.status).toBe(400);
     });
 
-    it('generates AWS SigV4 query authentication for Cloudflare R2 driver', async () => {
+    it('binds Content-Length in AWS SigV4 signed headers for Cloudflare R2 driver', async () => {
       const r2Driver = new R2StorageDriver({
         accessKeyId: 'test-r2-key',
         secretAccessKey: 'test-r2-secret-32-chars-long-xxx',
@@ -277,16 +318,49 @@ describe('Issue #10: Upload DoS Prevention, Quota & Presigned URL Direct Upload'
         'posters/event-123.jpg',
         'image/jpeg',
         'public',
+        2048,
         600,
       );
 
-      expect(presigned.uploadUrl).toContain('https://test-account.r2.cloudflarestorage.com/ticket-assets/posters/event-123.jpg?');
+      expect(presigned.uploadUrl).toContain(
+        'https://test-account.r2.cloudflarestorage.com/ticket-assets/posters/event-123.jpg?',
+      );
       expect(presigned.uploadUrl).toContain('X-Amz-Algorithm=AWS4-HMAC-SHA256');
       expect(presigned.uploadUrl).toContain('X-Amz-Credential=test-r2-key%2F');
       expect(presigned.uploadUrl).toContain('X-Amz-Signature=');
       expect(presigned.uploadUrl).toContain('X-Amz-Expires=600');
+      // Must sign content-length to bind upload size
+      expect(presigned.uploadUrl).toContain('content-length');
       expect(presigned.method).toBe('PUT');
-      expect(presigned.headers['content-type']).toBe('image/jpeg');
+      expect(presigned.headers['Content-Type']).toBe('image/jpeg');
+      expect(presigned.headers['Content-Length']).toBe('2048');
+    });
+
+    it('enforces maximum size bound on direct upload and rejects oversized payloads with 413', async () => {
+      const { PUT } = await import('../../src/app/api/media/direct-upload/route');
+
+      // Request presigned URL with max 10 bytes allowed
+      const presigned = await storage.createPresignedUploadUrl(
+        'posters/direct-upload-size-test.png',
+        'image/png',
+        'public',
+        10, // max 10 bytes
+      );
+
+      // Upload valid PNG which is 16 bytes (> 10 bytes) -> Must be rejected with 413!
+      const oversizedReq = new Request(`http://localhost:3000${presigned.uploadUrl}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'image/png',
+          'Content-Length': String(validPngBuffer.length),
+        },
+        body: new Uint8Array(validPngBuffer),
+      });
+
+      const rejectRes = await PUT(oversizedReq);
+      expect(rejectRes.status).toBe(413);
+      const rejectBody = await rejectRes.json();
+      expect(rejectBody.message).toContain('Payload Too Large');
     });
 
     it('executes direct upload via presigned token and verifies content in storage', async () => {
@@ -294,6 +368,7 @@ describe('Issue #10: Upload DoS Prevention, Quota & Presigned URL Direct Upload'
         'posters/direct-upload-test.png',
         'image/png',
         'public',
+        validPngBuffer.length,
       );
 
       // Upload directly using presigned upload URL
@@ -302,6 +377,7 @@ describe('Issue #10: Upload DoS Prevention, Quota & Presigned URL Direct Upload'
         method: 'PUT',
         headers: {
           'Content-Type': 'image/png',
+          'Content-Length': String(validPngBuffer.length),
         },
         body: new Uint8Array(validPngBuffer),
       });
