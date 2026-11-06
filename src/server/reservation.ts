@@ -401,7 +401,7 @@ export async function createReservation(
     }
 
     // 8. Create Order with 15-minute deadline (AC-13)
-    const orderId = `ORD-${Date.now().toString(36).toUpperCase()}-${randomUUID().slice(0, 6).toUpperCase()}`;
+    const orderId = `ORD-${randomUUID().toUpperCase()}`;
     const expiresAt = new Date(now.getTime() + RESERVATION_HOLD_SECONDS * 1000);
 
     await client.query(

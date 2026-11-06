@@ -94,7 +94,13 @@ export function OrderSuccessView({ orderId }: OrderSuccessViewProps) {
     }
 
     setIsLoading(true);
-    fetch(`/api/public/checkout/orders/${orderId}`)
+    const guestToken =
+      typeof window !== 'undefined'
+        ? sessionStorage.getItem('ticket_guest_otp_token') || ''
+        : '';
+    fetch(`/api/public/checkout/orders/${orderId}`, {
+      headers: guestToken ? { 'x-guest-token': guestToken } : {},
+    })
       .then(async res => {
         if (!res.ok) throw new Error('ไม่พบข้อมูลคำสั่งซื้อ');
         return res.json();
@@ -103,7 +109,9 @@ export function OrderSuccessView({ orderId }: OrderSuccessViewProps) {
         if (data?.reservation) {
           setReservation(data.reservation);
         }
-        return fetch(`/api/public/checkout/orders/${orderId}/tickets`);
+        return fetch(`/api/public/checkout/orders/${orderId}/tickets`, {
+          headers: guestToken ? { 'x-guest-token': guestToken } : {},
+        });
       })
       .then(async res => {
         if (res.ok) {

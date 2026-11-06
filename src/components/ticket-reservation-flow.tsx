@@ -61,13 +61,18 @@ export function TicketReservationFlow({
     if (typeof window === 'undefined') return;
     const savedOrderId = sessionStorage.getItem(`ticket_active_order_${eventId}`);
     if (!savedOrderId) return;
+    const guestToken = sessionStorage.getItem('ticket_guest_otp_token') || '';
 
-    fetch(`/api/public/checkout/orders/${savedOrderId}`)
+    fetch(`/api/public/checkout/orders/${savedOrderId}`, {
+      headers: guestToken ? { 'x-guest-token': guestToken } : {},
+    })
       .then(res => (res.ok ? res.json() : null))
       .then(data => {
         if (data?.reservation) {
           setReservation(data.reservation);
-          fetch(`/api/public/checkout/orders/${savedOrderId}/payment-qr`)
+          fetch(`/api/public/checkout/orders/${savedOrderId}/payment-qr`, {
+            headers: guestToken ? { 'x-guest-token': guestToken } : {},
+          })
             .then(qrRes => (qrRes.ok ? qrRes.json() : null))
             .then(qrData => {
               if (qrData?.charge) {
@@ -83,7 +88,14 @@ export function TicketReservationFlow({
   // Fetch issued tickets when order is paid (AC-17, AC-19)
   useEffect(() => {
     if (!reservation?.id || reservation.status !== 'paid') return;
-    fetch(`/api/public/checkout/orders/${reservation.id}/tickets`)
+    const guestToken =
+      buyer?.token ||
+      (typeof window !== 'undefined'
+        ? sessionStorage.getItem('ticket_guest_otp_token') || ''
+        : '');
+    fetch(`/api/public/checkout/orders/${reservation.id}/tickets`, {
+      headers: guestToken ? { 'x-guest-token': guestToken } : {},
+    })
       .then(res => (res.ok ? res.json() : null))
       .then(data => {
         if (data?.tickets) {
@@ -91,7 +103,7 @@ export function TicketReservationFlow({
         }
       })
       .catch(() => {});
-  }, [reservation?.id, reservation?.status]);
+  }, [reservation?.id, reservation?.status, buyer?.token]);
 
   useEffect(() => {
     if (!reservation?.expiresAt) return;

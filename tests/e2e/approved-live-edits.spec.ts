@@ -98,6 +98,7 @@ test.describe('Approved live session edits & quota protection (TASK-024, AC-67, 
       buyer: { name: 'ผู้ซื้อท่านที่สอง', email: buyer2Email, phone: '0822222222' },
       tickets: [{ name: 'บัตร Regular Standard', quantity: 1 }],
     });
+    const buyer2Token = await buyerPage.evaluate(() => sessionStorage.getItem('ticket_guest_otp_token'));
 
     // 5. Organizer submits amendment via UI on admin page
     await page.goto('/login');
@@ -176,7 +177,9 @@ test.describe('Approved live session edits & quota protection (TASK-024, AC-67, 
     await expect(buyerPage.getByText('฿1,800.00').first()).toBeVisible();
 
     // 9. Buyer 2's pre-existing active reservation retains original 1,000 THB quote throughout 15-minute hold (AC-68)
-    const orderCheckRes = await request.get(`/api/public/checkout/orders/${buyer2OrderId}`);
+    const orderCheckRes = await request.get(`/api/public/checkout/orders/${buyer2OrderId}`, {
+      headers: buyer2Token ? { 'x-guest-token': buyer2Token } : {},
+    });
     expect(orderCheckRes.status()).toBe(200);
     const orderData = await orderCheckRes.json();
     expect(Number(orderData.reservation.total)).toBe(1000);
