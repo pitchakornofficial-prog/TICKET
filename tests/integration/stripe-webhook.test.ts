@@ -140,7 +140,7 @@ describe('Stripe Verified Webhook Ticket Issuance Integration (TASK-043, AC-119,
     expect(issuedTickets[1].status).toBe('valid');
 
     // Verify order status in DB is 'paid'
-    const updatedCharge = await getPaymentChargeForOrder(fixture.pool, reservation.id);
+    const updatedCharge = await getPaymentChargeForOrder(fixture.pool, reservation.id, buyerToken);
     expect(updatedCharge?.status).toBe('successful');
 
     // Verify confirmation email was sent
