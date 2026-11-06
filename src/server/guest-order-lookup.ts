@@ -101,6 +101,7 @@ export async function requestOrderLookupOtp(
     email: string;
     phone: string;
     orderId?: string;
+    clientIp?: string;
     now?: Date;
   },
 ): Promise<{
@@ -142,6 +143,7 @@ export async function requestOrderLookupOtp(
   const otpResult = await requestGuestOtp(pool, {
     buyer,
     purpose: 'order_lookup',
+    clientIp: input.clientIp,
     now: input.now,
   });
 

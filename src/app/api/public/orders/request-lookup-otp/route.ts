@@ -1,6 +1,7 @@
 import { createSafeErrorResponse } from '@/server/api-error';
 import { getDatabasePool } from '@/server/database';
 import { requestOrderLookupOtp } from '@/server/guest-order-lookup';
+import { extractClientIp } from '@/server/guest-otp';
 
 export const runtime = 'nodejs';
 
@@ -10,10 +11,12 @@ export async function POST(request: Request) {
     const { email, phone, orderId } = body || {};
 
     const pool = getDatabasePool();
+    const clientIp = extractClientIp(request);
     const result = await requestOrderLookupOtp(pool, {
       email,
       phone,
       orderId,
+      clientIp,
     });
 
     if (!result.success) {

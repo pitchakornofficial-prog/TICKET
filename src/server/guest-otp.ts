@@ -1,4 +1,4 @@
-import { randomInt, randomUUID } from 'node:crypto';
+import { createHmac, randomInt, randomUUID, timingSafeEqual } from 'node:crypto';
 import type { Pool } from 'pg';
 import { emailTransport } from './email.ts';
 import { inTransaction } from './database.ts';
@@ -18,6 +18,28 @@ export const OTP_MAX_REQUESTS_IN_WINDOW = 5;
 export const OTP_MAX_FAILS_IN_WINDOW = 5;
 export const OTP_LOCKOUT_SECONDS = 15 * 60; // 900s
 export const VERIFIED_SESSION_EXPIRATION_SECONDS = 30 * 60; // 1800s
+
+// IP-level rate limiting (Issue #16): prevents distributed email spamming from a single IP
+export const OTP_IP_WINDOW_SECONDS = 15 * 60; // 900s (15 minutes)
+export const OTP_IP_MAX_REQUESTS_IN_WINDOW = 20; // 20 requests per IP per 15 minutes
+
+export function hashOtpCode(code: string, salt: string): string {
+  return createHmac('sha256', salt).update(code.trim()).digest('hex');
+}
+
+export function extractClientIp(request: Request): string {
+  const forwardedFor = request.headers.get('x-forwarded-for');
+  if (forwardedFor) {
+    const first = forwardedFor.split(',')[0].trim();
+    if (first) return first;
+  }
+  const realIp = request.headers.get('x-real-ip');
+  if (realIp) {
+    const trimmed = realIp.trim();
+    if (trimmed) return trimmed;
+  }
+  return '127.0.0.1';
+}
 
 export const ALLOWED_OTP_PURPOSES = ['checkout', 'order_lookup'] as const;
 export type OtpPurpose = (typeof ALLOWED_OTP_PURPOSES)[number];
@@ -110,6 +132,7 @@ export async function requestGuestOtp(
   input: {
     buyer: Partial<GuestBuyerDetails>;
     purpose?: string;
+    clientIp?: string;
     now?: Date;
   },
 ): Promise<{
@@ -142,6 +165,40 @@ export async function requestGuestOtp(
   await ensureGuestOtpSchema(pool);
 
   return inTransaction(pool, async client => {
+    // 0. IP-level rate limiting (Issue #16): prevents mass spamming across different emails from single IP
+    const rawIp = input.clientIp?.trim().toLowerCase();
+    const ipTrackKey = rawIp ? `ip:${rawIp}` : null;
+    let ipRequestCount = 0;
+    let ipTrackRes: { rowCount?: number | null; rows: Array<{ requestCount: number; lastRequestAt: Date }> } | null = null;
+
+    if (ipTrackKey) {
+      ipTrackRes = await client.query(
+        'SELECT "requestCount", "lastRequestAt" FROM guest_otp_tracking WHERE key = $1 FOR UPDATE',
+        [ipTrackKey],
+      );
+
+      if (ipTrackRes.rowCount && ipTrackRes.rowCount > 0) {
+        const ipRow = ipTrackRes.rows[0];
+        const ipLastRequestAt = new Date(ipRow.lastRequestAt);
+        const ipDiffMs = nowMs - ipLastRequestAt.getTime();
+
+        if (ipDiffMs < OTP_IP_WINDOW_SECONDS * 1000) {
+          if (ipRow.requestCount >= OTP_IP_MAX_REQUESTS_IN_WINDOW) {
+            return {
+              success: false,
+              error: 'คำขอรหัส OTP จาก IP ของท่านถี่เกินกำหนด กรุณารอสักครู่ (สูงสุด 20 ครั้งใน 15 นาที)',
+              code: 'RATE_LIMITED',
+            };
+          }
+          ipRequestCount = ipRow.requestCount + 1;
+        } else {
+          ipRequestCount = 1;
+        }
+      } else {
+        ipRequestCount = 1;
+      }
+    }
+
     const globalTrackKey = `${email}:global`;
     const trackKey = `${email}:${purpose}`;
 
@@ -276,6 +333,24 @@ export async function requestGuestOtp(
       );
     }
 
+    // Persist IP-level tracking (Issue #16)
+    if (ipTrackKey) {
+      if (ipTrackRes?.rowCount && ipTrackRes.rowCount > 0) {
+        await client.query(
+          `UPDATE guest_otp_tracking
+           SET "requestCount" = $1, "lastRequestAt" = $2
+           WHERE key = $3`,
+          [ipRequestCount, now, ipTrackKey],
+        );
+      } else {
+        await client.query(
+          `INSERT INTO guest_otp_tracking (key, "requestCount", "lastRequestAt", "failCount", "lastFailAt", "blockedUntil")
+           VALUES ($1, 1, $2, 0, NULL, NULL)`,
+          [ipTrackKey, now],
+        );
+      }
+    }
+
     // AC-58: New OTP invalidates previous active OTPs for this email and purpose
     await client.query(
       `UPDATE guest_otp SET "consumedAt" = $1 WHERE email = $2 AND purpose = $3 AND "consumedAt" IS NULL`,
@@ -286,11 +361,13 @@ export async function requestGuestOtp(
     const otpCode = randomInt(100000, 1000000).toString();
     const requestId = randomUUID();
     const expiresAt = new Date(nowMs + OTP_EXPIRATION_SECONDS * 1000);
+    // Issue #16: Hash OTP code using HMAC-SHA256 with unique requestId salt before storing
+    const hashedCode = hashOtpCode(otpCode, requestId);
 
     await client.query(
       `INSERT INTO guest_otp (id, email, purpose, code, "requestId", "expiresAt", "consumedAt", "createdAt")
        VALUES ($1, $2, $3, $4, $5, $6, NULL, $7)`,
-      [randomUUID(), email, purpose, otpCode, requestId, expiresAt, now],
+      [randomUUID(), email, purpose, hashedCode, requestId, expiresAt, now],
     );
 
     // Send email via transport
@@ -448,8 +525,19 @@ export async function verifyGuestOtp(
       return { success: false, error: 'รหัส OTP หมดอายุแล้ว กรุณาขอรหัสใหม่', code: 'EXPIRED' };
     }
 
-    // Code match check
-    if (otpRow.code !== submittedCode) {
+    // Code match check with timing-safe comparison (Issue #16)
+    let isCodeMatch = false;
+    if (otpRow.code && otpRow.code.length === 64) {
+      const expectedHash = hashOtpCode(submittedCode, requestId);
+      const storedBuf = Buffer.from(otpRow.code, 'hex');
+      const expectedBuf = Buffer.from(expectedHash, 'hex');
+      isCodeMatch = storedBuf.length === expectedBuf.length && timingSafeEqual(storedBuf, expectedBuf);
+    } else {
+      // Fallback for legacy plaintext codes
+      isCodeMatch = otpRow.code === submittedCode;
+    }
+
+    if (!isCodeMatch) {
       failCount += 1;
       lastFailAt = now;
       let newBlockedUntil: Date | null = null;

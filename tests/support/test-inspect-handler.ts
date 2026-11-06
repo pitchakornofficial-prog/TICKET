@@ -49,9 +49,16 @@ export async function handleTestInspectRequest(
     if (otpRes.rowCount === 0) {
       return { status: 404, body: { code: null } };
     }
+
+    const { getCapturedEmails } = await import('../../src/server/email.ts');
+    const emails = getCapturedEmails().filter((e) => e.to === email);
+    const lastEmail = emails.at(-1);
+    const match = lastEmail?.text?.match(/\b(\d{6})\b/) || lastEmail?.subject?.match(/\b(\d{6})\b/);
+    const code = match ? match[1] : otpRes.rows[0].code;
+
     return {
       status: 200,
-      body: { code: otpRes.rows[0].code, requestId: otpRes.rows[0].requestId },
+      body: { code, requestId: otpRes.rows[0].requestId },
     };
   }
 
