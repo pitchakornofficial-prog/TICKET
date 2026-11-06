@@ -24,13 +24,21 @@ export async function POST(request: Request) {
     return Response.json({ message: 'กรุณาระบุข้อมูลให้ครบถ้วน' }, { status: 400 });
   }
 
+  // Security: reject client-tampered purpose (Issue #6)
+  if (body.purpose && body.purpose !== 'checkout') {
+    return Response.json(
+      { message: 'วัตถุประสงค์ (purpose) ไม่ถูกต้องสำหรับขั้นตอนนี้', code: 'INVALID_INPUT' },
+      { status: 400 },
+    );
+  }
+
   const pool = getDatabasePool();
   try {
     const result = await verifyGuestOtp(pool, {
       email: body.email,
       code: body.code,
       requestId: body.requestId,
-      purpose: body.purpose || 'checkout',
+      purpose: 'checkout',
       buyer: body.buyer,
     });
 

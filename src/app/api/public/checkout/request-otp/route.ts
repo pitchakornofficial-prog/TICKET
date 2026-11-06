@@ -22,6 +22,14 @@ export async function POST(request: Request) {
     return Response.json({ message: 'กรุณาระบุข้อมูลผู้ซื้อ' }, { status: 400 });
   }
 
+  // Security: reject client-tampered purpose (Issue #6)
+  if (body.purpose && body.purpose !== 'checkout') {
+    return Response.json(
+      { message: 'วัตถุประสงค์ (purpose) ไม่ถูกต้องสำหรับขั้นตอนนี้', code: 'INVALID_INPUT' },
+      { status: 400 },
+    );
+  }
+
   const pool = getDatabasePool();
   try {
     // D-59, D-60: Anti-Scalping Cumulative Buyer Limit check before issuing OTP (Email-anchored)
@@ -75,7 +83,7 @@ export async function POST(request: Request) {
 
     const result = await requestGuestOtp(pool, {
       buyer: body.buyer,
-      purpose: body.purpose || 'checkout',
+      purpose: 'checkout',
     });
 
     if (!result.success) {
