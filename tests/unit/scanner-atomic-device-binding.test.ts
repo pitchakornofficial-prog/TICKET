@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
+  resolveScannerSessionScope,
+  resolveScannerSessionScopedEventId,
   signScannerEventScopeCookie,
   verifyScannerSessionEventScope,
 } from '../../src/server/scanner-scope';
@@ -252,6 +254,115 @@ describe('Issue #9: Scanner Atomic Device Binding & Verification (D-104)', () =>
 
       expect(check.allowed).toBe(false);
       expect(check.reason).toContain('ถูกจำกัดสิทธิ์เฉพาะงานคอนเสิร์ตที่ได้รับมอบหมาย');
+    });
+
+    it('resolveScannerSessionScope reads scope from server database when cookie is deleted', async () => {
+      const testToken = 'valid-token-scope-lookup';
+      const mockPool = {
+        query: vi.fn().mockImplementation((sql: string, params?: unknown[]) => {
+          if (sql.includes('SELECT "eventId" FROM scanner_session_scopes')) {
+            expect(params).toEqual([testToken]);
+            return Promise.resolve({
+              rowCount: 1,
+              rows: [{ eventId: eventA }],
+            });
+          }
+          return Promise.resolve({ rowCount: 0, rows: [] });
+        }),
+      } as unknown as Pool;
+
+      // Deleted scanner_event_scope cookie, only session token sent
+      const cookieHeader = `ticket.session_token=${testToken}.sig`;
+      const resolution = await resolveScannerSessionScope(mockPool, cookieHeader, testSecret);
+      expect(resolution).toEqual({ status: 'scoped', eventId: eventA });
+
+      const resolved = await resolveScannerSessionScopedEventId(mockPool, cookieHeader, testSecret);
+      expect(resolved).toBe(eventA);
+    });
+
+    it('resolveScannerSessionScope falls back to signed cookie when no server record exists', async () => {
+      const mockPool = {
+        query: vi.fn().mockResolvedValue({ rowCount: 0, rows: [] }),
+      } as unknown as Pool;
+
+      const signedScope = signScannerEventScopeCookie(eventA, testSecret);
+      const cookieHeader = `scanner_event_scope=${signedScope}`;
+      const resolution = await resolveScannerSessionScope(mockPool, cookieHeader, testSecret);
+      expect(resolution).toEqual({ status: 'scoped', eventId: eventA });
+
+      const resolved = await resolveScannerSessionScopedEventId(mockPool, cookieHeader, testSecret);
+      expect(resolved).toBe(eventA);
+    });
+
+    it('resolveScannerSessionScope returns error with 403 when signature is invalid', async () => {
+      const mockPool = {
+        query: vi.fn().mockResolvedValue({ rowCount: 0, rows: [] }),
+      } as unknown as Pool;
+
+      const cookieHeader = `scanner_event_scope=${eventA}.tampered-signature`;
+      const resolution = await resolveScannerSessionScope(mockPool, cookieHeader, testSecret);
+      expect(resolution.status).toBe('error');
+      if (resolution.status === 'error') {
+        expect(resolution.statusCode).toBe(403);
+        expect(resolution.reason).toContain('ลายเซ็นขอบเขตงานคอนเสิร์ตไม่ถูกต้องหรือถูกดัดแปลง');
+      }
+
+      await expect(
+        resolveScannerSessionScopedEventId(mockPool, cookieHeader, testSecret),
+      ).rejects.toThrow('ลายเซ็นขอบเขตงานคอนเสิร์ตไม่ถูกต้องหรือถูกดัดแปลง');
+    });
+
+    it('resolveScannerSessionScope returns error with 500 when DB query throws error (does NOT swallow error)', async () => {
+      const testToken = 'valid-session-db-crash';
+      const mockPool = {
+        query: vi.fn().mockRejectedValue(new Error('PostgreSQL connection timeout')),
+      } as unknown as Pool;
+
+      const cookieHeader = `ticket.session_token=${testToken}.sig`;
+      const resolution = await resolveScannerSessionScope(mockPool, cookieHeader, testSecret);
+      expect(resolution.status).toBe('error');
+      if (resolution.status === 'error') {
+        expect(resolution.statusCode).toBe(500);
+        expect(resolution.reason).toContain('เกิดข้อผิดพลาดในการตรวจสอบขอบเขตงานคอนเสิร์ต');
+      }
+
+      await expect(
+        resolveScannerSessionScopedEventId(mockPool, cookieHeader, testSecret),
+      ).rejects.toThrow('เกิดข้อผิดพลาดในการตรวจสอบขอบเขตงานคอนเสิร์ต');
+    });
+
+    it('resolveScannerSessionScope returns error with 500 when table does not exist (PostgreSQL error 42P01)', async () => {
+      const testToken = 'valid-session-table-missing';
+      const err42P01 = Object.assign(new Error('relation "scanner_session_scopes" does not exist'), { code: '42P01' });
+
+      const mockPool = {
+        query: vi.fn().mockRejectedValue(err42P01),
+      } as unknown as Pool;
+
+      const cookieHeader = `ticket.session_token=${testToken}.sig`;
+      const resolution = await resolveScannerSessionScope(mockPool, cookieHeader, testSecret);
+      expect(resolution.status).toBe('error');
+      if (resolution.status === 'error') {
+        expect(resolution.statusCode).toBe(500);
+        expect(resolution.reason).toContain('เกิดข้อผิดพลาดในการตรวจสอบขอบเขตงานคอนเสิร์ต');
+      }
+
+      await expect(
+        resolveScannerSessionScopedEventId(mockPool, cookieHeader, testSecret),
+      ).rejects.toThrow('เกิดข้อผิดพลาดในการตรวจสอบขอบเขตงานคอนเสิร์ต');
+    });
+
+    it('resolveScannerSessionScope returns unscoped when neither DB record nor cookie scope exists', async () => {
+      const mockPool = {
+        query: vi.fn().mockResolvedValue({ rowCount: 0, rows: [] }),
+      } as unknown as Pool;
+
+      const cookieHeader = 'ticket.session_token=unscoped-session.sig';
+      const resolution = await resolveScannerSessionScope(mockPool, cookieHeader, testSecret);
+      expect(resolution).toEqual({ status: 'unscoped' });
+
+      const resolved = await resolveScannerSessionScopedEventId(mockPool, cookieHeader, testSecret);
+      expect(resolved).toBeNull();
     });
   });
 });

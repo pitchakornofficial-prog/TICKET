@@ -5,9 +5,11 @@ import { validateUploadedFile } from '@/server/file-validator';
 import { storage } from '@/server/storage';
 import {
   MAX_FILE_SIZE,
+  MAX_JSON_BODY_SIZE,
   MAX_REQUEST_BODY_SIZE,
   checkAndReserveUploadQuota,
   readBoundedFormData,
+  readBoundedJson,
   releaseUploadQuota,
   validateUploadContentLength,
 } from '@/server/upload-quota';
@@ -130,7 +132,22 @@ export async function POST(request: Request) {
   // 2. Check for Presigned URL request mode (JSON payload)
   const contentTypeHeader = request.headers.get('content-type') || '';
   if (contentTypeHeader.includes('application/json')) {
-    const body = await request.json().catch(() => null);
+    let body: unknown;
+    try {
+      body = await readBoundedJson(request, MAX_JSON_BODY_SIZE);
+    } catch (err) {
+      const errorMsg = (err as Error)?.message;
+      if (errorMsg === 'PAYLOAD_TOO_LARGE') {
+        return Response.json(
+          { message: 'ขนาดคำขอ JSON เกินขีดจำกัดสูงสุด (Payload Too Large: สูงสุด 1MB)' },
+          { status: 413 },
+        );
+      }
+      return Response.json(
+        { message: 'ข้อมูลคำขอไม่ถูกต้อง (รูปแบบ JSON ไม่ถูกต้อง)' },
+        { status: 400 },
+      );
+    }
     return handlePresignedRequest(session.user, body, pool);
   }
 

@@ -192,6 +192,17 @@ describe('Issue #10: Upload DoS Prevention, Quota & Presigned URL Direct Upload'
       expect(withinQuota.allowed).toBe(true);
     });
 
+    it('fails closed when database operation throws an error (preserves quota integrity)', async () => {
+      const mockBrokenPool = {
+        connect: vi.fn().mockRejectedValue(new Error('PostgreSQL connection timeout or node crashed')),
+      } as unknown as import('pg').Pool;
+
+      const res = await checkAndReserveUploadQuota(mockBrokenPool, currentUserId, 1024);
+      expect(res.allowed).toBe(false);
+      expect(res.reason).toContain('ระบบจัดเก็บข้อมูลไม่พร้อมให้บริการชั่วคราว');
+      expect(res.retryAfterSeconds).toBe(30);
+    });
+
     it('isolates upload quotas between different accounts', async () => {
       for (let i = 0; i < MAX_UPLOADS_PER_WINDOW; i++) {
         await checkAndReserveUploadQuota(null, 'user-A', 1024);
@@ -202,6 +213,40 @@ describe('Issue #10: Upload DoS Prevention, Quota & Presigned URL Direct Upload'
   });
 
   describe('3. Direct Upload with Presigned URL & Size Enforcement', () => {
+    it('rejects oversized JSON request body exceeding 1MB with 413 Payload Too Large on presigned endpoint', async () => {
+      // Create a 1.2MB JSON payload
+      const padding = 'x'.repeat(1.2 * 1024 * 1024);
+      const req = new Request('http://localhost:3000/api/upload/presigned', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Content-Length': String(Buffer.byteLength(JSON.stringify({ filename: 'test.png', padding }))),
+        },
+        body: JSON.stringify({ filename: 'test.png', padding }),
+      });
+
+      const res = await presignedUploadPost(req);
+      expect(res.status).toBe(413);
+      const body = await res.json();
+      expect(body.message).toContain('Payload Too Large: สูงสุด 1MB');
+    });
+
+    it('rejects oversized JSON request body exceeding 1MB with 413 Payload Too Large on /api/upload', async () => {
+      const padding = 'x'.repeat(1.2 * 1024 * 1024);
+      const req = new Request('http://localhost:3000/api/upload', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ filename: 'test.png', padding }),
+      });
+
+      const res = await uploadPost(req);
+      expect(res.status).toBe(413);
+      const body = await res.json();
+      expect(body.message).toContain('Payload Too Large: สูงสุด 1MB');
+    });
+
     it('creates presigned upload URL via POST /api/upload/presigned for organizer', async () => {
       const req = new Request('http://localhost:3000/api/upload/presigned', {
         method: 'POST',
