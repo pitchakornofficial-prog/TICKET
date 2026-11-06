@@ -567,14 +567,14 @@ export function ScannerAdmissionTerminal({
             <div className="terminal-scan-section">
               <form onSubmit={handleScanSubmit} className="scan-input-form">
                 <label htmlFor="scanner-ticket-input" className="form-label">
-                  {action === 'entry' ? 'หรือพิมพ์/วางรหัสบัตรเพื่อบันทึกเข้างาน:' : 'หรือพิมพ์/วางรหัสบัตรเพื่อบันทึกออกนอกงาน:'}
+                  {action === 'entry' ? 'หรือสแกน/วาง QR Payload เพื่อบันทึกเข้างาน:' : 'หรือสแกน/วาง QR Payload เพื่อบันทึกออกนอกงาน:'}
                 </label>
                 <div className="scan-input-group">
                   <input
                     id="scanner-ticket-input"
                     type="text"
                     className="text-input font-mono"
-                    placeholder="วางรหัสบัตร เช่น TK-..., TKT-..."
+                    placeholder="สแกน QR Code (TKT-QR-...)"
                     value={ticketInput}
                     onChange={e => setTicketInput(e.target.value)}
                     autoComplete="off"

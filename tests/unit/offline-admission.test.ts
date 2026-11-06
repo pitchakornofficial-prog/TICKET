@@ -147,7 +147,7 @@ describe('TASK-033: Offline Admission Engine Unit Tests (AC-40, AC-41, AC-50, AC
         scannerId: 'SCAN-SEC',
         scannerName: 'ทีมสแกนสำรอง',
         isPrimary: false, // NOT primary
-        qrPayloadOrCode: 'TK-11111111',
+        qrPayloadOrCode: 'SECURE-QR-111',
         action: 'entry',
         now,
       },
@@ -198,7 +198,7 @@ describe('TASK-033: Offline Admission Engine Unit Tests (AC-40, AC-41, AC-50, AC
         scannerId: 'SCAN-PRI',
         scannerName: 'ทีมสแกน 1',
         isPrimary: true,
-        qrPayloadOrCode: 'TK-11111111',
+        qrPayloadOrCode: 'SECURE-QR-111',
         action: 'entry',
         now,
       },
@@ -224,7 +224,7 @@ describe('TASK-033: Offline Admission Engine Unit Tests (AC-40, AC-41, AC-50, AC
         scannerId: 'SCAN-PRI',
         scannerName: 'ทีมสแกน 1',
         isPrimary: true,
-        qrPayloadOrCode: 'TK-11111111',
+        qrPayloadOrCode: 'SECURE-QR-111',
         action: 'entry',
         now,
       },
@@ -246,7 +246,7 @@ describe('TASK-033: Offline Admission Engine Unit Tests (AC-40, AC-41, AC-50, AC
         scannerId: 'SCAN-PRI',
         scannerName: 'ทีมสแกน 1',
         isPrimary: true,
-        qrPayloadOrCode: 'TK-11111111',
+        qrPayloadOrCode: 'SECURE-QR-111',
         action: 'exit',
         now,
       },
@@ -269,7 +269,7 @@ describe('TASK-033: Offline Admission Engine Unit Tests (AC-40, AC-41, AC-50, AC
         scannerId: 'SCAN-PRI',
         scannerName: 'ทีมสแกน 1',
         isPrimary: true,
-        qrPayloadOrCode: 'TK-11111111',
+        qrPayloadOrCode: 'SECURE-QR-111',
         action: 'exit',
         now,
       },
@@ -288,7 +288,7 @@ describe('TASK-033: Offline Admission Engine Unit Tests (AC-40, AC-41, AC-50, AC
         scannerId: 'SCAN-PRI',
         scannerName: 'ทีมสแกน 1',
         isPrimary: true,
-        qrPayloadOrCode: 'TK-11111111',
+        qrPayloadOrCode: 'SECURE-QR-111',
         action: 'entry',
         now,
       },
@@ -319,7 +319,7 @@ describe('TASK-033: Offline Admission Engine Unit Tests (AC-40, AC-41, AC-50, AC
         scannerId: 'SCAN-PRI',
         scannerName: 'ทีมสแกน 1',
         isPrimary: true,
-        qrPayloadOrCode: 'TK-11111111',
+        qrPayloadOrCode: 'SECURE-QR-111',
         action: 'entry',
         now,
       },
@@ -350,7 +350,7 @@ describe('TASK-033: Offline Admission Engine Unit Tests (AC-40, AC-41, AC-50, AC
         scannerId: 'SCAN-PRI',
         scannerName: 'ทีมสแกน 1',
         isPrimary: true,
-        qrPayloadOrCode: 'TK-22222222',
+        qrPayloadOrCode: 'SECURE-QR-222',
         action: 'entry',
         now,
       },
@@ -367,7 +367,7 @@ describe('TASK-033: Offline Admission Engine Unit Tests (AC-40, AC-41, AC-50, AC
         scannerId: 'SCAN-PRI',
         scannerName: 'ทีมสแกน 1',
         isPrimary: true,
-        qrPayloadOrCode: 'TK-33333333',
+        qrPayloadOrCode: 'SECURE-QR-333',
         action: 'entry',
         now,
       },
@@ -384,7 +384,7 @@ describe('TASK-033: Offline Admission Engine Unit Tests (AC-40, AC-41, AC-50, AC
         scannerId: 'SCAN-PRI',
         scannerName: 'ทีมสแกน 1',
         isPrimary: true,
-        qrPayloadOrCode: 'TK-44444444',
+        qrPayloadOrCode: 'SECURE-QR-444',
         action: 'entry',
         now,
       },
@@ -402,7 +402,7 @@ describe('TASK-033: Offline Admission Engine Unit Tests (AC-40, AC-41, AC-50, AC
         scannerId: 'SCAN-PRI',
         scannerName: 'ทีมสแกน 1',
         isPrimary: true,
-        qrPayloadOrCode: 'TK-11111111',
+        qrPayloadOrCode: 'SECURE-QR-111',
         action: 'entry',
         now: tooEarlyTime,
       },
@@ -411,5 +411,28 @@ describe('TASK-033: Offline Admission Engine Unit Tests (AC-40, AC-41, AC-50, AC
     expect(tooEarlyRes.success).toBe(false);
     expect(tooEarlyRes.reason).toBe('OUTSIDE_ADMISSION_WINDOW');
     expect(tooEarlyRes.message).toContain('ยังไม่ถึงช่วงเวลาเปิดรับเข้างาน');
+  });
+  it("rejects offline scan using ticketCode and strictly requires qrPayload (Issue 14)", () => {
+    const storage = createMockStorage({
+      [getOfflineDatasetKey(eventId)]: JSON.stringify(baseDataset),
+    });
+
+    const result = performOfflineAdmissionScan(
+      {
+        eventId,
+        sessionId,
+        scannerId: "SCAN-PRI",
+        scannerName: "ทีมสแกน 1",
+        isPrimary: true,
+        qrPayloadOrCode: "TK-11111111", // guessable ticketCode must not be accepted
+        action: "entry",
+        now,
+      },
+      storage,
+    );
+
+    expect(result.success).toBe(false);
+    expect(result.status).toBe("rejected");
+    expect(result.reason).toBe("OFFLINE_TICKET_NOT_FOUND");
   });
 });

@@ -147,11 +147,13 @@ test.describe('TASK-033: Offline Admission Scanning on Primary Device (AC-40, AC
     await expect(buyerPage).toHaveURL(/\/orders\/ORD-[A-Z0-9-]+\/success$/);
     await buyerPage.locator('#tab-btn-tickets').click();
 
-    // Extract ticket code from buyer page
+    // Extract ticket code and qrPayload from buyer page
     const ticketCodeEl = buyerPage.locator('#ticket-code-0');
     await expect(ticketCodeEl).toBeVisible({ timeout: 20000 });
     const purchasedTicketCode = (await ticketCodeEl.textContent())?.trim() || '';
     expect(purchasedTicketCode).toMatch(/^TK-/);
+    const purchasedQrPayload = (await ticketCodeEl.getAttribute('data-qr-payload'))?.trim() || '';
+    expect(purchasedQrPayload).toMatch(/^TKT-QR-/);
     await buyerContext.close();
 
     // 6. Secondary Scanner (Scanner 2) checks offline rejection (AC-40, O1)
@@ -232,7 +234,7 @@ test.describe('TASK-033: Offline Admission Scanning on Primary Device (AC-40, AC
 
     // 9. Offline State Transitions Sequence (AC-96, AC-50)
     // Step A: First Entry (outside -> inside)
-    await ticketInput.fill(purchasedTicketCode);
+    await ticketInput.fill(purchasedQrPayload);
     await submitBtn.click({ force: true });
 
     await expect(scanner1Page.locator('#scan-result-card')).toHaveClass(/result-success-entry/);
@@ -244,7 +246,7 @@ test.describe('TASK-033: Offline Admission Scanning on Primary Device (AC-40, AC
     await scanner1Page.locator('#dismiss-scan-modal-btn').click({ force: true });
 
     // Step B: Repeat Entry while inside (AC-96, AC-49)
-    await ticketInput.fill(purchasedTicketCode);
+    await ticketInput.fill(purchasedQrPayload);
     await submitBtn.click({ force: true });
 
     await expect(scanner1Page.locator('#scan-result-card')).toHaveClass(/result-rejected/);
@@ -254,7 +256,7 @@ test.describe('TASK-033: Offline Admission Scanning on Primary Device (AC-40, AC
 
     // Step C: Exit scan (inside -> outside) (AC-96)
     await scanner1Page.locator('#mode-exit-btn').click({ force: true });
-    await ticketInput.fill(purchasedTicketCode);
+    await ticketInput.fill(purchasedQrPayload);
     await submitBtn.click({ force: true });
 
     await expect(scanner1Page.locator('#scan-result-card')).toHaveClass(/result-success-exit/);
@@ -264,7 +266,7 @@ test.describe('TASK-033: Offline Admission Scanning on Primary Device (AC-40, AC
     await scanner1Page.locator('#dismiss-scan-modal-btn').click({ force: true });
 
     // Step D: Repeat Exit while outside (AC-96)
-    await ticketInput.fill(purchasedTicketCode);
+    await ticketInput.fill(purchasedQrPayload);
     await submitBtn.click({ force: true });
 
     await expect(scanner1Page.locator('#scan-result-card')).toHaveClass(/result-rejected/);
@@ -274,7 +276,7 @@ test.describe('TASK-033: Offline Admission Scanning on Primary Device (AC-40, AC
 
     // Step E: Reentry scan (outside -> inside) (AC-96)
     await scanner1Page.locator('#mode-entry-btn').click({ force: true });
-    await ticketInput.fill(purchasedTicketCode);
+    await ticketInput.fill(purchasedQrPayload);
     await submitBtn.click({ force: true });
 
     await expect(scanner1Page.locator('#scan-result-card')).toHaveClass(/result-success-entry/);
@@ -295,7 +297,7 @@ test.describe('TASK-033: Offline Admission Scanning on Primary Device (AC-40, AC
     await expect(scanner1Page.locator('[data-testid="connectivity-status-badge"]')).toContainText('ออฟไลน์');
 
     // Try scanning entry again: should still be rejected as 'ALREADY_INSIDE' because ticket is inside!
-    await ticketInput.fill(purchasedTicketCode);
+    await ticketInput.fill(purchasedQrPayload);
     await submitBtn.click({ force: true });
     await expect(scanner1Page.locator('#scan-result-card')).toHaveClass(/result-rejected/);
     await expect(scanner1Page.locator('#scan-result-message')).toContainText('บัตรอยู่ในพื้นที่จัดงานแล้ว ไม่อนุญาตให้เข้าซ้ำ (AC-49, AC-96)');
@@ -313,7 +315,7 @@ test.describe('TASK-033: Offline Admission Scanning on Primary Device (AC-40, AC
 
     // Attempt exit scan while storage write is broken
     await scanner1Page.locator('#mode-exit-btn').click({ force: true });
-    await ticketInput.fill(purchasedTicketCode);
+    await ticketInput.fill(purchasedQrPayload);
     await submitBtn.click({ force: true });
 
     await expect(scanner1Page.locator('#scan-result-card')).toHaveClass(/result-rejected/);

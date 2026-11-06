@@ -223,7 +223,7 @@ describe('TASK-022: Refund Approval Integration Tests (AC-36, AC-88, AC-89, AC-9
       scannerName: fixtureAccounts.scanner.name,
       scannerRole: 'scanner',
       sessionId: data.sessionId,
-      qrPayloadOrCode: t1.ticketCode,
+      qrPayloadOrCode: t1.qrPayload,
       action: 'entry',
       now: new Date(data.sessionStartTime.getTime() + 10 * 60 * 1000), // 10 min after start (within window)
     });

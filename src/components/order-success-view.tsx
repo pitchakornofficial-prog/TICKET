@@ -536,15 +536,16 @@ export function OrderSuccessView({ orderId }: OrderSuccessViewProps) {
                                 id={`ticket-qr-${idx}`}
                                 src={tkt.qrCodeUrl}
                                 alt={`QR Code ${tkt.ticketCode}`}
+                                data-qr-payload={tkt.qrPayload}
                                 width={160}
                                 height={160}
                                 style={{ display: 'block', margin: '0 auto' }}
                               />
                             </div>
 
-                            <div className="stub-code-label">รหัสบัตรสำหรับเข้างาน</div>
+                            <div className="stub-code-label">รหัสอ้างอิงบัตร</div>
                             <div className="stub-code-value">
-                              <strong id={`ticket-code-${idx}`}>{tkt.ticketCode}</strong>
+                              <strong id={`ticket-code-${idx}`} data-qr-payload={tkt.qrPayload}>{tkt.ticketCode}</strong>
                             </div>
                           </div>
                         </>

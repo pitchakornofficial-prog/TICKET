@@ -1190,15 +1190,16 @@ export function GuestOrderLookupView({ initialOrderId }: GuestOrderLookupViewPro
                                                     id={`ticket-qr-${tkt.id}`}
                                                     src={tkt.qrCodeUrl}
                                                     alt={`QR Code บัตร ${tkt.ticketCode}`}
+                                                    data-qr-payload={tkt.qrPayload}
                                                     width={160}
                                                     height={160}
                                                     style={{ display: 'block', margin: '0 auto' }}
                                                   />
                                                 </div>
 
-                                                <div className="stub-code-label">รหัสบัตรสำหรับเข้างาน</div>
+                                                <div className="stub-code-label">รหัสอ้างอิงบัตร</div>
                                                 <div className="stub-code-value">
-                                                  <strong id={`ticket-code-${tkt.id}`}>{tkt.ticketCode}</strong>
+                                                  <strong id={`ticket-code-${tkt.id}`} data-qr-payload={tkt.qrPayload}>{tkt.ticketCode}</strong>
                                                 </div>
                                               </div>
                                             </>

@@ -126,9 +126,10 @@ describe('TASK-023: Manual Refund Transfer & Private Proof Integration Tests (AC
     const tRes = await fixture.pool.query<{
       id: string;
       ticketCode: string;
+      qrPayload: string;
       status: string;
     }>(
-      'SELECT id, "ticketCode", status FROM tickets WHERE "orderId" = $1 ORDER BY "ticketCode"',
+      'SELECT id, "ticketCode", "qrPayload", status FROM tickets WHERE "orderId" = $1 ORDER BY "ticketCode"',
       [reservation.id],
     );
 
@@ -282,7 +283,7 @@ describe('TASK-023: Manual Refund Transfer & Private Proof Integration Tests (AC
     // Scanner scan is still rejected (AC-89, AC-101)
     const scanResult = await recordAdmissionScan(fixture.pool, {
       sessionId: data.sessionId,
-      qrPayloadOrCode: data.refundedTicket.ticketCode,
+      qrPayloadOrCode: data.refundedTicket.qrPayload,
       scannerId: fixture.ids.scanner,
       scannerName: fixtureAccounts.scanner.name,
       scannerRole: 'scanner',

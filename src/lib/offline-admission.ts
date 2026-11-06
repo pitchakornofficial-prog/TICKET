@@ -178,7 +178,7 @@ export function performOfflineAdmissionScan(
   // 4. Ticket lookup in cached dataset (AC-41, O2)
   const cleanInput = input.qrPayloadOrCode.trim();
   const ticketIndex = dataset.tickets.findIndex(
-    (t: OfflineTicketItem) => t.qrPayload === cleanInput || t.ticketCode === cleanInput,
+    (t: OfflineTicketItem) => t.qrPayload === cleanInput,
   );
 
   if (ticketIndex === -1) {

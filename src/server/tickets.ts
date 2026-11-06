@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import { ensureReservationSchema } from './reservation.ts';
 
@@ -264,8 +264,9 @@ export async function issueTicketsForOrder(
   for (const item of itemsRes.rows) {
     for (let i = 0; i < item.quantity; i++) {
       const ticketId = `TKT-${randomUUID().slice(0, 8).toUpperCase()}`;
-      // Unique ticket code and distinct QR payload per ticket (AC-19)
-      const ticketCode = `TK-${orderId.slice(-6)}-${item.ticketTypeId.slice(-4)}-${globalTicketIndex.toString().padStart(2, '0')}`;
+      // Cryptographically unguessable ticket code (Issue 14) and distinct QR payload per ticket (AC-19)
+      const randomEntropy = randomBytes(4).toString('hex').toUpperCase();
+      const ticketCode = `TK-${orderId.slice(-4)}-${globalTicketIndex.toString().padStart(2, '0')}-${randomEntropy}`;
       const qrPayload = `TKT-QR-${randomUUID()}`;
       const qrCodeUrl = generateTicketQrSvg(ticketCode, qrPayload);
 

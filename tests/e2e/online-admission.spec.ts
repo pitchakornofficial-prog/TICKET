@@ -128,6 +128,7 @@ test.describe('Online Admission Scanning Journey (TASK-020, AC-08, AC-39, AC-49,
 
     const ticketCodeText = (await page.locator('#ticket-code-0').innerText()).trim();
     expect(ticketCodeText).toMatch(/^TK-/);
+    const qrPayloadText = (await page.locator('#ticket-qr-0').getAttribute('data-qr-payload')) || ticketCodeText;
 
     // 4. Scanner logs in and opens admission terminal (AC-08, AC-09)
     await page.goto('/login');
@@ -148,7 +149,7 @@ test.describe('Online Admission Scanning Journey (TASK-020, AC-08, AC-39, AC-49,
     await expect(page.getByRole('heading', { name: `เครื่องตรวจบัตรเข้างาน: ${eventTitle}` })).toBeVisible();
 
     // 5. STEP A: Online entry scan (AC-49, AC-39)
-    await page.locator('#scanner-ticket-input').fill(ticketCodeText);
+    await page.locator('#scanner-ticket-input').fill(qrPayloadText);
     await page.locator('#scanner-submit-btn').click({ force: true });
 
     // Assert success banner and text+icon
@@ -172,7 +173,7 @@ test.describe('Online Admission Scanning Journey (TASK-020, AC-08, AC-39, AC-49,
     await expect(page.locator('#stats-total-entries')).toHaveText('1');
 
     // 6. STEP B: Repeat entry scan (AC-49, AC-08)
-    await page.locator('#scanner-ticket-input').fill(ticketCodeText);
+    await page.locator('#scanner-ticket-input').fill(qrPayloadText);
     await page.locator('#scanner-submit-btn').click({ force: true });
 
     await expect(resultCard).toHaveClass(/result-rejected/);
@@ -185,7 +186,7 @@ test.describe('Online Admission Scanning Journey (TASK-020, AC-08, AC-39, AC-49,
     await exitModeBtn.click({ force: true });
     await expect(exitModeBtn).toHaveClass(/active/);
 
-    await page.locator('#scanner-ticket-input').fill(ticketCodeText);
+    await page.locator('#scanner-ticket-input').fill(qrPayloadText);
     await page.locator('#scanner-submit-btn').click({ force: true });
 
     await expect(resultCard).toHaveClass(/result-success-exit/);
@@ -203,7 +204,7 @@ test.describe('Online Admission Scanning Journey (TASK-020, AC-08, AC-39, AC-49,
     await entryModeBtn.click({ force: true });
     await expect(entryModeBtn).toHaveClass(/active/);
 
-    await page.locator('#scanner-ticket-input').fill(ticketCodeText);
+    await page.locator('#scanner-ticket-input').fill(qrPayloadText);
     await page.locator('#scanner-submit-btn').click({ force: true });
 
     await expect(resultCard).toHaveClass(/result-success-entry/);

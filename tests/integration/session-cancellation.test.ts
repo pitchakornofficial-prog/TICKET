@@ -321,7 +321,7 @@ describe('TASK-026: Session Cancellation Integration Tests (AC-35, AC-91, AC-108
       scannerName: fixtureAccounts.scanner.name,
       scannerRole: 'scanner',
       sessionId,
-      qrPayloadOrCode: ticket1.ticketCode,
+      qrPayloadOrCode: ticket1.qrPayload,
       action: 'entry',
       now: new Date(orderData.sessionStartTime.getTime() + 10 * 60 * 1000),
     });
