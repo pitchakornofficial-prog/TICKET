@@ -389,25 +389,23 @@ export async function createReservation(
 
     // D-37 general UBU discount fallback if not using per-ticket student privilege
     if (hasUbuPrivilege && discountAmount === 0 && !isUbuFreshyEvent) {
-      const ticketPrices: number[] = [];
-      for (const item of orderItemsToInsert) {
-        for (let i = 0; i < item.quantity; i++) {
-          ticketPrices.push(item.unitPrice);
+      let remainingDiscountTickets = 2;
+      const discountedItems: typeof orderItemsToInsert = [];
+      for (const item of [...orderItemsToInsert].sort((a, b) => b.unitPrice - a.unitPrice)) {
+        const discountedQuantity = Math.min(item.quantity, remainingDiscountTickets);
+        const fullPriceQuantity = item.quantity - discountedQuantity;
+        const discountPerTicket = Math.round(item.unitPrice * 0.15);
+        if (discountedQuantity > 0) {
+          const discountedUnitPrice = roundHalfUp(item.unitPrice - discountPerTicket);
+          discountedItems.push({ ...item, quantity: discountedQuantity, unitPrice: discountedUnitPrice, subtotal: roundHalfUp(discountedUnitPrice * discountedQuantity) });
+          discountAmount = roundHalfUp(discountAmount + discountPerTicket * discountedQuantity);
+          remainingDiscountTickets -= discountedQuantity;
+        }
+        if (fullPriceQuantity > 0) {
+          discountedItems.push({ ...item, id: discountedQuantity > 0 ? randomUUID() : item.id, quantity: fullPriceQuantity, subtotal: roundHalfUp(item.unitPrice * fullPriceQuantity) });
         }
       }
-      ticketPrices.sort((a, b) => b - a);
-      const maxDiscountTickets = Math.min(ticketPrices.length, 2);
-      for (let i = 0; i < maxDiscountTickets; i++) {
-        discountAmount = roundHalfUp(discountAmount + Math.round(ticketPrices[i] * 0.15));
-      }
-      let remainingDiscount = discountAmount;
-      for (const item of orderItemsToInsert) {
-        if (remainingDiscount <= 0) break;
-        const discountForThisItem = Math.min(remainingDiscount, item.subtotal);
-        item.subtotal = roundHalfUp(item.subtotal - discountForThisItem);
-        item.unitPrice = roundHalfUp(item.subtotal / item.quantity);
-        remainingDiscount = roundHalfUp(remainingDiscount - discountForThisItem);
-      }
+      orderItemsToInsert.splice(0, orderItemsToInsert.length, ...discountedItems);
     }
 
     const discountedTicketSubtotal = Math.max(0, roundHalfUp(orderSubtotal - discountAmount));

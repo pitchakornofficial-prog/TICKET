@@ -327,6 +327,6 @@ describe('Late Payment Recovery & Quota Reallocation (TASK-016, AC-72, AC-73, AC
     const c = processRes1.recoveryCase;
     expect(c?.reason).toBe('insufficient_quota');
     expect(c?.orderId).toBe(reservation1.id);
-    expect(c?.amount).toBe(5000); // 2 * 2500
+    expect(c?.amount).toBe(reservation1.total); // Full paid amount, including customer fee
   });
 });

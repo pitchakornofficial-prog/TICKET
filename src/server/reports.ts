@@ -375,11 +375,17 @@ export async function getEventMoneyReport(
     buyerPhone: string;
     orderCreatedAt: Date;
     ubuPrivilegeApplied?: boolean;
+    organizerFeeModeSnapshot: OrganizerFeeMode | null;
+    organizerFeeRateSnapshot: number | null;
+    organizerFeePrivilegeRateSnapshot: number | null;
   }>(
     `SELECT t.id AS "ticketId", t."orderId", t."sessionId", t."ticketTypeId",
             COALESCE(t.price, oi."unitPrice") AS "unitPrice", t.status,
             o."buyerName", o."buyerEmail", o."buyerPhone", o."createdAt" AS "orderCreatedAt",
-            COALESCE(o."ubuPrivilegeApplied", FALSE) AS "ubuPrivilegeApplied"
+            COALESCE(o."ubuPrivilegeApplied", FALSE) AS "ubuPrivilegeApplied",
+            o."organizerFeeMode" AS "organizerFeeModeSnapshot",
+            o."organizerFeeRate" AS "organizerFeeRateSnapshot",
+            o."organizerFeePrivilegeRate" AS "organizerFeePrivilegeRateSnapshot"
      FROM tickets t
      JOIN ticket_types tt ON tt.id = t."ticketTypeId"
      JOIN order_items oi ON oi.id = t."orderItemId"
@@ -439,21 +445,24 @@ export async function getEventMoneyReport(
     const isUbuBuyer =
       group.tickets.some(t => t.ubuPrivilegeApplied) ||
       (isUbuEmail(group.buyerEmail) && (Boolean(feeSettings.ubuPrivilegeMode) || eventId === 'event-ubu-freshy-2026'));
-    const privilegeRate = feeSettings.organizerFeePrivilegeRate ?? 3;
+    const orderSnapshot = group.tickets[0];
+    const organizerFeeMode = orderSnapshot.organizerFeeModeSnapshot ?? feeSettings.organizerFeeMode;
+    const organizerFeeRate = Number(orderSnapshot.organizerFeeRateSnapshot ?? feeSettings.organizerFeeRate);
+    const privilegeRate = Number(orderSnapshot.organizerFeePrivilegeRateSnapshot ?? feeSettings.organizerFeePrivilegeRate ?? 3);
     const grossPrivilegeSubtotal = isUbuBuyer ? grossSubtotal : 0;
     const netPrivilegeSubtotal = isUbuBuyer ? netSubtotal : 0;
 
     const orderFeeOriginal = calculateOrganizerOrderFee(
-      feeSettings.organizerFeeMode,
-      feeSettings.organizerFeeRate,
+      organizerFeeMode,
+      organizerFeeRate,
       totalCount,
       grossSubtotal,
       privilegeRate,
       grossPrivilegeSubtotal,
     );
     const orderFeeAdjusted = calculateOrganizerOrderFee(
-      feeSettings.organizerFeeMode,
-      feeSettings.organizerFeeRate,
+      organizerFeeMode,
+      organizerFeeRate,
       validCount,
       netSubtotal,
       privilegeRate,
