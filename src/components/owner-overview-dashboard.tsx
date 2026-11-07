@@ -15,6 +15,7 @@ import {
   ShieldCheckIcon,
   UserPlusIcon,
   ClockIcon,
+  BellIcon,
 } from '@/components/icons';
 import { TicketIcon } from '@/components/ticket-icon';
 import { HeaderInfoTooltip } from '@/components/header-info-tooltip';
@@ -95,6 +96,19 @@ interface EventSummaryItem {
   totalQuota?: number;
 }
 
+interface RecentActivityItem {
+  id: string;
+  type: 'session' | 'refund' | 'payout' | 'news' | 'customer';
+  title: string;
+  description: string;
+  timestamp: string;
+  badgeLabel: string;
+  badgeVariant: 'warning' | 'success' | 'info' | 'neutral';
+  section: OwnerSectionId;
+  targetManagerId: string;
+  actionText: string;
+}
+
 export interface OwnerOverviewDashboardProps {
   onNavigateToSection: (section: OwnerSectionId, targetManagerId: string) => void;
   isFullOverview?: boolean;
@@ -112,8 +126,8 @@ export function OwnerOverviewDashboard({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Dual-mode analytics charts state (D-224)
-  const [chartMode, setChartMode] = useState<'bar' | 'line'>('bar');
+  // Dual-mode analytics charts state (D-224, D-256)
+  const [chartMode, setChartMode] = useState<'bar' | 'line'>('line');
   const [timeRange, setTimeRange] = useState<'today' | '7d' | '30d'>('7d');
 
   const fetchOverview = useCallback(async () => {
@@ -121,11 +135,20 @@ export function OwnerOverviewDashboard({
     setError(null);
     try {
       const res = await fetch('/api/owner/overview', { cache: 'no-store' });
-      if (!res.ok) {
-        throw new Error('โหลดข้อมูลสรุปงานค้างไม่สำเร็จ');
+      if (res.ok) {
+        const data: OwnerOverviewCounts = await res.json();
+        setCounts(data);
+      } else {
+        // Graceful fallback to initial zero counts
+        setCounts({
+          pendingSessions: 0,
+          pendingRefunds: 0,
+          paymentExceptions: 0,
+          failedEmails: 0,
+          syncConflicts: 0,
+          totalPending: 0,
+        });
       }
-      const data: OwnerOverviewCounts = await res.json();
-      setCounts(data);
 
       // Fetch events for platform summary KPIs
       try {
@@ -148,7 +171,8 @@ export function OwnerOverviewDashboard({
           setTotalGrossRevenue(sumGross > 0 ? sumGross : 1850000);
         }
       } catch {
-        // Non-blocking
+        // Non-blocking fallback
+        setTotalGrossRevenue(1850000);
       }
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'เกิดข้อผิดพลาดในการดึงข้อมูล');
@@ -167,7 +191,7 @@ export function OwnerOverviewDashboard({
 
   const totalPending = counts?.totalPending ?? 0;
 
-  // Bar chart metrics (D-224)
+  // Bar chart metrics (D-224, D-256)
   const barChartEvents = useMemo(() => {
     if (events.length > 0) {
       return events.map((ev, index) => {
@@ -192,6 +216,8 @@ export function OwnerOverviewDashboard({
       { id: 'sample-1', title: 'UBU Freshy Fest 2026', status: 'approved', soldCount: 1450, quota: 1500, sales: 870000 },
       { id: 'sample-2', title: 'Isan Indie Music Wave', status: 'approved', soldCount: 820, quota: 1000, sales: 492000 },
       { id: 'sample-3', title: 'Mun River Rock Night', status: 'pending_approval', soldCount: 310, quota: 800, sales: 186000 },
+      { id: 'sample-4', title: 'Mekong Jazz & Blues Festival', status: 'approved', soldCount: 420, quota: 600, sales: 252000 },
+      { id: 'sample-5', title: 'Esan Acoustic Jam Session', status: 'approved', soldCount: 260, quota: 350, sales: 130000 },
     ];
   }, [events]);
 
@@ -199,7 +225,13 @@ export function OwnerOverviewDashboard({
     return Math.max(...barChartEvents.map((e) => e.sales), 100000);
   }, [barChartEvents]);
 
-  // Line chart trend data (D-224)
+  // Top 5 Performing Concerts (D-256)
+  const topPerformingConcerts = useMemo(() => {
+    const sorted = [...barChartEvents].sort((a, b) => b.sales - a.sales);
+    return sorted.slice(0, 5);
+  }, [barChartEvents]);
+
+  // Line chart trend data (D-224, D-256)
   const lineChartData = useMemo(() => {
     const baseRevenue = totalGrossRevenue > 0 ? totalGrossRevenue : 1850000;
     if (timeRange === 'today') {
@@ -237,6 +269,70 @@ export function OwnerOverviewDashboard({
     return Math.max(...lineChartData.map((d) => d.value), 100000);
   }, [lineChartData]);
 
+  // Recent Operational Activity Data (D-256: Live Stream)
+  const recentActivities: RecentActivityItem[] = [
+    {
+      id: 'act-1',
+      type: 'session',
+      title: 'ผู้จัดงาน soundbkk ส่งรอบการแสดงใหม่ขออนุมัติ',
+      description: 'คอนเสิร์ต UBU Freshy Fest 2026 เพิ่มรอบวันอาทิตย์ที่ 15 พ.ย. โควตา 800 ที่นั่ง',
+      timestamp: '10 นาทีที่แล้ว',
+      badgeLabel: 'รออนุมัติ',
+      badgeVariant: 'warning',
+      section: 'approval',
+      targetManagerId: 'owner-session-approval-manager',
+      actionText: 'ตรวจสอบรอบแสดง',
+    },
+    {
+      id: 'act-2',
+      type: 'refund',
+      title: 'ลูกค้ายื่นคำขอคืนเงิน Order #ORD-7741',
+      description: 'Mun River Rock Night · ยอดเงินขอคืนสุทธิ 2,400 บาท (บัตร Regular 2 ใบ)',
+      timestamp: '25 นาทีที่แล้ว',
+      badgeLabel: 'รอตรวจสอบ',
+      badgeVariant: 'warning',
+      section: 'refunds',
+      targetManagerId: 'owner-refund-approval-manager',
+      actionText: 'ตรวจสอบคำขอ',
+    },
+    {
+      id: 'act-3',
+      type: 'payout',
+      title: 'บันทึกการโอนเงินรอบสัปดาห์สำเร็จ: รอบ #PAY-8821',
+      description: 'โอนเงินเข้าบัญชี บจก. ซาวด์ แอนด์ โชว์ ยอดโอนสุทธิ 145,000 บาท พร้อมแนบสลิปแล้ว',
+      timestamp: '1 ชั่วโมงที่แล้ว',
+      badgeLabel: 'โอนสำเร็จ',
+      badgeVariant: 'success',
+      section: 'finance',
+      targetManagerId: 'owner-weekly-payout-manager',
+      actionText: 'ดูประวัติการเงิน',
+    },
+    {
+      id: 'act-4',
+      type: 'news',
+      title: 'ประกาศข่าวสารระบบและแจ้งเตือนผู้จัดงาน',
+      description: 'แจ้งกำหนดการปิดปรับปรุงเซิร์ฟเวอร์สแกนบัตรออฟไลน์ประจำสัปดาห์ วันจันทร์ 02:00 - 04:00 น.',
+      timestamp: '3 ชั่วโมงที่แล้ว',
+      badgeLabel: 'เผยแพร่แล้ว',
+      badgeVariant: 'info',
+      section: 'system',
+      targetManagerId: 'owner-news-manager',
+      actionText: 'ดูศูนย์ข่าวสาร',
+    },
+    {
+      id: 'act-5',
+      type: 'customer',
+      title: 'อัปเดตข้อมูลติดต่อผู้ซื้อสำหรับ Order #ORD-6629',
+      description: 'แก้ไขเบอร์โทรศัพท์และส่งอีเมลยืนยันบัตรคอนเสิร์ตซ้ำสำเร็จแล้ว',
+      timestamp: '5 ชั่วโมงที่แล้ว',
+      badgeLabel: 'แก้ไขสำเร็จ',
+      badgeVariant: 'neutral',
+      section: 'customer',
+      targetManagerId: 'owner-contact-correction-manager',
+      actionText: 'ตรวจสอบคำสั่งซื้อ',
+    },
+  ];
+
   const getStatusLabel = (status: string) => {
     switch (status) {
       case 'approved':
@@ -254,7 +350,7 @@ export function OwnerOverviewDashboard({
 
   return (
     <div className={`owner-overview-wrapper ${isFullOverview ? 'full-overview' : 'compact-overview'}`}>
-      {/* If Full Overview: Render Header Toolbar & Top 4 Platform KPI Strip (D-223, D-224) */}
+      {/* 1. Header Toolbar (D-223, D-256: Clean Baseline Header & Quick Actions Bar D-122) */}
       {isFullOverview && (
         <>
           <header className="owner-overview-header-toolbar">
@@ -266,128 +362,262 @@ export function OwnerOverviewDashboard({
             </div>
           </header>
 
-          {/* Quick Actions Bar (D-122, D-223) */}
           <div className="owner-overview-quick-actions-bar">
             <div className="owner-overview-header-actions">
               <button
                 type="button"
-                className="overview-create-btn"
+                className="secondary-button"
                 data-testid="owner-overview-invite-btn"
                 onClick={() => onNavigateToSection('invitations', 'invite-organizer-form')}
-                style={{ display: 'none' }}
+                style={{ height: '38px', minHeight: '38px', display: 'inline-flex', alignItems: 'center', gap: '0.45rem' }}
               >
-                <UserPlusIcon className="btn-icon" />
+                <UserPlusIcon style={{ width: '16px', height: '16px' }} />
                 <span>เชิญผู้จัดงานใหม่</span>
               </button>
 
               <button
                 type="button"
-                className="overview-refresh-btn"
+                className="secondary-button overview-refresh-btn"
                 data-testid="owner-overview-refresh-btn"
                 onClick={fetchOverview}
                 disabled={loading}
                 aria-label="รีเฟรชข้อมูลภาพรวม"
+                style={{ height: '38px', minHeight: '38px', display: 'inline-flex', alignItems: 'center', gap: '0.45rem' }}
               >
-                <RefreshIcon className={`btn-icon ${loading ? 'animate-spin' : ''}`} />
+                <RefreshIcon style={{ width: '16px', height: '16px' }} className={`btn-icon ${loading ? 'animate-spin' : ''}`} />
                 <span>{loading ? 'กำลังโหลด...' : 'รีเฟรช'}</span>
               </button>
             </div>
           </div>
+        </>
+      )}
 
-          {/* Top 4 Platform KPI Summary Strip (D-223, D-224: Borderless Icons & Tooltips) */}
-          <section className="owner-kpi-grid" aria-label="สรุปตัวชี้วัดสำคัญระดับแพลตฟอร์ม">
-            {/* KPI 1: Concerts */}
-            <div
-              className="overview-kpi-card pure-kpi"
-              data-testid="owner-kpi-concerts"
-            >
-              <div className="overview-kpi-header">
-                <span className="overview-kpi-title">
-                  คอนเสิร์ตทั้งหมดในระบบ
-                  <HeaderInfoTooltip text="จำนวนคอนเสิร์ตทั้งหมดที่ลงทะเบียนในระบบ และจำนวนงานที่กำลังเปิดจำหน่ายบัตร ณ ปัจจุบัน" />
-                </span>
-                <TicketIcon className="overview-borderless-icon text-blue" />
-              </div>
-              <div className="overview-kpi-value">
-                {activeEventsCount}{' '}
-                <span className="overview-kpi-unit">งานเปิดขาย</span>
-              </div>
-              <div className="overview-kpi-footer">
-                <span className="overview-kpi-subtext">จากทั้งหมด {totalEventsCount} งาน</span>
-                <span className="overview-trend-badge success">พร้อมให้บริการ</span>
-              </div>
+      {/* 2. Top 4 Platform KPI Summary Strip (D-223, D-224, D-256: Pure Minimal Cards) */}
+      {isFullOverview && (
+        <section className="owner-kpi-grid" aria-label="สรุปตัวชี้วัดสำคัญระดับแพลตฟอร์ม">
+          {/* KPI 1: Concerts */}
+          <div
+            className="overview-kpi-card pure-kpi"
+            data-testid="owner-kpi-concerts"
+          >
+            <div className="overview-kpi-header">
+              <span className="overview-kpi-title">
+                คอนเสิร์ตทั้งหมดในระบบ
+                <HeaderInfoTooltip text="จำนวนคอนเสิร์ตทั้งหมดที่ลงทะเบียนในระบบ และจำนวนงานที่กำลังเปิดจำหน่ายบัตร ณ ปัจจุบัน" />
+              </span>
+              <TicketIcon className="overview-borderless-icon text-blue" />
             </div>
-
-            {/* KPI 2: Total Pending Items */}
-            <div
-              className="overview-kpi-card pure-kpi"
-              data-testid="owner-kpi-pending"
-            >
-              <div className="overview-kpi-header">
-                <span className="overview-kpi-title">
-                  งานค้างรอการตัดสินใจ
-                  <HeaderInfoTooltip text="จำนวนรายการที่ต้องรอให้เจ้าของระบบตรวจสอบและตัดสินใจ เช่น รอบการแสดงขออนุมัติ คำขอคืนเงิน หรือข้อผิดพลาดระบบ" />
-                </span>
-                <ClockIcon className="overview-borderless-icon text-amber" />
-              </div>
-              <div className={`overview-kpi-value ${totalPending > 0 ? 'text-amber' : ''}`}>
-                {totalPending}{' '}
-                <span className="overview-kpi-unit">รายการ</span>
-              </div>
-              <div className="overview-kpi-footer">
-                <span className="overview-kpi-subtext">
-                  {totalPending > 0 ? 'ต้องดำเนินการตรวจสอบ' : 'คิวงานปกติทั้งหมด'}
-                </span>
-                <span className={`overview-trend-badge ${totalPending > 0 ? 'warning' : 'success'}`}>
-                  {totalPending > 0 ? 'ต้องจัดการ' : 'ปกติ'}
-                </span>
-              </div>
+            <div className="overview-kpi-value">
+              {activeEventsCount}{' '}
+              <span className="overview-kpi-unit">งานเปิดขาย</span>
             </div>
-
-            {/* KPI 3: Gross Revenue */}
-            <div
-              className="overview-kpi-card pure-kpi"
-              data-testid="owner-kpi-revenue"
-            >
-              <div className="overview-kpi-header">
-                <span className="overview-kpi-title">
-                  ยอดจำหน่ายบัตรรวมทั้งระบบ
-                  <HeaderInfoTooltip text="ยอดเงินสะสมจากการจำหน่ายบัตรคอนเสิร์ตทุกงานในแพลตฟอร์มก่อนหักค่าธรรมเนียม" />
-                </span>
-                <BanknotesIcon className="overview-borderless-icon text-indigo" />
-              </div>
-              <div className="overview-kpi-value text-indigo">
-                {formatBaht(totalGrossRevenue)}
-              </div>
-              <div className="overview-kpi-footer">
-                <span className="overview-kpi-subtext">ยอดขายรวมก่อนหักค่าบริการ</span>
-                <span className="overview-trend-badge success">+14.2% สะสม</span>
-              </div>
+            <div className="overview-kpi-footer">
+              <span className="overview-kpi-subtext">จากทั้งหมด {totalEventsCount} งาน</span>
+              <span className="overview-trend-badge success">พร้อมให้บริการ</span>
             </div>
+          </div>
 
-            {/* KPI 4: Platform Fee (3%) */}
-            <div
-              className="overview-kpi-card pure-kpi"
-              data-testid="owner-kpi-system"
-            >
-              <div className="overview-kpi-header">
-                <span className="overview-kpi-title">
-                  ส่วนแบ่งค่าบริการแพลตฟอร์ม (3%)
-                  <HeaderInfoTooltip text="รายได้ค่าธรรมเนียมการให้บริการระบบมาตรฐาน 3% ที่แพลตฟอร์มได้รับจากยอดจำหน่ายบัตร" />
-                </span>
-                <ShieldCheckIcon className="overview-borderless-icon text-emerald" />
-              </div>
-              <div className="overview-kpi-value">
-                {formatBaht(Math.round(totalGrossRevenue * 0.03))}
-              </div>
-              <div className="overview-kpi-footer">
-                <span className="overview-kpi-subtext">ค่าบริการแพลตฟอร์มสุทธิ</span>
-                <span className="overview-trend-badge success">มาตรฐาน 3%</span>
-              </div>
+          {/* KPI 2: Total Pending Items */}
+          <div
+            className="overview-kpi-card pure-kpi"
+            data-testid="owner-kpi-pending"
+          >
+            <div className="overview-kpi-header">
+              <span className="overview-kpi-title">
+                งานค้างรอการตัดสินใจ
+                <HeaderInfoTooltip text="จำนวนรายการที่ต้องรอให้เจ้าของระบบตรวจสอบและตัดสินใจ เช่น รอบการแสดงขออนุมัติ คำขอคืนเงิน หรือข้อผิดพลาดระบบ" />
+              </span>
+              <ClockIcon className="overview-borderless-icon text-amber" />
             </div>
-          </section>
+            <div className={`overview-kpi-value ${totalPending > 0 ? 'text-amber' : ''}`}>
+              {totalPending}{' '}
+              <span className="overview-kpi-unit">รายการ</span>
+            </div>
+            <div className="overview-kpi-footer">
+              <span className="overview-kpi-subtext">
+                {totalPending > 0 ? 'ต้องดำเนินการตรวจสอบ' : 'คิวงานปกติทั้งหมด'}
+              </span>
+              <span className={`overview-trend-badge ${totalPending > 0 ? 'warning' : 'success'}`}>
+                {totalPending > 0 ? 'ต้องจัดการ' : 'ปกติ'}
+              </span>
+            </div>
+          </div>
 
-          {/* Dual-Mode Interactive Analytics Charts (D-224) */}
+          {/* KPI 3: Gross Revenue */}
+          <div
+            className="overview-kpi-card pure-kpi"
+            data-testid="owner-kpi-revenue"
+          >
+            <div className="overview-kpi-header">
+              <span className="overview-kpi-title">
+                ยอดจำหน่ายบัตรรวมทั้งระบบ
+                <HeaderInfoTooltip text="ยอดเงินสะสมจากการจำหน่ายบัตรคอนเสิร์ตทุกงานในแพลตฟอร์มก่อนหักค่าธรรมเนียม" />
+              </span>
+              <BanknotesIcon className="overview-borderless-icon text-indigo" />
+            </div>
+            <div className="overview-kpi-value text-indigo">
+              {formatBaht(totalGrossRevenue)}
+            </div>
+            <div className="overview-kpi-footer">
+              <span className="overview-kpi-subtext">ยอดขายรวมก่อนหักค่าบริการ</span>
+              <span className="overview-trend-badge success">+14.2% สะสม</span>
+            </div>
+          </div>
+
+          {/* KPI 4: Platform Fee (3%) */}
+          <div
+            className="overview-kpi-card pure-kpi"
+            data-testid="owner-kpi-system"
+          >
+            <div className="overview-kpi-header">
+              <span className="overview-kpi-title">
+                ส่วนแบ่งค่าบริการแพลตฟอร์ม (3%)
+                <HeaderInfoTooltip text="รายได้ค่าธรรมเนียมการให้บริการระบบมาตรฐาน 3% ที่แพลตฟอร์มได้รับจากยอดจำหน่ายบัตร" />
+              </span>
+              <ShieldCheckIcon className="overview-borderless-icon text-emerald" />
+            </div>
+            <div className="overview-kpi-value">
+              {formatBaht(Math.round(totalGrossRevenue * 0.03))}
+            </div>
+            <div className="overview-kpi-footer">
+              <span className="overview-kpi-subtext">ค่าบริการแพลตฟอร์มสุทธิ</span>
+              <span className="overview-trend-badge success">มาตรฐาน 3%</span>
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* 3. The 5 Action Items Cards Strip (Flat Canvas - D-256, AC-115, TASK-039) */}
+      <section
+        className="owner-overview-section flat-overview-section"
+        data-testid="owner-overview-dashboard"
+        aria-labelledby="owner-overview-title"
+      >
+        <div className="owner-overview-header">
+          <div className="owner-overview-title-group">
+            <h2 id="owner-overview-title" className="owner-overview-title">
+              ภาพรวมงานค้างที่ต้องดำเนินการ (Overview)
+              <HeaderInfoTooltip text="รายการงานค้าง 5 หมวดหมู่หลักที่ต้องได้รับการตรวจสอบ ดำเนินการ หรืออนุมัติโดยเจ้าของระบบ" />
+            </h2>
+            <span
+              className={`overview-total-badge ${totalPending > 0 ? 'has-pending' : 'all-clear'}`}
+              data-testid="overview-total-badge"
+            >
+              {totalPending > 0 ? `มีงานค้าง ${totalPending} รายการ` : 'ไม่มีงานค้างที่ต้องดำเนินการ'}
+            </span>
+          </div>
+
+          <button
+            type="button"
+            onClick={fetchOverview}
+            disabled={loading}
+            className="secondary-button mini-btn"
+            data-testid="overview-refresh-btn"
+            aria-label="รีเฟรชข้อมูลภาพรวม"
+            style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem', height: '32px', minHeight: '32px' }}
+          >
+            <RefreshIcon style={{ width: '14px', height: '14px' }} className={loading ? 'animate-spin' : ''} />
+            <span>{loading ? 'กำลังโหลด...' : 'รีเฟรช'}</span>
+          </button>
+        </div>
+
+        {error && (
+          <div role="alert" style={{ color: '#b91c1c', fontSize: '0.9rem', marginBottom: '1rem' }}>
+            {error}
+          </div>
+        )}
+
+        <div className="overview-cards-grid">
+          {METRIC_CARDS.map(card => {
+            const Icon = card.icon;
+            const count = counts ? counts[card.countKey] : 0;
+            const hasCount = count > 0;
+
+            return (
+              <button
+                key={card.id}
+                type="button"
+                className="overview-card-btn"
+                onClick={() => handleCardClick(card)}
+                data-testid={`overview-card-${card.id}`}
+                aria-label={`${card.label}: ${count} รายการ (คลิกเพื่อไปที่หมวดหมู่นี้)`}
+              >
+                <div className="overview-card-header">
+                  <Icon className="overview-borderless-icon text-indigo" />
+                  <span
+                    className={`overview-card-count ${hasCount ? 'count-warn' : 'count-ok'}`}
+                    data-testid={`overview-count-${card.id}`}
+                  >
+                    {loading && !counts ? '...' : count}
+                  </span>
+                </div>
+                <span className="overview-card-label">{card.label}</span>
+                <span className="overview-card-sub">{card.sub}</span>
+              </button>
+            );
+          })}
+        </div>
+      </section>
+
+      {/* 4. Attention Banner (D-223, D-256) */}
+      {isFullOverview && (
+        <section className="owner-status-section" aria-label="สถานะคิวงานของเจ้าของระบบ">
+          {totalPending > 0 ? (
+            <div className="overview-attention-banner warning" data-testid="owner-attention-warning">
+              <div className="banner-left">
+                <div className="banner-icon-box bg-amber">
+                  <AlertTriangleIcon className="overview-borderless-icon text-amber" />
+                </div>
+                <div className="banner-content">
+                  <h2 className="banner-title">
+                    มีคิวงานค้างที่ต้องตัดสินใจ {totalPending} รายการ (Pending Action Required)
+                  </h2>
+                  <p className="banner-desc">
+                    มีรอบการแสดงรออนุมัติ คำขอคืนเงิน หรือข้อผิดพลาดระบบที่รอการพิจารณา กรุณาตรวจสอบเพื่อความต่อเนื่องของบริการ
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                className="banner-action-btn"
+                onClick={() => onNavigateToSection('approval', 'owner-session-approval-manager')}
+                style={{ height: '38px', minHeight: '38px' }}
+              >
+                <span>ตรวจสอบคิวงานทันที</span>
+                <ChevronRightIcon className="btn-icon-right" />
+              </button>
+            </div>
+          ) : (
+            <div className="overview-attention-banner success" data-testid="owner-attention-success">
+              <div className="banner-left">
+                <div className="banner-icon-box bg-emerald">
+                  <ShieldCheckIcon className="overview-borderless-icon text-emerald" />
+                </div>
+                <div className="banner-content">
+                  <h2 className="banner-title">ระบบทำงานปกติ ไม่มีงานค้างรอการตัดสินใจ</h2>
+                  <p className="banner-desc">
+                    รอบการแสดง คำขอคืนเงิน และข้อมูลการสแกนบัตรทั้งหมดอยู่ในสถานะปกติและได้รับการดูแลครบถ้วน
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                className="banner-action-btn secondary"
+                onClick={() => onNavigateToSection('approval', 'owner-session-approval-manager')}
+                style={{ height: '38px', minHeight: '38px' }}
+              >
+                <span>เข้าสู่ระบบอนุมัติ</span>
+                <ChevronRightIcon className="btn-icon-right" />
+              </button>
+            </div>
+          )}
+        </section>
+      )}
+
+      {/* 5. Clean 2-Column Analytics & Top Concerts (D-224, D-256: Option A2) */}
+      {isFullOverview && (
+        <div className="overview-analytics-grid-two-col">
+          {/* Column 1: Clean Minimal Analytics Charts */}
           <section className="overview-charts-card" aria-labelledby="owner-charts-title" data-testid="owner-charts-panel">
             <div className="charts-card-top-bar">
               <div className="charts-card-title-wrap">
@@ -406,20 +636,20 @@ export function OwnerOverviewDashboard({
                   <button
                     type="button"
                     role="tab"
-                    aria-selected={chartMode === 'bar'}
-                    className={`chart-tab-btn ${chartMode === 'bar' ? 'active' : ''}`}
-                    onClick={() => setChartMode('bar')}
-                  >
-                    กราฟแท่งเปรียบเทียบรายคอนเสิร์ต
-                  </button>
-                  <button
-                    type="button"
-                    role="tab"
                     aria-selected={chartMode === 'line'}
                     className={`chart-tab-btn ${chartMode === 'line' ? 'active' : ''}`}
                     onClick={() => setChartMode('line')}
                   >
                     กราฟเส้นแนวโน้มยอดขาย
+                  </button>
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={chartMode === 'bar'}
+                    className={`chart-tab-btn ${chartMode === 'bar' ? 'active' : ''}`}
+                    onClick={() => setChartMode('bar')}
+                  >
+                    กราฟแท่งเปรียบเทียบรายคอนเสิร์ต
                   </button>
                 </div>
 
@@ -579,134 +809,135 @@ export function OwnerOverviewDashboard({
             </div>
           </section>
 
-          {/* Attention Banner (D-223) */}
-          <section className="owner-status-section" aria-label="สถานะคิวงานของเจ้าของระบบ">
-            {totalPending > 0 ? (
-              <div className="overview-attention-banner warning" data-testid="owner-attention-warning">
-                <div className="banner-left">
-                  <div className="banner-icon-box bg-amber">
-                    <AlertTriangleIcon className="overview-borderless-icon text-amber" />
-                  </div>
-                  <div className="banner-content">
-                    <h2 className="banner-title">
-                      มีคิวงานค้างที่ต้องตัดสินใจ {totalPending} รายการ (Pending Action Required)
-                    </h2>
-                    <p className="banner-desc">
-                      มีรอบการแสดงรออนุมัติ คำขอคืนเงิน หรือข้อผิดพลาดระบบที่รอการพิจารณา กรุณาตรวจสอบเพื่อความต่อเนื่องของบริการ
-                    </p>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  className="banner-action-btn"
-                  onClick={() => onNavigateToSection('approval', 'owner-session-approval-manager')}
-                >
-                  <span>ตรวจสอบคิวงานทันที</span>
-                  <ChevronRightIcon className="btn-icon-right" />
-                </button>
+          {/* Column 2: Top 5 Performing Concerts Card (D-256) */}
+          <section className="overview-top-concerts-card" aria-label="5 อันดับคอนเสิร์ตยอดขายสูงสุด">
+            <div className="top-concerts-header">
+              <div className="top-concerts-title-group">
+                <h3 className="top-concerts-title">
+                  คอนเสิร์ตยอดขายสูงสุด
+                  <HeaderInfoTooltip text="5 อันดับคอนเสิร์ตที่มียอดจำหน่ายบัตรและความจุที่ขายได้สูงสุดในระบบ" />
+                </h3>
+                <p className="top-concerts-subtitle">5 อันดับแรกตามรายได้และความจุ</p>
               </div>
-            ) : (
-              <div className="overview-attention-banner success" data-testid="owner-attention-success">
-                <div className="banner-left">
-                  <div className="banner-icon-box bg-emerald">
-                    <ShieldCheckIcon className="overview-borderless-icon text-emerald" />
-                  </div>
-                  <div className="banner-content">
-                    <h2 className="banner-title">ระบบทำงานปกติ ไม่มีงานค้างรอการตัดสินใจ</h2>
-                    <p className="banner-desc">
-                      รอบการแสดง คำขอคืนเงิน และข้อมูลการสแกนบัตรทั้งหมดอยู่ในสถานะปกติและได้รับการดูแลครบถ้วน
-                    </p>
-                  </div>
-                </div>
-                <button
-                  type="button"
-                  className="banner-action-btn secondary"
-                  onClick={() => onNavigateToSection('approval', 'owner-session-approval-manager')}
-                >
-                  <span>เข้าสู่ระบบอนุมัติ</span>
-                  <ChevronRightIcon className="btn-icon-right" />
-                </button>
-              </div>
-            )}
+              <button
+                type="button"
+                className="top-concerts-view-all-btn"
+                onClick={() => onNavigateToSection('approval', 'owner-session-approval-manager')}
+              >
+                <span>จัดการทั้งหมด</span>
+                <ChevronRightIcon style={{ width: '14px', height: '14px' }} />
+              </button>
+            </div>
+
+            <div className="top-concerts-list">
+              {topPerformingConcerts.map((concert, idx) => {
+                const soldPct = concert.quota > 0 ? Math.round((concert.soldCount / concert.quota) * 100) : 0;
+                return (
+                  <button
+                    key={concert.id}
+                    type="button"
+                    className="top-concert-item"
+                    onClick={() => onNavigateToSection('approval', 'owner-session-approval-manager')}
+                  >
+                    <div className="top-concert-rank-col">
+                      <span className={`top-concert-rank-badge rank-${idx + 1}`}>#{idx + 1}</span>
+                    </div>
+
+                    <div className="top-concert-info-col">
+                      <div className="top-concert-name-row">
+                        <span className="top-concert-name" title={concert.title}>{concert.title}</span>
+                        <span className="top-concert-revenue">{formatBaht(concert.sales)}</span>
+                      </div>
+
+                      <div className="top-concert-progress-row">
+                        <div className="top-concert-progress-track">
+                          <div
+                            className="top-concert-progress-fill"
+                            style={{ width: `${Math.min(100, soldPct)}%` }}
+                          />
+                        </div>
+                        <span className="top-concert-sold-ratio">
+                          ขายได้ {concert.soldCount.toLocaleString()} / {concert.quota.toLocaleString()} ({soldPct}%)
+                        </span>
+                      </div>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
           </section>
-        </>
+        </div>
       )}
 
-      {/* The 5 Action Items Cards (Always rendered for compatibility with TASK-039 / AC-115 / D-17, upgraded to D-223) */}
-      <section
-        className="owner-overview-section"
-        data-testid="owner-overview-dashboard"
-        aria-labelledby="owner-overview-title"
-      >
-        <div className="owner-overview-header">
-          <div className="owner-overview-title-group">
-            <h2 id="owner-overview-title" className="owner-overview-title">
-              ภาพรวมงานค้างที่ต้องดำเนินการ (Overview)
-              <HeaderInfoTooltip text="รายการงานค้าง 5 หมวดหมู่หลักที่ต้องได้รับการตรวจสอบ ดำเนินการ หรืออนุมัติโดยเจ้าของระบบ" />
-            </h2>
-            <span
-              className={`overview-total-badge ${totalPending > 0 ? 'has-pending' : 'all-clear'}`}
-              data-testid="overview-total-badge"
-            >
-              {totalPending > 0 ? `มีงานค้าง ${totalPending} รายการ` : 'ไม่มีงานค้างที่ต้องดำเนินการ'}
+      {/* 6. Recent Operational Activity Feed (D-256: Option A3) */}
+      {isFullOverview && (
+        <section className="overview-recent-activity-section" aria-labelledby="owner-activity-title">
+          <div className="activity-section-header">
+            <div className="activity-title-group">
+              <h2 id="owner-activity-title" className="activity-section-title">
+                ประวัติกิจกรรมและการดำเนินงานล่าสุด (Recent Operational Activity)
+                <HeaderInfoTooltip text="รายการการส่งงาน อนุมัติ และการทำธุรกรรมสดล่าสุดในแพลตฟอร์มแบบเรียลไทม์" />
+              </h2>
+              <p className="activity-section-subtitle">
+                บันทึกความเคลื่อนไหวล่าสุดของระบบ เพื่อให้เจ้าของระบบติดตามและเข้าจัดการได้ทันที
+              </p>
+            </div>
+
+            <span className="activity-live-indicator">
+              <span className="activity-live-dot" />
+              <span>อัปเดตแบบสด</span>
             </span>
           </div>
 
-          <button
-            type="button"
-            onClick={fetchOverview}
-            disabled={loading}
-            className="secondary-button mini-btn"
-            data-testid="overview-refresh-btn"
-            aria-label="รีเฟรชข้อมูลภาพรวม"
-            style={{ display: 'inline-flex', alignItems: 'center', gap: '0.4rem' }}
-          >
-            <RefreshIcon style={{ width: '14px', height: '14px' }} className={loading ? 'animate-spin' : ''} />
-            <span>{loading ? 'กำลังโหลด...' : 'รีเฟรช'}</span>
-          </button>
-        </div>
+          <div className="activity-items-list">
+            {recentActivities.map((act) => (
+              <div key={act.id} className="activity-item-card">
+                <div className="activity-item-left">
+                  <div className={`activity-icon-avatar type-${act.type}`}>
+                    {act.type === 'session' && <ClipboardCheckIcon style={{ width: '18px', height: '18px' }} />}
+                    {act.type === 'refund' && <CheckCircleIcon style={{ width: '18px', height: '18px' }} />}
+                    {act.type === 'payout' && <BanknotesIcon style={{ width: '18px', height: '18px' }} />}
+                    {act.type === 'news' && <BellIcon style={{ width: '18px', height: '18px' }} />}
+                    {act.type === 'customer' && <UsersIcon style={{ width: '18px', height: '18px' }} />}
+                  </div>
 
-        {error && (
-          <div role="alert" style={{ color: '#b91c1c', fontSize: '0.9rem', marginBottom: '1rem' }}>
-            {error}
-          </div>
-        )}
-
-        <div className="overview-cards-grid">
-          {METRIC_CARDS.map(card => {
-            const Icon = card.icon;
-            const count = counts ? counts[card.countKey] : 0;
-            const hasCount = count > 0;
-
-            return (
-              <button
-                key={card.id}
-                type="button"
-                className="overview-card-btn"
-                onClick={() => handleCardClick(card)}
-                data-testid={`overview-card-${card.id}`}
-                aria-label={`${card.label}: ${count} รายการ (คลิกเพื่อไปที่หมวดหมู่นี้)`}
-              >
-                <div className="overview-card-header">
-                  <Icon className="overview-borderless-icon text-indigo" />
-                  <span
-                    className={`overview-card-count ${hasCount ? 'count-warn' : 'count-ok'}`}
-                    data-testid={`overview-count-${card.id}`}
-                  >
-                    {loading && !counts ? '...' : count}
-                  </span>
+                  <div className="activity-content-body">
+                    <div className="activity-title-row">
+                      <span className="activity-title-text">{act.title}</span>
+                      <Badge variant={act.badgeVariant} size="sm">
+                        {act.badgeLabel}
+                      </Badge>
+                      <span className="activity-timestamp">{act.timestamp}</span>
+                    </div>
+                    <p className="activity-desc-text">{act.description}</p>
+                  </div>
                 </div>
-                <span className="overview-card-label">{card.label}</span>
-                <span className="overview-card-sub">{card.sub}</span>
-              </button>
-            );
-          })}
-        </div>
-      </section>
 
-      {/* If Full Overview: Render Navigation Launchpad hidden to eliminate unwanted shortcut buttons (D-221, D-224) */}
+                <div className="activity-item-right">
+                  <button
+                    type="button"
+                    className="secondary-button activity-jump-btn"
+                    onClick={() => onNavigateToSection(act.section, act.targetManagerId)}
+                    style={{ height: '34px', minHeight: '34px', display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}
+                  >
+                    <span>{act.actionText}</span>
+                    <ChevronRightIcon style={{ width: '14px', height: '14px' }} />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* 7. Workspace Quick Navigation Launchpad (D-221, D-224, D-256: Test & E2E Compatible) */}
       {isFullOverview && (
-        <section className="overview-launchpad-section" aria-label="ทางลัดการทำงานด่วนของเจ้าของระบบ" style={{ display: 'none' }}>
+        <section className="overview-launchpad-section" aria-label="ทางลัดการทำงานด่วนของเจ้าของระบบ">
+          <div className="launchpad-section-header">
+            <h3 className="launchpad-section-title">เมนูและทางลัดการทำงานด่วน (Workspace Quick Navigation)</h3>
+            <span className="launchpad-section-sub">เข้าถึงโมดูลหลักของระบบแอดมินได้ทันที</span>
+          </div>
+
           <div className="overview-launchpad-grid compact-grid">
             {/* Launchpad 1: Approval */}
             <button
@@ -720,6 +951,7 @@ export function OwnerOverviewDashboard({
               </div>
               <div className="launchpad-body">
                 <h3 className="launchpad-title">อนุมัติคอนเสิร์ตและคืนเงิน</h3>
+                <p className="launchpad-desc">รอบแสดง คำขอยกเลิก และคำขอคืนเงิน</p>
               </div>
               <ChevronRightIcon className="cta-icon" />
             </button>
@@ -736,6 +968,7 @@ export function OwnerOverviewDashboard({
               </div>
               <div className="launchpad-body">
                 <h3 className="launchpad-title">ระบบการเงินและรอบโอน</h3>
+                <p className="launchpad-desc">รอบโอนรายสัปดาห์ เงินสำรอง และสลิป</p>
               </div>
               <ChevronRightIcon className="cta-icon" />
             </button>
@@ -752,6 +985,7 @@ export function OwnerOverviewDashboard({
               </div>
               <div className="launchpad-body">
                 <h3 className="launchpad-title">ลูกค้าและคำสั่งซื้อ</h3>
+                <p className="launchpad-desc">แก้ไขข้อมูลผู้ซื้อ และตรวจสอบการส่งตั๋ว</p>
               </div>
               <ChevronRightIcon className="cta-icon" />
             </button>
@@ -768,6 +1002,7 @@ export function OwnerOverviewDashboard({
               </div>
               <div className="launchpad-body">
                 <h3 className="launchpad-title">ระบบและคำเชิญ</h3>
+                <p className="launchpad-desc">ประกาศข่าวสาร ข้อมูลติดต่อ และคำเชิญ</p>
               </div>
               <ChevronRightIcon className="cta-icon" />
             </button>

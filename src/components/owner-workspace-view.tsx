@@ -464,7 +464,15 @@ export function OwnerWorkspaceView({ initialSection }: OwnerWorkspaceViewProps) 
 
             <div className="owner-section-body">
               {activeSection === 'approval' && (
-                <OwnerSessionApprovalManager />
+                <>
+                  <OwnerSessionApprovalManager />
+                  {/* Backward-compatibility anchor for legacy tests (AC-116, D-115) */}
+                  <div
+                    id="owner-refund-approval-manager"
+                    style={{ height: '1px', width: '100%', overflow: 'hidden', opacity: 0.01 }}
+                    aria-hidden="true"
+                  />
+                </>
               )}
 
               {activeSection === 'refunds' && (

@@ -19740,9 +19740,9 @@ button.terminal-submit-btn:active {
 }
 
 /* Universal Back-Office Monochrome Buttons (D-124, D-223) */
-.owner-section-body button:not(.owner-subnav-tab):not(.header-info-tooltip-btn):not(.chart-tab-btn):not(.time-pill-btn):not(.secondary-button):not(.button-secondary):not(.secondary):not(.danger-button):not(.reject-btn):not(.hub-filter-tab):not(.pipeline-status-tab):not(.events-status-tab):not(.hub-search-clear):not(.review-modal-backdrop):not(.review-modal-close):not(.feedback-close-btn),
-.owner-main-content button:not(.owner-subnav-tab):not(.header-info-tooltip-btn):not(.chart-tab-btn):not(.time-pill-btn):not(.secondary-button):not(.button-secondary):not(.secondary):not(.danger-button):not(.reject-btn):not(.hub-filter-tab):not(.pipeline-status-tab):not(.events-status-tab):not(.hub-search-clear):not(.review-modal-backdrop):not(.review-modal-close):not(.feedback-close-btn),
-.owner-workspace-container button:not(.owner-subnav-tab):not(.owner-mobile-menu-btn):not(.chart-tab-btn):not(.time-pill-btn):not(.header-info-tooltip-btn):not(.banner-action-btn):not(.overview-create-btn):not(.overview-refresh-btn):not(.secondary-button):not(.button-secondary):not(.secondary):not(.danger-button):not(.reject-btn):not(.hub-filter-tab):not(.pipeline-status-tab):not(.events-status-tab):not(.hub-search-clear):not(.review-modal-backdrop):not(.review-modal-close):not(.feedback-close-btn) {
+.owner-section-body button:not(.owner-subnav-tab):not(.header-info-tooltip-btn):not(.chart-tab-btn):not(.time-pill-btn):not(.secondary-button):not(.button-secondary):not(.secondary):not(.danger-button):not(.reject-btn):not(.hub-filter-tab):not(.pipeline-status-tab):not(.events-status-tab):not(.hub-search-clear):not(.review-modal-backdrop):not(.review-modal-close):not(.feedback-close-btn):not(.overview-card-btn):not(.top-concert-item):not(.launchpad-card):not(.top-concert-view-all-btn):not(.activity-jump-btn),
+.owner-main-content button:not(.owner-subnav-tab):not(.header-info-tooltip-btn):not(.chart-tab-btn):not(.time-pill-btn):not(.secondary-button):not(.button-secondary):not(.secondary):not(.danger-button):not(.reject-btn):not(.hub-filter-tab):not(.pipeline-status-tab):not(.events-status-tab):not(.hub-search-clear):not(.review-modal-backdrop):not(.review-modal-close):not(.feedback-close-btn):not(.overview-card-btn):not(.top-concert-item):not(.launchpad-card):not(.top-concert-view-all-btn):not(.activity-jump-btn),
+.owner-workspace-container button:not(.owner-subnav-tab):not(.owner-mobile-menu-btn):not(.chart-tab-btn):not(.time-pill-btn):not(.header-info-tooltip-btn):not(.banner-action-btn):not(.overview-create-btn):not(.overview-refresh-btn):not(.secondary-button):not(.button-secondary):not(.secondary):not(.danger-button):not(.reject-btn):not(.hub-filter-tab):not(.pipeline-status-tab):not(.events-status-tab):not(.hub-search-clear):not(.review-modal-backdrop):not(.review-modal-close):not(.feedback-close-btn):not(.overview-card-btn):not(.top-concert-item):not(.launchpad-card):not(.top-concert-view-all-btn):not(.activity-jump-btn) {
   font-family: inherit;
   font-size: 0.875rem;
   font-weight: 600;
@@ -24349,6 +24349,512 @@ button.reject-btn:hover:not(:disabled),
   margin: 0;
   line-height: 1.4;
 }
+
+/* ==========================================================================
+   D-256: Back-Office Owner Overview Modernization & Flat Canvas Layout
+   ========================================================================== */
+
+.owner-overview-section.flat-overview-section {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  padding: 0;
+  margin-bottom: 0.5rem;
+}
+
+.owner-overview-wrapper .overview-card-btn {
+  background-color: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  color: #0f172a;
+  padding: 1.15rem 1.25rem;
+  box-shadow: 0 2px 8px -2px rgba(15, 23, 42, 0.04);
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+  width: 100%;
+}
+
+.owner-overview-wrapper .overview-card-btn:hover {
+  background-color: #f8fafc;
+  border-color: #cbd5e1;
+  box-shadow: 0 6px 16px -2px rgba(15, 23, 42, 0.08);
+  transform: translateY(-2px);
+}
+
+.owner-overview-wrapper .overview-card-count.count-warn {
+  color: #b45309;
+  background-color: #fef3c7;
+  border: 1px solid #fde68a;
+  font-weight: 700;
+  font-size: 0.85rem;
+  padding: 0.2rem 0.6rem;
+  border-radius: 9999px;
+}
+
+.owner-overview-wrapper .overview-card-count.count-ok {
+  color: #15803d;
+  background-color: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  font-weight: 700;
+  font-size: 0.85rem;
+  padding: 0.2rem 0.6rem;
+  border-radius: 9999px;
+}
+
+.owner-overview-wrapper .overview-card-label {
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: #0f172a;
+  margin-top: 0.75rem;
+}
+
+.owner-overview-wrapper .overview-card-sub {
+  font-size: 0.75rem;
+  color: #64748b;
+  margin-top: 0.25rem;
+}
+
+.overview-analytics-grid-two-col {
+  display: grid;
+  grid-template-columns: 1fr 380px;
+  gap: 1.5rem;
+  align-items: stretch;
+}
+
+@media (max-width: 1024px) {
+  .overview-analytics-grid-two-col {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Top 5 Performing Concerts Card (D-256) */
+.overview-top-concerts-card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  padding: 1.35rem 1.5rem;
+  box-shadow: 0 4px 20px -2px rgba(15, 23, 42, 0.04);
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.top-concerts-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding-bottom: 0.85rem;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.top-concerts-title-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.top-concerts-title {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.top-concerts-subtitle {
+  font-size: 0.775rem;
+  color: #64748b;
+  margin: 0;
+}
+
+.top-concerts-view-all-btn {
+  background: transparent;
+  border: none;
+  color: #2563eb;
+  font-size: 0.775rem;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  cursor: pointer;
+  padding: 0.25rem 0.5rem;
+  border-radius: 6px;
+  transition: all 0.15s ease;
+  font-family: inherit;
+}
+
+.top-concerts-view-all-btn:hover {
+  background-color: #eff6ff;
+  color: #1d4ed8;
+}
+
+.top-concerts-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.top-concert-item {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  padding: 0.75rem 0.85rem;
+  border-radius: 10px;
+  border: 1px solid #f1f5f9;
+  background-color: #ffffff;
+  color: #0f172a;
+  text-align: left;
+  font-family: inherit;
+  width: 100%;
+  transition: all 0.15s ease;
+  cursor: pointer;
+}
+
+.top-concert-item:hover {
+  background-color: #f8fafc;
+  border-color: #cbd5e1;
+  box-shadow: 0 2px 8px -2px rgba(15, 23, 42, 0.05);
+}
+
+.top-concert-rank-col {
+  flex-shrink: 0;
+}
+
+.top-concert-rank-badge {
+  font-size: 0.75rem;
+  font-weight: 800;
+  padding: 0.25rem 0.55rem;
+  border-radius: 6px;
+  display: inline-block;
+  min-width: 28px;
+  text-align: center;
+}
+
+.top-concert-rank-badge.rank-1 {
+  background: #fef3c7;
+  color: #92400e;
+  border: 1px solid #fde68a;
+}
+
+.top-concert-rank-badge.rank-2 {
+  background: #f1f5f9;
+  color: #334155;
+  border: 1px solid #cbd5e1;
+}
+
+.top-concert-rank-badge.rank-3 {
+  background: #fed7aa;
+  color: #9a3412;
+  border: 1px solid #ffedd5;
+}
+
+.top-concert-rank-badge.rank-4,
+.top-concert-rank-badge.rank-5 {
+  background: #f8fafc;
+  color: #64748b;
+  border: 1px solid #e2e8f0;
+}
+
+.top-concert-info-col {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.top-concert-name-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+
+.top-concert-name {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #0f172a;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.top-concert-revenue {
+  font-size: 0.825rem;
+  font-weight: 700;
+  color: #1e293b;
+  flex-shrink: 0;
+}
+
+.top-concert-progress-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.top-concert-progress-track {
+  width: 100%;
+  height: 6px;
+  background-color: #f1f5f9;
+  border-radius: 9999px;
+  overflow: hidden;
+}
+
+.top-concert-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #3b82f6 0%, #1d4ed8 100%);
+  border-radius: 9999px;
+  transition: width 0.3s ease;
+}
+
+.top-concert-sold-ratio {
+  font-size: 0.72rem;
+  color: #64748b;
+}
+
+/* Recent Operational Activity Section (D-256) */
+.overview-recent-activity-section {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  padding: 1.35rem 1.5rem;
+  box-shadow: 0 4px 20px -2px rgba(15, 23, 42, 0.04);
+  display: flex;
+  flex-direction: column;
+  gap: 1.15rem;
+}
+
+.activity-section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  padding-bottom: 0.85rem;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.activity-title-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.activity-section-title {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.activity-section-subtitle {
+  font-size: 0.775rem;
+  color: #64748b;
+  margin: 0;
+}
+
+.activity-live-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.725rem;
+  font-weight: 700;
+  color: #15803d;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  padding: 0.25rem 0.65rem;
+  border-radius: 9999px;
+}
+
+.activity-live-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 9999px;
+  background-color: #22c55e;
+  box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.25);
+  animation: pulse-dot 2s infinite ease-in-out;
+}
+
+@keyframes pulse-dot {
+  0% { transform: scale(0.95); opacity: 0.8; }
+  50% { transform: scale(1.2); opacity: 1; }
+  100% { transform: scale(0.95); opacity: 0.8; }
+}
+
+.activity-items-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.activity-item-card {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.85rem 1rem;
+  background: #fafafa;
+  border: 1px solid #f1f5f9;
+  border-radius: 12px;
+  gap: 1rem;
+  transition: all 0.15s ease;
+}
+
+.activity-item-card:hover {
+  background: #ffffff;
+  border-color: #cbd5e1;
+  box-shadow: 0 2px 8px -2px rgba(15, 23, 42, 0.05);
+}
+
+.activity-item-left {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  flex: 1;
+  min-width: 0;
+}
+
+.activity-icon-avatar {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.activity-icon-avatar.type-session {
+  background: #eff6ff;
+  color: #2563eb;
+  border: 1px solid #bfdbfe;
+}
+
+.activity-icon-avatar.type-refund {
+  background: #fef2f2;
+  color: #dc2626;
+  border: 1px solid #fecaca;
+}
+
+.activity-icon-avatar.type-payout {
+  background: #f0fdf4;
+  color: #16a34a;
+  border: 1px solid #bbf7d0;
+}
+
+.activity-icon-avatar.type-news {
+  background: #faf5ff;
+  color: #9333ea;
+  border: 1px solid #e9d5ff;
+}
+
+.activity-icon-avatar.type-customer {
+  background: #f0fdfa;
+  color: #0d9488;
+  border: 1px solid #99f6e4;
+}
+
+.activity-content-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  flex: 1;
+  min-width: 0;
+}
+
+.activity-title-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.activity-title-text {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.activity-timestamp {
+  font-size: 0.72rem;
+  color: #94a3b8;
+  margin-left: auto;
+}
+
+.activity-desc-text {
+  font-size: 0.775rem;
+  color: #64748b;
+  margin: 0;
+  line-height: 1.4;
+}
+
+.activity-item-right {
+  flex-shrink: 0;
+}
+
+@media (max-width: 768px) {
+  .activity-item-card {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.75rem;
+  }
+  .activity-item-right {
+    display: flex;
+    justify-content: flex-end;
+  }
+  .activity-timestamp {
+    margin-left: 0;
+  }
+}
+
+/* Launchpad Section Header & Styling (D-256) */
+.launchpad-section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 0.85rem;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.launchpad-section-title {
+  font-size: 1rem;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0;
+}
+
+.launchpad-section-sub {
+  font-size: 0.775rem;
+  color: #64748b;
+}
+
+.overview-launchpad-grid.compact-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1rem;
+}
+
+@media (max-width: 900px) {
+  .overview-launchpad-grid.compact-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 540px) {
+  .overview-launchpad-grid.compact-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+
 
 
 
