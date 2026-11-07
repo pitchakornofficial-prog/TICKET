@@ -247,7 +247,9 @@ export async function saveEventFeeSettings(
   if (existing.organizerFeeLocked) {
     if (
       existing.organizerFeeMode !== input.organizerFeeMode ||
-      roundHalfUp(existing.organizerFeeRate) !== roundHalfUp(input.organizerFeeRate)
+      roundHalfUp(existing.organizerFeeRate) !== roundHalfUp(input.organizerFeeRate) ||
+      roundHalfUp(existing.organizerFeePrivilegeRate ?? 0) !== roundHalfUp(input.organizerFeePrivilegeRate ?? 0) ||
+      Boolean(existing.ubuPrivilegeMode) !== Boolean(input.ubuPrivilegeMode)
     ) {
       throw new Error(
         'ค่าบริการฝั่งผู้จัดงานถูกล็อกแล้วเนื่องจากมีคำสั่งซื้อหรือการกันบัตรแล้ว ไม่สามารถเปลี่ยนแปลงได้',

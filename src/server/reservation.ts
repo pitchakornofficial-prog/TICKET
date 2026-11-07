@@ -5,6 +5,7 @@ import {
   calculateCustomerFee,
   roundHalfUp,
   type CustomerFeeMode,
+  type OrganizerFeeMode,
   ensureFeeSchema,
 } from './fees.ts';
 import { getVerifiedGuestSession } from './guest-otp.ts';
@@ -86,6 +87,10 @@ export async function ensureReservationSchema(pool: Pool): Promise<void> {
       "updatedAt" TIMESTAMPTZ NOT NULL DEFAULT now()
     );
     ALTER TABLE orders ADD COLUMN IF NOT EXISTS "discountAmount" NUMERIC(12, 2) NOT NULL DEFAULT 0;
+    ALTER TABLE orders ADD COLUMN IF NOT EXISTS "ubuPrivilegeApplied" BOOLEAN NOT NULL DEFAULT FALSE;
+    ALTER TABLE orders ADD COLUMN IF NOT EXISTS "organizerFeeRate" NUMERIC(12, 2);
+    ALTER TABLE orders ADD COLUMN IF NOT EXISTS "organizerFeePrivilegeRate" NUMERIC(12, 2);
+    ALTER TABLE orders ADD COLUMN IF NOT EXISTS "organizerFeeMode" TEXT;
     CREATE INDEX IF NOT EXISTS idx_orders_event_session ON orders("eventId", "sessionId");
     CREATE INDEX IF NOT EXISTS idx_orders_buyer ON orders("buyerEmail");
     CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status);
@@ -254,7 +259,7 @@ export async function createReservation(
     // 3. Lock ticket types for update to guarantee atomicity under concurrent requests (AC-14, AC-61)
     const ticketTypeIds = sanitizedItems.map(i => i.ticketTypeId);
     const ttRes = await client.query(
-      `SELECT id, name, price, quota, "sessionId"
+      `SELECT id, name, price, quota, "sessionId", "isStudentPrivilege", "studentPrice"
        FROM ticket_types
        WHERE id = ANY($1) AND "sessionId" = $2
        FOR UPDATE`,
@@ -268,7 +273,51 @@ export async function createReservation(
 
     const ticketTypeMap = new Map(ttRes.rows.map(r => [r.id, r]));
 
-    // 4. Check available quota for each requested ticket type
+    // 4. Lock organizer fee atomically on first reservation (G-49, AC-111)
+    const feeRes = await client.query(
+      `SELECT "organizerFeeMode", "organizerFeeRate", "organizerFeePrivilegeRate", "ubuPrivilegeMode", "customerFeeMode", "customerFeeRate", "organizerFeeLocked"
+       FROM event_fee_settings
+       WHERE "eventId" = $1
+       FOR UPDATE`,
+      [input.eventId],
+    );
+
+    let customerFeeMode: CustomerFeeMode = 'percentage';
+    let customerFeeRate = 5;
+    let organizerFeeMode: OrganizerFeeMode = 'percentage';
+    let organizerFeeRate = 2;
+    let organizerFeePrivilegeRate = 3;
+
+    if (feeRes.rowCount === 0) {
+      // Initialize default fee settings with organizerFeeLocked = true
+      await client.query(
+        `INSERT INTO event_fee_settings ("eventId", "organizerFeeLocked", "customerFeeMode", "customerFeeRate", "updatedAt")
+         VALUES ($1, TRUE, 'percentage', 5, now())`,
+        [input.eventId],
+      );
+    } else {
+      const row = feeRes.rows[0];
+      customerFeeMode = (row.customerFeeMode || 'percentage') as CustomerFeeMode;
+      customerFeeRate = row.customerFeeRate != null ? Number(row.customerFeeRate) : 5;
+      organizerFeeMode = (row.organizerFeeMode || 'percentage') as OrganizerFeeMode;
+      organizerFeeRate = row.organizerFeeRate != null ? Number(row.organizerFeeRate) : 2;
+      organizerFeePrivilegeRate = row.organizerFeePrivilegeRate != null ? Number(row.organizerFeePrivilegeRate) : 3;
+
+      if (!row.organizerFeeLocked) {
+        await client.query(
+          `UPDATE event_fee_settings
+           SET "organizerFeeLocked" = TRUE, "updatedAt" = now()
+           WHERE "eventId" = $1`,
+          [input.eventId],
+        );
+      }
+    }
+
+    // 5. Calculate UBU Privilege & check quota for each requested ticket type
+    const hasUbuPrivilege = isUbuEmail(verifiedSession.email);
+    const isUbuPrivilegeMode = Boolean(feeRes.rows[0]?.ubuPrivilegeMode);
+    const isUbuFreshyEvent = isUbuPrivilegeMode || input.eventId === 'event-ubu-freshy-2026';
+
     const orderItemsToInsert: {
       id: string;
       ticketTypeId: string;
@@ -279,6 +328,7 @@ export async function createReservation(
     }[] = [];
 
     let orderSubtotal = 0;
+    let discountAmount = 0;
 
     for (const item of sanitizedItems) {
       const tt = ticketTypeMap.get(item.ticketTypeId);
@@ -307,88 +357,60 @@ export async function createReservation(
         throw new Error(`บัตรประเภท "${tt.name}" เหลือไม่เพียงพอ (เหลือ ${Math.max(0, availableQuota)} ใบ)`);
       }
 
-      const unitPrice = Number(tt.price);
-      const itemSubtotal = roundHalfUp(unitPrice * item.quantity);
-      orderSubtotal = roundHalfUp(orderSubtotal + itemSubtotal);
+      const regularUnitPrice = Number(tt.price);
+      let actualUnitPrice = regularUnitPrice;
+      let itemDiscount = 0;
+
+      if (hasUbuPrivilege) {
+        const isStudentTicket = Boolean(tt.isStudentPrivilege) || isUbuFreshyEvent;
+        if (isStudentTicket) {
+          actualUnitPrice = tt.studentPrice != null
+            ? Number(tt.studentPrice)
+            : (regularUnitPrice === 150 ? 99 : Math.round(regularUnitPrice * 0.85));
+          itemDiscount = roundHalfUp((regularUnitPrice - actualUnitPrice) * item.quantity);
+          if (regularUnitPrice === 150 && actualUnitPrice === 99) {
+            itemDiscount = roundHalfUp((150 - 99) * item.quantity);
+          }
+        }
+      }
+
+      orderSubtotal = roundHalfUp(orderSubtotal + regularUnitPrice * item.quantity);
+      discountAmount = roundHalfUp(discountAmount + itemDiscount);
 
       orderItemsToInsert.push({
         id: randomUUID(),
         ticketTypeId: tt.id,
         ticketTypeName: tt.name,
-        unitPrice,
+        unitPrice: actualUnitPrice,
         quantity: item.quantity,
-        subtotal: itemSubtotal,
+        subtotal: roundHalfUp(actualUnitPrice * item.quantity),
       });
     }
 
-    // 5. Lock organizer fee atomically on first reservation (G-49, AC-111)
-    const feeRes = await client.query(
-      `SELECT "organizerFeeMode", "organizerFeeRate", "organizerFeePrivilegeRate", "ubuPrivilegeMode", "customerFeeMode", "customerFeeRate", "organizerFeeLocked"
-       FROM event_fee_settings
-       WHERE "eventId" = $1
-       FOR UPDATE`,
-      [input.eventId],
-    );
-
-    let customerFeeMode: CustomerFeeMode = 'percentage';
-    let customerFeeRate = 5;
-
-    if (feeRes.rowCount === 0) {
-      // Initialize default fee settings with organizerFeeLocked = true
-      await client.query(
-        `INSERT INTO event_fee_settings ("eventId", "organizerFeeLocked", "customerFeeMode", "customerFeeRate", "updatedAt")
-         VALUES ($1, TRUE, 'percentage', 5, now())`,
-        [input.eventId],
-      );
-    } else {
-      const row = feeRes.rows[0];
-      customerFeeMode = (row.customerFeeMode || 'percentage') as CustomerFeeMode;
-      customerFeeRate = row.customerFeeRate != null ? Number(row.customerFeeRate) : 5;
-
-      if (!row.organizerFeeLocked) {
-        await client.query(
-          `UPDATE event_fee_settings
-           SET "organizerFeeLocked" = TRUE, "updatedAt" = now()
-           WHERE "eventId" = $1`,
-          [input.eventId],
-        );
-      }
-    }
-
-    // 6. Calculate UBU Privilege Discount (D-37, D-134, D-181)
-    const hasUbuPrivilege = isUbuEmail(verifiedSession.email);
-    let discountAmount = 0;
-    if (hasUbuPrivilege) {
-      const isUbuPrivilegeMode = Boolean(feeRes.rows[0]?.ubuPrivilegeMode);
-      const isUbuFreshyEvent = isUbuPrivilegeMode || input.eventId === 'event-ubu-freshy-2026';
-      if (isUbuFreshyEvent) {
-        // D-181: Reduce price to 99 THB for ALL tickets (51 THB discount per 150 THB ticket)
-        for (const item of orderItemsToInsert) {
-          if (item.unitPrice === 150) {
-            discountAmount = roundHalfUp(discountAmount + (150 - 99) * item.quantity);
-          } else {
-            discountAmount = roundHalfUp(discountAmount + Math.round(item.unitPrice * 0.15) * item.quantity);
-          }
+    // D-37 general UBU discount fallback if not using per-ticket student privilege
+    if (hasUbuPrivilege && discountAmount === 0 && !isUbuFreshyEvent) {
+      let remainingDiscountTickets = 2;
+      const discountedItems: typeof orderItemsToInsert = [];
+      for (const item of [...orderItemsToInsert].sort((a, b) => b.unitPrice - a.unitPrice)) {
+        const discountedQuantity = Math.min(item.quantity, remainingDiscountTickets);
+        const fullPriceQuantity = item.quantity - discountedQuantity;
+        const discountPerTicket = Math.round(item.unitPrice * 0.15);
+        if (discountedQuantity > 0) {
+          const discountedUnitPrice = roundHalfUp(item.unitPrice - discountPerTicket);
+          discountedItems.push({ ...item, quantity: discountedQuantity, unitPrice: discountedUnitPrice, subtotal: roundHalfUp(discountedUnitPrice * discountedQuantity) });
+          discountAmount = roundHalfUp(discountAmount + discountPerTicket * discountedQuantity);
+          remainingDiscountTickets -= discountedQuantity;
         }
-      } else {
-        // D-37: 15% discount on up to 2 tickets (applied to highest priced tickets first)
-        const ticketPrices: number[] = [];
-        for (const item of orderItemsToInsert) {
-          for (let i = 0; i < item.quantity; i++) {
-            ticketPrices.push(item.unitPrice);
-          }
-        }
-        ticketPrices.sort((a, b) => b - a);
-        const maxDiscountTickets = Math.min(ticketPrices.length, 2);
-        for (let i = 0; i < maxDiscountTickets; i++) {
-          discountAmount = roundHalfUp(discountAmount + Math.round(ticketPrices[i] * 0.15));
+        if (fullPriceQuantity > 0) {
+          discountedItems.push({ ...item, id: discountedQuantity > 0 ? randomUUID() : item.id, quantity: fullPriceQuantity, subtotal: roundHalfUp(item.unitPrice * fullPriceQuantity) });
         }
       }
+      orderItemsToInsert.splice(0, orderItemsToInsert.length, ...discountedItems);
     }
 
     const discountedTicketSubtotal = Math.max(0, roundHalfUp(orderSubtotal - discountAmount));
 
-    // 7. Calculate exact customer fee and total (AC-69, D-134, D-135: 5% with Math.ceil whole Baht)
+    // 6. Calculate exact customer fee and total (AC-69, D-134, D-135: 5% or 6% with Math.ceil whole Baht)
     let { fee: customerFee, total: orderTotal } = calculateCustomerFee(
       customerFeeMode,
       customerFeeRate,
@@ -400,7 +422,7 @@ export async function createReservation(
       orderTotal = roundHalfUp(discountedTicketSubtotal + customerFee);
     }
 
-    // 8. Create Order with 15-minute deadline (AC-13)
+    // 7. Create Order with 15-minute deadline (AC-13)
     const orderId = `ORD-${randomUUID().toUpperCase()}`;
     const expiresAt = new Date(now.getTime() + RESERVATION_HOLD_SECONDS * 1000);
 
@@ -408,9 +430,10 @@ export async function createReservation(
       `INSERT INTO orders (
          id, "eventId", "sessionId", "buyerEmail", "buyerName", "buyerPhone",
          status, subtotal, "discountAmount", "customerFee", total, "customerFeeMode", "customerFeeRate",
+         "ubuPrivilegeApplied", "organizerFeeRate", "organizerFeePrivilegeRate", "organizerFeeMode",
          "reservedAt", "expiresAt", "createdAt", "updatedAt"
        )
-       VALUES ($1, $2, $3, $4, $5, $6, 'reserved', $7, $8, $9, $10, $11, $12, $13, $14, $15, $15)`,
+       VALUES ($1, $2, $3, $4, $5, $6, 'reserved', $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $19)`,
       [
         orderId,
         input.eventId,
@@ -424,13 +447,17 @@ export async function createReservation(
         orderTotal,
         customerFeeMode,
         customerFeeRate,
+        hasUbuPrivilege && discountAmount > 0,
+        organizerFeeRate,
+        organizerFeePrivilegeRate,
+        organizerFeeMode,
         now,
         expiresAt,
         now,
       ],
     );
 
-    // 9. Insert Order Items
+    // 8. Insert Order Items
     for (const item of orderItemsToInsert) {
       await client.query(
         `INSERT INTO order_items (id, "orderId", "ticketTypeId", quantity, "unitPrice", subtotal)

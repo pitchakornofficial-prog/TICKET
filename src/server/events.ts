@@ -42,6 +42,7 @@ export interface SessionDraftInput {
     quota: number;
     description?: string;
     isStudentPrivilege?: boolean;
+    studentPrice?: number | null;
   }[];
 }
 
@@ -124,6 +125,7 @@ export async function ensureEventSchema(pool: Pool): Promise<void> {
     );
     CREATE INDEX IF NOT EXISTS idx_ticket_types_sessionId ON ticket_types("sessionId");
     ALTER TABLE ticket_types ADD COLUMN IF NOT EXISTS "isStudentPrivilege" BOOLEAN NOT NULL DEFAULT FALSE;
+    ALTER TABLE ticket_types ADD COLUMN IF NOT EXISTS "studentPrice" NUMERIC(12, 2);
     ALTER TABLE event_sessions ADD COLUMN IF NOT EXISTS "rejectionReason" TEXT;
 
     CREATE TABLE IF NOT EXISTS event_scanners (
@@ -258,9 +260,18 @@ export async function createEventDraft(
         if (tt.price < 0) throw new Error('ราคาบัตรต้องไม่ติดลบ');
         const ttId = randomUUID();
         await client.query(
-          `INSERT INTO ticket_types (id, "sessionId", name, price, quota, description, "isStudentPrivilege", "createdAt", "updatedAt")
-           VALUES ($1, $2, $3, $4, $5, $6, $7, now(), now())`,
-          [ttId, sessionId, tt.name.trim(), tt.price, tt.quota, tt.description || '', Boolean(tt.isStudentPrivilege)],
+          `INSERT INTO ticket_types (id, "sessionId", name, price, quota, description, "isStudentPrivilege", "studentPrice", "createdAt", "updatedAt")
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, now(), now())`,
+          [
+            ttId,
+            sessionId,
+            tt.name.trim(),
+            tt.price,
+            tt.quota,
+            tt.description || '',
+            Boolean(tt.isStudentPrivilege),
+            tt.studentPrice != null ? Number(tt.studentPrice) : null,
+          ],
         );
       }
     }
@@ -351,9 +362,18 @@ export async function updateEventDraft(
         for (const tt of session.ticketTypes) {
           const ttId = randomUUID();
           await client.query(
-            `INSERT INTO ticket_types (id, "sessionId", name, price, quota, description, "createdAt", "updatedAt")
-             VALUES ($1, $2, $3, $4, $5, $6, now(), now())`,
-            [ttId, sessionId, tt.name.trim(), tt.price, tt.quota, tt.description || ''],
+            `INSERT INTO ticket_types (id, "sessionId", name, price, quota, description, "isStudentPrivilege", "studentPrice", "createdAt", "updatedAt")
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, now(), now())`,
+            [
+              ttId,
+              sessionId,
+              tt.name.trim(),
+              tt.price,
+              tt.quota,
+              tt.description || '',
+              Boolean(tt.isStudentPrivilege),
+              tt.studentPrice != null ? Number(tt.studentPrice) : null,
+            ],
           );
         }
       }
@@ -629,7 +649,7 @@ export async function getPublicEventWithApprovedSessions(pool: Pool, eventId: st
     const sessions = [];
     for (const sess of sessRes.rows) {
       const query = canCheckHeld
-        ? `SELECT tt.id, tt.name, tt.price, tt.description,
+        ? `SELECT tt.id, tt.name, tt.price, tt.description, tt."isStudentPrivilege", tt."studentPrice",
                   GREATEST(0, tt.quota - GREATEST(0, COALESCE(
                     (SELECT SUM(oi.quantity)::int
                      FROM order_items oi
@@ -646,7 +666,7 @@ export async function getPublicEventWithApprovedSessions(pool: Pool, eventId: st
            FROM ticket_types tt
            WHERE tt."sessionId" = $1
            ORDER BY tt.price ASC`
-        : 'SELECT id, name, price, quota, description FROM ticket_types WHERE "sessionId" = $1 ORDER BY price ASC';
+        : 'SELECT id, name, price, quota, description, "isStudentPrivilege", "studentPrice" FROM ticket_types WHERE "sessionId" = $1 ORDER BY price ASC';
 
       const ttRes = await pool.query(query, [sess.id]);
       sessions.push({
@@ -655,6 +675,8 @@ export async function getPublicEventWithApprovedSessions(pool: Pool, eventId: st
           ...tt,
           price: Number(tt.price),
           quota: Number(tt.quota),
+          isStudentPrivilege: Boolean(tt.isStudentPrivilege),
+          studentPrice: tt.studentPrice != null ? Number(tt.studentPrice) : null,
         })),
       });
     }
@@ -1049,6 +1071,8 @@ export interface AmendmentTicketTypeItem {
   price: number;
   quota: number;
   description?: string;
+  isStudentPrivilege?: boolean;
+  studentPrice?: number | null;
 }
 
 export interface SubmitSessionAmendmentInput {
@@ -1531,16 +1555,36 @@ export async function approveSessionAmendment(
       if (item.id) {
         await client.query(
           `UPDATE ticket_types
-           SET name = $2, price = $3, quota = $4, description = COALESCE($5, description), "updatedAt" = now()
+           SET name = $2, price = $3, quota = $4, description = COALESCE($5, description),
+               "isStudentPrivilege" = COALESCE($6, "isStudentPrivilege"),
+               "studentPrice" = $7,
+               "updatedAt" = now()
            WHERE id = $1`,
-          [item.id, item.name.trim(), item.price, item.quota, item.description || null],
+          [
+            item.id,
+            item.name.trim(),
+            item.price,
+            item.quota,
+            item.description || null,
+            item.isStudentPrivilege != null ? Boolean(item.isStudentPrivilege) : null,
+            item.studentPrice != null ? Number(item.studentPrice) : null,
+          ],
         );
       } else {
         const newTtId = randomUUID();
         await client.query(
-          `INSERT INTO ticket_types (id, "sessionId", name, price, quota, description, "createdAt", "updatedAt")
-           VALUES ($1, $2, $3, $4, $5, $6, now(), now())`,
-          [newTtId, amd.sessionId, item.name.trim(), item.price, item.quota, item.description || ''],
+          `INSERT INTO ticket_types (id, "sessionId", name, price, quota, description, "isStudentPrivilege", "studentPrice", "createdAt", "updatedAt")
+           VALUES ($1, $2, $3, $4, $5, $6, $7, $8, now(), now())`,
+          [
+            newTtId,
+            amd.sessionId,
+            item.name.trim(),
+            item.price,
+            item.quota,
+            item.description || '',
+            Boolean(item.isStudentPrivilege),
+            item.studentPrice != null ? Number(item.studentPrice) : null,
+          ],
         );
       }
     }
@@ -2087,14 +2131,14 @@ export async function seedUbuFreshyFest(pool: Pool): Promise<void> {
       [sessionId, eventId, startTime, endTime, admissionStartTime, admissionEndTime],
     );
 
-    // 4. Ensure single ticket type: 150 THB, quota 4500
+    // 4. Ensure single ticket type: 150 THB, quota 4500, student privilege 99 THB
     await pool.query(
       `INSERT INTO ticket_types (
-         id, "sessionId", name, price, quota, description,
+         id, "sessionId", name, price, quota, description, "isStudentPrivilege", "studentPrice",
          "createdAt", "updatedAt"
        )
-       VALUES ($1, $2, $3, 150, 4500, $4, now(), now())
-       ON CONFLICT (id) DO UPDATE SET price = 150, quota = 4500`,
+       VALUES ($1, $2, $3, 150, 4500, $4, TRUE, 99, now(), now())
+       ON CONFLICT (id) DO UPDATE SET price = 150, quota = 4500, "isStudentPrivilege" = TRUE, "studentPrice" = 99`,
       [
         ticketTypeId,
         sessionId,
@@ -2167,7 +2211,7 @@ export async function seedUbuFreshyFest(pool: Pool): Promise<void> {
       );
     }
 
-    // 7. Ensure 1 real payout record for UBU Freshy Music Fest (D-187)
+    // 7. Ensure event_payouts schema exists (D-185: do not seed fake payout records)
     await pool.query(`
       CREATE TABLE IF NOT EXISTS event_payouts (
         id TEXT PRIMARY KEY,
@@ -2184,42 +2228,8 @@ export async function seedUbuFreshyFest(pool: Pool): Promise<void> {
       );
       CREATE INDEX IF NOT EXISTS idx_event_payouts_eventId ON event_payouts("eventId");
     `);
-    const ownerRes = await pool.query<{ id: string }>(
-      "SELECT id FROM auth_user WHERE role = 'owner' LIMIT 1",
-    );
-    const ownerId = ownerRes.rows[0]?.id || 'a126ac40-7067-4146-9f52-c89fab24ac4c';
 
-    await pool.query(
-      `INSERT INTO event_payouts (
-         id, "eventId", amount, status, "paidAt",
-         "transferProofKey", "transferProofUrl", "transferNote",
-         "recordedBy", "createdAt", "updatedAt"
-       )
-       VALUES (
-         $1, $2, $3, 'completed', $4,
-         $5, $6, $7,
-         $8, now(), now()
-       )
-       ON CONFLICT (id) DO UPDATE SET
-         amount = EXCLUDED.amount,
-         status = 'completed',
-         "paidAt" = EXCLUDED."paidAt",
-         "transferProofKey" = EXCLUDED."transferProofKey",
-         "transferProofUrl" = EXCLUDED."transferProofUrl",
-         "transferNote" = EXCLUDED."transferNote"`,
-      [
-        'payout-ubu-freshy-w01',
-        eventId,
-        45000,
-        new Date(Date.now() - 2 * 24 * 60 * 60 * 1000),
-        'TXN-UBU2026-PAYOUT01',
-        '/api/organizer/payouts/payout-ubu-freshy-w01/slip',
-        'รอบโอนเงินค่าบัตรจำหน่ายล่วงหน้าสัปดาห์ที่ 1 ให้สโมสรนักศึกษา ม.อุบลฯ',
-        ownerId,
-      ],
-    );
-
-    // 8. Ensure 3 additional UBU Club concerts (D-189)
+    // 8. Definition reference for additional UBU concerts (D-189/D-197 definition specs, D-185: single active DB event)
     const extraConcerts = [
       {
         id: 'event-ubu-acoustic-2026',
@@ -2266,68 +2276,8 @@ export async function seedUbuFreshyFest(pool: Pool): Promise<void> {
         ],
       },
     ];
-
-    for (const ec of extraConcerts) {
-      await pool.query(
-        `INSERT INTO events (
-           id, "organizerId", title, description, location,
-           "posterUrl", "coverBannerUrl", status, "limitPerOrder",
-           "createdAt", "updatedAt"
-         )
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, 4, now(), now())
-         ON CONFLICT (id) DO UPDATE SET
-           status = EXCLUDED.status,
-           title = EXCLUDED.title,
-           location = EXCLUDED.location,
-           description = EXCLUDED.description`,
-        [ec.id, organizerId, ec.title, ec.description, ec.location, ec.posterUrl, ec.coverBannerUrl, ec.status],
-      );
-
-      const sessId = `session-${ec.id}-s1`;
-      const sTime = new Date(Date.now() + ec.daysOffset * 24 * 60 * 60 * 1000);
-      const eTime = new Date(sTime.getTime() + ec.durationHours * 60 * 60 * 1000);
-      const admStart = new Date(sTime.getTime() - 60 * 60 * 1000);
-      const admEnd = new Date(sTime.getTime() + 4 * 60 * 60 * 1000);
-
-      await pool.query(
-        `INSERT INTO event_sessions (
-           id, "eventId", "startTime", "endTime",
-           "admissionStartTime", "admissionEndTime", status,
-           "createdAt", "updatedAt"
-         )
-         VALUES ($1, $2, $3, $4, $5, $6, $7, now(), now())
-         ON CONFLICT (id) DO UPDATE SET status = EXCLUDED.status`,
-        [sessId, ec.id, sTime, eTime, admStart, admEnd, ec.status],
-      );
-
-      for (const tt of ec.ticketTypes) {
-        await pool.query(
-          `INSERT INTO ticket_types (
-             id, "sessionId", name, price, quota, description,
-             "createdAt", "updatedAt"
-           )
-           VALUES ($1, $2, $3, $4, $5, $6, now(), now())
-           ON CONFLICT (id) DO UPDATE SET price = EXCLUDED.price, quota = EXCLUDED.quota`,
-          [tt.id, sessId, tt.name, tt.price, tt.quota, tt.desc],
-        );
-      }
-
-      await pool.query(
-        `INSERT INTO event_fee_settings (
-           "eventId", "organizerFeeMode", "organizerFeeRate", "organizerFeePrivilegeRate",
-           "ubuPrivilegeMode", "customerFeeMode", "customerFeeRate", "reservePercentage",
-           "organizerFeeLocked", "createdAt", "updatedAt"
-         )
-         VALUES ($1, 'percentage', 2, 3, TRUE, 'percentage', 6, 10, FALSE, now(), now())
-         ON CONFLICT ("eventId") DO UPDATE SET
-           "customerFeeRate" = 6,
-           "customerFeeMode" = 'percentage',
-           "organizerFeeRate" = 2,
-           "organizerFeePrivilegeRate" = 3,
-           "ubuPrivilegeMode" = TRUE`,
-        [ec.id],
-      );
-    }
+    // In compliance with D-185: do not seed additional mock concerts into live/local database.
+    void extraConcerts;
   } catch {
     // Non-blocking in isolated unit tests
   }

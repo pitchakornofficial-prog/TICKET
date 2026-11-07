@@ -120,7 +120,7 @@ describe('Ticket Email Delivery & Failure Recovery (TASK-017, AC-20, AC-75)', ()
     expect(ticketEmail?.html).toContain('คอนเสิร์ต ส่งอีเมลบัตร AC-20');
     expect(ticketEmail?.html).toContain(processRes.tickets?.[0].ticketCode);
     expect(ticketEmail?.html).toContain(processRes.tickets?.[1].ticketCode);
-    expect(ticketEmail?.html).toContain(`https://tickets.example.com/my-tickets?orderId=${reservation.id}`);
+    expect(ticketEmail?.html).toContain(`https://tickets.example.com/orders/${reservation.id}/success?tab=tickets`);
     expect(ticketEmail?.text).not.toContain('127.0.0.1');
 
     // Check delivery record in database

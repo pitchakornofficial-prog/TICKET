@@ -54,6 +54,7 @@ const proxy = createServer(async (req, res) => {
       headers: {
         ...req.headers,
         host: req.headers.host || '127.0.0.1:3100',
+        origin: req.headers.origin || `http://${req.headers.host || '127.0.0.1:3100'}`,
       },
     },
     upstreamRes => {

@@ -887,10 +887,11 @@ export function GuestOrderLookupView({ initialOrderId }: GuestOrderLookupViewPro
             /* Concert Groups */
             <div>
               {concertGroups.map((group, groupIdx) => {
+                const isTargetConcert = Boolean(orderId && group.orders.some(o => o.id === orderId));
                 const isConcertExpanded =
                   expandedConcertKeys[group.groupKey] !== undefined
                     ? expandedConcertKeys[group.groupKey]
-                    : groupIdx === 0;
+                    : groupIdx === 0 || isTargetConcert;
 
                 return (
                   <div key={group.groupKey} className="lookup-concert-card">

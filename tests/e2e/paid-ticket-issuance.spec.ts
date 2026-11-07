@@ -58,7 +58,7 @@ test.describe('Paid ticket issuance flow (TASK-043, AC-119, AC-120, AC-123, AC-1
 
     const sessionCard = page.locator('.pending-session-card', { hasText: eventTitle });
     await expect(sessionCard).toBeVisible();
-    await sessionCard.getByRole('button', { name: 'อนุมัติรอบนี้' }).click();
+    await sessionCard.getByRole('button', { name: 'อนุมัติด่วน' }).click();
     await expect(page.getByText(`อนุมัติรอบการแสดงของ "${eventTitle}" สำเร็จ`)).toBeVisible();
 
     await page.getByRole('button', { name: 'ออกจากระบบ', exact: true }).click();
@@ -66,7 +66,7 @@ test.describe('Paid ticket issuance flow (TASK-043, AC-119, AC-120, AC-123, AC-1
 
     // 3. Guest visits concert detail page and proceeds to checkout
     await page.goto(`/events/${createdEvent.id}`, { waitUntil: 'domcontentloaded' });
-    await expect(page.getByRole('heading', { name: eventTitle })).toBeVisible();
+    await expect(page.getByRole('heading', { name: eventTitle, exact: true })).toBeVisible();
 
     const enterQueueBtn = page.getByTestId('enter-queue-cta-btn');
     if (await enterQueueBtn.isVisible()) {
@@ -87,8 +87,9 @@ test.describe('Paid ticket issuance flow (TASK-043, AC-119, AC-120, AC-123, AC-1
 
     // 5. Fill buyer info and complete OTP verification
     await page.getByLabel('ชื่อ-นามสกุล *').fill(guestName);
-    await page.getByLabel('อีเมล *').fill(guestEmail);
+    await page.getByLabel('อีเมลสำหรับรับบัตรและรหัส OTP *').fill(guestEmail);
     await page.getByLabel('เบอร์โทรศัพท์มือถือ *').fill(guestPhone);
+    await page.getByRole('checkbox', { name: /ฉันได้อ่านและยอมรับ/ }).check();
     await page.getByRole('button', { name: 'ขอรหัส OTP เพื่อซื้อบัตร' }).click();
 
     await expect(page.getByText('ส่งรหัส OTP 6 หลักไปยังอีเมลของคุณเรียบร้อยแล้ว')).toBeVisible();
@@ -99,12 +100,9 @@ test.describe('Paid ticket issuance flow (TASK-043, AC-119, AC-120, AC-123, AC-1
     expect(otpRes.status()).toBe(200);
     const { code } = await otpRes.json();
 
-    await page.getByLabel('รหัส OTP 6 หลัก *').fill(code);
-    await page.getByRole('button', { name: 'ยืนยันรหัส OTP' }).click();
-
-    // Pre-verification modal
-    await expect(page.getByRole('heading', { name: 'ยืนยันข้อมูลคำสั่งซื้อและการล็อกสิทธิ์' })).toBeVisible();
-    await page.getByRole('button', { name: 'ยืนยันและดำเนินการต่อ' }).click();
+    const digits = page.getByRole('group', { name: 'ช่องกรอกรหัส OTP 6 หลัก' }).getByRole('textbox');
+    for (let index = 0; index < code.length; index++) await digits.nth(index).fill(code[index]);
+    await page.getByRole('button', { name: 'ยืนยันและไปหน้าชำระเงิน' }).click();
 
     await expect(page.getByRole('heading', { name: 'ยืนยันอีเมลสำเร็จ (Guest Verified)' })).toBeVisible();
 

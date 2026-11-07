@@ -5,6 +5,7 @@ import { getVerifiedGuestSession } from './guest-otp.ts';
 import { ensureReservationSchema } from './reservation.ts';
 import { ensureTicketSchema, issueTicketsForOrder, type TicketDetail } from './tickets.ts';
 import { ensureRefundSchema } from './refunds.ts';
+import { roundHalfUp } from './fees.ts';
 import { sendOrderTicketsEmail } from './ticket-delivery.ts';
 import {
   generatePromptPaySvg,
@@ -497,6 +498,7 @@ export async function processStripeSuccessEvent(
       total: number;
       subtotal: number;
       customerFee: number;
+      discountAmount?: number | null;
       buyerEmail: string;
       buyerName: string;
       buyerPhone: string;
@@ -505,7 +507,7 @@ export async function processStripeSuccessEvent(
       sessionUpdatedAt: Date;
       cancellationApprovedAt: Date | null;
     }>(
-      `SELECT o.id, o."eventId", o."sessionId", o.status, o.total, o.subtotal, o."customerFee",
+      `SELECT o.id, o."eventId", o."sessionId", o.status, o.total, o.subtotal, o."customerFee", o."discountAmount",
               o."buyerEmail", o."buyerName", o."buyerPhone", o."expiresAt",
               es.status AS "sessionStatus",
               es."updatedAt" AS "sessionUpdatedAt",
@@ -815,6 +817,9 @@ export async function processStripeSuccessEvent(
           [order.id, now],
         );
 
+        const faceValueAmount = roundHalfUp(
+          Math.max(0, Number(order.subtotal) - Number(order.discountAmount || 0)),
+        );
         const refundRequestId = `REF-${randomUUID().slice(0, 8).toUpperCase()}`;
         await client.query(
           `INSERT INTO refund_requests (
@@ -828,7 +833,7 @@ export async function processStripeSuccessEvent(
             order.buyerEmail,
             order.buyerPhone,
             order.buyerName,
-            order.subtotal,
+            faceValueAmount,
             'รอบการแสดงถูกยกเลิก (ชำระเงินก่อนเวลายกเลิกรอบ - G-51, AC-113)',
             now,
             'ระบบอัตโนมัติ (G-51)',
@@ -842,7 +847,7 @@ export async function processStripeSuccessEvent(
              amount, status, "approvedAt", "createdAt"
            ) VALUES ($1, $2, $3, $4, $5, $6, 'unpaid', $7, $7)
            ON CONFLICT ("refundRequestId") DO NOTHING`,
-          [liabilityId, refundRequestId, order.id, order.eventId, order.sessionId, order.subtotal, now],
+          [liabilityId, refundRequestId, order.id, order.eventId, order.sessionId, faceValueAmount, now],
         );
 
         return {
@@ -853,7 +858,7 @@ export async function processStripeSuccessEvent(
           eventId: event.id,
           message: 'รอบการแสดงถูกยกเลิก ชำระเงินก่อนเวลายกเลิกรอบ ระบบสร้างรายการคืนเงินเฉพาะราคาบัตรตามเงื่อนไข (ไม่รวมค่าบริการ)',
           refundRequestId,
-          refundAmount: Number(order.subtotal),
+          refundAmount: faceValueAmount,
         };
       }
 
@@ -1179,6 +1184,7 @@ export async function verifyAndProcessPayment(
       total: number;
       subtotal: number;
       customerFee: number;
+      discountAmount?: number | null;
       buyerEmail: string;
       buyerName: string;
       buyerPhone: string;
@@ -1187,7 +1193,7 @@ export async function verifyAndProcessPayment(
       sessionUpdatedAt: Date;
       cancellationApprovedAt: Date | null;
     }>(
-      `SELECT o.id, o."eventId", o."sessionId", o.status, o.total, o.subtotal, o."customerFee",
+      `SELECT o.id, o."eventId", o."sessionId", o.status, o.total, o.subtotal, o."customerFee", o."discountAmount",
               o."buyerEmail", o."buyerName", o."buyerPhone", o."expiresAt",
               es.status AS "sessionStatus",
               es."updatedAt" AS "sessionUpdatedAt",
@@ -1420,6 +1426,9 @@ export async function verifyAndProcessPayment(
           [order.id, now],
         );
 
+        const faceValueAmount = roundHalfUp(
+          Math.max(0, Number(order.subtotal) - Number(order.discountAmount || 0)),
+        );
         const refundRequestId = `REF-${randomUUID().slice(0, 8).toUpperCase()}`;
         await client.query(
           `INSERT INTO refund_requests (
@@ -1433,7 +1442,7 @@ export async function verifyAndProcessPayment(
             order.buyerEmail,
             order.buyerPhone,
             order.buyerName,
-            order.subtotal,
+            faceValueAmount,
             'รอบการแสดงถูกยกเลิก (ชำระเงินก่อนเวลายกเลิกรอบ - G-51)',
             now,
             'ระบบอัตโนมัติ (G-51)',
@@ -1447,7 +1456,7 @@ export async function verifyAndProcessPayment(
              amount, status, "approvedAt", "createdAt"
            ) VALUES ($1, $2, $3, $4, $5, $6, 'unpaid', $7, $7)
            ON CONFLICT ("refundRequestId") DO NOTHING`,
-          [liabilityId, refundRequestId, order.id, order.eventId, order.sessionId, order.subtotal, now],
+          [liabilityId, refundRequestId, order.id, order.eventId, order.sessionId, faceValueAmount, now],
         );
 
         return {
@@ -1456,7 +1465,7 @@ export async function verifyAndProcessPayment(
           status: 'cancelled_session_refund_face_value',
           message: 'รอบการแสดงถูกยกเลิก ชำระเงินก่อนเวลายกเลิกรอบ ระบบสร้างรายการคืนเงินเฉพาะราคาบัตรตามเงื่อนไข (ไม่รวมค่าบริการ)',
           refundRequestId,
-          refundAmount: Number(order.subtotal),
+          refundAmount: faceValueAmount,
         };
       }
 

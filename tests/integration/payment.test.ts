@@ -356,7 +356,7 @@ describe('Payment QR creation and quotation consistency (TASK-042, AC-118, AC-15
     ]);
 
     expect(charge1.id).toBe(charge2.id);
-    expect(charge1.amount).toBe(240000);
+    expect(charge1.amount).toBe(reservation.total * 100);
     expect(charge1.expiresAt).toBe(charge2.expiresAt);
     // Stripe double created only ONE PaymentIntent
     expect(double.getCreatedIntentsCount()).toBe(1);
@@ -416,7 +416,7 @@ describe('Payment QR creation and quotation consistency (TASK-042, AC-118, AC-15
     );
 
     expect(recoveredCharge.id).toMatch(/^pi_test_/);
-    expect(recoveredCharge.amount).toBe(100000);
+    expect(recoveredCharge.amount).toBe(reservation.total * 100);
     // Original reservation deadline is preserved, NOT extended
     expect(new Date(recoveredCharge.expiresAt).getTime()).toBe(new Date(reservation.expiresAt).getTime());
     // Intent count remains 1, no duplicate intent created
