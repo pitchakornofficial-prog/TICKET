@@ -77,27 +77,27 @@ export function generateBankSlipSvg(data: BankSlipData): string {
   <text x="240" y="192" text-anchor="middle" fill="#64748b" font-size="13">${dateStr}</text>
 
   <!-- From / To Route Box -->
-  <rect x="28" y="210" width="424" height="124" rx="12" fill="#f8fafc" stroke="#e2e8f0"/>
+  <rect x="28" y="210" width="424" height="136" rx="12" fill="#f8fafc" stroke="#e2e8f0"/>
   
   <!-- From row -->
   <circle cx="50" cy="242" r="7" fill="#2563eb"/>
-  <text x="68" y="238" fill="#64748b" font-size="11" font-weight="600">จาก (ผู้โอนเงิน)</text>
-  <text x="68" y="254" fill="#0f172a" font-size="13" font-weight="700">${sender}</text>
-  <text x="432" y="254" text-anchor="end" fill="#475569" font-size="12">${senderAcc}</text>
+  <text x="68" y="236" fill="#64748b" font-size="11" font-weight="600">จาก (ผู้โอนเงิน)</text>
+  <text x="68" y="253" fill="#0f172a" font-size="12.5" font-weight="700">${sender}</text>
+  <text x="68" y="269" fill="#64748b" font-size="11.5">${senderAcc}</text>
 
   <!-- Route Line connecting dots -->
-  <line x1="50" y1="253" x2="50" y2="289" stroke="#cbd5e1" stroke-width="1.5" stroke-dasharray="2,2"/>
+  <line x1="50" y1="251" x2="50" y2="293" stroke="#cbd5e1" stroke-width="1.5" stroke-dasharray="2,2"/>
   
   <!-- To row -->
-  <circle cx="50" cy="300" r="7" fill="#10b981"/>
+  <circle cx="50" cy="302" r="7" fill="#10b981"/>
   <text x="68" y="296" fill="#64748b" font-size="11" font-weight="600">ไปยัง (ผู้รับเงิน)</text>
-  <text x="68" y="312" fill="#0f172a" font-size="13" font-weight="700">${receiver}</text>
-  <text x="432" y="312" text-anchor="end" fill="#047857" font-size="12" font-weight="600">${receiverAcc}</text>
+  <text x="68" y="313" fill="#0f172a" font-size="12.5" font-weight="700">${receiver}</text>
+  <text x="68" y="329" fill="#047857" font-size="11.5" font-weight="600">${receiverAcc}</text>
 
   <!-- Perforated Divider Line with Cutout Notches -->
-  <path d="M0 354 Q14 354 14 364 Q14 374 0 374 Z" fill="#f1f5f9"/>
-  <line x1="24" y1="364" x2="456" y2="364" stroke="#cbd5e1" stroke-width="1.5" stroke-dasharray="5,4"/>
-  <path d="M480 354 Q466 354 466 364 Q466 374 480 374 Z" fill="#f1f5f9"/>
+  <path d="M0 360 Q14 360 14 370 Q14 380 0 380 Z" fill="#f1f5f9"/>
+  <line x1="24" y1="370" x2="456" y2="370" stroke="#cbd5e1" stroke-width="1.5" stroke-dasharray="5,4"/>
+  <path d="M480 360 Q466 360 466 370 Q466 380 480 380 Z" fill="#f1f5f9"/>
 
   <!-- Net Amount Highlight Section -->
   <text x="240" y="402" text-anchor="middle" fill="#64748b" font-size="13" font-weight="600">จำนวนเงินที่โอน</text>

@@ -31,6 +31,7 @@ export interface PaidOrderForCorrection {
   customerFee: number;
   total: number;
   ticketCount: number;
+  auditCount?: number;
   createdAt: string;
   updatedAt: string;
   auditLogs?: OrderContactAuditRecord[];
@@ -69,11 +70,13 @@ export async function listPaidOrdersForOwner(
            o.status, o.subtotal, o."customerFee", o.total, o."createdAt", o."updatedAt",
            e.title as "eventTitle",
            es."startTime" as "sessionStartTime",
-           COUNT(t.id)::int as "ticketCount"
+           COUNT(DISTINCT t.id)::int as "ticketCount",
+           COUNT(DISTINCT a.id)::int as "auditCount"
     FROM orders o
     JOIN events e ON o."eventId" = e.id
     JOIN event_sessions es ON o."sessionId" = es.id
     LEFT JOIN tickets t ON o.id = t."orderId"
+    LEFT JOIN order_contact_audit_logs a ON o.id = a."orderId"
     WHERE o.status = 'paid'
   `;
 
@@ -113,6 +116,7 @@ export async function listPaidOrdersForOwner(
     customerFee: Number(r.customerFee),
     total: Number(r.total),
     ticketCount: Number(r.ticketCount) || 0,
+    auditCount: Number(r.auditCount) || 0,
     createdAt: new Date(r.createdAt).toISOString(),
     updatedAt: new Date(r.updatedAt).toISOString(),
   }));
@@ -299,3 +303,52 @@ export async function getOrderContactAuditLogs(
     createdAt: new Date(r.createdAt).toISOString(),
   }));
 }
+
+export interface OrderContactAuditWithDetails extends OrderContactAuditRecord {
+  buyerName?: string;
+  eventTitle?: string;
+}
+
+/**
+ * Retrieves all recent contact audit log records across orders.
+ */
+export async function getAllOrderContactAuditLogs(
+  pool: Pool,
+  actor: { id: string; role: string },
+  limit = 50,
+): Promise<OrderContactAuditWithDetails[]> {
+  if (actor.role !== 'owner') {
+    throw new Error('เฉพาะผู้ดูแลระบบ (Owner) เท่านั้นที่มีสิทธิ์ดูประวัติการแก้ไขข้อมูลติดต่อ (AC-76)');
+  }
+
+  await ensureContactAuditSchema(pool);
+
+  const res = await pool.query(
+    `SELECT a.id, a."orderId", a."correctedByUserId", a."correctedByName",
+            a."previousEmail", a."previousPhone", a."newEmail", a."newPhone",
+            a.reason, a."createdAt",
+            o."buyerName", e.title as "eventTitle"
+     FROM order_contact_audit_logs a
+     JOIN orders o ON a."orderId" = o.id
+     JOIN events e ON o."eventId" = e.id
+     ORDER BY a."createdAt" DESC
+     LIMIT $1`,
+    [limit],
+  );
+
+  return res.rows.map(r => ({
+    id: r.id,
+    orderId: r.orderId,
+    correctedByUserId: r.correctedByUserId,
+    correctedByName: r.correctedByName,
+    previousEmail: r.previousEmail,
+    previousPhone: r.previousPhone,
+    newEmail: r.newEmail,
+    newPhone: r.newPhone,
+    reason: r.reason,
+    createdAt: new Date(r.createdAt).toISOString(),
+    buyerName: r.buyerName,
+    eventTitle: r.eventTitle,
+  }));
+}
+

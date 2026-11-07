@@ -275,13 +275,14 @@ export async function updateEventDraft(
   organizerId: string,
   eventInput: Partial<EventDraftInput>,
   sessionsInput?: SessionDraftInput[],
+  isOwner = false,
 ) {
   await ensureEventSchema(pool);
 
   return inTransaction(pool, async client => {
     const check = await client.query('SELECT "organizerId", status FROM events WHERE id = $1', [eventId]);
     if (check.rowCount === 0) throw new Error('ไม่พบงานคอนเสิร์ต');
-    if (check.rows[0].organizerId !== organizerId) {
+    if (!isOwner && check.rows[0].organizerId !== organizerId) {
       throw new Error('ไม่อนุญาต: คุณไม่ใช่ผู้จัดงานคอนเสิร์ตนี้');
     }
 
