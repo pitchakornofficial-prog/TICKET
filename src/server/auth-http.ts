@@ -17,8 +17,14 @@ export async function handleAuthRequest(auth: TicketAuth, request: Request): Pro
     ].includes(path));
   if (!allowed) return Response.json({ message: 'ไม่พบเส้นทางที่ร้องขอ' }, { status: 404, headers: { 'Cache-Control': 'no-store' } });
 
-  // Test inspection endpoint for E2E runner (only available on loopback test setups)
+  // Test inspection endpoint for E2E runner (strictly disallowed in production)
   if (isTestInspectToken) {
+    if (process.env.NODE_ENV === 'production') {
+      return Response.json(
+        { message: 'ไม่พบเส้นทางที่ร้องขอ' },
+        { status: 404, headers: { 'Cache-Control': 'no-store' } },
+      );
+    }
     const url = new URL(request.url);
     const email = url.searchParams.get('email') || '';
     const pool = auth.options.database as import('pg').Pool;

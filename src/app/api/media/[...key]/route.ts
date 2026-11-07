@@ -28,6 +28,7 @@ export async function GET(
     headers: {
       'Content-Type': item.contentType,
       'Cache-Control': item.visibility === 'private' ? 'private, no-cache' : 'public, max-age=3600',
+      'X-Content-Type-Options': 'nosniff',
     },
   });
 }
