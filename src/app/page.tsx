@@ -1,18 +1,15 @@
+import { Suspense } from 'react';
 import { getDatabasePool } from '@/server/database';
 import { listPublicEvents, type PublicEventSummary } from '@/server/events';
 import { HomeConcertCatalog } from '@/components/home-concert-catalog';
+import { HomeCatalogSkeleton } from '@/components/home-catalog-skeleton';
 
 export const metadata = {
   title: 'TICKET — บัตรคอนเสิร์ต',
   description: 'แพลตฟอร์มจำหน่ายบัตรคอนเสิร์ตในประเทศไทย ซื้อบัตรได้โดยไม่สมัครสมาชิก',
 };
 
-export default async function Home({
-  searchParams,
-}: {
-  searchParams: Promise<{ q?: string }>;
-}) {
-  const { q } = await searchParams;
+async function AsyncHomeCatalog({ q }: { q?: string }) {
   let allEvents: PublicEventSummary[] = [];
 
   try {
@@ -27,4 +24,18 @@ export default async function Home({
   }
 
   return <HomeConcertCatalog allEvents={allEvents} initialQuery={q} />;
+}
+
+export default async function Home({
+  searchParams,
+}: {
+  searchParams: Promise<{ q?: string }>;
+}) {
+  const { q } = await searchParams;
+
+  return (
+    <Suspense fallback={<HomeCatalogSkeleton />}>
+      <AsyncHomeCatalog q={q} />
+    </Suspense>
+  );
 }
