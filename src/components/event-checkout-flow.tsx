@@ -84,10 +84,31 @@ export function EventCheckoutFlow({
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const storageKey = `ticket_checkout_deadline_${eventId}`;
+    const rawQueue = sessionStorage.getItem(`ticket_queue_pass_${eventId}`);
+    let passDeadline: number | null = null;
+
+    if (rawQueue) {
+      try {
+        const parsedPass = JSON.parse(rawQueue);
+        if (parsedPass?.passedAt) {
+          const passTime = new Date(parsedPass.passedAt).getTime();
+          if (!Number.isNaN(passTime)) {
+            passDeadline = passTime + TOTAL_HOLD_SECONDS * 1000;
+          }
+        }
+      } catch {
+        // ignore parse error
+      }
+    }
+
     const stored = sessionStorage.getItem(storageKey);
     let deadline: number;
 
-    if (stored) {
+    if (passDeadline && passDeadline > Date.now()) {
+      // Prioritize fresh deadline from queue pass
+      deadline = passDeadline;
+      sessionStorage.setItem(storageKey, deadline.toString());
+    } else if (stored) {
       const parsed = parseInt(stored, 10);
       if (!Number.isNaN(parsed) && parsed > Date.now()) {
         deadline = parsed;
@@ -299,11 +320,22 @@ export function EventCheckoutFlow({
     });
   }
 
+  const handleBackToDetails = () => {
+    try {
+      if (typeof window !== 'undefined') {
+        sessionStorage.removeItem(`ticket_checkout_deadline_${eventId}`);
+        sessionStorage.removeItem(`ticket_queue_pass_${eventId}`);
+      }
+    } catch {
+      // ignore storage errors
+    }
+  };
+
   if (sessions.length === 0) {
     return (
       <div className="event-detail-page">
         <nav className="detail-breadcrumb" aria-label="ย้อนกลับ">
-          <Link href={`/events/${eventId}`} className="back-link">
+          <Link href={`/events/${eventId}`} replace className="back-link" onClick={handleBackToDetails}>
             <ArrowLeftIcon /> ย้อนกลับไปหน้ารายละเอียดคอนเสิร์ต
           </Link>
         </nav>
@@ -322,7 +354,7 @@ export function EventCheckoutFlow({
   return (
     <div className="event-detail-page">
       <nav className="detail-breadcrumb" aria-label="ย้อนกลับ">
-        <Link href={`/events/${eventId}`} className="back-link">
+        <Link href={`/events/${eventId}`} replace className="back-link" onClick={handleBackToDetails}>
           <ArrowLeftIcon /> ย้อนกลับไปหน้ารายละเอียดคอนเสิร์ต
         </Link>
       </nav>
@@ -401,7 +433,15 @@ export function EventCheckoutFlow({
                 </span>
               </div>
 
-              <div className="session-tab-chips-grid">
+              <div
+                className={`session-tab-chips-grid ${
+                  sessions.length === 1
+                    ? 'session-layout-single'
+                    : sessions.length === 2
+                      ? 'session-layout-pair'
+                      : 'session-layout-scroll'
+                }`}
+              >
                 {sessions.map((s, idx) => {
                   const isSelected = s.id === selectedSession.id;
                   const isSingle = sessions.length === 1;

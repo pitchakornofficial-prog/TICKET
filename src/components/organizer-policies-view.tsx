@@ -9,6 +9,7 @@ import {
   CheckCircleIcon,
   PrinterIcon,
   SearchIcon,
+  RefreshIcon,
   XIcon,
   ChevronDownIcon,
   ChevronUpIcon,
@@ -194,6 +195,12 @@ const POLICY_SECTIONS: PolicySection[] = [
 ];
 
 export function OrganizerPoliciesView() {
+  const [refreshing, setRefreshing] = useState(false);
+
+  const handleRefresh = () => {
+    setRefreshing(true);
+    setTimeout(() => setRefreshing(false), 400);
+  };
   const [selectedCategory, setSelectedCategory] = useState<PolicyCategory>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
@@ -285,7 +292,20 @@ export function OrganizerPoliciesView() {
       {/* 1. Header Toolbar (D-122: Clean Baseline) */}
       <header className="policies-management-header">
         <div className="policies-management-title-wrap">
-          <h1 className="policies-management-title">ข้อตกลงและเงื่อนไขการให้บริการสำหรับผู้จัดงาน</h1>
+          <div className="organizer-header-title-row">
+            <h1 className="policies-management-title">ข้อตกลงและเงื่อนไขการให้บริการสำหรับผู้จัดงาน</h1>
+            <button
+              type="button"
+              className="organizer-inline-refresh-btn"
+              data-testid="policies-refresh-btn"
+              onClick={handleRefresh}
+              disabled={refreshing}
+              aria-label="รีเฟรชข้อมูลนโยบายและบัญชี"
+              title="รีเฟรชข้อมูลนโยบายและบัญชี"
+            >
+              <RefreshIcon className={`inline-refresh-icon ${refreshing ? 'animate-spin' : ''}`} />
+            </button>
+          </div>
           <p className="policies-management-desc">
             ข้อกำหนดความร่วมมือ มาตรการทางการเงิน กติกาการสแกน และความรับผิดชอบร่วมกันระหว่างผู้จัดงานและแพลตฟอร์ม TICKET
           </p>

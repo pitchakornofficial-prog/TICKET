@@ -12,6 +12,12 @@ import {
 // Note: ChevronUpIcon previously used for Back-to-Top (D-143), unified with organizer arrow (D-172)
 import { formatBahtCompact } from '@/lib/locale';
 import type { PublicEventSummary } from '@/server/events';
+import {
+  loadHomeBanners,
+  isBannerScheduleActive,
+  EVENT_HOME_BANNERS_CHANGED,
+  type HeroBannerItem,
+} from '@/lib/home-banners-sync';
 
 interface HomeConcertCatalogProps {
   allEvents: PublicEventSummary[];
@@ -85,14 +91,71 @@ export function HomeConcertCatalog({
     return Array.from(locSet).sort((a, b) => a.localeCompare(b, 'th'));
   }, [allEvents]);
 
-  // Upcoming concerts for the wide image banner carousel
+  // Configured Hero Banners from Store (Q1A, Q2A, Q3A, Q4A)
+  const [configuredBanners, setConfiguredBanners] = useState<HeroBannerItem[]>(() => loadHomeBanners());
+
+  useEffect(() => {
+    const handleBannersChanged = (e: Event) => {
+      const customEvent = e as CustomEvent<HeroBannerItem[]>;
+      if (customEvent.detail && Array.isArray(customEvent.detail)) {
+        setConfiguredBanners(customEvent.detail);
+      } else {
+        setConfiguredBanners(loadHomeBanners());
+      }
+    };
+    window.addEventListener(EVENT_HOME_BANNERS_CHANGED, handleBannersChanged);
+    return () => window.removeEventListener(EVENT_HOME_BANNERS_CHANGED, handleBannersChanged);
+  }, []);
+
+  // Filter only active & scheduled banners
+  const activeBanners = useMemo(() => {
+    return configuredBanners
+      .filter(banner => isBannerScheduleActive(banner))
+      .sort((a, b) => a.order - b.order);
+  }, [configuredBanners]);
+
+  // Upcoming concerts for fallback when no custom banner is active
   const upcomingEvents = useMemo(() => {
     return [...allEvents].sort((a, b) => {
       return new Date(a.earliestStartTime).getTime() - new Date(b.earliestStartTime).getTime();
     });
   }, [allEvents]);
 
-  const totalSlides = upcomingEvents.length;
+  // Unified banner slides list
+  const bannerSlides = useMemo(() => {
+    if (activeBanners.length > 0) {
+      return activeBanners.map(b => {
+        const linkedEvent = b.eventId ? allEvents.find(e => e.id === b.eventId) : undefined;
+        let targetUrl: string | null = null;
+        if (b.linkType === 'concert') {
+          targetUrl = b.eventId ? `/events/${b.eventId}` : (linkedEvent ? `/events/${linkedEvent.id}` : '#');
+        } else if (b.linkType === 'custom_url') {
+          targetUrl = b.customUrl || '#';
+        }
+
+        return {
+          id: b.id,
+          title: b.title || 'คอนเสิร์ตเด่น',
+          imageUrl: b.imageUrl || linkedEvent?.posterUrl || '',
+          targetUrl,
+          isClickable: b.linkType !== 'none' && Boolean(targetUrl && targetUrl !== '#'),
+        };
+      });
+    }
+
+    // Default fallback: display upcoming concerts
+    return upcomingEvents.map(ev => ({
+      id: ev.id,
+      title: ev.title,
+      subtitle: `${ev.location || 'สถานที่จัดงาน'} • เริ่มต้น ${formatBahtCompact(ev.startingPrice)}`,
+      imageUrl: ev.posterUrl || '',
+      targetUrl: `/events/${ev.id}`,
+      ctaText: 'จองบัตรเลย',
+      isClickable: true,
+    }));
+  }, [activeBanners, upcomingEvents, allEvents]);
+
+  const totalSlides = bannerSlides.length;
 
   const nextSlide = useCallback(() => {
     if (totalSlides > 1) {
@@ -261,7 +324,7 @@ export function HomeConcertCatalog({
     return () => observer.disconnect();
   }, [isSearching]);
 
-  const activeEvent = upcomingEvents[currentSlide] || null;
+  const activeSlide = bannerSlides[currentSlide] || null;
 
   return (
     <div className="home-container">
@@ -270,42 +333,57 @@ export function HomeConcertCatalog({
           ======================================================== */}
       {!isSearching && (
         <>
-          {/* Pure Wide Graphic Banner Carousel (D-28) */}
-          {totalSlides > 0 && activeEvent && (
+          {/* Pure Wide Graphic Banner Carousel (D-28, Q1A, Q3A) */}
+          {totalSlides > 0 && activeSlide && (
             <section
               className="upcoming-banner-section"
-              aria-label="แบนเนอร์คอนเสิร์ตที่จะมาถึง"
+              aria-label="แบนเนอร์คอนเสิร์ตเด่นหน้าแรก"
               onMouseEnter={() => setIsPaused(true)}
               onMouseLeave={() => setIsPaused(false)}
             >
               <div className="banner-carousel-container">
                 <div className="banner-fade-track">
-                  {upcomingEvents.map((ev, index) => {
+                  {bannerSlides.map((slide, index) => {
                     const isActive = index === currentSlide;
+                    const SlideContent = slide.imageUrl ? (
+                      /* biome-ignore lint/performance/noImgElement: wide panoramic banner */
+                      <img
+                        src={slide.imageUrl}
+                        alt={`แบนเนอร์ ${slide.title || 'คอนเสิร์ต'}`}
+                        className="banner-image"
+                        loading={index === 0 ? 'eager' : 'lazy'}
+                      />
+                    ) : (
+                      <div className="banner-graphic-card">
+                        <div className="banner-graphic-bg" />
+                        <div className="banner-graphic-glow" />
+                      </div>
+                    );
+
+                    if (slide.isClickable && slide.targetUrl) {
+                      return (
+                        <Link
+                          key={slide.id}
+                          href={slide.targetUrl}
+                          className={`banner-slide-link ${isActive ? 'banner-slide-active' : 'banner-slide-inactive'}`}
+                          aria-label={`ดูรายละเอียด ${slide.title}`}
+                          tabIndex={isActive ? 0 : -1}
+                          aria-hidden={!isActive}
+                        >
+                          {SlideContent}
+                        </Link>
+                      );
+                    }
+
                     return (
-                      <Link
-                        key={ev.id}
-                        href={`/events/${ev.id}`}
-                        className={`banner-slide-link ${isActive ? 'banner-slide-active' : 'banner-slide-inactive'}`}
-                        aria-label={`ดูรายละเอียดคอนเสิร์ต ${ev.title}`}
-                        tabIndex={isActive ? 0 : -1}
+                      <div
+                        key={slide.id}
+                        className={`banner-slide-link banner-slide-static ${isActive ? 'banner-slide-active' : 'banner-slide-inactive'}`}
+                        tabIndex={-1}
                         aria-hidden={!isActive}
                       >
-                        {ev.posterUrl ? (
-                          /* biome-ignore lint/performance/noImgElement: wide panoramic banner */
-                          <img
-                            src={ev.posterUrl}
-                            alt={`แบนเนอร์คอนเสิร์ต ${ev.title}`}
-                            className="banner-image"
-                            loading={index === 0 ? 'eager' : 'lazy'}
-                          />
-                        ) : (
-                          <div className="banner-graphic-card">
-                            <div className="banner-graphic-bg" />
-                            <div className="banner-graphic-glow" />
-                          </div>
-                        )}
-                      </Link>
+                        {SlideContent}
+                      </div>
                     );
                   })}
                 </div>
@@ -320,7 +398,7 @@ export function HomeConcertCatalog({
                         prevSlide();
                       }}
                       className="carousel-arrow carousel-arrow-prev"
-                      aria-label="แบนเนอร์คอนเสิร์ตก่อนหน้า"
+                      aria-label="แบนเนอร์ก่อนหน้า"
                     >
                       <ChevronLeftIcon />
                     </button>
@@ -332,19 +410,19 @@ export function HomeConcertCatalog({
                         nextSlide();
                       }}
                       className="carousel-arrow carousel-arrow-next"
-                      aria-label="แบนเนอร์คอนเสิร์ตถัดไป"
+                      aria-label="แบนเนอร์ถัดไป"
                     >
                       <ChevronRightIcon />
                     </button>
 
-                    <div className="carousel-dots-bar" role="tablist" aria-label="เลือกลำดับแบนเนอร์คอนเสิร์ต">
-                      {upcomingEvents.map((ev, index) => (
+                    <div className="carousel-dots-bar" role="tablist" aria-label="เลือกลำดับแบนเนอร์">
+                      {bannerSlides.map((slide, index) => (
                         <button
-                          key={ev.id}
+                          key={slide.id}
                           type="button"
                           role="tab"
                           aria-selected={index === currentSlide}
-                          aria-label={`แบนเนอร์คอนเสิร์ตลำดับที่ ${index + 1}: ${ev.title}`}
+                          aria-label={`แบนเนอร์ลำดับที่ ${index + 1}: ${slide.title}`}
                           className={`carousel-dot ${index === currentSlide ? 'active' : ''}`}
                           onClick={e => {
                             e.preventDefault();

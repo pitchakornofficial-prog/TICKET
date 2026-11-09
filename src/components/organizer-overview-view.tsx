@@ -6,13 +6,12 @@ import {
   BanknotesIcon,
   RefreshIcon,
   MapPinIcon,
-  ShieldCheckIcon,
   ClockIcon,
   CalendarIcon,
   AlertTriangleIcon,
 } from './icons';
 import { TicketIcon } from './ticket-icon';
-import { Button, Badge } from '@/components/ui';
+import { Badge } from '@/components/ui';
 import { HeaderInfoTooltip } from './header-info-tooltip';
 import { formatBaht } from '@/lib/locale';
 import type { OrganizerSectionId } from './organizer-workspace-view';
@@ -27,6 +26,7 @@ interface OrganizerEventItem {
   title: string;
   location: string;
   status: string;
+  posterUrl?: string;
   sessionCount?: number;
   totalQuota?: number;
   minPrice?: number;
@@ -43,6 +43,9 @@ interface EventProgressStats {
   netSales: number;
 }
 
+type EventStatusFilter = 'all' | 'approved' | 'pending_approval' | 'draft' | 'cancelled';
+type EventSortBy = 'latest' | 'grossSales' | 'soldTickets' | 'title';
+
 export function OrganizerOverviewView({
   onNavigateSection,
 }: OrganizerOverviewViewProps) {
@@ -52,9 +55,12 @@ export function OrganizerOverviewView({
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Chart state (D-215: Option A)
-  const [chartMode, setChartMode] = useState<'bar' | 'line'>('bar');
-  const [timeRange, setTimeRange] = useState<'today' | '7d' | '30d'>('7d');
+  // Search, Filter, Sort & Pagination state
+  const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState<EventStatusFilter>('all');
+  const [sortBy, setSortBy] = useState<EventSortBy>('latest');
+  const [currentPage, setCurrentPage] = useState(1);
+  const ITEMS_PER_PAGE = 4;
 
   const loadData = useCallback(async () => {
     setError(null);
@@ -120,6 +126,8 @@ export function OrganizerOverviewView({
   const totalEventsCount = events.length;
   const activeEvents = events.filter((e) => e.status === 'approved');
   const activeEventsCount = activeEvents.length;
+  const pendingEventsCount = events.filter((e) => e.status === 'pending_approval').length;
+  const draftEventsCount = events.filter((e) => e.status === 'draft').length;
 
   let totalSoldTickets = 0;
   let totalGrossRevenue = 0;
@@ -133,6 +141,11 @@ export function OrganizerOverviewView({
       totalGrossRevenue += stats.grossSales;
     }
   }
+
+  const totalFee = Math.round(totalGrossRevenue * 0.03);
+  const totalNetSales = totalGrossRevenue - totalFee;
+  const avgTicketPrice = totalSoldTickets > 0 ? Math.round(totalGrossRevenue / totalSoldTickets) : 0;
+  const remainingQuota = Math.max(0, totalQuota - totalSoldTickets);
 
   // Multi-Period Sales Breakdown (D-212)
   const todaySales = totalGrossRevenue > 0 ? Math.round(totalGrossRevenue * 0.08) : 45000;
@@ -157,65 +170,89 @@ export function OrganizerOverviewView({
     }
   };
 
-  // Line Chart Data points based on timeRange
-  const lineChartData = useMemo(() => {
-    if (timeRange === 'today') {
-      return [
-        { label: '00:00', value: Math.round(todaySales * 0.05) },
-        { label: '04:00', value: Math.round(todaySales * 0.08) },
-        { label: '08:00', value: Math.round(todaySales * 0.2) },
-        { label: '12:00', value: Math.round(todaySales * 0.45) },
-        { label: '16:00', value: Math.round(todaySales * 0.72) },
-        { label: '20:00', value: Math.round(todaySales * 0.9) },
-        { label: 'ปัจจุบัน', value: todaySales },
-      ];
-    }
-    if (timeRange === '7d') {
-      return [
-        { label: 'จันทร์', value: Math.round(thisWeekSales * 0.1) },
-        { label: 'อังคาร', value: Math.round(thisWeekSales * 0.22) },
-        { label: 'พุธ', value: Math.round(thisWeekSales * 0.38) },
-        { label: 'พฤหัสฯ', value: Math.round(thisWeekSales * 0.52) },
-        { label: 'ศุกร์', value: Math.round(thisWeekSales * 0.75) },
-        { label: 'เสาร์', value: Math.round(thisWeekSales * 0.9) },
-        { label: 'วันนี้', value: thisWeekSales },
-      ];
-    }
-    return [
-      { label: 'สัปดาห์ 1', value: Math.round(thisMonthSales * 0.2) },
-      { label: 'สัปดาห์ 2', value: Math.round(thisMonthSales * 0.45) },
-      { label: 'สัปดาห์ 3', value: Math.round(thisMonthSales * 0.75) },
-      { label: 'สัปดาห์ 4', value: thisMonthSales },
-    ];
-  }, [timeRange, todaySales, thisWeekSales, thisMonthSales]);
+  // Filter, Search & Sort
+  const filteredEvents = useMemo(() => {
+    let result = [...events];
 
-  // Max value for line chart scaling
-  const maxLineValue = useMemo(() => {
-    const maxVal = Math.max(...lineChartData.map(d => d.value), 1000);
-    return Math.ceil(maxVal * 1.15);
-  }, [lineChartData]);
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase().trim();
+      result = result.filter(
+        (ev) =>
+          ev.title.toLowerCase().includes(q) ||
+          ev.location?.toLowerCase().includes(q),
+      );
+    }
 
-  // Max value for bar chart scaling
-  const maxBarSales = useMemo(() => {
-    let max = 1;
-    for (const ev of events) {
-      const stats = eventStats[ev.id];
-      if (stats && stats.grossSales > max) {
-        max = stats.grossSales;
+    if (statusFilter !== 'all') {
+      result = result.filter((ev) => ev.status === statusFilter);
+    }
+
+    result.sort((a, b) => {
+      const statsA = eventStats[a.id] || { grossSales: 0, soldTickets: 0 };
+      const statsB = eventStats[b.id] || { grossSales: 0, soldTickets: 0 };
+      if (sortBy === 'grossSales') {
+        return statsB.grossSales - statsA.grossSales;
       }
+      if (sortBy === 'soldTickets') {
+        return statsB.soldTickets - statsA.soldTickets;
+      }
+      if (sortBy === 'title') {
+        return a.title.localeCompare(b.title, 'th');
+      }
+      return 0;
+    });
+
+    return result;
+  }, [events, eventStats, searchQuery, statusFilter, sortBy]);
+
+  const handleSearchChange = (val: string) => {
+    setSearchQuery(val);
+    setCurrentPage(1);
+  };
+
+  const handleStatusChange = (val: EventStatusFilter) => {
+    setStatusFilter(val);
+    setCurrentPage(1);
+  };
+
+  const handleSortChange = (val: EventSortBy) => {
+    setSortBy(val);
+    setCurrentPage(1);
+  };
+
+  const totalPages = Math.max(1, Math.ceil(filteredEvents.length / ITEMS_PER_PAGE));
+  const validCurrentPage = Math.min(currentPage, totalPages);
+  const startIndex = (validCurrentPage - 1) * ITEMS_PER_PAGE;
+  const paginatedEvents = filteredEvents.slice(startIndex, startIndex + ITEMS_PER_PAGE);
+
+  const handlePageChange = (newPage: number) => {
+    if (newPage >= 1 && newPage <= totalPages) {
+      setCurrentPage(newPage);
     }
-    return max;
-  }, [events, eventStats]);
+  };
 
   return (
     <div className="overview-workspace-container" data-testid="organizer-overview-view">
-      {/* 1. Header Toolbar (D-122, D-216: Universal 'i' Tooltip) */}
+      {/* 1. Header Toolbar with Inline Borderless Refresh Button (D-122, D-216, D-258) */}
       <header className="overview-header-toolbar">
         <div className="overview-header-titles">
-          <h1 className="overview-header-title">
-            ภาพรวมระบบผู้จัดงาน
-            <HeaderInfoTooltip text="ศูนย์รวมภาพรวมสถิติคอนเสิร์ตของคุณ สรุปยอดขายรวม บัตรที่จำหน่ายได้ และงานค้างที่ต้องดำเนินการ" />
-          </h1>
+          <div className="overview-header-title-row">
+            <h1 className="overview-header-title">
+              ภาพรวมระบบผู้จัดงาน
+              <HeaderInfoTooltip text="ศูนย์รวมภาพรวมสถิติคอนเสิร์ตของคุณ สรุปยอดขายรวม บัตรที่จำหน่ายได้ และงานค้างที่ต้องดำเนินการ" />
+            </h1>
+            <button
+              type="button"
+              className="overview-inline-refresh-btn"
+              data-testid="overview-refresh-btn"
+              onClick={handleRefresh}
+              disabled={refreshing || loading}
+              aria-label="รีเฟรชข้อมูลภาพรวม"
+              title="รีเฟรชข้อมูลภาพรวม"
+            >
+              <RefreshIcon className={`inline-refresh-icon ${refreshing ? 'animate-spin' : ''}`} />
+            </button>
+          </div>
           <p className="overview-header-subtitle">
             ติดตามสถานะงานคอนเสิร์ต ยอดจำหน่ายบัตร และการวิเคราะห์รายได้แบบเรียลไทม์
           </p>
@@ -229,320 +266,146 @@ export function OrganizerOverviewView({
         </div>
       )}
 
-      {/* 2. Actions Bar (Data-only Refresh Action, no generic jump links D-210) */}
-      <div className="overview-quick-actions-bar">
-        <div className="overview-header-actions">
-          <Button
-            variant="outline"
-            size="md"
-            className="overview-refresh-btn"
-            data-testid="overview-refresh-btn"
-            onClick={handleRefresh}
-            disabled={refreshing || loading}
-            loading={refreshing}
-            icon={<RefreshIcon className="btn-icon" />}
-            aria-label="รีเฟรชข้อมูลภาพรวม"
-          >
-            รีเฟรชข้อมูล
-          </Button>
+      {/* 2. Top Executive 4-Card Hero Grid (2x2 on Desktop, Detailed Metrics, Semantic Colors D-259) */}
+      <section className="overview-kpi-grid overview-4kpi-grid overview-5kpi-grid" aria-label="สรุปตัวชี้วัดสำคัญภาพรวม">
+        {/* Card 1: Revenue & Financial Net Overview */}
+        <div className="overview-kpi-card pure-kpi kpi-hero-card" data-testid="overview-kpi-revenue">
+          <div className="overview-kpi-header">
+            <span className="overview-kpi-title">
+              รายได้บัตรรวมทั้งหมด
+              <HeaderInfoTooltip text="ยอดขายบัตรรวมทุกงานคอนเสิร์ตก่อนหักค่าบริการระบบ พร้อมสรุปยอดสุทธิรอรับเงิน" />
+            </span>
+            <BanknotesIcon className="overview-borderless-icon text-slate-500" />
+          </div>
+          <div className="overview-kpi-value">
+            {formatBaht(totalGrossRevenue)}
+          </div>
+          <div className="overview-kpi-breakdown-box">
+            <div className="kpi-breakdown-row">
+              <span className="breakdown-label">หักค่าบริการระบบ (3%):</span>
+              <span className="breakdown-val text-muted">-{formatBaht(totalFee)}</span>
+            </div>
+            <div className="kpi-breakdown-row highlight-net-row">
+              <span className="breakdown-label font-semibold">รายได้สุทธิรอรับเงิน:</span>
+              <span className="breakdown-val text-emerald font-bold">+{formatBaht(totalNetSales)}</span>
+            </div>
+          </div>
+          <div className="overview-kpi-footer">
+            <span className="overview-kpi-subtext">
+              คำนวณจากทุกรายการคำสั่งซื้อที่ชำระเงินสำเร็จแล้ว
+            </span>
+          </div>
         </div>
-      </div>
 
-      {/* 3. Top Executive 5-KPI Strip (D-212, D-216: Borderless Icons & Tooltips) */}
-      <section className="overview-kpi-grid overview-5kpi-grid" aria-label="สรุปตัวชี้วัดสำคัญภาพรวม">
-        {/* KPI 1: Active Concerts */}
-        <div className="overview-kpi-card pure-kpi" data-testid="overview-kpi-events">
+        {/* Card 2: Ticket Sales & Quota Progress */}
+        <div className="overview-kpi-card pure-kpi kpi-hero-card" data-testid="overview-kpi-tickets">
+          <div className="overview-kpi-header">
+            <span className="overview-kpi-title">
+              การจำหน่ายบัตร &amp; โควตา
+              <HeaderInfoTooltip text="สรุปจำนวนบัตรที่ออกสำเร็จเทียบกับความจุโควตารวมทุกคอนเสิร์ต" />
+            </span>
+            <TicketIcon className="overview-borderless-icon text-slate-500" />
+          </div>
+          <div className="overview-kpi-value">
+            {totalSoldTickets.toLocaleString()}{' '}
+            <span className="overview-kpi-unit">/ {totalQuota.toLocaleString()} ใบ</span>
+          </div>
+          <div className="kpi-progress-wrap">
+            <div className="kpi-progress-bar-track">
+              <div
+                className="kpi-progress-bar-fill"
+                style={{ width: `${soldPercentage}%` }}
+              />
+            </div>
+            <div className="kpi-progress-stats">
+              <span>ความคืบหน้าการขาย: {soldPercentage}%</span>
+              <span>คงเหลือ: {remainingQuota.toLocaleString()} ใบ</span>
+            </div>
+          </div>
+          <div className="overview-kpi-footer">
+            <span className="overview-kpi-subtext">
+              ราคาจำหน่ายเฉลี่ย: {avgTicketPrice > 0 ? formatBaht(avgTicketPrice) : '-'} / ใบ
+            </span>
+          </div>
+        </div>
+
+        {/* Card 3: Concert Portfolio Governance */}
+        <div className="overview-kpi-card pure-kpi kpi-hero-card" data-testid="overview-kpi-events">
           <div className="overview-kpi-header">
             <span className="overview-kpi-title">
               คอนเสิร์ตที่เปิดขาย
               <HeaderInfoTooltip text="จำนวนคอนเสิร์ตที่ผ่านการอนุมัติและกำลังเปิดจำหน่ายบัตรอยู่ในขณะนี้" />
             </span>
-            <TicketIcon className="overview-borderless-icon text-blue" />
+            <CalendarIcon className="overview-borderless-icon text-slate-500" />
           </div>
           <div className="overview-kpi-value">
             {activeEventsCount}{' '}
-            <span className="overview-kpi-unit">งาน</span>
+            <span className="overview-kpi-unit">/ {totalEventsCount} งานเปิดขาย</span>
           </div>
-          <div className="overview-kpi-footer">
-            <span className="overview-kpi-subtext">
-              จากทั้งหมด {totalEventsCount} งานในระบบ
-            </span>
-          </div>
-        </div>
-
-        {/* KPI 2: Total Gross Revenue */}
-        <div className="overview-kpi-card pure-kpi" data-testid="overview-kpi-revenue">
-          <div className="overview-kpi-header">
-            <span className="overview-kpi-title">
-              รายได้บัตรรวมทั้งหมด
-              <HeaderInfoTooltip text="ยอดขายบัตรรวมทุกงานคอนเสิร์ตก่อนหักค่าบริการระบบ" />
-            </span>
-            <BanknotesIcon className="overview-borderless-icon text-indigo" />
-          </div>
-          <div className="overview-kpi-value text-indigo">
-            {formatBaht(totalGrossRevenue)}
-          </div>
-          <div className="overview-kpi-footer">
-            <span className="overview-kpi-subtext">
-              ออกบัตรแล้ว {totalSoldTickets.toLocaleString()} / {totalQuota.toLocaleString()} ใบ ({soldPercentage}%)
-            </span>
-          </div>
-        </div>
-
-        {/* KPI 3: Today's Sales */}
-        <div className="overview-kpi-card pure-kpi" data-testid="overview-kpi-today">
-          <div className="overview-kpi-header">
-            <span className="overview-kpi-title">
-              ยอดขายวันนี้ (Today)
-              <HeaderInfoTooltip text="ยอดเงินจากการจำหน่ายบัตรที่ทำรายการสำเร็จภายในวันนี้ตั้งแต่เวลา 00:00 น." />
-            </span>
-            <ClockIcon className="overview-borderless-icon text-amber" />
-          </div>
-          <div className="overview-kpi-value">
-            {formatBaht(todaySales)}
-          </div>
-          <div className="overview-kpi-footer">
-            <span className="overview-trend-badge success">+12.5% จากเมื่อวาน</span>
-          </div>
-        </div>
-
-        {/* KPI 4: This Week's Sales */}
-        <div className="overview-kpi-card pure-kpi" data-testid="overview-kpi-week">
-          <div className="overview-kpi-header">
-            <span className="overview-kpi-title">
-              ยอดขายสัปดาห์นี้
-              <HeaderInfoTooltip text="ยอดเงินจากการจำหน่ายบัตรที่ทำรายการสำเร็จในรอบสัปดาห์ปัจจุบัน (จันทร์-อาทิตย์)" />
-            </span>
-            <CalendarIcon className="overview-borderless-icon text-emerald" />
-          </div>
-          <div className="overview-kpi-value">
-            {formatBaht(thisWeekSales)}
-          </div>
-          <div className="overview-kpi-footer">
-            <span className="overview-trend-badge success">+8.2% จากสัปดาห์ก่อน</span>
-          </div>
-        </div>
-
-        {/* KPI 5: This Month's Sales */}
-        <div className="overview-kpi-card pure-kpi" data-testid="overview-kpi-month">
-          <div className="overview-kpi-header">
-            <span className="overview-kpi-title">
-              ยอดขายเดือนนี้
-              <HeaderInfoTooltip text="ยอดเงินสะสมจากการจำหน่ายบัตรที่ทำรายการสำเร็จในรอบเดือนนี้" />
-            </span>
-            <ShieldCheckIcon className="overview-borderless-icon text-purple" />
-          </div>
-          <div className="overview-kpi-value">
-            {formatBaht(thisMonthSales)}
-          </div>
-          <div className="overview-kpi-footer">
-            <span className="overview-trend-badge success">+15.4% จากเดือนก่อน</span>
-          </div>
-        </div>
-      </section>
-
-      {/* 4. Interactive Dual-Mode Visual Analytics Charts (D-215: Option A) */}
-      <section className="overview-charts-card" aria-labelledby="overview-charts-title" data-testid="overview-charts-panel">
-        <div className="charts-card-top-bar">
-          <div className="charts-card-title-wrap">
-            <h2 id="overview-charts-title" className="charts-card-title">
-              กราฟวิเคราะห์สถิติและการเปรียบเทียบ (Visual Analytics)
-              <HeaderInfoTooltip text="วิเคราะห์เปรียบเทียบยอดขายระหว่างแต่ละคอนเสิร์ต และแนวโน้มรายได้ตามช่วงเวลาแบบเรียลไทม์" />
-            </h2>
-            <p className="charts-card-subtitle">
-              สลับมุมมองระหว่างการเปรียบเทียบสัดส่วนรายได้แต่ละคอนเสิร์ต หรือเส้นแนวโน้มยอดขายตามช่วงเวลา
-            </p>
-          </div>
-
-          <div className="charts-controls-wrap">
-            {/* Mode Switcher Tabs */}
-            <div className="charts-mode-tabs" role="tablist" aria-label="โหมดกราฟ">
-              <button
-                type="button"
-                role="tab"
-                aria-selected={chartMode === 'bar'}
-                className={`chart-tab-btn ${chartMode === 'bar' ? 'active' : ''}`}
-                onClick={() => setChartMode('bar')}
-              >
-                กราฟแท่งเปรียบเทียบรายคอนเสิร์ต
-              </button>
-              <button
-                type="button"
-                role="tab"
-                aria-selected={chartMode === 'line'}
-                className={`chart-tab-btn ${chartMode === 'line' ? 'active' : ''}`}
-                onClick={() => setChartMode('line')}
-              >
-                กราฟเส้นแนวโน้มยอดขาย
-              </button>
+          <div className="kpi-status-chips-wrap">
+            <div className="kpi-chip-item success">
+              <span className="kpi-chip-dot bg-success" />
+              <span>เปิดขาย: {activeEventsCount} งาน</span>
             </div>
-
-            {/* Time Filter Pills for Line Chart */}
-            {chartMode === 'line' && (
-              <div className="charts-time-filter">
-                <button
-                  type="button"
-                  className={`time-pill-btn ${timeRange === 'today' ? 'active' : ''}`}
-                  onClick={() => setTimeRange('today')}
-                >
-                  วันนี้ (24 ชม.)
-                </button>
-                <button
-                  type="button"
-                  className={`time-pill-btn ${timeRange === '7d' ? 'active' : ''}`}
-                  onClick={() => setTimeRange('7d')}
-                >
-                  7 วันล่าสุด
-                </button>
-                <button
-                  type="button"
-                  className={`time-pill-btn ${timeRange === '30d' ? 'active' : ''}`}
-                  onClick={() => setTimeRange('30d')}
-                >
-                  30 วันล่าสุด
-                </button>
+            <div className="kpi-chip-item warning">
+              <span className="kpi-chip-dot bg-warning" />
+              <span>รออนุมัติ: {pendingEventsCount} งาน</span>
+            </div>
+            {draftEventsCount > 0 && (
+              <div className="kpi-chip-item neutral">
+                <span className="kpi-chip-dot bg-neutral" />
+                <span>ฉบับร่าง: {draftEventsCount} งาน</span>
               </div>
             )}
           </div>
+          <div className="overview-kpi-footer">
+            <span className="overview-kpi-subtext">
+              จากทั้งหมด {totalEventsCount} งานที่ลงทะเบียนในระบบ
+            </span>
+          </div>
         </div>
 
-        {/* Chart Content Area */}
-        <div className="charts-content-viewport">
-          {chartMode === 'bar' ? (
-            /* Mode 1: Bar Chart Comparison Across Concerts */
-            <div className="overview-barchart-container" data-testid="overview-barchart">
-              <div className="barchart-bars-stack">
-                {events.map((ev) => {
-                  const stats = eventStats[ev.id] || { soldTickets: 0, grossSales: 0 };
-                  const barWidthPct = maxBarSales > 0 ? Math.max(6, Math.round((stats.grossSales / maxBarSales) * 100)) : 6;
-                  const sharePct = totalGrossRevenue > 0 ? Math.round((stats.grossSales / totalGrossRevenue) * 100) : 0;
-
-                  return (
-                    <div key={ev.id} className="barchart-item-row">
-                      <div className="barchart-item-meta">
-                        <span className="barchart-event-name">{ev.title}</span>
-                        <Badge
-                          variant={
-                            ev.status === 'approved'
-                              ? 'success'
-                              : ev.status === 'pending_approval'
-                                ? 'warning'
-                                : 'neutral'
-                          }
-                          size="sm"
-                        >
-                          {getStatusLabel(ev.status)}
-                        </Badge>
-                      </div>
-
-                      <div className="barchart-item-bar-col">
-                        <div className="barchart-bar-track">
-                          <div
-                            className="barchart-bar-fill"
-                            style={{ width: `${barWidthPct}%` }}
-                            title={`${ev.title}: ${formatBaht(stats.grossSales)} (${sharePct}% ของยอดรวม)`}
-                          >
-                            <span className="barchart-inner-label">{sharePct > 8 ? `${sharePct}%` : ''}</span>
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="barchart-item-stat-col">
-                        <span className="barchart-sales-val">{formatBaht(stats.grossSales)}</span>
-                        <span className="barchart-tickets-val">จำหน่าย {stats.soldTickets.toLocaleString()} ใบ</span>
-                      </div>
-                    </div>
-                  );
-                })}
+        {/* Card 4: Multi-Period Sales Trend */}
+        <div className="overview-kpi-card pure-kpi kpi-hero-card" data-testid="overview-kpi-time-summary">
+          <div className="overview-kpi-header">
+            <span className="overview-kpi-title">
+              ยอดขายตามช่วงเวลา
+              <HeaderInfoTooltip text="ยอดเงินจากการจำหน่ายบัตรแบ่งตามช่วงเวลา วันนี้, 7 วันล่าสุด และยอดสะสมรอบเดือนนี้" />
+            </span>
+            <ClockIcon className="overview-borderless-icon text-slate-500" />
+          </div>
+          <div className="kpi-period-metrics-stack">
+            <div className="kpi-period-row" data-testid="overview-kpi-today">
+              <div className="kpi-period-meta">
+                <span className="period-name">ยอดขายวันนี้ (Today)</span>
+                <span className="overview-trend-badge success">+12.5% จากเมื่อวาน</span>
               </div>
+              <span className="period-val">{formatBaht(todaySales)}</span>
             </div>
-          ) : (
-            /* Mode 2: Line Chart Sales Trend Over Time */
-            <div className="overview-linechart-container" data-testid="overview-linechart">
-              <div className="linechart-svg-wrap">
-                <svg
-                  viewBox="0 0 760 220"
-                  className="linechart-svg"
-                  preserveAspectRatio="none"
-                  aria-label="กราฟเส้นแนวโน้มยอดขายตามช่วงเวลา"
-                >
-                  <defs>
-                    <linearGradient id="lineAreaGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="0%" stopColor="#1848ed" stopOpacity="0.28" />
-                      <stop offset="100%" stopColor="#1848ed" stopOpacity="0.0" />
-                    </linearGradient>
-                  </defs>
-
-                  {/* Horizontal Grid lines */}
-                  <line x1="40" y1="30" x2="740" y2="30" stroke="#f1f5f9" strokeWidth="1" strokeDasharray="3 3" />
-                  <line x1="40" y1="80" x2="740" y2="80" stroke="#f1f5f9" strokeWidth="1" strokeDasharray="3 3" />
-                  <line x1="40" y1="130" x2="740" y2="130" stroke="#f1f5f9" strokeWidth="1" strokeDasharray="3 3" />
-                  <line x1="40" y1="180" x2="740" y2="180" stroke="#e2e8f0" strokeWidth="1" />
-
-                  {/* Generate Path Coordinates */}
-                  {(() => {
-                    const stepX = (740 - 60) / Math.max(lineChartData.length - 1, 1);
-                    const coords = lineChartData.map((d, i) => {
-                      const x = 60 + i * stepX;
-                      const y = 180 - (d.value / maxLineValue) * 150;
-                      return { x, y, ...d };
-                    });
-
-                    const pathD = coords.reduce((acc, pt, i) => {
-                      return i === 0 ? `M ${pt.x} ${pt.y}` : `${acc} L ${pt.x} ${pt.y}`;
-                    }, '');
-
-                    const areaD = `${pathD} L ${coords[coords.length - 1].x} 180 L ${coords[0].x} 180 Z`;
-
-                    return (
-                      <>
-                        <path d={areaD} fill="url(#lineAreaGrad)" />
-                        <path d={pathD} fill="none" stroke="#1848ed" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
-                        {coords.map((pt) => (
-                          <g key={pt.label} className="linechart-dot-group">
-                            <circle
-                              cx={pt.x}
-                              cy={pt.y}
-                              r={4.5}
-                              fill="#ffffff"
-                              stroke="#1848ed"
-                              strokeWidth={2.5}
-                              className="linechart-dot"
-                            >
-                              <title>{`${pt.label}: ${formatBaht(pt.value)}`}</title>
-                            </circle>
-                            {/* X-axis label */}
-                            <text
-                              x={pt.x}
-                              y={202}
-                              textAnchor="middle"
-                              fontSize="11"
-                              fill="#64748b"
-                              fontFamily="inherit"
-                            >
-                              {pt.label}
-                            </text>
-                          </g>
-                        ))}
-                      </>
-                    );
-                  })()}
-                </svg>
-
-                {/* Line Chart Period Total Tooltip Badge */}
-                <div className="linechart-hover-tooltip" aria-hidden="true">
-                  <span className="tooltip-period">
-                    {timeRange === 'today' ? 'ยอดขายวันนี้' : timeRange === '7d' ? 'ยอดขาย 7 วันล่าสุด' : 'ยอดขาย 30 วันล่าสุด'}
-                  </span>
-                  <span className="tooltip-amount">{formatBaht(lineChartData.reduce((s: number, p: { value: number }) => s + p.value, 0))}</span>
-                </div>
+            <div className="kpi-period-row" data-testid="overview-kpi-week">
+              <div className="kpi-period-meta">
+                <span className="period-name">ยอดขายสัปดาห์นี้</span>
+                <span className="overview-trend-badge success">+8.2% จากสัปดาห์ก่อน</span>
               </div>
+              <span className="period-val">{formatBaht(thisWeekSales)}</span>
             </div>
-          )}
+            <div className="kpi-period-row" data-testid="overview-kpi-month">
+              <div className="kpi-period-meta">
+                <span className="period-name">ยอดขายเดือนนี้</span>
+                <span className="overview-trend-badge success">+15.4% จากเดือนก่อน</span>
+              </div>
+              <span className="period-val font-bold">{formatBaht(thisMonthSales)}</span>
+            </div>
+          </div>
+          <div className="overview-kpi-footer">
+            <span className="overview-kpi-subtext">
+              สรุปแนวโน้มยอดขายตามช่วงเวลาย้อนหลัง
+            </span>
+          </div>
         </div>
       </section>
 
-      {/* 5. Concert Performance Cards (D-213: 3-Zone Horizontal Layout, D-214: Targeted Navigation) */}
+      {/* 4. Concert Performance Vertical Cards Section (Search, Filter, Pagination) */}
       <section className="overview-performance-section" aria-labelledby="overview-performance-title" data-testid="overview-performance-section">
         <div className="section-header-row">
           <div>
@@ -556,6 +419,65 @@ export function OrganizerOverviewView({
           </div>
         </div>
 
+        {/* Search, Filter & Sort Toolbar */}
+        <div className="performance-filter-toolbar">
+          <div className="filter-search-box">
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => handleSearchChange(e.target.value)}
+              placeholder="ค้นหาชื่อคอนเสิร์ต หรือสถานที่จัดงาน..."
+              className="filter-search-input"
+              aria-label="ค้นหาชื่อคอนเสิร์ตหรือสถานที่"
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                className="filter-clear-btn"
+                onClick={() => handleSearchChange('')}
+                aria-label="ล้างคำค้นหา"
+              >
+                ล้าง
+              </button>
+            )}
+          </div>
+
+          <div className="filter-controls-group">
+            {/* Status Filter */}
+            <div className="perf-filter-select-wrap">
+              <span className="perf-filter-label">สถานะ:</span>
+              <select
+                value={statusFilter}
+                onChange={(e) => handleStatusChange(e.target.value as EventStatusFilter)}
+                className="perf-filter-select"
+                aria-label="กรองตามสถานะงาน"
+              >
+                <option value="all">ทั้งหมด ({events.length})</option>
+                <option value="approved">กำลังเปิดขาย ({activeEventsCount})</option>
+                <option value="pending_approval">รออนุมัติ ({pendingEventsCount})</option>
+                <option value="draft">ฉบับร่าง ({draftEventsCount})</option>
+              </select>
+            </div>
+
+            {/* Sort Select */}
+            <div className="perf-filter-select-wrap">
+              <span className="perf-filter-label">จัดเรียง:</span>
+              <select
+                value={sortBy}
+                onChange={(e) => handleSortChange(e.target.value as EventSortBy)}
+                className="perf-filter-select"
+                aria-label="จัดเรียงลำดับคอนเสิร์ต"
+              >
+                <option value="latest">สร้างล่าสุด</option>
+                <option value="grossSales">ยอดขายสูงสุด</option>
+                <option value="soldTickets">จำหน่ายบัตรมากที่สุด</option>
+                <option value="title">ชื่อคอนเสิร์ต (ก-ฮ)</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        {/* Concert Cards Rendering */}
         {events.length === 0 ? (
           <div className="overview-empty-card" data-testid="overview-events-empty">
             <TicketIcon className="empty-icon" />
@@ -572,146 +494,205 @@ export function OrganizerOverviewView({
               สร้างคอนเสิร์ตแรกของคุณ
             </button>
           </div>
-        ) : (
-          <div className="overview-performance-list" data-testid="overview-performance-list">
-            {events.map((ev) => {
-              const stats = eventStats[ev.id] || {
-                soldTickets: 0,
-                grossSales: 0,
-                fee: 0,
-                netSales: 0,
-              };
-              const quota = ev.totalQuota || 1500;
-              const sold = stats.soldTickets;
-              const pct = quota > 0 ? Math.min(100, Math.round((sold / quota) * 100)) : 0;
-              const gross = stats.grossSales;
-              const fee = stats.fee;
-              const net = stats.netSales;
-
-              return (
-                <div
-                  key={ev.id}
-                  className="overview-concert-card"
-                  data-testid={`overview-concert-card-${ev.id}`}
-                >
-                  {/* Zone 1: Event Details & Ticket Progress */}
-                  <div className="concert-card-zone-info">
-                    <div className="concert-status-badge-row">
-                      <Badge
-                        variant={
-                          ev.status === 'approved'
-                            ? 'success'
-                            : ev.status === 'pending_approval'
-                              ? 'warning'
-                              : ev.status === 'cancelled'
-                                ? 'danger'
-                                : 'neutral'
-                        }
-                        size="sm"
-                      >
-                        {getStatusLabel(ev.status)}
-                      </Badge>
-                      <span className="concert-meta-sessions">{ev.sessionCount || 1} รอบการแสดง</span>
-                    </div>
-
-                    <h3 className="concert-card-title">
-                      {ev.title}
-                      <HeaderInfoTooltip text={`ข้อมูลคอนเสิร์ต ${ev.title} ณ ${ev.location || 'สถานที่จัดงาน'}`} />
-                    </h3>
-
-                    <div className="concert-card-location">
-                      <MapPinIcon className="meta-icon" />
-                      <span>{ev.location || 'ไม่ระบุสถานที่'}</span>
-                    </div>
-
-                    {/* Ticket Progress Bar */}
-                    <div className="concert-progress-box">
-                      <div className="progress-header-row">
-                        <span className="progress-label">
-                          ขายแล้ว {sold.toLocaleString()} / {quota.toLocaleString()} ใบ
-                        </span>
-                        <span className="progress-pct-badge">{pct}%</span>
-                      </div>
-                      <div className="progress-bar-track">
-                        <div
-                          className="progress-bar-fill"
-                          style={{ width: `${pct}%` }}
-                          role="progressbar"
-                          aria-valuenow={pct}
-                          aria-valuemin={0}
-                          aria-valuemax={100}
-                        />
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Zone 2: Financial Breakdown (3 values: Gross -> Fees -> Net) */}
-                  <div className="concert-card-zone-finance">
-                    <div className="finance-metric-box">
-                      <span className="finance-metric-label">
-                        รายได้รวม
-                        <HeaderInfoTooltip text="ยอดขายบัตรรวมจากคำสั่งซื้อที่ชำระเงินสำเร็จของคอนเสิร์ตนี้" />
-                      </span>
-                      <span className="finance-metric-val">{formatBaht(gross)}</span>
-                    </div>
-
-                    <div className="finance-metric-divider">−</div>
-
-                    <div className="finance-metric-box">
-                      <span className="finance-metric-label">
-                        หักค่าบริการ (3%)
-                        <HeaderInfoTooltip text="ค่าบริการแพลตฟอร์มระบบ TICKET ที่หักตามรอบการขาย" />
-                      </span>
-                      <span className="finance-metric-val fee-val">
-                        {fee > 0 ? `-${formatBaht(fee)}` : '฿0'}
-                      </span>
-                    </div>
-
-                    <div className="finance-metric-divider">=</div>
-
-                    <div className="finance-metric-box highlight-net">
-                      <span className="finance-metric-label">
-                        ยอดสุทธิคงเหลือ
-                        <HeaderInfoTooltip text="ยอดเงินสุทธิที่ผู้จัดงานจะได้รับหลังหักค่าบริการเรียบร้อยแล้ว" />
-                      </span>
-                      <span className="finance-metric-val net-val">{formatBaht(net)}</span>
-                    </div>
-                  </div>
-
-                  {/* Zone 3: 3 Action Buttons (D-213, D-214: Highlight on Click) */}
-                  <div className="concert-card-zone-actions">
-                    <Link
-                      href={`/events/${ev.id}`}
-                      className="overview-concert-action-btn btn-store"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      title="เปิดดูหน้าเว็บฝั่งลูกค้าในแท็บใหม่"
-                    >
-                      ดูหน้าร้านลูกค้า
-                    </Link>
-
-                    <button
-                      type="button"
-                      className="overview-concert-action-btn btn-finance"
-                      onClick={() => onNavigateSection?.('finance', ev.id)}
-                      title="เปิดรายงานการเงินพร้อมไฮไลท์คอนเสิร์ตนี้"
-                    >
-                      รายงานการเงิน
-                    </button>
-
-                    <button
-                      type="button"
-                      className="overview-concert-action-btn btn-manage"
-                      onClick={() => onNavigateSection?.('events', ev.id)}
-                      title="ไปที่หน้าคอนเสิร์ตพร้อมไฮไลท์งานนี้"
-                    >
-                      จัดการงาน
-                    </button>
-                  </div>
-                </div>
-              );
-            })}
+        ) : filteredEvents.length === 0 ? (
+          <div className="overview-empty-card" data-testid="overview-search-empty">
+            <TicketIcon className="empty-icon" />
+            <h3 className="empty-title">ไม่พบคอนเสิร์ตที่ตรงกับเงื่อนไขการค้นหา</h3>
+            <p className="empty-desc">
+              ลองปรับเปลี่ยนคำค้นหา หรือเลือกตัวกรองสถานะเป็น &quot;ทั้งหมด&quot;
+            </p>
+            <button
+              type="button"
+              className="overview-create-btn"
+              onClick={() => {
+                setSearchQuery('');
+                setStatusFilter('all');
+              }}
+            >
+              ล้างตัวกรองทั้งหมด
+            </button>
           </div>
+        ) : (
+          <>
+            <div className="overview-performance-grid overview-performance-list" data-testid="overview-performance-list">
+              {paginatedEvents.map((ev) => {
+                const stats = eventStats[ev.id] || {
+                  soldTickets: 0,
+                  grossSales: 0,
+                  fee: 0,
+                  netSales: 0,
+                };
+                const quota = ev.totalQuota || 1500;
+                const sold = stats.soldTickets;
+                const pct = quota > 0 ? Math.min(100, Math.round((sold / quota) * 100)) : 0;
+                const gross = stats.grossSales;
+                const fee = stats.fee;
+                const net = stats.netSales;
+
+                return (
+                  <div
+                    key={ev.id}
+                    className="overview-concert-card horizontal-card"
+                    data-testid={`overview-concert-card-${ev.id}`}
+                  >
+                    {/* Zone 1: Event Details & Ticket Progress */}
+                    <div className="concert-card-zone-info">
+                      <div className="concert-status-badge-row">
+                        <Badge
+                          variant={
+                            ev.status === 'approved'
+                              ? 'success'
+                              : ev.status === 'pending_approval'
+                                ? 'warning'
+                                : ev.status === 'cancelled'
+                                  ? 'danger'
+                                  : 'neutral'
+                          }
+                          size="sm"
+                        >
+                          {getStatusLabel(ev.status)}
+                        </Badge>
+                        <span className="concert-meta-sessions">{ev.sessionCount || 1} รอบการแสดง</span>
+                      </div>
+
+                      <h3 className="concert-card-title" title={ev.title}>
+                        {ev.title}
+                        <HeaderInfoTooltip text={`ข้อมูลคอนเสิร์ต ${ev.title} ณ ${ev.location || 'สถานที่จัดงาน'}`} />
+                      </h3>
+
+                      <div className="concert-card-location">
+                        <MapPinIcon className="meta-icon" />
+                        <span>{ev.location || 'ไม่ระบุสถานที่'}</span>
+                      </div>
+
+                      {/* Ticket Progress Bar */}
+                      <div className="concert-progress-box">
+                        <div className="progress-header-row">
+                          <span className="progress-label">
+                            ขายแล้ว {sold.toLocaleString()} / {quota.toLocaleString()} ใบ
+                          </span>
+                          <span className="progress-pct-badge">{pct}%</span>
+                        </div>
+                        <div className="progress-bar-track">
+                          <div
+                            className="progress-bar-fill"
+                            style={{ width: `${pct}%` }}
+                            role="progressbar"
+                            aria-valuenow={pct}
+                            aria-valuemin={0}
+                            aria-valuemax={100}
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Zone 2: Financial Breakdown (Horizontal 3-Metric Summary, Clean Layout D-260, D-261) */}
+                    <div className="concert-card-zone-finance highlight-net">
+                      <div className="finance-metric-box">
+                        <span className="finance-metric-label">
+                          รายได้รวม
+                          <HeaderInfoTooltip text="ยอดขายบัตรรวมจากคำสั่งซื้อที่ชำระเงินสำเร็จของคอนเสิร์ตนี้" />
+                        </span>
+                        <span className="finance-metric-val">{formatBaht(gross)}</span>
+                      </div>
+
+                      <div className="finance-metric-box">
+                        <span className="finance-metric-label">
+                          หักค่าบริการ (3%)
+                          <HeaderInfoTooltip text="ค่าบริการแพลตฟอร์มระบบ TICKET ที่หักตามรอบการขาย" />
+                        </span>
+                        <span className="finance-metric-val fee-val">
+                          {fee > 0 ? `-${formatBaht(fee)}` : '฿0'}
+                        </span>
+                      </div>
+
+                      <div className="finance-metric-box highlight-net">
+                        <span className="finance-metric-label">
+                          ยอดสุทธิคงเหลือ
+                          <HeaderInfoTooltip text="ยอดเงินสุทธิที่ผู้จัดงานจะได้รับหลังหักค่าบริการเรียบร้อยแล้ว" />
+                        </span>
+                        <span className="finance-metric-val net-val">{formatBaht(net)}</span>
+                      </div>
+                    </div>
+
+                    {/* Zone 3: 3 Action Buttons */}
+                    <div className="concert-card-zone-actions">
+                      <Link
+                        href={`/events/${ev.id}`}
+                        className="overview-concert-action-btn btn-store"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        title="เปิดดูหน้าร้านลูกค้าในแท็บใหม่"
+                      >
+                        ดูหน้าร้านลูกค้า
+                      </Link>
+
+                      <button
+                        type="button"
+                        className="overview-concert-action-btn btn-finance"
+                        onClick={() => onNavigateSection?.('finance', ev.id)}
+                        title="เปิดรายงานการเงินพร้อมไฮไลท์คอนเสิร์ตนี้"
+                      >
+                        รายงานการเงิน
+                      </button>
+
+                      <button
+                        type="button"
+                        className="overview-concert-action-btn btn-manage"
+                        onClick={() => onNavigateSection?.('events', ev.id)}
+                        title="ไปที่หน้าคอนเสิร์ตพร้อมไฮไลท์งานนี้"
+                      >
+                        จัดการงาน
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Pagination Controls */}
+            {totalPages > 1 && (
+              <nav className="overview-pagination-bar" aria-label="การแบ่งหน้าคอนเสิร์ต">
+                <span className="pagination-info-text">
+                  แสดง {startIndex + 1} - {Math.min(startIndex + ITEMS_PER_PAGE, filteredEvents.length)} จากทั้งหมด {filteredEvents.length} คอนเสิร์ต
+                </span>
+
+                <div className="pagination-buttons-group">
+                  <button
+                    type="button"
+                    className="pagination-btn nav-btn"
+                    onClick={() => handlePageChange(validCurrentPage - 1)}
+                    disabled={validCurrentPage <= 1}
+                    aria-label="หน้าก่อนหน้า"
+                  >
+                    ก่อนหน้า
+                  </button>
+
+                  {Array.from({ length: totalPages }, (_, idx) => idx + 1).map((pageNum) => (
+                    <button
+                      key={pageNum}
+                      type="button"
+                      className={`pagination-btn page-num-btn ${pageNum === validCurrentPage ? 'active' : ''}`}
+                      onClick={() => handlePageChange(pageNum)}
+                      aria-current={pageNum === validCurrentPage ? 'page' : undefined}
+                    >
+                      {pageNum}
+                    </button>
+                  ))}
+
+                  <button
+                    type="button"
+                    className="pagination-btn nav-btn"
+                    onClick={() => handlePageChange(validCurrentPage + 1)}
+                    disabled={validCurrentPage >= totalPages}
+                    aria-label="หน้าถัดไป"
+                  >
+                    ถัดไป
+                  </button>
+                </div>
+              </nav>
+            )}
+          </>
         )}
       </section>
     </div>

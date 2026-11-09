@@ -20,6 +20,7 @@ import {
   ChevronDownIcon,
   XIcon,
   PencilSquareIcon,
+  RefreshIcon,
 } from './icons';
 import { TicketIcon } from './ticket-icon';
 import { AlertIcon } from './alert-icon';
@@ -365,6 +366,13 @@ export function OrganizerEventsManager({
   const [selectedReportEventId, setSelectedReportEventId] = useState<string | null>(null);
 
   const filterSearchInputId = useId();
+  const [refreshing, setRefreshing] = useState(false);
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await loadEvents();
+    setRefreshing(false);
+  };
 
   const loadEvents = useCallback(async () => {
     try {
@@ -914,10 +922,23 @@ export function OrganizerEventsManager({
       {/* 1. Header with Title & Description (D-122, D-197 Tooltip 'i') */}
       <header className="events-management-header">
         <div className="events-management-title-wrap">
-          <h1 className="events-management-title">
+          <div className="organizer-header-title-row">
+            <h1 className="events-management-title">
             งานคอนเสิร์ตของคุณ
             <HeaderInfoTooltip text="ศูนย์จัดการคอนเสิร์ต สร้างงานใหม่ ตรวจสอบสถานะการอนุมัติ จัดการรอบการแสดง และดูรายงานการเงินแยกรายคอนเสิร์ต" />
           </h1>
+            <button
+              type="button"
+              className="organizer-inline-refresh-btn"
+              data-testid="events-refresh-btn"
+              onClick={handleRefresh}
+              disabled={refreshing || loading}
+              aria-label="รีเฟรชข้อมูลคอนเสิร์ต"
+              title="รีเฟรชข้อมูลคอนเสิร์ต"
+            >
+              <RefreshIcon className={`inline-refresh-icon ${refreshing ? 'animate-spin' : ''}`} />
+            </button>
+          </div>
           <p className="events-management-desc">
             สร้างฉบับร่าง จัดการรอบการแสดง ขอแก้ไขราคา หรือตรวจสอบรายงานการเงินแยกรายคอนเสิร์ต
           </p>

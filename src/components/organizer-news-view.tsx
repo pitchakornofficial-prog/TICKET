@@ -6,6 +6,7 @@ import {
   CalendarIcon,
   EyeIcon,
   PencilSquareIcon,
+  RefreshIcon,
   TrashIcon,
   CheckCircleIcon,
   AlertTriangleIcon,
@@ -98,6 +99,12 @@ const STATUS_LABELS: Record<OrganizerNewsItem['status'], { label: string; class:
 };
 
 export function OrganizerNewsView() {
+  const [refreshing, setRefreshing] = useState(false);
+
+  const handleRefresh = () => {
+    setRefreshing(true);
+    setTimeout(() => setRefreshing(false), 400);
+  };
   const [newsList, setNewsList] = useState<OrganizerNewsItem[]>(INITIAL_NEWS);
   const [activeTab, setActiveTab] = useState<
     'all' | 'draft' | 'pending' | 'published' | 'rejected'
@@ -345,10 +352,23 @@ export function OrganizerNewsView() {
         {/* Header Toolbar (D-122: Clean Baseline) */}
         <header className="news-management-header">
           <div className="news-management-title-wrap">
+            <div className="organizer-header-title-row">
             <h1 className="news-management-title">
               จัดการข่าวสารและประกาศ
               <HeaderInfoTooltip text="เขียน แก้ไข และส่งคำขอประชาสัมพันธ์คอนเสิร์ต เพื่อให้เจ้าของระบบตรวจสอบและอนุมัติก่อนเผยแพร่สู่สาธารณะ" />
             </h1>
+            <button
+              type="button"
+              className="organizer-inline-refresh-btn"
+              data-testid="news-refresh-btn"
+              onClick={handleRefresh}
+              disabled={refreshing}
+              aria-label="รีเฟรชข้อมูลข่าวสาร"
+              title="รีเฟรชข้อมูลข่าวสาร"
+            >
+              <RefreshIcon className={`inline-refresh-icon ${refreshing ? 'animate-spin' : ''}`} />
+            </button>
+          </div>
             <p className="news-management-desc">
               เขียน แก้ไข และส่งคำขอประชาสัมพันธ์คอนเสิร์ต
               เพื่อให้เจ้าของระบบตรวจสอบและอนุมัติก่อนเผยแพร่สู่สาธารณะ

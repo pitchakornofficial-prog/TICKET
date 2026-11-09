@@ -297,8 +297,12 @@ export default async function EventDetailPage({ params, searchParams }: EventDet
           </div>
         </section>
 
+        <hr className="detail-section-divider" />
+
         {/* Category 2: ภาพและรายละเอียดเพิ่มเติมจากผู้จัด (Event Gallery & Official Details) (D-147) */}
         <EventOfficialGallery eventTitle={event.title} />
+
+        <hr className="detail-section-divider" />
 
         {/* Category 3: รอบการแสดงและประเภทบัตร */}
         <section className="event-category-card" aria-labelledby="cat-sessions-title">
@@ -317,7 +321,9 @@ export default async function EventDetailPage({ params, searchParams }: EventDet
           </div>
         </section>
 
-        {/* Category 3: สถานที่จัดงานและแผนที่การเดินทาง */}
+        <hr className="detail-section-divider" />
+
+        {/* Category 4: สถานที่จัดงานและแผนที่การเดินทาง */}
         <section className="event-category-card" aria-labelledby="cat-venue-title">
           <div className="category-header-wrap">
             <div className="venue-heading-split">
@@ -353,10 +359,14 @@ export default async function EventDetailPage({ params, searchParams }: EventDet
           </div>
         </section>
 
-        {/* Category 4: กฎระเบียบและสิ่งของต้องห้ามนำเข้างาน (Regulations & Prohibited Items Carousel) (D-146) */}
+        <hr className="detail-section-divider" />
+
+        {/* Category 5: กฎระเบียบและสิ่งของต้องห้ามนำเข้างาน (Regulations & Prohibited Items Carousel) (D-146) */}
         <EventProhibitedItemsCarousel />
 
-        {/* Category 5: ข้อกำหนดและข้อชี้แจงในการซื้อบัตร (D-42: Independent FAQ item cards) */}
+        <hr className="detail-section-divider" />
+
+        {/* Category 6: ข้อกำหนดและข้อชี้แจงในการซื้อบัตร (D-42: Independent FAQ item cards) */}
         <PurchaseTermsFaqList />
       </div>
 

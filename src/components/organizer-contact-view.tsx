@@ -8,6 +8,7 @@ import {
   ClockIcon,
   CheckCircleIcon,
   CheckIcon,
+  RefreshIcon,
 } from '@/components/icons';
 import { HeaderInfoTooltip } from './header-info-tooltip';
 import {
@@ -19,6 +20,13 @@ import {
 export function OrganizerContactView() {
   const [contactInfo, setContactInfo] = useState<OwnerContactInfo>(() => loadOwnerContactInfo());
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const handleRefresh = () => {
+    setRefreshing(true);
+    setContactInfo(loadOwnerContactInfo());
+    setTimeout(() => setRefreshing(false), 300);
+  };
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
   useEffect(() => {
@@ -65,10 +73,23 @@ export function OrganizerContactView() {
         {/* Header Toolbar */}
         <header className="contact-page-header">
           <div className="contact-header-text">
+            <div className="organizer-header-title-row">
             <h1 className="contact-page-title">
               ติดต่อเจ้าของระบบ TICKET
               <HeaderInfoTooltip text="ช่องทางติดต่ออย่างเป็นทางการสำหรับผู้จัดงาน เพื่อประสานงาน แจ้งปัญหา หรือขอคำปรึกษาเร่งด่วนกับเจ้าของระบบ" />
             </h1>
+            <button
+              type="button"
+              className="organizer-inline-refresh-btn"
+              data-testid="contact-refresh-btn"
+              onClick={handleRefresh}
+              disabled={refreshing}
+              aria-label="รีเฟรชข้อมูลติดต่อ"
+              title="รีเฟรชข้อมูลติดต่อ"
+            >
+              <RefreshIcon className={`inline-refresh-icon ${refreshing ? 'animate-spin' : ''}`} />
+            </button>
+          </div>
             <p className="contact-page-desc">
               ช่องทางติดต่ออย่างเป็นทางการสำหรับผู้จัดงานและผู้ว่าจ้าง เพื่อประสานงาน แจ้งปัญหา หรือขอคำปรึกษาเร่งด่วน
             </p>
