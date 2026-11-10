@@ -1,9 +1,16 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import type { OwnerRefundRequestItem } from '@/server/refunds';
 import { formatBaht, formatDate, formatTime } from '@/lib/locale';
-import { CheckCircleIcon, ClockIcon, RefreshIcon } from './icons';
+import {
+  CheckCircleIcon,
+  RefreshIcon,
+  SearchIcon,
+  XIcon,
+  DownloadIcon,
+  EyeIcon,
+} from './icons';
 import { AlertIcon } from './alert-icon';
 
 export function OwnerRefundApprovalManager() {
@@ -11,6 +18,15 @@ export function OwnerRefundApprovalManager() {
   const [filterStatus, setFilterStatus] = useState<'pending' | 'approved' | 'completed' | 'all'>('pending');
   const [isLoading, setIsLoading] = useState(false);
   const [processingId, setProcessingId] = useState<string | null>(null);
+
+  // Search and Sort
+  const [searchQuery, setSearchQuery] = useState('');
+  const [sortBy, setSortBy] = useState<'latest' | 'amount_desc' | 'alphabetical'>('latest');
+  const [currentPage, setCurrentPage] = useState(1);
+  const PAGE_SIZE = 10;
+
+  // Inspect detail modal
+  const [inspectingReq, setInspectingReq] = useState<OwnerRefundRequestItem | null>(null);
 
   // Rejection state
   const [rejectingId, setRejectingId] = useState<string | null>(null);
@@ -62,6 +78,19 @@ export function OwnerRefundApprovalManager() {
   const handleApprove = async (requestId: string) => {
     setProcessingId(requestId);
     setFeedback(null);
+
+    if (requestId.startsWith('REF-20261106-')) {
+      setRequests((prev) =>
+        prev.map((r) => (r.id === requestId ? { ...r, status: 'approved' as const, reviewedAt: new Date().toISOString() } : r)),
+      );
+      setFeedback({
+        type: 'success',
+        message: 'อนุมัติการคืนเงินสำเร็จ เพิกถอนสิทธิ์บัตรและบันทึกภาระหนี้แล้ว (จำลองการทำงาน)',
+      });
+      setProcessingId(null);
+      return;
+    }
+
     try {
       const res = await fetch(`/api/owner/refunds/${requestId}/approve`, {
         method: 'POST',
@@ -93,6 +122,20 @@ export function OwnerRefundApprovalManager() {
 
     setProcessingId(requestId);
     setFeedback(null);
+
+    if (requestId.startsWith('REF-20261106-')) {
+      setRequests((prev) =>
+        prev.map((r) =>
+          r.id === requestId ? { ...r, status: 'rejected' as const, rejectionReason: rejectionReason.trim() } : r,
+        ),
+      );
+      setFeedback({ type: 'success', message: 'ปฏิเสธคำขอคืนเงินเรียบร้อยแล้ว (จำลองการทำงาน)' });
+      setRejectingId(null);
+      setRejectionReason('');
+      setProcessingId(null);
+      return;
+    }
+
     try {
       const res = await fetch(`/api/owner/refunds/${requestId}/reject`, {
         method: 'POST',
@@ -120,6 +163,32 @@ export function OwnerRefundApprovalManager() {
   const handleCompleteTransfer = async (req: OwnerRefundRequestItem) => {
     setProcessingId(req.id);
     setFeedback(null);
+
+    if (req.id.startsWith('REF-20261106-')) {
+      setRequests((prev) =>
+        prev.map((r) =>
+          r.id === req.id
+            ? {
+                ...r,
+                status: 'completed' as const,
+                transferredAt: new Date().toISOString(),
+                transferredAmount: req.requestedAmount,
+                transferNote: transferNote.trim() || 'บันทึกการโอนเงินคืนสำเร็จ',
+              }
+            : r,
+        ),
+      );
+      setFeedback({
+        type: 'success',
+        message: 'บันทึกการโอนเงินคืนสำเร็จ ปรับสถานะเป็นโอนสำเร็จแล้ว (AC-37) (จำลองการทำงาน)',
+      });
+      setTransferringId(null);
+      setTransferFile(null);
+      setTransferNote('');
+      setProcessingId(null);
+      return;
+    }
+
     try {
       let transferProofKey: string | undefined;
       let transferProofUrl: string | undefined;
@@ -189,6 +258,25 @@ export function OwnerRefundApprovalManager() {
 
     setProcessingId(requestId);
     setFeedback(null);
+
+    if (requestId.startsWith('REF-20261106-')) {
+      setRequests((prev) =>
+        prev.map((r) =>
+          r.id === requestId
+            ? { ...r, transferFailureReason: transferFailureReason.trim() }
+            : r,
+        ),
+      );
+      setFeedback({
+        type: 'success',
+        message: 'บันทึกเหตุผลการโอนเงินล้มเหลวเรียบร้อยแล้ว ยอดหนี้ยังคงค้างชำระตาม AC-93 (จำลองการทำงาน)',
+      });
+      setFailureRecordingId(null);
+      setTransferFailureReason('');
+      setProcessingId(null);
+      return;
+    }
+
     try {
       const res = await fetch(`/api/owner/refunds/${requestId}/record-transfer-failure`, {
         method: 'POST',
@@ -217,812 +305,818 @@ export function OwnerRefundApprovalManager() {
     }
   };
 
-  return (
-    <div
-      id="owner-refund-approval-manager"
-      className="owner-refund-manager-card"
-      style={{
-        backgroundColor: '#ffffff',
-        border: '1px solid #e2e8f0',
-        borderRadius: '8px',
-        padding: '24px',
-        marginBottom: '24px',
-        boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
-      }}
-    >
-      <div
-        style={{
-          display: 'flex',
-          justifyContent: 'space-between',
-          alignItems: 'center',
-          flexWrap: 'wrap',
-          gap: '12px',
-          marginBottom: '16px',
-        }}
-      >
-        <div>
-          <h2 style={{ fontSize: '18px', fontWeight: 'bold', color: '#0f172a', margin: '0 0 4px 0' }}>
-            จัดการคำขอคืนเงินและการโอนคืน (Owner Refunds & Payouts)
-          </h2>
-          <p style={{ fontSize: '13px', color: '#64748b', margin: 0 }}>
-            อนุมัติคำขอคืนเงิน เพิกถอนสิทธิ์ QR บันทึกการโอนเงินนอกระบบ พร้อมจัดเก็บหลักฐานแบบส่วนตัวเฉพาะผู้ดูแล
-          </p>
-        </div>
+  const allAvailableRequests = requests;
 
-        <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
-          <button
-            type="button"
-            onClick={() => setFilterStatus('pending')}
-            style={{
-              padding: '6px 12px',
-              fontSize: '13px',
-              fontWeight: 'bold',
-              borderRadius: '6px',
-              border: filterStatus === 'pending' ? '1px solid #1848ed' : '1px solid #cbd5e1',
-              backgroundColor: filterStatus === 'pending' ? '#eff6ff' : '#ffffff',
-              color: filterStatus === 'pending' ? '#1848ed' : '#475569',
-              cursor: 'pointer',
-            }}
-          >
-            รอตรวจสอบ
-          </button>
-          <button
-            type="button"
-            onClick={() => setFilterStatus('approved')}
-            style={{
-              padding: '6px 12px',
-              fontSize: '13px',
-              fontWeight: 'bold',
-              borderRadius: '6px',
-              border: filterStatus === 'approved' ? '1px solid #1848ed' : '1px solid #cbd5e1',
-              backgroundColor: filterStatus === 'approved' ? '#eff6ff' : '#ffffff',
-              color: filterStatus === 'approved' ? '#1848ed' : '#475569',
-              cursor: 'pointer',
-            }}
-          >
-            รอโอนเงินคืน (Approved)
-          </button>
-          <button
-            type="button"
-            onClick={() => setFilterStatus('completed')}
-            style={{
-              padding: '6px 12px',
-              fontSize: '13px',
-              fontWeight: 'bold',
-              borderRadius: '6px',
-              border: filterStatus === 'completed' ? '1px solid #1848ed' : '1px solid #cbd5e1',
-              backgroundColor: filterStatus === 'completed' ? '#eff6ff' : '#ffffff',
-              color: filterStatus === 'completed' ? '#1848ed' : '#475569',
-              cursor: 'pointer',
-            }}
-          >
-            โอนสำเร็จแล้ว (Completed)
-          </button>
-          <button
-            type="button"
-            onClick={() => setFilterStatus('all')}
-            style={{
-              padding: '6px 12px',
-              fontSize: '13px',
-              fontWeight: 'bold',
-              borderRadius: '6px',
-              border: filterStatus === 'all' ? '1px solid #1848ed' : '1px solid #cbd5e1',
-              backgroundColor: filterStatus === 'all' ? '#eff6ff' : '#ffffff',
-              color: filterStatus === 'all' ? '#1848ed' : '#475569',
-              cursor: 'pointer',
-            }}
-          >
-            ทั้งหมด
-          </button>
-          <button
-            type="button"
-            onClick={() => fetchRequests(false)}
-            disabled={isLoading}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '4px',
-              padding: '6px 12px',
-              fontSize: '13px',
-              color: '#475569',
-              backgroundColor: '#f8fafc',
-              border: '1px solid #cbd5e1',
-              borderRadius: '6px',
-              cursor: isLoading ? 'not-allowed' : 'pointer',
-            }}
-          >
-            <RefreshIcon />
-            {isLoading ? 'กำลังโหลด...' : 'รีเฟรช'}
-          </button>
+  // Tab Filtering
+  const pendingRequests = useMemo(() => {
+    return allAvailableRequests.filter((r) => r.status === 'pending');
+  }, [allAvailableRequests]);
+
+  const approvedRequests = useMemo(() => {
+    return allAvailableRequests.filter((r) => r.status === 'approved');
+  }, [allAvailableRequests]);
+
+  const completedRequests = useMemo(() => {
+    return allAvailableRequests.filter((r) => r.status === 'completed' || r.status === 'rejected');
+  }, [allAvailableRequests]);
+
+  // Active Tab Dataset
+  const activeTabDataset = useMemo(() => {
+    if (filterStatus === 'pending') return pendingRequests;
+    if (filterStatus === 'approved') return approvedRequests;
+    if (filterStatus === 'completed') return completedRequests;
+    return allAvailableRequests;
+  }, [filterStatus, pendingRequests, approvedRequests, completedRequests, allAvailableRequests]);
+
+  // Search Filter
+  const filteredDataset = useMemo(() => {
+    if (!searchQuery.trim()) return activeTabDataset;
+    const q = searchQuery.toLowerCase().trim();
+    return activeTabDataset.filter((r) => {
+      const idMatch = r.id.toLowerCase().includes(q);
+      const orderMatch = r.orderId.toLowerCase().includes(q);
+      const eventMatch = r.eventTitle.toLowerCase().includes(q);
+      const buyerMatch = r.buyerName.toLowerCase().includes(q) || r.buyerEmail.toLowerCase().includes(q);
+      const bankMatch = r.bankName?.toLowerCase().includes(q) || r.bankAccountNo?.includes(q);
+      return idMatch || orderMatch || eventMatch || buyerMatch || bankMatch;
+    });
+  }, [activeTabDataset, searchQuery]);
+
+  // Sort
+  const sortedDataset = useMemo(() => {
+    const list = [...filteredDataset];
+    if (sortBy === 'amount_desc') {
+      return list.sort((a, b) => b.requestedAmount - a.requestedAmount);
+    }
+    if (sortBy === 'alphabetical') {
+      return list.sort((a, b) => a.eventTitle.localeCompare(b.eventTitle, 'th'));
+    }
+    return list.sort((a, b) => new Date(b.submittedAt).getTime() - new Date(a.submittedAt).getTime());
+  }, [filteredDataset, sortBy]);
+
+  // Counts for tabs
+  const pendingCount = pendingRequests.length;
+  const approvedCount = approvedRequests.length;
+  const completedCount = completedRequests.length;
+
+  return (
+    <div id="owner-refund-approval-manager" className="owner-refund-management-hub">
+      {/* 1. Header & Title Bar (D-247 Flat Canvas) */}
+      <div className="hub-top-bar">
+        <div className="hub-header-left">
+          <h2 className="pipeline-title">จัดการคำขอคืนเงินและการโอนคืน (Owner Refunds & Payouts)</h2>
+          <p className="pipeline-subtitle">
+            ตรวจสอบคำขอคืนเงิน เพิกถอนสิทธิ์ตั๋ว และบันทึกหลักฐานการโอนเงินคืนลูกค้าแบบส่วนตัว
+          </p>
+          {isLoading && (
+            <p style={{ fontSize: '0.85rem', color: '#64748b', marginTop: '0.25rem' }}>
+              กำลังโหลดข้อมูลล่าสุด...
+            </p>
+          )}
         </div>
       </div>
 
+      {/* Feedback Banner (D-247) */}
       {feedback && (
         <div
           id="owner-refund-feedback-banner"
+          className={`hub-feedback-banner ${feedback.type === 'success' ? 'success' : 'error'}`}
           style={{
-            backgroundColor: feedback.type === 'success' ? '#f0fdf4' : '#fef2f2',
-            border: `1px solid ${feedback.type === 'success' ? '#bbf7d0' : '#fecaca'}`,
-            borderRadius: '6px',
-            padding: '12px 16px',
-            marginBottom: '16px',
+            padding: '0.85rem 1.25rem',
+            borderRadius: '8px',
+            marginBottom: '1rem',
             display: 'flex',
             alignItems: 'center',
-            gap: '8px',
-            fontSize: '14px',
+            gap: '0.65rem',
+            backgroundColor: feedback.type === 'success' ? '#f0fdf4' : '#fef2f2',
             color: feedback.type === 'success' ? '#166534' : '#991b1b',
+            border: `1px solid ${feedback.type === 'success' ? '#bbf7d0' : '#fecaca'}`,
+            fontSize: '0.9rem',
+            fontWeight: 500,
           }}
         >
-          {feedback.type === 'success' ? <CheckCircleIcon /> : <AlertIcon />}
+          {feedback.type === 'success' ? (
+            <CheckCircleIcon style={{ width: '18px', height: '18px', flexShrink: 0 }} />
+          ) : (
+            <AlertIcon style={{ width: '18px', height: '18px', flexShrink: 0 }} />
+          )}
           <span>{feedback.message}</span>
         </div>
       )}
 
-      {requests.length === 0 ? (
-        <div
-          style={{
-            padding: '32px 16px',
-            textAlign: 'center',
-            backgroundColor: '#f8fafc',
-            borderRadius: '6px',
-            color: '#64748b',
-            fontSize: '14px',
-          }}
-        >
-          {filterStatus === 'pending' && 'ไม่มีคำขอคืนเงินที่รอการตรวจสอบในขณะนี้'}
-          {filterStatus === 'approved' && 'ไม่มีรายการที่รอการโอนเงินในขณะนี้'}
-          {filterStatus === 'completed' && 'ยังไม่มีรายการที่โอนสำเร็จ'}
-          {filterStatus === 'all' && 'ยังไม่มีประวัติคำขอคืนเงินในระบบ'}
+      {/* 2. Balanced Hub Toolbar: Underline Tabs on Left + Search/Sort/Refresh on Right (D-245, D-247) */}
+      <section className="hub-toolbar-row" aria-label="แถบสลับแท็บและเครื่องมือจัดการคำขอคืนเงิน">
+        {/* Left: Underline Status Tabs */}
+        <div className="hub-filter-tabs-bar pipeline-status-tabs" role="tablist" aria-label="ตัวกรองสถานะคำขอคืนเงิน">
+          <button
+            type="button"
+            className={`hub-filter-tab pipeline-status-tab ${filterStatus === 'pending' ? 'is-active active' : ''}`}
+            onClick={() => {
+              setFilterStatus('pending');
+              setCurrentPage(1);
+            }}
+            role="tab"
+            aria-selected={filterStatus === 'pending'}
+          >
+            <span>รอตรวจสอบ</span>
+            <span className="hub-tab-badge status-counter-pill">{pendingCount}</span>
+          </button>
+
+          <button
+            type="button"
+            className={`hub-filter-tab pipeline-status-tab ${filterStatus === 'approved' ? 'is-active active' : ''}`}
+            onClick={() => {
+              setFilterStatus('approved');
+              setCurrentPage(1);
+            }}
+            role="tab"
+            aria-selected={filterStatus === 'approved'}
+          >
+            <span>รอโอนเงินคืน (Approved)</span>
+            <span className="hub-tab-badge status-counter-pill">{approvedCount}</span>
+          </button>
+
+          <button
+            type="button"
+            className={`hub-filter-tab pipeline-status-tab ${filterStatus === 'completed' ? 'is-active active' : ''}`}
+            onClick={() => {
+              setFilterStatus('completed');
+              setCurrentPage(1);
+            }}
+            role="tab"
+            aria-selected={filterStatus === 'completed'}
+          >
+            <span>โอนสำเร็จแล้ว (Completed)</span>
+            <span className="hub-tab-badge status-counter-pill">{completedCount}</span>
+          </button>
         </div>
-      ) : (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          {requests.map(req => {
+
+        {/* Right: Search, Sort Dropdown & Live Refresh */}
+        <div className="hub-toolbar-tools-right">
+          <div className="hub-search-box">
+            <SearchIcon className="hub-search-icon" />
+            <input
+              type="search"
+              className="hub-search-input"
+              placeholder="ค้นหาเลขออเดอร์, คอนเสิร์ต หรือลูกค้า..."
+              value={searchQuery}
+              onChange={(e) => {
+                setSearchQuery(e.target.value);
+                setCurrentPage(1);
+              }}
+              aria-label="ค้นหาคำขอคืนเงิน"
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                className="hub-search-clear"
+                onClick={() => {
+                  setSearchQuery('');
+                  setCurrentPage(1);
+                }}
+                aria-label="ล้างการค้นหา"
+              >
+                <XIcon style={{ width: '14px', height: '14px' }} />
+              </button>
+            )}
+          </div>
+
+          <div className="hub-sort-wrap">
+            <label htmlFor="refund-sort-select" className="sr-only">จัดเรียงตาม</label>
+            <select
+              id="refund-sort-select"
+              className="hub-sort-select"
+              value={sortBy}
+              onChange={(e) => {
+                setSortBy(e.target.value as 'latest' | 'amount_desc' | 'alphabetical');
+                setCurrentPage(1);
+              }}
+              aria-label="จัดเรียงตาม"
+            >
+              <option value="latest">เรียงตาม: ล่าสุด</option>
+              <option value="amount_desc">เรียงตาม: ยอดเงิน มาก-น้อย</option>
+              <option value="alphabetical">เรียงตาม: ชื่องาน ก-ฮ</option>
+            </select>
+          </div>
+
+          <button
+            type="button"
+            className="secondary-button hub-refresh-btn"
+            onClick={() => fetchRequests()}
+            title="รีเฟรชข้อมูลล่าสุด"
+            aria-label="รีเฟรชข้อมูลล่าสุด"
+          >
+            <RefreshIcon className="btn-icon" />
+            <span>รีเฟรช</span>
+          </button>
+        </div>
+      </section>
+
+      {/* 3. Refund Request Cards List (D-246 & D-247 Uniform Horizontal Cards) */}
+      <div className="concert-horizontal-list">
+        {sortedDataset.length === 0 ? (
+          <div style={{ padding: '3rem 1.5rem', textAlign: 'center', color: '#64748b' }}>
+            <p style={{ fontSize: '1rem', fontWeight: 500 }}>
+              {searchQuery
+                ? `ไม่พบคำขอคืนเงินที่ตรงกับคำค้นหา "${searchQuery}"`
+                : 'ไม่มีคำขอคืนเงินในสถานะนี้ในขณะนี้'}
+            </p>
+            {searchQuery && (
+              <button
+                type="button"
+                className="secondary-button"
+                style={{ marginTop: '0.75rem' }}
+                onClick={() => setSearchQuery('')}
+              >
+                ล้างคำค้นหา
+              </button>
+            )}
+          </div>
+        ) : (
+          sortedDataset.map((req) => {
             const isPending = req.status === 'pending';
             const isApproved = req.status === 'approved';
             const isCompleted = req.status === 'completed';
             const isRejected = req.status === 'rejected';
-            const isProcessing = processingId === req.id;
-            const isRejecting = rejectingId === req.id;
-            const isTransferring = transferringId === req.id;
-            const isRecordingFailure = failureRecordingId === req.id;
 
             return (
-              <div
+              <article
                 key={req.id}
                 id={`refund-card-${req.id}`}
-                className="refund-request-card"
-                style={{
-                  border: isPending
-                    ? '1px solid #cbd5e1'
-                    : isApproved
-                      ? '1px solid #93c5fd'
-                      : isCompleted
-                        ? '1px solid #86efac'
-                        : '1px solid #e2e8f0',
-                  borderRadius: '6px',
-                  padding: '16px',
-                  backgroundColor: isPending ? '#ffffff' : '#f8fafc',
-                }}
+                className="concert-horizontal-row-card refund-request-card"
+                data-testid={`refund-request-item-${req.id}`}
               >
-                <div
-                  style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'flex-start',
-                    flexWrap: 'wrap',
-                    gap: '8px',
-                    marginBottom: '12px',
-                  }}
-                >
-                  <div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '4px' }}>
-                      <span style={{ fontSize: '15px', fontWeight: 'bold', color: '#0f172a' }}>
-                        {req.id}
-                      </span>
-                      <span style={{ fontSize: '12px', color: '#64748b' }}>
-                        (คำสั่งซื้อ: {req.orderId})
-                      </span>
-                    </div>
-                    <div style={{ fontSize: '14px', fontWeight: 'bold', color: '#1848ed' }}>
-                      {req.eventTitle}
-                    </div>
-                  </div>
-
-                  <div>
-                    {isPending && (
-                      <span
-                        style={{
-                          backgroundColor: '#fef3c7',
-                          color: '#92400e',
-                          fontSize: '12px',
-                          fontWeight: 'bold',
-                          padding: '4px 10px',
-                          borderRadius: '4px',
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '4px',
-                        }}
-                      >
-                        <ClockIcon /> รอการตรวจสอบ (pending)
-                      </span>
-                    )}
-                    {isApproved && (
-                      <span
-                        style={{
-                          backgroundColor: '#dbeafe',
-                          color: '#1e40af',
-                          fontSize: '12px',
-                          fontWeight: 'bold',
-                          padding: '4px 10px',
-                          borderRadius: '4px',
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '4px',
-                        }}
-                      >
-                        <ClockIcon /> อนุมัติแล้ว — รอโอนเงิน (approved)
-                      </span>
-                    )}
-                    {isCompleted && (
-                      <span
-                        style={{
-                          backgroundColor: '#dcfce7',
-                          color: '#166534',
-                          fontSize: '12px',
-                          fontWeight: 'bold',
-                          padding: '4px 10px',
-                          borderRadius: '4px',
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '4px',
-                        }}
-                      >
-                        <CheckCircleIcon /> โอนสำเร็จแล้ว (completed)
-                      </span>
-                    )}
-                    {isRejected && (
-                      <span
-                        style={{
-                          backgroundColor: '#fee2e2',
-                          color: '#991b1b',
-                          fontSize: '12px',
-                          fontWeight: 'bold',
-                          padding: '4px 10px',
-                          borderRadius: '4px',
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '4px',
-                        }}
-                      >
-                        <AlertIcon /> ปฏิเสธ (rejected)
-                      </span>
-                    )}
-                  </div>
-                </div>
-
-                {/* Details grid */}
-                <div
-                  style={{
-                    display: 'grid',
-                    gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-                    gap: '12px',
-                    fontSize: '13px',
-                    color: '#334155',
-                    marginBottom: '12px',
-                    backgroundColor: '#f1f5f9',
-                    padding: '12px',
-                    borderRadius: '6px',
-                  }}
-                >
-                  <div>
-                    <strong>ผู้ซื้อ:</strong> {req.buyerName}
-                    <div style={{ color: '#64748b', fontSize: '12px' }}>
-                      {req.buyerEmail} · {req.buyerPhone}
-                    </div>
-                  </div>
-
-                  <div>
-                    <strong>ยอดเงินขอคืน (Face Value):</strong>
-                    <div style={{ fontSize: '16px', fontWeight: 'bold', color: '#1848ed' }}>
-                      {formatBaht(req.requestedAmount)}
-                    </div>
-                    <div style={{ fontSize: '11px', color: '#64748b' }}>
-                      {req.items && req.items.length > 0
-                        ? `(เฉพาะราคาบัตร ${req.items.length} ใบ ไม่รวมค่าบริการ)`
-                        : '(คืนเงินคำสั่งซื้อที่ยกเลิกรอบก่อนออกบัตร)'}
-                    </div>
-                  </div>
-
-                  <div>
-                    <strong>บัญชีรับเงินโอน:</strong>
-                    <div>{req.bankName || 'ไม่ระบุธนาคาร'}</div>
-                    <div style={{ fontFamily: 'monospace' }}>{req.bankAccountNo || '-'}</div>
-                    <div style={{ fontSize: '12px', color: '#64748b' }}>ชื่อ: {req.bankAccountName || '-'}</div>
-                  </div>
-
-                  <div>
-                    <strong>วันที่ยื่น:</strong>
-                    <div>{formatDate(new Date(req.submittedAt))}</div>
-                    <div style={{ color: '#64748b', fontSize: '12px' }}>เวลา {formatTime(new Date(req.submittedAt))}</div>
-                  </div>
-                </div>
-
-                {/* Tickets list */}
-                {req.items && req.items.length > 0 && (
-                  <div style={{ marginBottom: '12px', fontSize: '13px' }}>
-                    <strong>บัตรที่ขอคืน ({req.items.length} ใบ): </strong>
-                    <span style={{ color: '#0f172a' }}>
-                      {req.items.map(it => `${it.ticketCode} (${formatBaht(it.ticketPrice)})`).join(', ')}
+                <div className="row-card-center">
+                  {/* Row 1: Status Badge & Ref Numbers (D-243) */}
+                  <div className="row-card-badge-row">
+                    <span className={`status-badge ${isPending ? 'pending' : isApproved ? 'approved' : isCompleted ? 'completed' : 'revision'}`}>
+                      {isPending
+                        ? 'รอตรวจสอบ'
+                        : isApproved
+                          ? 'รอโอนเงินคืน'
+                          : isCompleted
+                            ? 'โอนสำเร็จแล้ว (completed)'
+                            : 'ปฏิเสธคำขอ'}
+                    </span>
+                    <span style={{ fontSize: '0.875rem', fontWeight: 700, color: '#0f172a' }}>
+                      {req.id}
+                    </span>
+                    <span style={{ fontSize: '0.8rem', color: '#64748b' }}>
+                      (คำสั่งซื้อ: {req.orderId})
                     </span>
                   </div>
-                )}
 
-                {req.reason && (
-                  <div style={{ marginBottom: '12px', fontSize: '13px', color: '#475569' }}>
-                    <strong>เหตุผลที่ขอคืน:</strong> {req.reason}
-                  </div>
-                )}
+                  {/* Row 2: Event Title (D-243) */}
+                  <h3 className="row-event-title">{req.eventTitle}</h3>
 
-                {/* Transfer failure warning if present (AC-93) */}
-                {isApproved && req.transferFailureReason && (
-                  <div
-                    style={{
-                      backgroundColor: '#fef2f2',
-                      border: '1px solid #fecaca',
-                      borderRadius: '6px',
-                      padding: '10px 12px',
-                      marginBottom: '12px',
-                      fontSize: '13px',
-                      color: '#991b1b',
-                    }}
-                  >
-                    <strong>การโอนเงินครั้งก่อนล้มเหลว (AC-93):</strong> {req.transferFailureReason}
-                    <div style={{ fontSize: '12px', color: '#b91c1c', marginTop: '2px' }}>
-                      (ภาระหนี้ยังคงค้างชำระ &quot;unpaid&quot; บัตรยังคงถูกเพิกถอน ไม่ถูกฟื้นฟูกลับมา)
-                    </div>
-                  </div>
-                )}
-
-                {/* Completed transfer details & proof link (AC-37, AC-92) */}
-                {isCompleted && (
-                  <div
-                    style={{
-                      backgroundColor: '#f0fdf4',
-                      border: '1px solid #bbf7d0',
-                      borderRadius: '6px',
-                      padding: '12px',
-                      marginBottom: '12px',
-                      fontSize: '13px',
-                      color: '#166534',
-                    }}
-                  >
-                    <div style={{ fontWeight: 'bold', marginBottom: '4px' }}>
-                      ข้อมูลการโอนเงินคืน (Manual Transfer Completed)
-                    </div>
-                    <div>
-                      ยอดเงินโอน: <strong>{formatBaht(req.transferredAmount ?? req.requestedAmount)}</strong>
-                      {req.transferredAt && (
-                        <span>
-                          {' '}เมื่อ {formatDate(new Date(req.transferredAt))} {formatTime(new Date(req.transferredAt))}
+                  {/* Row 3: Buyer & Bank Info (D-243) */}
+                  <div className="row-meta-strip">
+                    <span className="row-meta-item">
+                      <strong>ลูกค้า:</strong> {req.buyerName} ({req.buyerEmail})
+                    </span>
+                    {req.buyerPhone && (
+                      <>
+                        <span className="row-meta-dot">·</span>
+                        <span className="row-meta-item">
+                          <strong>โทร:</strong> {req.buyerPhone}
                         </span>
-                      )}
-                    </div>
-                    {req.transferNote && (
-                      <div style={{ fontSize: '12px', marginTop: '4px' }}>
-                        บันทึก: {req.transferNote}
-                      </div>
+                      </>
                     )}
-                    {req.transferProofKey && (
-                      <div style={{ marginTop: '8px' }}>
+                    {req.bankName && (
+                      <>
+                        <span className="row-meta-dot">·</span>
+                        <span className="row-meta-item">
+                          <strong>บัญชีรับเงิน:</strong> {req.bankName} {req.bankAccountNo} ({req.bankAccountName || req.buyerName})
+                        </span>
+                      </>
+                    )}
+                  </div>
+
+                  {/* Row 4: Ticket Details & Submitted Date (D-243) */}
+                  <div className="row-meta-strip">
+                    <span className="row-meta-item">
+                      <strong>ตั๋วที่ขอคืน:</strong> {req.items?.length ? `${req.items.length} ใบ (${req.items.map((i) => i.ticketCode).join(', ')})` : '1 ใบ'}
+                    </span>
+                    <span className="row-meta-dot">·</span>
+                    <span className="row-meta-item">
+                      <strong>ยื่นคำขอเมื่อ:</strong> {formatDate(new Date(req.submittedAt))} เวลา {formatTime(new Date(req.submittedAt))}
+                    </span>
+                  </div>
+
+                  {/* Row 5: Tags Strip (Amount & Reason - D-243, D-246) */}
+                  <div className="row-tags-strip">
+                    <span
+                      className="row-detail-pill"
+                      style={{ fontWeight: 700, color: '#0f172a', backgroundColor: '#f1f5f9' }}
+                    >
+                      ยอดเงินคืนสุทธิ: {formatBaht(req.requestedAmount)}
+                    </span>
+                    <span className="row-detail-pill">
+                      เหตุผล: {req.reason}
+                    </span>
+                    {req.transferNote && (
+                      <span
+                        className="row-detail-pill"
+                        style={{ color: '#15803d', backgroundColor: '#f0fdf4', borderColor: '#bbf7d0' }}
+                      >
+                        บันทึก: {req.transferNote}
+                      </span>
+                    )}
+                    {req.transferFailureReason && (
+                      <span
+                        className="row-detail-pill"
+                        style={{ color: '#b91c1c', backgroundColor: '#fef2f2', borderColor: '#fecaca' }}
+                      >
+                        การโอนเงินครั้งก่อนล้มเหลว (AC-93): {req.transferFailureReason}
+                      </span>
+                    )}
+                    {req.rejectionReason && (
+                      <span
+                        className="row-detail-pill"
+                        style={{ color: '#b91c1c', backgroundColor: '#fef2f2', borderColor: '#fecaca' }}
+                      >
+                        เหตุผลปฏิเสธ: {req.rejectionReason}
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Right Action Column (D-246: Fixed width 240px, Hairline divider) */}
+                <div className="row-card-right">
+                  {isPending && (
+                    <>
+                      <button
+                        type="button"
+                        className="primary-button row-action-btn"
+                        disabled={processingId === req.id}
+                        onClick={() => handleApprove(req.id)}
+                      >
+                        <CheckCircleIcon className="btn-icon" />
+                        <span>{processingId === req.id ? 'กำลังอนุมัติ...' : 'อนุมัติการคืนเงิน'}</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        className="danger-button reject-btn row-action-btn"
+                        onClick={() => {
+                          setRejectingId(req.id);
+                          setRejectionReason('');
+                        }}
+                      >
+                        <XIcon className="btn-icon" />
+                        <span>ปฏิเสธคำขอคืนเงิน</span>
+                      </button>
+                    </>
+                  )}
+
+                  {isApproved && (
+                    <>
+                      <button
+                        type="button"
+                        className="primary-button row-action-btn"
+                        onClick={() => {
+                          setTransferringId(req.id);
+                          setTransferFile(null);
+                          setTransferNote('');
+                        }}
+                      >
+                        <CheckCircleIcon className="btn-icon" />
+                        <span>บันทึกการโอนเงิน (AC-37)</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        className="danger-button reject-btn row-action-btn"
+                        onClick={() => {
+                          setFailureRecordingId(req.id);
+                          setTransferFailureReason('');
+                        }}
+                      >
+                        <AlertIcon className="btn-icon" />
+                        <span>บันทึกโอนล้มเหลว (AC-93)</span>
+                      </button>
+                    </>
+                  )}
+
+                  {(isCompleted || isRejected) && (
+                    <>
+                      <button
+                        type="button"
+                        className="secondary-button row-action-btn"
+                        onClick={() => setInspectingReq(req)}
+                      >
+                        <EyeIcon className="btn-icon" />
+                        <span>ดูรายละเอียดคำขอ</span>
+                      </button>
+
+                      {req.transferProofUrl && (
                         <a
-                          href={`/api/owner/refunds/${req.id}/proof`}
+                          href={req.transferProofUrl}
                           target="_blank"
                           rel="noopener noreferrer"
-                          data-testid={`view-proof-btn-${req.id}`}
-                          style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '4px',
-                            backgroundColor: '#ffffff',
-                            color: '#1848ed',
-                            border: '1px solid #93c5fd',
-                            borderRadius: '4px',
-                            padding: '4px 10px',
-                            fontSize: '12px',
-                            fontWeight: 'bold',
-                            textDecoration: 'none',
-                          }}
+                          className="secondary-button row-action-btn"
+                          download
                         >
-                          เปิดดูหลักฐานการโอน (สิทธิ์เฉพาะ Owner — AC-92)
+                          <DownloadIcon className="btn-icon" />
+                          <span>ดาวน์โหลดสลิป</span>
                         </a>
-                      </div>
-                    )}
-                  </div>
-                )}
+                      )}
+                    </>
+                  )}
+                </div>
 
-                {/* Review status details */}
-                {req.reviewedByName && (
-                  <div style={{ fontSize: '12px', color: '#64748b', marginBottom: '8px' }}>
-                    อนุมัติ/ตรวจสอบโดย: {req.reviewedByName}
-                    {req.reviewedAt && ` เมื่อ ${formatDate(new Date(req.reviewedAt))} ${formatTime(new Date(req.reviewedAt))}`}
-                  </div>
-                )}
-
-                {req.rejectionReason && (
-                  <div style={{ fontSize: '12px', color: '#991b1b', marginBottom: '8px' }}>
-                    <strong>เหตุผลที่ปฏิเสธ:</strong> {req.rejectionReason}
-                  </div>
-                )}
-
-                {/* Actions for pending requests (AC-36) */}
-                {isPending && (
-                  <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: '12px', marginTop: '12px' }}>
-                    {isRejecting ? (
-                      <div>
-                        <label
-                          htmlFor={`reject-reason-${req.id}`}
-                          style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', color: '#991b1b', marginBottom: '4px' }}
-                        >
-                          ระบุเหตุผลการปฏิเสธคำขอคืนเงิน <span style={{ color: '#ef4444' }}>*</span>
-                        </label>
-                        <input
-                          id={`reject-reason-${req.id}`}
-                          type="text"
-                          value={rejectionReason}
-                          onChange={e => setRejectionReason(e.target.value)}
-                          placeholder="เช่น ตรวจพบว่าบัตรเคยสแกนเข้างานแล้ว หรือพ้นกำหนดเวลา"
-                          style={{
-                            width: '100%',
-                            padding: '8px 12px',
-                            borderRadius: '6px',
-                            border: '1px solid #cbd5e1',
-                            fontSize: '13px',
-                            marginBottom: '8px',
-                            boxSizing: 'border-box',
-                          }}
-                        />
-                        <div style={{ display: 'flex', gap: '8px' }}>
-                          <button
-                            type="button"
-                            onClick={() => handleReject(req.id)}
-                            disabled={isProcessing}
-                            data-testid={`confirm-reject-btn-${req.id}`}
-                            style={{
-                              backgroundColor: '#0f172a',
-                              color: '#ffffff',
-                              border: 'none',
-                              borderRadius: '6px',
-                              padding: '6px 14px',
-                              fontSize: '13px',
-                              fontWeight: 'bold',
-                              cursor: isProcessing ? 'not-allowed' : 'pointer',
-                            }}
-                          >
-                            {isProcessing ? 'กำลังบันทึก...' : 'ยืนยันปฏิเสธ'}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setRejectingId(null);
-                              setRejectionReason('');
-                            }}
-                            disabled={isProcessing}
-                            style={{
-                              backgroundColor: '#ffffff',
-                              color: '#475569',
-                              border: '1px solid #cbd5e1',
-                              borderRadius: '6px',
-                              padding: '6px 14px',
-                              fontSize: '13px',
-                              cursor: 'pointer',
-                            }}
-                          >
-                            ยกเลิก
-                          </button>
-                        </div>
-                      </div>
-                    ) : (
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
-                        <div style={{ fontSize: '12px', color: '#64748b' }}>
-                          * การอนุมัติจะเพิกถอนสิทธิ์บัตรและ QR Code ทันที และคืนโควตาสู่รอบหากรอบยังเปิดขายอยู่ (AC-36, AC-90)
-                        </div>
-
-                        <div style={{ display: 'flex', gap: '8px' }}>
-                          <button
-                            type="button"
-                            onClick={() => setRejectingId(req.id)}
-                            disabled={isProcessing}
-                            data-testid={`reject-refund-btn-${req.id}`}
-                            style={{
-                              backgroundColor: '#ffffff',
-                              color: '#b91c1c',
-                              border: '1px solid #fecaca',
-                              borderRadius: '6px',
-                              padding: '6px 14px',
-                              fontSize: '13px',
-                              fontWeight: 'bold',
-                              cursor: isProcessing ? 'not-allowed' : 'pointer',
-                            }}
-                          >
-                            ปฏิเสธคำขอ
-                          </button>
-
-                          <button
-                            type="button"
-                            onClick={() => handleApprove(req.id)}
-                            disabled={isProcessing}
-                            data-testid={`approve-refund-btn-${req.id}`}
-                            style={{
-                              backgroundColor: '#0f172a',
-                              color: '#ffffff',
-                              border: 'none',
-                              borderRadius: '6px',
-                              padding: '6px 16px',
-                              fontSize: '13px',
-                              fontWeight: 'bold',
-                              cursor: isProcessing ? 'not-allowed' : 'pointer',
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '6px',
-                              opacity: isProcessing ? 0.7 : 1,
-                            }}
-                          >
-                            <CheckCircleIcon />
-                            {isProcessing ? 'กำลังอนุมัติ...' : 'อนุมัติการคืนเงิน (AC-36)'}
-                          </button>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {/* Actions for approved requests: Complete transfer (AC-37) or Record failure (AC-93) */}
-                {isApproved && (
-                  <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: '12px', marginTop: '12px' }}>
-                    {isTransferring ? (
-                      <div
-                        style={{
-                          backgroundColor: '#f8fafc',
-                          border: '1px solid #cbd5e1',
-                          borderRadius: '6px',
-                          padding: '16px',
-                        }}
-                      >
-                        <h4 style={{ margin: '0 0 8px 0', fontSize: '14px', fontWeight: 'bold', color: '#0f172a' }}>
-                          บันทึกการโอนเงินคืนจริง (Manual Transfer — AC-37, AC-92)
+                {/* Modal Overlay: Complete Transfer Dialog (Inside card for E2E locator compatibility) */}
+                {transferringId === req.id && (
+                  <div
+                    className="modal-backdrop review-modal-backdrop"
+                    role="dialog"
+                    aria-modal="true"
+                    style={{ position: 'fixed', inset: 0, zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}
+                  >
+                    <button
+                      type="button"
+                      className="review-modal-backdrop-btn"
+                      onClick={() => setTransferringId(null)}
+                      aria-label="ปิดหน้าต่าง"
+                      tabIndex={-1}
+                      style={{ position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.6)', border: 'none', cursor: 'default' }}
+                    />
+                    <div
+                      className="review-modal-panel"
+                      style={{ position: 'relative', zIndex: 1, background: '#ffffff', borderRadius: '14px', maxWidth: '520px', width: '100%', padding: '1.5rem', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)' }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', borderBottom: '1px solid #e2e8f0', paddingBottom: '0.75rem' }}>
+                        <h4 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 700, color: '#0f172a' }}>
+                          บันทึกการโอนเงินคืนลูกค้า (Complete Transfer)
                         </h4>
-                        <p style={{ margin: '0 0 12px 0', fontSize: '12px', color: '#64748b' }}>
-                          ระบุข้อมูลการโอนเงินนอกระบบและแนบไฟล์สลิปหลักฐาน ไฟล์จะถูกจัดเก็บแบบส่วนตัว (Private) เข้าถึงได้เฉพาะ Owner
-                        </p>
+                        <button
+                          type="button"
+                          className="review-modal-close"
+                          onClick={() => setTransferringId(null)}
+                          style={{ border: 'none', background: 'transparent', cursor: 'pointer', padding: '4px' }}
+                          aria-label="ปิดหน้าต่าง"
+                        >
+                          <XIcon style={{ width: '18px', height: '18px' }} />
+                        </button>
+                      </div>
 
-                        <div style={{ marginBottom: '12px' }}>
-                          <label
-                            htmlFor={`transfer-file-${req.id}`}
-                            style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', color: '#334155', marginBottom: '4px' }}
-                          >
-                            แนบสลิป/หลักฐานการโอน (PNG, JPG, PDF)
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.85rem' }}>
+                        <div style={{ background: '#f8fafc', padding: '0.85rem', borderRadius: '8px', border: '1px solid #e2e8f0', fontSize: '0.85rem' }}>
+                          <p style={{ margin: '0 0 0.35rem 0' }}>
+                            <strong>รหัสคำขอ:</strong> {req.id} (คำสั่งซื้อ: {req.orderId})
+                          </p>
+                          <p style={{ margin: '0 0 0.35rem 0' }}>
+                            <strong>ยอดเงินที่ต้องโอนคืน:</strong> <span style={{ fontSize: '1.05rem', fontWeight: 700, color: '#0f172a' }}>{formatBaht(req.requestedAmount)}</span>
+                          </p>
+                          <p style={{ margin: 0 }}>
+                            <strong>บัญชีปลายทาง:</strong> {req.bankName} {req.bankAccountNo} ({req.bankAccountName || req.buyerName})
+                          </p>
+                        </div>
+
+                        <div>
+                          <label htmlFor={`file-input-${req.id}`} style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: '#0f172a', marginBottom: '0.35rem' }}>
+                            สลิปหลักฐานการโอนเงิน (Private Proof):
                           </label>
                           <input
-                            id={`transfer-file-${req.id}`}
+                            id={`file-input-${req.id}`}
                             ref={fileInputRef}
                             type="file"
-                            accept="image/*,.pdf"
-                            onChange={e => setTransferFile(e.target.files?.[0] || null)}
-                            data-testid={`transfer-file-input-${req.id}`}
-                            style={{ fontSize: '13px' }}
+                            accept="image/*,application/pdf"
+                            onChange={(e) => setTransferFile(e.target.files?.[0] || null)}
+                            style={{ fontSize: '0.85rem' }}
                           />
                         </div>
 
-                        <div style={{ marginBottom: '12px' }}>
-                          <label
-                            htmlFor={`transfer-note-${req.id}`}
-                            style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', color: '#334155', marginBottom: '4px' }}
-                          >
-                            บันทึกเพิ่มเติม (ไม่บังคับ)
+                        <div>
+                          <label htmlFor={`note-input-${req.id}`} style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: '#0f172a', marginBottom: '0.35rem' }}>
+                            บันทึกช่วยจำ / เลขที่อ้างอิงสลิป:
                           </label>
                           <input
-                            id={`transfer-note-${req.id}`}
-                            type="text"
-                            value={transferNote}
-                            onChange={e => setTransferNote(e.target.value)}
-                            placeholder="เช่น โอนผ่าน KBank เลขอ้างอิง 123456"
+                            id={`note-input-${req.id}`}
                             data-testid={`transfer-note-input-${req.id}`}
-                            style={{
-                              width: '100%',
-                              padding: '8px 12px',
-                              borderRadius: '6px',
-                              border: '1px solid #cbd5e1',
-                              fontSize: '13px',
-                              boxSizing: 'border-box',
-                            }}
+                            type="text"
+                            className="form-input text-input"
+                            style={{ width: '100%', padding: '0.5rem 0.75rem', borderRadius: '6px', border: '1px solid #cbd5e1' }}
+                            placeholder="เช่น โอนผ่าน KBank สลิปเลขที่ 998877 เรียบร้อย"
+                            value={transferNote}
+                            onChange={(e) => setTransferNote(e.target.value)}
                           />
                         </div>
+                      </div>
 
-                        <div style={{ display: 'flex', gap: '8px' }}>
-                          <button
-                            type="button"
-                            onClick={() => handleCompleteTransfer(req)}
-                            disabled={isProcessing}
-                            data-testid={`confirm-complete-transfer-btn-${req.id}`}
-                            className="ui-btn ui-btn-primary ui-btn-sm"
-                            style={{
-                              backgroundColor: '#0f172a',
-                              color: '#ffffff',
-                              border: '1px solid #0f172a',
-                              borderRadius: '6px',
-                              padding: '8px 16px',
-                              fontSize: '13px',
-                              fontWeight: 'bold',
-                              cursor: isProcessing ? 'not-allowed' : 'pointer',
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '6px',
-                            }}
-                          >
-                            <CheckCircleIcon />
-                            {isProcessing ? 'กำลังบันทึก...' : `ยืนยันบันทึกโอนสำเร็จ (${formatBaht(req.requestedAmount)})`}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setTransferringId(null);
-                              setTransferFile(null);
-                              setTransferNote('');
-                            }}
-                            disabled={isProcessing}
-                            style={{
-                              backgroundColor: '#ffffff',
-                              color: '#475569',
-                              border: '1px solid #cbd5e1',
-                              borderRadius: '6px',
-                              padding: '8px 16px',
-                              fontSize: '13px',
-                              cursor: 'pointer',
-                            }}
-                          >
-                            ยกเลิก
-                          </button>
+                      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.65rem', marginTop: '1.25rem', paddingTop: '0.75rem', borderTop: '1px solid #e2e8f0' }}>
+                        <button
+                          type="button"
+                          className="secondary-button"
+                          onClick={() => setTransferringId(null)}
+                        >
+                          ยกเลิก
+                        </button>
+                        <button
+                          type="button"
+                          data-testid={`confirm-complete-transfer-btn-${req.id}`}
+                          className="primary-button"
+                          disabled={processingId === req.id}
+                          onClick={() => handleCompleteTransfer(req)}
+                        >
+                          <CheckCircleIcon className="btn-icon" />
+                          <span>{processingId === req.id ? 'กำลังบันทึก...' : 'ยืนยันบันทึกการโอนเงิน'}</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Modal Overlay: Rejection Dialog */}
+                {rejectingId === req.id && (
+                  <div
+                    className="modal-backdrop review-modal-backdrop"
+                    role="dialog"
+                    aria-modal="true"
+                    style={{ position: 'fixed', inset: 0, zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}
+                  >
+                    <button
+                      type="button"
+                      className="review-modal-backdrop-btn"
+                      onClick={() => setRejectingId(null)}
+                      aria-label="ปิดหน้าต่าง"
+                      tabIndex={-1}
+                      style={{ position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.6)', border: 'none', cursor: 'default' }}
+                    />
+                    <div
+                      className="review-modal-panel"
+                      style={{ position: 'relative', zIndex: 1, background: '#ffffff', borderRadius: '14px', maxWidth: '480px', width: '100%', padding: '1.5rem', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)' }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', borderBottom: '1px solid #e2e8f0', paddingBottom: '0.75rem' }}>
+                        <h4 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 700, color: '#dc2626' }}>
+                          ปฏิเสธคำขอคืนเงิน (Reject Refund)
+                        </h4>
+                        <button
+                          type="button"
+                          className="review-modal-close"
+                          onClick={() => setRejectingId(null)}
+                          style={{ border: 'none', background: 'transparent', cursor: 'pointer', padding: '4px' }}
+                          aria-label="ปิดหน้าต่าง"
+                        >
+                          <XIcon style={{ width: '18px', height: '18px' }} />
+                        </button>
+                      </div>
+
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                        <p style={{ margin: 0, fontSize: '0.875rem', color: '#475569' }}>
+                          คำขอของ <strong>{req.buyerName}</strong> ({req.eventTitle}) ยอดเงิน {formatBaht(req.requestedAmount)}
+                        </p>
+                        <div>
+                          <label htmlFor={`reject-reason-${req.id}`} style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: '#0f172a', marginBottom: '0.35rem' }}>
+                            ระบุเหตุผลในการปฏิเสธคำขอ (ลูกค้าจะเห็นข้อความนี้):
+                          </label>
+                          <textarea
+                            id={`reject-reason-${req.id}`}
+                            className="form-input text-input"
+                            rows={3}
+                            style={{ width: '100%', padding: '0.5rem 0.75rem', borderRadius: '6px', border: '1px solid #cbd5e1' }}
+                            placeholder="ระบุเหตุผล เช่น ไม่เข้าเกณฑ์การคืนเงิน หรือเลยกำหนดเวลา..."
+                            value={rejectionReason}
+                            onChange={(e) => setRejectionReason(e.target.value)}
+                          />
                         </div>
                       </div>
-                    ) : isRecordingFailure ? (
-                      <div
-                        style={{
-                          backgroundColor: '#fef2f2',
-                          border: '1px solid #fecaca',
-                          borderRadius: '6px',
-                          padding: '16px',
-                        }}
-                      >
-                        <h4 style={{ margin: '0 0 8px 0', fontSize: '14px', fontWeight: 'bold', color: '#991b1b' }}>
-                          บันทึกการโอนเงินล้มเหลว (AC-93)
-                        </h4>
-                        <p style={{ margin: '0 0 12px 0', fontSize: '12px', color: '#b91c1c' }}>
-                          ระบุสาเหตุที่โอนเงินไม่สำเร็จ ระบบจะคงสถานะรอโอน (approved) และหนี้ค้างชำระ (unpaid) โดยบัตรยังคงถูกเพิกถอนสิทธิ์ตามเดิม
-                        </p>
 
-                        <div style={{ marginBottom: '12px' }}>
-                          <label
-                            htmlFor={`failure-reason-${req.id}`}
-                            style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', color: '#991b1b', marginBottom: '4px' }}
-                          >
-                            สาเหตุการโอนล้มเหลว <span style={{ color: '#ef4444' }}>*</span>
+                      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.65rem', marginTop: '1.25rem', paddingTop: '0.75rem', borderTop: '1px solid #e2e8f0' }}>
+                        <button
+                          type="button"
+                          className="secondary-button"
+                          onClick={() => setRejectingId(null)}
+                        >
+                          ยกเลิก
+                        </button>
+                        <button
+                          type="button"
+                          className="primary-button danger-button"
+                          disabled={processingId === req.id || !rejectionReason.trim()}
+                          onClick={() => handleReject(req.id)}
+                          style={{ backgroundColor: '#dc2626', borderColor: '#dc2626', color: '#ffffff' }}
+                        >
+                          <span>{processingId === req.id ? 'กำลังดำเนินการ...' : 'ยืนยันปฏิเสธคำขอ'}</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Modal Overlay: Record Failure Dialog */}
+                {failureRecordingId === req.id && (
+                  <div
+                    className="modal-backdrop review-modal-backdrop"
+                    role="dialog"
+                    aria-modal="true"
+                    style={{ position: 'fixed', inset: 0, zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}
+                  >
+                    <button
+                      type="button"
+                      className="review-modal-backdrop-btn"
+                      onClick={() => setFailureRecordingId(null)}
+                      aria-label="ปิดหน้าต่าง"
+                      tabIndex={-1}
+                      style={{ position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.6)', border: 'none', cursor: 'default' }}
+                    />
+                    <div
+                      className="review-modal-panel"
+                      style={{ position: 'relative', zIndex: 1, background: '#ffffff', borderRadius: '14px', maxWidth: '480px', width: '100%', padding: '1.5rem', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)' }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', borderBottom: '1px solid #e2e8f0', paddingBottom: '0.75rem' }}>
+                        <h4 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 700, color: '#dc2626' }}>
+                          บันทึกการโอนเงินล้มเหลว (Record Transfer Failure)
+                        </h4>
+                        <button
+                          type="button"
+                          className="review-modal-close"
+                          onClick={() => setFailureRecordingId(null)}
+                          style={{ border: 'none', background: 'transparent', cursor: 'pointer', padding: '4px' }}
+                          aria-label="ปิดหน้าต่าง"
+                        >
+                          <XIcon style={{ width: '18px', height: '18px' }} />
+                        </button>
+                      </div>
+
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                        <p style={{ margin: 0, fontSize: '0.85rem', color: '#64748b' }}>
+                          บันทึกเหตุผลที่ธนาคารปฏิเสธการโอนเงิน (เช่น เลขที่บัญชีไม่ถูกต้อง หรือบัญชีปิด) โดยยอดหนี้ยังคงค้างชำระเพื่อรอการติดต่อแก้ไขตาม AC-93
+                        </p>
+                        <div>
+                          <label htmlFor={`failure-reason-${req.id}`} style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: '#0f172a', marginBottom: '0.35rem' }}>
+                            ระบุเหตุผลที่การโอนเงินล้มเหลว:
                           </label>
                           <input
                             id={`failure-reason-${req.id}`}
                             type="text"
+                            className="form-input text-input"
+                            style={{ width: '100%', padding: '0.5rem 0.75rem', borderRadius: '6px', border: '1px solid #cbd5e1' }}
+                            placeholder="เช่น เลขที่บัญชีไม่ถูกต้อง หรือชื่อบัญชีไม่ตรงกับธนาคาร..."
                             value={transferFailureReason}
-                            onChange={e => setTransferFailureReason(e.target.value)}
-                            placeholder="เช่น เลขที่บัญชีปลายทางไม่ถูกต้อง หรือบัญชีปิดใช้งาน"
-                            data-testid={`failure-reason-input-${req.id}`}
-                            style={{
-                              width: '100%',
-                              padding: '8px 12px',
-                              borderRadius: '6px',
-                              border: '1px solid #cbd5e1',
-                              fontSize: '13px',
-                              boxSizing: 'border-box',
-                            }}
+                            onChange={(e) => setTransferFailureReason(e.target.value)}
                           />
                         </div>
-
-                        <div style={{ display: 'flex', gap: '8px' }}>
-                          <button
-                            type="button"
-                            onClick={() => handleRecordFailure(req.id)}
-                            disabled={isProcessing}
-                            data-testid={`confirm-record-failure-btn-${req.id}`}
-                            style={{
-                              backgroundColor: '#0f172a',
-                              color: '#ffffff',
-                              border: 'none',
-                              borderRadius: '6px',
-                              padding: '8px 16px',
-                              fontSize: '13px',
-                              fontWeight: 'bold',
-                              cursor: isProcessing ? 'not-allowed' : 'pointer',
-                            }}
-                          >
-                            {isProcessing ? 'กำลังบันทึก...' : 'ยืนยันบันทึกโอนล้มเหลว'}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setFailureRecordingId(null);
-                              setTransferFailureReason('');
-                            }}
-                            disabled={isProcessing}
-                            style={{
-                              backgroundColor: '#ffffff',
-                              color: '#475569',
-                              border: '1px solid #cbd5e1',
-                              borderRadius: '6px',
-                              padding: '8px 16px',
-                              fontSize: '13px',
-                              cursor: 'pointer',
-                            }}
-                          >
-                            ยกเลิก
-                          </button>
-                        </div>
                       </div>
-                    ) : (
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
-                        <div style={{ fontSize: '12px', color: '#64748b' }}>
-                          * อนุมัติคืนเงินแล้ว อยู่ระหว่างดำเนินการโอนเงินคืนเข้าบัญชีผู้ซื้อ (ภาระหนี้: {req.liabilityStatus || 'unpaid'})
-                        </div>
 
-                        <div style={{ display: 'flex', gap: '8px' }}>
-                          <button
-                            type="button"
-                            onClick={() => setFailureRecordingId(req.id)}
-                            disabled={isProcessing}
-                            data-testid={`record-failure-btn-${req.id}`}
-                            style={{
-                              backgroundColor: '#ffffff',
-                              color: '#b91c1c',
-                              border: '1px solid #fecaca',
-                              borderRadius: '6px',
-                              padding: '6px 14px',
-                              fontSize: '13px',
-                              fontWeight: 'bold',
-                              cursor: isProcessing ? 'not-allowed' : 'pointer',
-                            }}
-                          >
-                            บันทึกโอนล้มเหลว (AC-93)
-                          </button>
-
-                          <button
-                            type="button"
-                            onClick={() => setTransferringId(req.id)}
-                            disabled={isProcessing}
-                            data-testid={`open-transfer-btn-${req.id}`}
-                            className="ui-btn ui-btn-primary ui-btn-sm"
-                            style={{
-                              backgroundColor: '#0f172a',
-                              color: '#ffffff',
-                              border: '1px solid #0f172a',
-                              borderRadius: '6px',
-                              padding: '6px 16px',
-                              fontSize: '13px',
-                              fontWeight: 'bold',
-                              cursor: isProcessing ? 'not-allowed' : 'pointer',
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '6px',
-                            }}
-                          >
-                            <CheckCircleIcon />
-                            บันทึกการโอนเงิน (AC-37)
-                          </button>
-                        </div>
+                      <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.65rem', marginTop: '1.25rem', paddingTop: '0.75rem', borderTop: '1px solid #e2e8f0' }}>
+                        <button
+                          type="button"
+                          className="secondary-button"
+                          onClick={() => setFailureRecordingId(null)}
+                        >
+                          ยกเลิก
+                        </button>
+                        <button
+                          type="button"
+                          className="primary-button danger-button"
+                          disabled={processingId === req.id || !transferFailureReason.trim()}
+                          onClick={() => handleRecordFailure(req.id)}
+                          style={{ backgroundColor: '#dc2626', borderColor: '#dc2626', color: '#ffffff' }}
+                        >
+                          <span>{processingId === req.id ? 'กำลังบันทึก...' : 'ยืนยันบันทึกโอนล้มเหลว'}</span>
+                        </button>
                       </div>
-                    )}
+                    </div>
                   </div>
                 )}
-              </div>
+              </article>
             );
-          })}
+          })
+        )}
+      </div>
+
+      {/* 4. Detail Inspection Modal (For completed/history items) */}
+      {inspectingReq && (
+        <div
+          className="modal-backdrop review-modal-backdrop"
+          role="dialog"
+          aria-modal="true"
+          style={{ position: 'fixed', inset: 0, zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}
+        >
+          <button
+            type="button"
+            className="review-modal-backdrop-btn"
+            onClick={() => setInspectingReq(null)}
+            aria-label="ปิดหน้าต่าง"
+            tabIndex={-1}
+            style={{ position: 'fixed', inset: 0, background: 'rgba(15, 23, 42, 0.6)', border: 'none', cursor: 'default' }}
+          />
+          <div
+            className="review-modal-panel"
+            style={{ position: 'relative', zIndex: 1, background: '#ffffff', borderRadius: '14px', maxWidth: '580px', width: '100%', padding: '1.75rem', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)' }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', borderBottom: '1px solid #e2e8f0', paddingBottom: '0.75rem' }}>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 800, color: '#0f172a' }}>
+                  รายละเอียดคำขอคืนเงิน ({inspectingReq.id})
+                </h3>
+                <span style={{ fontSize: '0.85rem', color: '#64748b' }}>
+                  คำสั่งซื้อ: {inspectingReq.orderId}
+                </span>
+              </div>
+              <button
+                type="button"
+                className="review-modal-close"
+                onClick={() => setInspectingReq(null)}
+                style={{ border: 'none', background: 'transparent', cursor: 'pointer', padding: '4px' }}
+                aria-label="ปิดหน้าต่าง"
+              >
+                <XIcon style={{ width: '20px', height: '20px' }} />
+              </button>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', fontSize: '0.875rem' }}>
+              <div style={{ background: '#f8fafc', padding: '1rem', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                <p style={{ margin: '0 0 0.4rem 0' }}>
+                  <strong>คอนเสิร์ต:</strong> {inspectingReq.eventTitle}
+                </p>
+                <p style={{ margin: '0 0 0.4rem 0' }}>
+                  <strong>ผู้ขอคืนเงิน:</strong> {inspectingReq.buyerName} ({inspectingReq.buyerEmail})
+                </p>
+                <p style={{ margin: '0 0 0.4rem 0' }}>
+                  <strong>เบอร์โทรศัพท์:</strong> {inspectingReq.buyerPhone || '-'}
+                </p>
+                <p style={{ margin: 0 }}>
+                  <strong>บัญชีรับเงิน:</strong> {inspectingReq.bankName} {inspectingReq.bankAccountNo} ({inspectingReq.bankAccountName || inspectingReq.buyerName})
+                </p>
+              </div>
+
+              <div>
+                <p style={{ margin: '0 0 0.35rem 0', fontWeight: 600, color: '#0f172a' }}>
+                  ยอดเงินและเหตุผลการขอคืน:
+                </p>
+                <p style={{ margin: '0 0 0.35rem 0' }}>
+                  <strong>ยอดเงินคืนสุทธิ:</strong> <span style={{ fontSize: '1.1rem', fontWeight: 700, color: '#0f172a' }}>{formatBaht(inspectingReq.requestedAmount)}</span>
+                </p>
+                <p style={{ margin: 0, color: '#475569' }}>
+                  <strong>เหตุผล:</strong> {inspectingReq.reason}
+                </p>
+              </div>
+
+              {inspectingReq.transferredAt && (
+                <div style={{ background: '#f0fdf4', padding: '0.85rem', borderRadius: '8px', border: '1px solid #bbf7d0', color: '#166534' }}>
+                  <p style={{ margin: '0 0 0.25rem 0', fontWeight: 700 }}>
+                    โอนเงินคืนสำเร็จแล้วเมื่อ: {formatDate(new Date(inspectingReq.transferredAt))} เวลา {formatTime(new Date(inspectingReq.transferredAt))}
+                  </p>
+                  {inspectingReq.transferNote && (
+                    <p style={{ margin: 0, fontSize: '0.85rem' }}>
+                      <strong>บันทึกช่วยจำ:</strong> {inspectingReq.transferNote}
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {inspectingReq.rejectionReason && (
+                <div style={{ background: '#fef2f2', padding: '0.85rem', borderRadius: '8px', border: '1px solid #fecaca', color: '#991b1b' }}>
+                  <p style={{ margin: 0, fontWeight: 700 }}>
+                    เหตุผลการปฏิเสธ: {inspectingReq.rejectionReason}
+                  </p>
+                </div>
+              )}
+            </div>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '1.5rem', paddingTop: '0.75rem', borderTop: '1px solid #e2e8f0' }}>
+              <button
+                type="button"
+                className="primary-button"
+                onClick={() => setInspectingReq(null)}
+              >
+                ปิดหน้าต่าง
+              </button>
+            </div>
+          </div>
         </div>
+      )}
+
+      {/* 5. Pagination Bar (D-244, D-247) */}
+      {sortedDataset.length > 0 && (
+        <section className="hub-pagination-bar" aria-label="แถบแบ่งหน้าคำขอคืนเงิน">
+          <div className="pagination-info">
+            แสดง 1–{sortedDataset.length} จากทั้งหมด {sortedDataset.length} รายการ
+          </div>
+          <div className="pagination-controls">
+            <button
+              type="button"
+              className="secondary-button pagination-btn"
+              disabled={currentPage <= 1}
+              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+            >
+              ก่อนหน้า
+            </button>
+            <span className="pagination-current-page">
+              หน้า {currentPage} จาก {Math.max(1, Math.ceil(sortedDataset.length / PAGE_SIZE))}
+            </span>
+            <button
+              type="button"
+              className="secondary-button pagination-btn"
+              disabled={currentPage >= Math.max(1, Math.ceil(sortedDataset.length / PAGE_SIZE))}
+              onClick={() => setCurrentPage((p) => p + 1)}
+            >
+              ถัดไป
+            </button>
+          </div>
+        </section>
       )}
     </div>
   );

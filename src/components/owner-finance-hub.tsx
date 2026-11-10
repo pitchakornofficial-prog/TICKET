@@ -13,7 +13,6 @@ import {
   ReceiptIcon,
 } from './icons';
 import { triggerToast } from './toast-notification';
-import { generateBankSlipSvgDataUrl } from '@/lib/bank-slip';
 import { OwnerFeeSettingsManager } from './owner-fee-settings-manager';
 import { OwnerReserveReleaseManager } from './owner-reserve-release-manager';
 import { OwnerDebtRepaymentManager } from './owner-debt-repayment-manager';
@@ -67,145 +66,6 @@ export interface PayoutRecordItem {
   createdAt: string;
 }
 
-// Fallback mock datasets for realistic visual rendering in dev/test environments (D-252)
-const SAMPLE_MOCK_PAYABLE_CONCERTS: PayableConcertItem[] = [
-  {
-    id: 'evt-ubu-freshy-2026',
-    title: 'เทศกาลดนตรีต้อนรับน้องใหม่ UBU Freshy Fest 2026',
-    organizerId: 'org-ubu-council',
-    organizerName: 'สโมสรนักศึกษา มหาวิทยาลัยอุบลราชธานี',
-    organizerEmail: 'council@ubu.ac.th',
-    location: 'ศูนย์ประชุมนานาชาติ มหาวิทยาลัยอุบลราชธานี',
-    sessionTime: '2026-11-21T08:00:00.000Z',
-    status: 'เปิดขายบัตรแล้ว',
-    cycleStatus: 'ready',
-    cutoffDate: '2026-11-06T23:59:59.000Z',
-    payoutBankName: 'ธนาคารกรุงไทย (KTB)',
-    payoutAccountNumber: '020-1-98765-4',
-    payoutAccountName: 'สโมสรนักศึกษา มหาวิทยาลัยอุบลราชธานี',
-    isBankVerified: true,
-    grossSales: 540000,
-    customerFee: 16200,
-    platformFee: 32400,
-    netSales: 540000,
-    netEntitlement: 507600,
-    reservePercentage: 10,
-    reserveTarget: 50760,
-    actualHeldReserve: 50760,
-    totalPaidOut: 200000,
-    payableAmount: 256840,
-  },
-  {
-    id: 'evt-rock-rimmool-2026',
-    title: 'Rock Rimmool Live Festival 2026',
-    organizerId: 'org-rimmool',
-    organizerName: 'บจก. ริมมูล มิวสิค โปรดักชั่น',
-    organizerEmail: 'finance@rimmool.co.th',
-    location: 'ลานริมแม่น้ำมูล อ.วารินชำราบ จ.อุบลราชธานี',
-    sessionTime: '2026-12-06T07:00:00.000Z',
-    status: 'เปิดขายบัตรแล้ว',
-    cycleStatus: 'ready',
-    cutoffDate: '2026-11-05T23:59:59.000Z',
-    payoutBankName: 'ธนาคารกสิกรไทย (KBANK)',
-    payoutAccountNumber: '741-2-12345-6',
-    payoutAccountName: 'บจก. ริมมูล มิวสิค โปรดักชั่น',
-    isBankVerified: true,
-    grossSales: 720000,
-    customerFee: 21600,
-    platformFee: 43200,
-    netSales: 720000,
-    netEntitlement: 676800,
-    reservePercentage: 10,
-    reserveTarget: 67680,
-    actualHeldReserve: 67680,
-    totalPaidOut: 0,
-    payableAmount: 609120,
-  },
-  {
-    id: 'evt-isan-folk-2026',
-    title: 'Isan Folk & Acoustic Night 2026',
-    organizerId: 'org-isan-arts',
-    organizerName: 'กลุ่มศิลปินเพลงอีสานร่วมสมัย',
-    organizerEmail: 'preecha@isanfolk.org',
-    location: 'หอศิลปวัฒนธรรม มหาวิทยาลัยอุบลราชธานี',
-    sessionTime: '2026-11-29T09:00:00.000Z',
-    status: 'เปิดขายบัตรแล้ว',
-    cycleStatus: 'cutoff',
-    cutoffDate: '2026-11-04T23:59:59.000Z',
-    payoutBankName: 'ธนาคารไทยพาณิชย์ (SCB)',
-    payoutAccountNumber: '405-8-76543-2',
-    payoutAccountName: 'กลุ่มศิลปินเพลงอีสานร่วมสมัย',
-    isBankVerified: true,
-    grossSales: 180000,
-    customerFee: 5400,
-    platformFee: 10800,
-    netSales: 180000,
-    netEntitlement: 169200,
-    reservePercentage: 10,
-    reserveTarget: 16920,
-    actualHeldReserve: 16920,
-    totalPaidOut: 50000,
-    payableAmount: 102280,
-  },
-];
-
-const SAMPLE_MOCK_PAYOUT_HISTORY: PayoutRecordItem[] = [
-  {
-    id: 'PAY-20261105-001',
-    eventId: 'evt-ubu-freshy-2026',
-    eventTitle: 'เทศกาลดนตรีต้อนรับน้องใหม่ UBU Freshy Fest 2026',
-    organizerName: 'สโมสรนักศึกษา มหาวิทยาลัยอุบลราชธานี',
-    amount: 200000,
-    paidAt: '2026-11-05T15:45:00.000Z',
-    status: 'completed',
-    payoutBankName: 'ธนาคารกรุงไทย (KTB)',
-    payoutAccountNumber: '020-1-98765-4',
-    payoutAccountName: 'สโมสรนักศึกษา มหาวิทยาลัยอุบลราชธานี',
-    transferProofKey: 'proofs/payout-ubu-week1.png',
-    transferProofUrl: '/api/uploads/proofs/payout-ubu-week1.png',
-    transferNote: 'โอนเงินรอบสัปดาห์ที่ 1 ตามสูตร A_pay',
-    transferRef: 'KTB-TXN-20261105-8912',
-    recordedByName: 'เจ้าของเว็บทดสอบ',
-    createdAt: '2026-11-05T15:45:00.000Z',
-  },
-  {
-    id: 'PAY-20261103-002',
-    eventId: 'evt-isan-folk-2026',
-    eventTitle: 'Isan Folk & Acoustic Night 2026',
-    organizerName: 'กลุ่มศิลปินเพลงอีสานร่วมสมัย',
-    amount: 50000,
-    paidAt: '2026-11-03T14:20:00.000Z',
-    status: 'completed',
-    payoutBankName: 'ธนาคารไทยพาณิชย์ (SCB)',
-    payoutAccountNumber: '405-8-76543-2',
-    payoutAccountName: 'กลุ่มศิลปินเพลงอีสานร่วมสมัย',
-    transferProofKey: 'proofs/payout-isan-early.png',
-    transferProofUrl: '/api/uploads/proofs/payout-isan-early.png',
-    transferNote: 'โอนเงินค่าบัตรจำหน่ายล่วงหน้า (Early Round)',
-    transferRef: 'SCB-TXN-20261103-4412',
-    recordedByName: 'เจ้าของเว็บทดสอบ',
-    createdAt: '2026-11-03T14:20:00.000Z',
-  },
-  {
-    id: 'PAY-20261028-003',
-    eventId: 'evt-charity-2026',
-    eventTitle: 'คอนเสิร์ตการกุศล แสงดาวแห่งศรัทธา 2026',
-    organizerName: 'มูลนิธิเพื่อการศึกษาเด็กอีสาน',
-    amount: 150000,
-    paidAt: '2026-10-28T11:30:00.000Z',
-    status: 'completed',
-    payoutBankName: 'ธนาคารกรุงเทพ (BBL)',
-    payoutAccountNumber: '112-9-88765-1',
-    payoutAccountName: 'มูลนิธิเพื่อการศึกษาเด็กอีสาน',
-    transferProofKey: 'proofs/payout-charity-round1.png',
-    transferProofUrl: '/api/uploads/proofs/payout-charity-round1.png',
-    transferNote: 'โอนเงินรอบสมทบทุนจัดงาน',
-    transferRef: 'BBL-TXN-20261028-1109',
-    recordedByName: 'เจ้าของเว็บทดสอบ',
-    createdAt: '2026-10-28T11:30:00.000Z',
-  },
-];
-
 export function OwnerFinanceHub() {
   const [activeTab, setActiveTab] = useState<FinanceHubTab>('ready');
 
@@ -215,8 +75,8 @@ export function OwnerFinanceHub() {
   const [selectedStatusFilter, setSelectedStatusFilter] = useState('all');
 
   // Datasets
-  const [payableConcerts, setPayableConcerts] = useState<PayableConcertItem[]>(SAMPLE_MOCK_PAYABLE_CONCERTS);
-  const [payoutHistory, setPayoutHistory] = useState<PayoutRecordItem[]>(SAMPLE_MOCK_PAYOUT_HISTORY);
+  const [payableConcerts, setPayableConcerts] = useState<PayableConcertItem[]>([]);
+  const [payoutHistory, setPayoutHistory] = useState<PayoutRecordItem[]>([]);
   const [isLoadingData, setIsLoadingData] = useState(false);
 
   // Modal 1: Transfer & Proof Modal
@@ -308,12 +168,12 @@ export function OwnerFinanceHub() {
             }
           }
 
-          if (liveConcerts.length > 0) setPayableConcerts(liveConcerts);
-          if (livePayouts.length > 0) setPayoutHistory(livePayouts);
+          setPayableConcerts(liveConcerts);
+          setPayoutHistory(livePayouts);
         }
       }
     } catch {
-      // Keep sample mock data for testing
+      triggerToast({ message: 'โหลดข้อมูลการเงินไม่สำเร็จ', type: 'error' });
     } finally {
       setIsLoadingData(false);
     }
@@ -355,84 +215,48 @@ export function OwnerFinanceHub() {
 
     setIsSubmittingTransfer(true);
     try {
-      let transferProofKey = `proofs/payout-${editingPayoutConcert.id}-${Date.now()}.png`;
-      let transferProofUrl = `/api/uploads/${transferProofKey}`;
+      let transferProofKey: string | undefined;
+      let transferProofUrl: string | undefined;
 
       if (transferFile) {
-        try {
-          const formData = new FormData();
-          formData.append('file', transferFile);
-          formData.append('visibility', 'private');
-          const uploadRes = await fetch('/api/upload', { method: 'POST', body: formData });
-          if (uploadRes.ok) {
-            const uploadData = await uploadRes.json();
-            transferProofKey = uploadData.key || transferProofKey;
-            transferProofUrl = uploadData.url || transferProofUrl;
-          }
-        } catch {
-          // Fall back to generated key
+        const formData = new FormData();
+        formData.append('file', transferFile);
+        formData.append('visibility', 'private');
+        const uploadRes = await fetch('/api/upload', { method: 'POST', body: formData });
+        if (!uploadRes.ok) {
+          triggerToast({ message: 'อัปโหลดหลักฐานการโอนไม่สำเร็จ', type: 'error' });
+          return;
         }
+        const uploadData = await uploadRes.json();
+        transferProofKey = uploadData.key;
+        transferProofUrl = uploadData.url;
       }
 
-      // Record payout to backend API
-      try {
-        await fetch(`/api/owner/events/${editingPayoutConcert.id}/payouts`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            amount: numAmount,
-            status: 'completed',
-            paidAt: `${transferDate}T${transferTime.replace('.', ':')}:00.000Z`,
-            transferProofKey,
-            transferProofUrl,
-            transferNote: transferNote.trim() || undefined,
-          }),
-        });
-      } catch {
-        // Continue for mock/local verification
-      }
-
-      // Add to local history & update payable concert
-      const newPayoutId = `PAY-${Date.now().toString().slice(-8)}`;
-      const newRecord: PayoutRecordItem = {
-        id: newPayoutId,
-        eventId: editingPayoutConcert.id,
-        eventTitle: editingPayoutConcert.title,
-        organizerName: editingPayoutConcert.organizerName,
-        amount: numAmount,
-        paidAt: `${transferDate}T${transferTime.replace('.', ':')}:00.000Z`,
-        status: 'completed',
-        payoutBankName: editingPayoutConcert.payoutBankName,
-        payoutAccountNumber: editingPayoutConcert.payoutAccountNumber,
-        payoutAccountName: editingPayoutConcert.payoutAccountName,
-        transferProofKey,
-        transferProofUrl,
-        transferNote: transferNote.trim() || 'โอนเงินตามรอบสัปดาห์',
-        transferRef: transferRefCode.trim() || `TXN-${newPayoutId}`,
-        recordedByName: 'เจ้าของเว็บทดสอบ',
-        createdAt: new Date().toISOString(),
-      };
-
-      setPayoutHistory(prev => [newRecord, ...prev]);
-
-      setPayableConcerts(prev =>
-        prev.map(c => {
-          if (c.id === editingPayoutConcert.id) {
-            const nextPaid = c.totalPaidOut + numAmount;
-            const nextPayable = Math.max(0, c.netEntitlement - c.actualHeldReserve - nextPaid);
-            return {
-              ...c,
-              totalPaidOut: nextPaid,
-              payableAmount: nextPayable,
-              cycleStatus: nextPayable <= 0 ? 'cutoff' : 'ready',
-            };
-          }
-          return c;
+      const payoutRes = await fetch(`/api/owner/events/${editingPayoutConcert.id}/payouts`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          amount: numAmount,
+          status: 'completed',
+          paidAt: `${transferDate}T${transferTime.replace('.', ':')}:00.000Z`,
+          transferProofKey,
+          transferProofUrl,
+          transferNote: transferNote.trim() || undefined,
         }),
-      );
+      });
+      if (!payoutRes.ok) {
+        const errData = await payoutRes.json().catch(() => ({}));
+        triggerToast({
+          message: errData.message || 'บันทึกการโอนเงินไม่สำเร็จ',
+          type: 'error',
+        });
+        return;
+      }
+
+      await fetchData();
 
       triggerToast({
-        message: `บันทึกการโอนเงินจำนวน ${formatBaht(numAmount)} ให้ "${editingPayoutConcert.organizerName}" สำเร็จเรียบร้อย (รหัส: ${newPayoutId})`,
+        message: `บันทึกการโอนเงินจำนวน ${formatBaht(numAmount)} ให้ "${editingPayoutConcert.organizerName}" สำเร็จเรียบร้อย`,
         type: 'success',
       });
 
@@ -490,21 +314,10 @@ export function OwnerFinanceHub() {
     });
   }, [payoutHistory, searchQuery, selectedConcertFilter, selectedStatusFilter]);
 
-  // Generated slip data url for modal
-  const proofSlipSvgDataUrl = useMemo(() => {
-    if (!viewingProofPayout) return '';
-    return generateBankSlipSvgDataUrl({
-      amount: viewingProofPayout.amount,
-      paidAt: viewingProofPayout.paidAt,
-      transferRef: viewingProofPayout.transferRef || `TXN-${viewingProofPayout.id}`,
-      eventTitle: viewingProofPayout.eventTitle,
-      senderName: 'บจก. ทิกเก็ต เทคโนโลยี (TICKET Platform)',
-      senderAccount: 'ธ.กสิกรไทย • 123-2-99881-0',
-      receiverName: viewingProofPayout.payoutAccountName || viewingProofPayout.organizerName,
-      receiverAccount: `${viewingProofPayout.payoutBankName} • ${viewingProofPayout.payoutAccountNumber}`,
-      note: viewingProofPayout.transferNote || 'รอบโอนเงินค่าบัตรจำหน่ายล่วงหน้า',
-    });
-  }, [viewingProofPayout]);
+  // Real proof file served by the owner-only proof endpoint
+  const proofSlipUrl = viewingProofPayout
+    ? `/api/owner/payouts/${encodeURIComponent(viewingProofPayout.id)}/proof`
+    : '';
 
   return (
     <div
@@ -1185,7 +998,7 @@ export function OwnerFinanceHub() {
                   >
                     {/* biome-ignore lint/performance/noImgElement: Data URL SVG Bank Slip */}
                     <img
-                      src={proofSlipSvgDataUrl}
+                      src={proofSlipUrl}
                       alt="สลิปหลักฐานการโอนเงิน"
                       style={{
                         maxWidth: '100%',
@@ -1198,8 +1011,8 @@ export function OwnerFinanceHub() {
 
                   <div style={{ marginTop: '1rem', display: 'flex', justifyContent: 'center' }}>
                     <a
-                      href={proofSlipSvgDataUrl}
-                      download={`slip-${viewingProofPayout.id}.svg`}
+                      href={proofSlipUrl}
+                      download={`payout-proof-${viewingProofPayout.id}`}
                       className="primary-button modal-footer-btn"
                       style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}
                     >
