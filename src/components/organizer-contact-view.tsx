@@ -25,8 +25,10 @@ export function OrganizerContactView() {
 
   const handleRefresh = () => {
     setRefreshing(true);
-    setContactInfo(loadOwnerContactInfo());
-    setTimeout(() => setRefreshing(false), 300);
+    loadSharedOwnerContactInfo()
+      .then(setContactInfo)
+      .catch(() => setToastMessage('โหลดข้อมูลติดต่อไม่สำเร็จ'))
+      .finally(() => setRefreshing(false));
   };
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
