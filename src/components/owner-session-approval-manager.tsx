@@ -461,6 +461,27 @@ export function OwnerSessionApprovalManager() {
     }
   }
 
+  async function handleApproveSession(sessionId: string, eventTitle: string) {
+    setError('');
+    setActionMessage('');
+    try {
+      const res = await fetch('/api/owner/sessions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.message || 'อนุมัติไม่สำเร็จ');
+        return;
+      }
+      setActionMessage(`อนุมัติรอบการแสดงของ "${eventTitle}" สำเร็จ`);
+      await loadData();
+    } catch {
+      setError('เกิดข้อผิดพลาดในการเชื่อมต่อ');
+    }
+  }
+
   async function handleApproveWithFee(sessionId: string) {
     setSubmittingApproval(true);
     setError('');
@@ -1073,8 +1094,8 @@ export function OwnerSessionApprovalManager() {
                     sortedSessions.map((sess) => (
                       <article
                         key={sess.sessionId}
-                        className="concert-horizontal-row-card"
-                        data-testid={`concert-row-${sess.sessionId}`}
+                        className="concert-horizontal-row-card pending-session-card"
+                        data-testid={`pending-session-card-${sess.sessionId}`}
                       >
                         <div className="row-card-center">
                           {/* Row 1: Status Badge (D-243) */}
@@ -1155,7 +1176,63 @@ export function OwnerSessionApprovalManager() {
                             <PencilSquareIcon className="btn-icon" />
                             <span>แก้ไขข้อมูล</span>
                           </button>
+
+                          <button
+                            type="button"
+                            className="secondary-button row-action-btn"
+                            data-testid={`fast-approve-session-btn-${sess.sessionId}`}
+                            onClick={() => handleApproveSession(sess.sessionId, sess.eventTitle)}
+                          >
+                            <span>อนุมัติด่วน</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            className="danger-button reject-btn row-action-btn"
+                            data-testid={`reject-session-open-btn-${sess.sessionId}`}
+                            onClick={() => setRejectingSessionId(sess.sessionId)}
+                          >
+                            <span>ปฏิเสธ</span>
+                          </button>
                         </div>
+
+                        {rejectingSessionId === sess.sessionId && !reviewingSession && (
+                          <div className="rejection-box" style={{ gridColumn: '1 / -1', padding: '0.75rem' }}>
+                            <label htmlFor={`reject-pending-reason-${sess.sessionId}`} className="field-label">
+                              ระบุเหตุผลในการปฏิเสธคำขอเปิดรอบการแสดง:
+                            </label>
+                            <input
+                              id={`reject-pending-reason-${sess.sessionId}`}
+                              data-testid={`reject-pending-reason-input-${sess.sessionId}`}
+                              type="text"
+                              className="form-input"
+                              value={pendingRejectionReason}
+                              onChange={(e) => setPendingRejectionReason(e.target.value)}
+                              style={{ width: '100%', marginBottom: '0.5rem' }}
+                            />
+                            <div style={{ display: 'flex', gap: '0.5rem' }}>
+                              <button
+                                type="button"
+                                className="primary-button danger"
+                                data-testid={`confirm-reject-pending-btn-${sess.sessionId}`}
+                                disabled={submittingApproval}
+                                onClick={() => handleRejectPendingSession(sess.sessionId)}
+                              >
+                                <span>{submittingApproval ? 'กำลังบันทึก...' : 'ยืนยันปฏิเสธ'}</span>
+                              </button>
+                              <button
+                                type="button"
+                                className="secondary-button"
+                                onClick={() => {
+                                  setRejectingSessionId(null);
+                                  setPendingRejectionReason('');
+                                }}
+                              >
+                                <span>ยกเลิก</span>
+                              </button>
+                            </div>
+                          </div>
+                        )}
                       </article>
                     ))
                   )}
@@ -1212,7 +1289,7 @@ export function OwnerSessionApprovalManager() {
                             </span>
                           </div>
 
-                          <details className="special-refund-accordion" style={{ marginTop: '0.35rem', fontSize: '0.78rem', color: '#64748b' }}>
+                          <details open className="special-refund-accordion" style={{ marginTop: '0.35rem', fontSize: '0.78rem', color: '#64748b' }}>
                             <summary style={{ cursor: 'pointer', padding: '0.15rem 0' }}>
                               กำหนดช่วงเวลาคืนเงินพิเศษเพิ่มเติม (ระบุวันเวลาด้วยตนเอง)
                             </summary>
@@ -1220,6 +1297,7 @@ export function OwnerSessionApprovalManager() {
                               <input
                                 type="datetime-local"
                                 className="form-input"
+                                data-testid={`srw-start-${amd.id}`}
                                 style={{ padding: '0.2rem 0.4rem', fontSize: '0.78rem' }}
                                 value={specialWindows[amd.id]?.start || ''}
                                 onChange={(e) =>
@@ -1233,6 +1311,7 @@ export function OwnerSessionApprovalManager() {
                               <input
                                 type="datetime-local"
                                 className="form-input"
+                                data-testid={`srw-end-${amd.id}`}
                                 style={{ padding: '0.2rem 0.4rem', fontSize: '0.78rem' }}
                                 value={specialWindows[amd.id]?.end || ''}
                                 onChange={(e) =>
@@ -1264,6 +1343,7 @@ export function OwnerSessionApprovalManager() {
                                 <button
                                   type="button"
                                   className="primary-button danger"
+                                  data-testid={`confirm-reject-amendment-btn-${amd.id}`}
                                   onClick={() => handleRejectAmendment(amd.id)}
                                 >
                                   <span>ยืนยันปฏิเสธ</span>
@@ -1287,6 +1367,7 @@ export function OwnerSessionApprovalManager() {
                           <button
                             type="button"
                             className="primary-button row-action-btn"
+                            data-testid={`approve-amendment-btn-${amd.id}`}
                             onClick={() => handleApproveAmendment(amd.id, amd.eventTitle)}
                           >
                             <span>อนุมัติการแก้ไขราคา</span>
@@ -1294,6 +1375,7 @@ export function OwnerSessionApprovalManager() {
                           <button
                             type="button"
                             className="danger-button reject-btn row-action-btn"
+                            data-testid={`reject-amendment-btn-${amd.id}`}
                             onClick={() => setRejectingAmendmentId(amd.id)}
                           >
                             <span>ส่งกลับแก้ไข</span>
@@ -1321,7 +1403,7 @@ export function OwnerSessionApprovalManager() {
                     </p>
                   ) : (
                     filteredCancellations.map((can) => (
-                      <article key={can.id} className="concert-horizontal-row-card cancellation-row">
+                      <article key={can.id} className="concert-horizontal-row-card cancellation-row" data-testid={`cancellation-request-${can.id}`}>
                         <div className="row-card-center">
                           {/* Row 1: Status Badge (D-243) */}
                           <div className="row-card-badge-row">
@@ -1361,6 +1443,7 @@ export function OwnerSessionApprovalManager() {
                               </label>
                               <input
                                 id={`reject-can-reason-${can.id}`}
+                                data-testid={`reject-cancellation-reason-${can.id}`}
                                 type="text"
                                 className="form-input"
                                 placeholder="ระบุเหตุผล..."
@@ -1372,6 +1455,7 @@ export function OwnerSessionApprovalManager() {
                                 <button
                                   type="button"
                                   className="primary-button danger"
+                                  data-testid={`confirm-reject-cancellation-btn-${can.id}`}
                                   onClick={() => handleRejectCancellation(can.id)}
                                 >
                                   <span>ยืนยันปฏิเสธคำขอยกเลิก</span>
@@ -1395,6 +1479,7 @@ export function OwnerSessionApprovalManager() {
                           <button
                             type="button"
                             className="primary-button row-action-btn"
+                            data-testid={`approve-cancellation-btn-${can.id}`}
                             onClick={() => handleApproveCancellation(can.id, can.eventTitle)}
                           >
                             <span>อนุมัติยกเลิกรอบการแสดง</span>
@@ -1402,6 +1487,7 @@ export function OwnerSessionApprovalManager() {
                           <button
                             type="button"
                             className="danger-button reject-btn row-action-btn"
+                            data-testid={`reject-cancellation-open-btn-${can.id}`}
                             onClick={() => setRejectingCancellationId(can.id)}
                           >
                             <span>ปฏิเสธคำขอยกเลิก</span>
