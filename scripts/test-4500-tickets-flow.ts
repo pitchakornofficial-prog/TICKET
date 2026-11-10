@@ -1,12 +1,16 @@
 import { randomBytes, randomUUID } from 'node:crypto';
 import { Pool } from 'pg';
+import { ensureAdmissionSchema } from '../src/server/admission.ts';
 import { migrateAuth } from '../src/server/auth-migration.ts';
 import { bootstrapOwner } from '../src/server/bootstrap-owner.ts';
+import { ensureContactAuditSchema } from '../src/server/contact-correction.ts';
 import { setCustomEmailTransport } from '../src/server/email.ts';
 import { approveSession, createEventDraft, ensureEventSchema } from '../src/server/events.ts';
 import { ensureFeeSchema } from '../src/server/fees.ts';
 import { ensureGuestOtpSchema, requestGuestOtp, verifyGuestOtp } from '../src/server/guest-otp.ts';
+import { ensureNewsSchema } from '../src/server/news.ts';
 import { createPaymentQr, ensurePaymentSchema, verifyAndProcessPayment } from '../src/server/payment.ts';
+import { ensureRefundSchema } from '../src/server/refunds.ts';
 import { createReservation, ensureReservationSchema, getBuyerTicketCountForEvent } from '../src/server/reservation.ts';
 import { StripeContractDouble, resetStripeClient, setStripeClient } from '../src/server/stripe.ts';
 import { ensureTicketDeliverySchema } from '../src/server/ticket-delivery.ts';
@@ -19,6 +23,15 @@ setStripeClient(stripeDouble);
 setCustomEmailTransport({
   send: async () => ({ id: `mock-email-${randomUUID()}` }),
 });
+
+// Suppress verbose dev OTP logs during high-volume simulation
+const origLog = console.log;
+console.log = (...args: unknown[]) => {
+  if (typeof args[0] === 'string' && args[0].startsWith('[LOCAL DEV OTP]')) {
+    return;
+  }
+  origLog(...args);
+};
 
 interface FlowSimulationConfig {
   totalTargetTickets: number; // e.g. 4500
@@ -49,6 +62,7 @@ interface OrderResult {
   latencyMs: number;
   success: boolean;
   error?: string;
+  stack?: string;
 }
 
 export async function runTicketSaleSimulation(config: FlowSimulationConfig) {
@@ -75,7 +89,7 @@ export async function runTicketSaleSimulation(config: FlowSimulationConfig) {
     max: Math.max(30, concurrency + 5),
   });
 
-  const startTime = Date.now();
+  const _startTime = Date.now();
 
   try {
     // -------------------------------------------------------------------------
@@ -90,6 +104,10 @@ export async function runTicketSaleSimulation(config: FlowSimulationConfig) {
     await ensureTicketSchema(pool);
     await ensureTicketDeliverySchema(pool);
     await ensureFeeSchema(pool);
+    await ensureAdmissionSchema(pool);
+    await ensureRefundSchema(pool);
+    await ensureContactAuditSchema(pool);
+    await ensureNewsSchema(pool);
 
     // Bootstrap test owner & organizer
     const owner = await bootstrapOwner(pool, {
@@ -346,12 +364,14 @@ export async function runTicketSaleSimulation(config: FlowSimulationConfig) {
           latencyMs: Date.now() - orderStart,
           success: false,
           error: err instanceof Error ? err.message : String(err),
+          stack: err instanceof Error ? err.stack : undefined,
         };
       }
     }
 
     // Queue worker pool
     let nextIdx = 0;
+    let lastLoggedTickets = 0;
     async function worker() {
       while (nextIdx < buyerQueue.length) {
         const idx = nextIdx++;
@@ -363,16 +383,17 @@ export async function runTicketSaleSimulation(config: FlowSimulationConfig) {
           completedOrders++;
           completedTickets += res.quantity;
         } else {
-          console.error(`       ❌ Order #${res.orderIndex} failed: ${res.error}`);
+          console.error(`       ❌ Order #${res.orderIndex} failed: ${res.error}\n${res.stack || ''}`);
         }
 
-        // Progress update every 250 orders or at completion
-        if (completedOrders % 250 === 0 || completedOrders === totalOrders) {
+        // Progress update every 500 tickets or at completion
+        if (completedTickets - lastLoggedTickets >= 500 || completedOrders === totalOrders) {
+          lastLoggedTickets = completedTickets;
           const elapsedSec = ((Date.now() - flowStartTime) / 1000).toFixed(1);
           const tps = (completedTickets / Math.max(0.01, (Date.now() - flowStartTime) / 1000)).toFixed(1);
           const percent = ((completedTickets / totalTargetTickets) * 100).toFixed(1);
           console.log(
-            `    ⏳ ดำเนินการแล้ว: ${completedTickets.toLocaleString()} / ${totalTargetTickets.toLocaleString()} ใบ (${percent}%) | ${completedOrders.toLocaleString()} / ${totalOrders.toLocaleString()} ออเดอร์ | เวลา: ${elapsedSec}s (${tps} บัตร/วิ)`,
+            `    ⏳ จำหน่ายแล้ว: ${completedTickets.toLocaleString()} / ${totalTargetTickets.toLocaleString()} ใบ (${percent}%) | ${completedOrders.toLocaleString()} / ${totalOrders.toLocaleString()} คำสั่งซื้อ | เวลา: ${elapsedSec}s (${tps} บัตร/วินาที)`,
           );
         }
       }
@@ -442,18 +463,20 @@ export async function runTicketSaleSimulation(config: FlowSimulationConfig) {
       const buyerTickets = await getBuyerTicketCountForEvent(pool, event.id, topBuyer.buyerEmail);
       console.log(`       - อีเมล ${topBuyer.buyerEmail} ซื้อไปแล้ว: ${buyerTickets} ใบ (เพดานจำกัด: ${limitPerOrder} ใบ)`);
 
+      // Advance time by 65 seconds to clear 60s cooldown
+      const futureTime = new Date(Date.now() + 65000);
       const extraOtp = await requestGuestOtp(pool, {
-        buyer: { name: 'Scalper Attempt', email: topBuyer.buyerEmail, phone: '0812345678' },
+        buyer: { name: 'คุณผู้ซื้อทดสอบ', email: topBuyer.buyerEmail, phone: '0812345678' },
         purpose: 'checkout',
-        now: new Date(),
+        now: futureTime,
       });
       const extraVerify = await verifyGuestOtp(pool, {
         email: topBuyer.buyerEmail,
         code: extraOtp.devOtpCode || '123456',
         requestId: extraOtp.requestId || '',
         purpose: 'checkout',
-        buyer: { name: 'Scalper Attempt', email: topBuyer.buyerEmail, phone: '0812345678' },
-        now: new Date(),
+        buyer: { name: 'คุณผู้ซื้อทดสอบ', email: topBuyer.buyerEmail, phone: '0812345678' },
+        now: futureTime,
       });
 
       let scalperBlocked = false;
@@ -467,7 +490,7 @@ export async function runTicketSaleSimulation(config: FlowSimulationConfig) {
             sessionId,
             items: [{ ticketTypeId, quantity: 1 }],
           },
-          new Date(),
+          futureTime,
         );
       } catch (e: unknown) {
         scalperBlocked = true;
@@ -543,7 +566,7 @@ export async function runTicketSaleSimulation(config: FlowSimulationConfig) {
     const p95 = latencies[Math.floor(latencies.length * 0.95)] || 0;
 
     // Summary Display
-    console.log('\n' + '='.repeat(70));
+    console.log(`\n${'='.repeat(70)}`);
     console.log(' 🏁 สรุปผลการทดสอบการขายบัตร (Simulation Test Report)');
     console.log('='.repeat(70));
     console.log(` ✅ จำนวนบัตรที่ขายได้จริง:     ${totalTicketsInDb.toLocaleString()} / ${totalTargetTickets.toLocaleString()} ใบ (ครบ 100%)`);

@@ -8,23 +8,35 @@ import {
   ClockIcon,
   CheckCircleIcon,
   CheckIcon,
+  RefreshIcon,
 } from '@/components/icons';
 import { HeaderInfoTooltip } from './header-info-tooltip';
 import {
-  loadOwnerContactInfo,
+  EMPTY_OWNER_CONTACT_INFO,
+  loadSharedOwnerContactInfo,
   EVENT_OWNER_CONTACT_CHANGED,
   type OwnerContactInfo,
 } from '@/lib/owner-contact-sync';
 
 export function OrganizerContactView() {
-  const [contactInfo, setContactInfo] = useState<OwnerContactInfo>(() => loadOwnerContactInfo());
+  const [contactInfo, setContactInfo] = useState<OwnerContactInfo>(EMPTY_OWNER_CONTACT_INFO);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const handleRefresh = () => {
+    setRefreshing(true);
+    loadSharedOwnerContactInfo()
+      .then(setContactInfo)
+      .catch(() => setToastMessage('โหลดข้อมูลติดต่อไม่สำเร็จ'))
+      .finally(() => setRefreshing(false));
+  };
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
   useEffect(() => {
     const handleUpdate = () => {
-      setContactInfo(loadOwnerContactInfo());
+      loadSharedOwnerContactInfo().then(setContactInfo).catch(() => setToastMessage('โหลดข้อมูลติดต่อไม่สำเร็จ'));
     };
+    handleUpdate();
     window.addEventListener(EVENT_OWNER_CONTACT_CHANGED, handleUpdate);
     window.addEventListener('storage', handleUpdate);
     return () => {
@@ -65,10 +77,23 @@ export function OrganizerContactView() {
         {/* Header Toolbar */}
         <header className="contact-page-header">
           <div className="contact-header-text">
+            <div className="organizer-header-title-row">
             <h1 className="contact-page-title">
               ติดต่อเจ้าของระบบ TICKET
               <HeaderInfoTooltip text="ช่องทางติดต่ออย่างเป็นทางการสำหรับผู้จัดงาน เพื่อประสานงาน แจ้งปัญหา หรือขอคำปรึกษาเร่งด่วนกับเจ้าของระบบ" />
             </h1>
+            <button
+              type="button"
+              className="organizer-inline-refresh-btn"
+              data-testid="contact-refresh-btn"
+              onClick={handleRefresh}
+              disabled={refreshing}
+              aria-label="รีเฟรชข้อมูลติดต่อ"
+              title="รีเฟรชข้อมูลติดต่อ"
+            >
+              <RefreshIcon className={`inline-refresh-icon ${refreshing ? 'animate-spin' : ''}`} />
+            </button>
+          </div>
             <p className="contact-page-desc">
               ช่องทางติดต่ออย่างเป็นทางการสำหรับผู้จัดงานและผู้ว่าจ้าง เพื่อประสานงาน แจ้งปัญหา หรือขอคำปรึกษาเร่งด่วน
             </p>

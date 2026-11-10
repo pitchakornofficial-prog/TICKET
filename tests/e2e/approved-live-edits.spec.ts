@@ -28,11 +28,14 @@ test.describe('Approved live session edits & quota protection (TASK-024, AC-67, 
     await page.getByRole('button', { name: 'เข้าสู่ระบบ', exact: true }).click();
     await expect(page).toHaveURL('/back-office/organizer');
 
-    await page.getByRole('button', { name: 'สร้างคอนเสิร์ตใหม่' }).click();
+    const mobileMenu = page.getByRole('button', { name: 'เมนูผู้จัดงาน' });
+    if (await mobileMenu.isVisible()) await mobileMenu.click();
+    await page.getByRole('button', { name: 'คอนเสิร์ต', exact: true }).click();
+    await page.getByTestId('open-create-concert-btn').click();
     await page.getByLabel('ชื่องานคอนเสิร์ต').fill(eventTitle);
-    await page.getByLabel('สถานที่จัดงาน').fill('รอยัล พารากอน ฮอลล์');
+    await page.getByRole('tab', { name: '2. สถานที่ & แผนที่' }).click();
+    await page.locator('#event-location').fill('รอยัล พารากอน ฮอลล์');
     await saveEventDraft(page);
-    await expect(page.getByText('บันทึกงานคอนเสิร์ตสำเร็จ')).toBeVisible();
 
     const eventsRes = await page.request.get('/api/events');
     const { events } = await eventsRes.json();
@@ -71,7 +74,7 @@ test.describe('Approved live session edits & quota protection (TASK-024, AC-67, 
 
     const sessionCard = page.locator('.pending-session-card', { hasText: eventTitle });
     await expect(sessionCard).toBeVisible();
-    await sessionCard.getByRole('button', { name: 'อนุมัติรอบนี้' }).click({ force: true });
+    await sessionCard.getByRole('button', { name: 'อนุมัติด่วน' }).click({ force: true });
     await expect(page.getByText(`อนุมัติรอบการแสดงของ "${eventTitle}" สำเร็จ`)).toBeVisible();
 
     await page.getByRole('button', { name: 'ออกจากระบบ', exact: true }).click({ force: true });
@@ -99,6 +102,12 @@ test.describe('Approved live session edits & quota protection (TASK-024, AC-67, 
       tickets: [{ name: 'บัตร Regular Standard', quantity: 1 }],
     });
     const buyer2Token = await buyerPage.evaluate(() => sessionStorage.getItem('ticket_guest_otp_token'));
+    const originalOrderResponse = await request.get(`/api/public/checkout/orders/${buyer2OrderId}`, {
+      headers: buyer2Token ? { 'x-guest-token': buyer2Token } : {},
+    });
+    expect(originalOrderResponse.status()).toBe(200);
+    const originalOrder = await originalOrderResponse.json();
+    expect(Number(originalOrder.reservation.subtotal)).toBe(1000);
 
     // 5. Organizer submits amendment via UI on admin page
     await page.goto('/login');
@@ -173,7 +182,7 @@ test.describe('Approved live session edits & quota protection (TASK-024, AC-67, 
       localStorage.clear();
     });
     await buyerPage.goto(`/events/${createdEvent.id}`);
-    await expect(buyerPage.getByRole('heading', { name: eventTitle })).toBeVisible();
+    await expect(buyerPage.getByRole('heading', { name: eventTitle, exact: true })).toBeVisible();
     await expect(buyerPage.getByText('฿1,800.00').first()).toBeVisible();
 
     // 9. Buyer 2's pre-existing active reservation retains original 1,000 THB quote throughout 15-minute hold (AC-68)
@@ -182,7 +191,8 @@ test.describe('Approved live session edits & quota protection (TASK-024, AC-67, 
     });
     expect(orderCheckRes.status()).toBe(200);
     const orderData = await orderCheckRes.json();
-    expect(Number(orderData.reservation.total)).toBe(1000);
+    expect(Number(orderData.reservation.subtotal)).toBe(1000);
+    expect(Number(orderData.reservation.total)).toBe(Number(originalOrder.reservation.total));
 
     await buyerContext.close();
   });

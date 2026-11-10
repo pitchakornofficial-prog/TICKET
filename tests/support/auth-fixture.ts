@@ -27,7 +27,7 @@ export async function authFixture(prefix: 'integration' | 'e2e', baseURL = 'http
   await control.query(`CREATE SCHEMA "${schema}"`);
   const scopedUrl = new URL(databaseUrl);
   scopedUrl.searchParams.set('options', `-c search_path=${schema}`);
-  const pool = new Pool({ connectionString: scopedUrl.toString(), max: 5 });
+  const pool = new Pool({ connectionString: scopedUrl.toString(), max: 15 });
   const settings = { baseURL, secret: randomBytes(32).toString('base64url') };
   async function cleanup() {
     try { await pool.end(); await control.query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`); }

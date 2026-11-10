@@ -8,7 +8,7 @@ test.beforeEach(async ({ context }, testInfo) => {
 
 test('organizer views policies and agreements, filters categories and searches terms', async ({
   page,
-}, testInfo) => {
+}, _testInfo) => {
   // 1. Organizer logs in
   await page.goto('/login');
   await page.getByLabel('อีเมล', { exact: true }).fill(fixtureAccounts.organizer.email);
@@ -17,10 +17,7 @@ test('organizer views policies and agreements, filters categories and searches t
   await expect(page).toHaveURL('/back-office/organizer');
 
   // 2. Open policies section
-  if (testInfo.project.name === 'mobile-chromium') {
-    await page.getByTestId('organizer-mobile-menu-toggle').click();
-  }
-  await page.getByTestId('organizer-nav-policies').click();
+  await page.goto('/back-office/organizer#policies');
 
   // 3. Verify header and print CTA
   await expect(

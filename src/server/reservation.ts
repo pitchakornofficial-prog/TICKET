@@ -62,11 +62,19 @@ export interface OrderReservationDetail {
   expiresAt: string;
 }
 
+const reservationSchemaPromises = new WeakMap<Pool, Promise<void>>();
+
 export async function ensureReservationSchema(pool: Pool): Promise<void> {
-  await ensureFeeSchema(pool);
-  await inTransaction(pool, async client => {
-    await client.query('SELECT pg_advisory_xact_lock($1)', [945162031]);
-    await client.query(`
+  const existing = reservationSchemaPromises.get(pool);
+  if (existing) {
+    return existing;
+  }
+  const promise = (async () => {
+    try {
+      await ensureFeeSchema(pool);
+      await inTransaction(pool, async client => {
+        await client.query('SELECT pg_advisory_xact_lock($1)', [945162031]);
+        await client.query(`
     CREATE TABLE IF NOT EXISTS orders (
       id TEXT PRIMARY KEY,
       "eventId" TEXT NOT NULL REFERENCES events(id) ON DELETE CASCADE,
@@ -115,18 +123,27 @@ export async function ensureReservationSchema(pool: Pool): Promise<void> {
       "ticketTypeId" TEXT NOT NULL REFERENCES ticket_types(id) ON DELETE CASCADE,
       "ticketCode" TEXT NOT NULL UNIQUE,
       "qrPayload" TEXT NOT NULL UNIQUE,
+      price NUMERIC(12, 2),
       status TEXT NOT NULL DEFAULT 'valid',
       "admissionStatus" TEXT NOT NULL DEFAULT 'outside',
       "createdAt" TIMESTAMPTZ NOT NULL DEFAULT now(),
       "updatedAt" TIMESTAMPTZ NOT NULL DEFAULT now()
     );
+    ALTER TABLE tickets ADD COLUMN IF NOT EXISTS "price" NUMERIC(12, 2);
     CREATE INDEX IF NOT EXISTS idx_tickets_order ON tickets("orderId");
     CREATE INDEX IF NOT EXISTS idx_tickets_session ON tickets("sessionId");
     CREATE INDEX IF NOT EXISTS idx_tickets_type ON tickets("ticketTypeId");
     CREATE INDEX IF NOT EXISTS idx_tickets_code ON tickets("ticketCode");
     CREATE INDEX IF NOT EXISTS idx_tickets_qr_payload ON tickets("qrPayload");
   `);
-  });
+      });
+    } catch (err) {
+      reservationSchemaPromises.delete(pool);
+      throw err;
+    }
+  })();
+  reservationSchemaPromises.set(pool, promise);
+  return promise;
 }
 
 export async function getBuyerTicketCountForEvent(

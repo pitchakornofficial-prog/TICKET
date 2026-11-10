@@ -327,15 +327,21 @@ export interface OwnerEventWithFeeSettings {
   organizerId: string;
   organizerName: string;
   organizerEmail: string;
+  payoutBankName: string | null;
+  payoutAccountNumber: string | null;
+  payoutAccountName: string | null;
   feeSettings: EventFeeSettings;
 }
 
 export async function listAllEventsWithFeeSettings(
   pool: Pool,
 ): Promise<OwnerEventWithFeeSettings[]> {
+  const { ensureEventSchema } = await import('./events.ts');
+  await ensureEventSchema(pool);
   await ensureFeeSchema(pool);
   const res = await pool.query(
     `SELECT e.id, e.title, e.location, e.status, e."organizerId",
+            e."payoutBankName", e."payoutAccountNumber", e."payoutAccountName",
             u.name as "organizerName", u.email as "organizerEmail",
             f."organizerFeeMode", f."organizerFeeRate",
             f."organizerFeePrivilegeRate", f."ubuPrivilegeMode",
@@ -356,6 +362,9 @@ export async function listAllEventsWithFeeSettings(
     organizerId: row.organizerId,
     organizerName: row.organizerName || 'ไม่ระบุ',
     organizerEmail: row.organizerEmail || '',
+    payoutBankName: row.payoutBankName ?? null,
+    payoutAccountNumber: row.payoutAccountNumber ?? null,
+    payoutAccountName: row.payoutAccountName ?? null,
     feeSettings: {
       eventId: row.id,
       organizerFeeMode: (row.organizerFeeMode || 'percentage') as OrganizerFeeMode,

@@ -28,31 +28,23 @@ export interface TicketDetail {
   createdAt: string;
 }
 
+const ticketSchemaPromises = new WeakMap<Pool, Promise<void>>();
+
 export async function ensureTicketSchema(pool: Pool): Promise<void> {
-  await ensureReservationSchema(pool);
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS tickets (
-      id TEXT PRIMARY KEY,
-      "orderId" TEXT NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
-      "orderItemId" TEXT NOT NULL REFERENCES order_items(id) ON DELETE CASCADE,
-      "eventId" TEXT NOT NULL REFERENCES events(id) ON DELETE CASCADE,
-      "sessionId" TEXT NOT NULL REFERENCES event_sessions(id) ON DELETE CASCADE,
-      "ticketTypeId" TEXT NOT NULL REFERENCES ticket_types(id) ON DELETE CASCADE,
-      "ticketCode" TEXT NOT NULL UNIQUE,
-      "qrPayload" TEXT NOT NULL UNIQUE,
-      price NUMERIC(12, 2),
-      status TEXT NOT NULL DEFAULT 'valid',
-      "admissionStatus" TEXT NOT NULL DEFAULT 'outside',
-      "createdAt" TIMESTAMPTZ NOT NULL DEFAULT now(),
-      "updatedAt" TIMESTAMPTZ NOT NULL DEFAULT now()
-    );
-    ALTER TABLE tickets ADD COLUMN IF NOT EXISTS "price" NUMERIC(12, 2);
-    CREATE INDEX IF NOT EXISTS idx_tickets_order ON tickets("orderId");
-    CREATE INDEX IF NOT EXISTS idx_tickets_session ON tickets("sessionId");
-    CREATE INDEX IF NOT EXISTS idx_tickets_type ON tickets("ticketTypeId");
-    CREATE INDEX IF NOT EXISTS idx_tickets_code ON tickets("ticketCode");
-    CREATE INDEX IF NOT EXISTS idx_tickets_qr_payload ON tickets("qrPayload");
-  `);
+  const existing = ticketSchemaPromises.get(pool);
+  if (existing) {
+    return existing;
+  }
+  const promise = (async () => {
+    try {
+      await ensureReservationSchema(pool);
+    } catch (err) {
+      ticketSchemaPromises.delete(pool);
+      throw err;
+    }
+  })();
+  ticketSchemaPromises.set(pool, promise);
+  return promise;
 }
 
 /**

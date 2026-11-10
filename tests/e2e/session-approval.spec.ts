@@ -19,11 +19,12 @@ test('organizer submits two sessions, owner approves one session, and only appro
 
   // Create event with two sessions
   await page.goto('/back-office/organizer#events');
-  await page.getByRole('button', { name: '+ สร้างงานคอนเสิร์ตใหม่' }).click();
+  await page.getByTestId('open-create-concert-btn').click();
   await page.getByLabel('ชื่องานคอนเสิร์ต').fill(eventTitle);
-  await page.getByLabel('สถานที่จัดงาน').fill('เอ็มแคปปิตอล ฮอลล์');
+  await page.getByRole('tab', { name: '2. สถานที่ & แผนที่' }).click();
+  await page.locator('#event-location').fill('เอ็มแคปปิตอล ฮอลล์');
   await saveEventDraft(page);
-  await expect(page.getByText('บันทึกงานคอนเสิร์ตสำเร็จ')).toBeVisible();
+  await expect(page.locator('#create-concert-title')).toBeHidden();
 
   // Find created event in DB or API to get session ids and submit session 1
   const eventsRes = await page.request.get('/api/events');
@@ -77,7 +78,7 @@ test('organizer submits two sessions, owner approves one session, and only appro
   await expect(sessionCard).toBeVisible();
 
   // Approve session 1
-  await sessionCard.getByRole('button', { name: 'อนุมัติรอบนี้' }).click();
+  await sessionCard.getByRole('button', { name: 'อนุมัติด่วน' }).click();
   await expect(page.getByText(`อนุมัติรอบการแสดงของ "${eventTitle}" สำเร็จ`)).toBeVisible();
 
   // 3. Check public API endpoint: only session 1 is approved; session 2 is not present

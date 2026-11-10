@@ -26,36 +26,51 @@ export type InvitationRecord = {
   acceptedAt?: Date | null;
 };
 
-export async function ensureInvitationSchema(pool: Pool): Promise<void> {
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS organizer_invitations (
-      id TEXT PRIMARY KEY,
-      email TEXT NOT NULL,
-      token TEXT NOT NULL UNIQUE,
-      role TEXT NOT NULL DEFAULT 'organizer',
-      status TEXT NOT NULL,
-      "expiresAt" TIMESTAMPTZ NOT NULL,
-      "createdAt" TIMESTAMPTZ NOT NULL DEFAULT now(),
-      "acceptedAt" TIMESTAMPTZ
-    );
-    ALTER TABLE organizer_invitations ADD COLUMN IF NOT EXISTS role TEXT NOT NULL DEFAULT 'organizer';
-    CREATE INDEX IF NOT EXISTS idx_organizer_invitations_email ON organizer_invitations(email);
-    CREATE INDEX IF NOT EXISTS idx_organizer_invitations_token ON organizer_invitations(token);
+const invitationSchemaPromises = new WeakMap<Pool, Promise<void>>();
 
-    CREATE TABLE IF NOT EXISTS invitation_audit_logs (
-      id TEXT PRIMARY KEY,
-      "invitationId" TEXT NOT NULL,
-      "invitedEmail" TEXT NOT NULL,
-      "invitedRole" TEXT NOT NULL,
-      "issuedByUserId" TEXT NOT NULL,
-      "issuedByName" TEXT,
-      "issuedByEmail" TEXT,
-      "ipAddress" TEXT,
-      "createdAt" TIMESTAMPTZ NOT NULL DEFAULT now()
-    );
-    CREATE INDEX IF NOT EXISTS idx_invitation_audit_invitation ON invitation_audit_logs("invitationId");
-    CREATE INDEX IF NOT EXISTS idx_invitation_audit_issued_by ON invitation_audit_logs("issuedByUserId");
-  `);
+export async function ensureInvitationSchema(pool: Pool): Promise<void> {
+  const existing = invitationSchemaPromises.get(pool);
+  if (existing) {
+    return existing;
+  }
+  const promise = (async () => {
+    try {
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS organizer_invitations (
+          id TEXT PRIMARY KEY,
+          email TEXT NOT NULL,
+          token TEXT NOT NULL UNIQUE,
+          role TEXT NOT NULL DEFAULT 'organizer',
+          status TEXT NOT NULL,
+          "expiresAt" TIMESTAMPTZ NOT NULL,
+          "createdAt" TIMESTAMPTZ NOT NULL DEFAULT now(),
+          "acceptedAt" TIMESTAMPTZ
+        );
+        ALTER TABLE organizer_invitations ADD COLUMN IF NOT EXISTS role TEXT NOT NULL DEFAULT 'organizer';
+        CREATE INDEX IF NOT EXISTS idx_organizer_invitations_email ON organizer_invitations(email);
+        CREATE INDEX IF NOT EXISTS idx_organizer_invitations_token ON organizer_invitations(token);
+
+        CREATE TABLE IF NOT EXISTS invitation_audit_logs (
+          id TEXT PRIMARY KEY,
+          "invitationId" TEXT NOT NULL,
+          "invitedEmail" TEXT NOT NULL,
+          "invitedRole" TEXT NOT NULL,
+          "issuedByUserId" TEXT NOT NULL,
+          "issuedByName" TEXT,
+          "issuedByEmail" TEXT,
+          "ipAddress" TEXT,
+          "createdAt" TIMESTAMPTZ NOT NULL DEFAULT now()
+        );
+        CREATE INDEX IF NOT EXISTS idx_invitation_audit_invitation ON invitation_audit_logs("invitationId");
+        CREATE INDEX IF NOT EXISTS idx_invitation_audit_issued_by ON invitation_audit_logs("issuedByUserId");
+      `);
+    } catch (err) {
+      invitationSchemaPromises.delete(pool);
+      throw err;
+    }
+  })();
+  invitationSchemaPromises.set(pool, promise);
+  return promise;
 }
 
 export async function recordInvitationAuditLog(

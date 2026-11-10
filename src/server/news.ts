@@ -33,41 +33,42 @@ export interface OwnerNewsItem {
   authorName: string;
 }
 
-let newsSchemaPromise: Promise<void> | null = null;
+const newsSchemaPromises = new WeakMap<Pool, Promise<void>>();
 
 export async function ensureNewsSchema(pool: Pool): Promise<void> {
-  if (!newsSchemaPromise) {
-    newsSchemaPromise = (async () => {
-      try {
-        await pool.query(`
-          CREATE TABLE IF NOT EXISTS news (
-            id TEXT PRIMARY KEY,
-            title TEXT NOT NULL,
-            content TEXT NOT NULL,
-            status TEXT NOT NULL DEFAULT 'draft',
-            "coverUrl" TEXT,
-            "publishedAt" TIMESTAMPTZ,
-            "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-            "updatedAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-            "authorId" TEXT NOT NULL REFERENCES auth_user(id)
-          );
-          CREATE INDEX IF NOT EXISTS idx_news_status_published_at ON news(status, "publishedAt" DESC);
-        `);
-      } catch (error) {
-        const err = error as { code?: string };
-        if (err?.code === '42P01') {
-          newsSchemaPromise = null;
-          return;
-        }
-        if (err?.code === '23505') {
-          return;
-        }
-        newsSchemaPromise = null;
-        throw error;
+  const existing = newsSchemaPromises.get(pool);
+  if (existing) return existing;
+  const promise = (async () => {
+    try {
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS news (
+          id TEXT PRIMARY KEY,
+          title TEXT NOT NULL,
+          content TEXT NOT NULL,
+          status TEXT NOT NULL DEFAULT 'draft',
+          "coverUrl" TEXT,
+          "publishedAt" TIMESTAMPTZ,
+          "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          "updatedAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          "authorId" TEXT NOT NULL REFERENCES auth_user(id)
+        );
+        CREATE INDEX IF NOT EXISTS idx_news_status_published_at ON news(status, "publishedAt" DESC);
+      `);
+    } catch (error) {
+      const err = error as { code?: string };
+      if (err?.code === '42P01') {
+        newsSchemaPromises.delete(pool);
+        return;
       }
-    })();
-  }
-  return newsSchemaPromise;
+      if (err?.code === '23505') {
+        return;
+      }
+      newsSchemaPromises.delete(pool);
+      throw error;
+    }
+  })();
+  newsSchemaPromises.set(pool, promise);
+  return promise;
 }
 
 export async function listPublishedNews(pool: Pool): Promise<PublicNewsSummary[]> {

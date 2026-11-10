@@ -697,3 +697,5 @@ export function GuestOrderRefundManager({
     </div>
   );
 }
+
+export const OrderRefundSection = GuestOrderRefundManager;

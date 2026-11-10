@@ -24,15 +24,16 @@ test('organizer logs in, creates a concert draft with poster and views it in the
   }
   await page.getByTestId('organizer-nav-events').click();
   await expect(page.getByRole('heading', { name: 'งานคอนเสิร์ตของคุณ' })).toBeVisible();
-  await page.getByRole('button', { name: '+ สร้างงานคอนเสิร์ตใหม่' }).click();
+  await page.getByTestId('open-create-concert-btn').click();
 
   // 3. Fill event details
   await page.getByLabel('ชื่องานคอนเสิร์ต').fill(eventTitle);
-  await page.getByLabel('สถานที่จัดงาน').fill(location);
   await page.getByLabel('เกี่ยวกับคอนเสิร์ตนี้ / รายละเอียดและจุดเด่น').fill('เทศกาลดนตรีฤดูหนาวประจำปี');
+  await page.getByRole('tab', { name: '2. สถานที่ & แผนที่' }).click();
+  await page.locator('#event-location').fill(location);
 
   // Upload dummy poster in the media step
-  await page.getByRole('button', { name: '3. รูปภาพ & สื่อประชาสัมพันธ์', exact: true }).click();
+  await page.getByRole('tab', { name: '5. รูปภาพ & สื่อ' }).click();
   await page.locator('#event-poster').setInputFiles({
     name: 'test-poster.png',
     mimeType: 'image/png',
@@ -42,13 +43,12 @@ test('organizer logs in, creates a concert draft with poster and views it in the
   await saveEventDraft(page);
 
   // 4. Verify draft appears in organizer workspace with poster
-  await expect(page.getByText('บันทึกงานคอนเสิร์ตสำเร็จ')).toBeVisible();
+  await expect(page.locator('#create-concert-title')).toBeHidden();
   const card = page.locator('.event-card', { hasText: eventTitle });
   await expect(card).toBeVisible();
   await expect(card.getByText(`สถานที่: ${location}`)).toBeVisible();
-  await expect(card.getByText('สถานะ: draft')).toBeVisible();
+  await expect(card.getByText(/สถานะ:\s*(draft|ฉบับร่าง)/)).toBeVisible();
 
-  const storefrontLink = card.getByRole('link', { name: 'หน้าร้านลูกค้า' });
-  await expect(storefrontLink).toBeVisible();
-  await expect(storefrontLink).toHaveAttribute('href', /^\/events\//);
+  await expect(card.getByRole('button', { name: 'แก้ไขข้อมูล' })).toBeVisible();
+  await expect(card.getByRole('button', { name: 'ส่งขออนุมัติ' })).toBeVisible();
 });

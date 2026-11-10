@@ -6,6 +6,7 @@ import { ensureFeeSchema } from './fees.ts';
 import { ensureReservationSchema } from './reservation.ts';
 import { ensureRefundSchema, processSessionCancellationRefunds } from './refunds.ts';
 import { ensureNewsSchema } from './news.ts';
+import { ensureTicketSchema } from './tickets.ts';
 
 export type EventStatus = 'draft' | 'pending_approval' | 'approved' | 'rejected' | 'cancelled';
 export type SessionStatus = 'draft' | 'pending_approval' | 'approved' | 'rejected' | 'cancelled';
@@ -61,141 +62,158 @@ export interface PublicEventSummary {
   totalQuota: number;
 }
 
-const eventSchemaInitialized = new WeakSet<Pool>();
+const eventSchemaPromises = new WeakMap<Pool, Promise<void>>();
 
 export async function ensureEventSchema(pool: Pool): Promise<void> {
-  if (eventSchemaInitialized.has(pool)) {
-    return;
+  const existing = eventSchemaPromises.get(pool);
+  if (existing) {
+    return existing;
   }
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS events (
-      id TEXT PRIMARY KEY,
-      "organizerId" TEXT NOT NULL REFERENCES auth_user(id),
-      title TEXT NOT NULL,
-      description TEXT NOT NULL DEFAULT '',
-      location TEXT NOT NULL,
-      "posterUrl" TEXT,
-      "ticketTemplateUrl" TEXT,
-      "coverBannerUrl" TEXT,
-      "googleMapsUrl" TEXT,
-      "salesStartTime" TIMESTAMPTZ,
-      "salesEndTime" TIMESTAMPTZ,
-      "limitPerOrder" INTEGER NOT NULL DEFAULT 4,
-      status TEXT NOT NULL DEFAULT 'draft',
-      "createdAt" TIMESTAMPTZ NOT NULL DEFAULT now(),
-      "updatedAt" TIMESTAMPTZ NOT NULL DEFAULT now()
-    );
-    ALTER TABLE events ADD COLUMN IF NOT EXISTS "ticketTemplateUrl" TEXT;
-    ALTER TABLE events ADD COLUMN IF NOT EXISTS "coverBannerUrl" TEXT;
-    ALTER TABLE events ADD COLUMN IF NOT EXISTS "googleMapsUrl" TEXT;
-    ALTER TABLE events ADD COLUMN IF NOT EXISTS "salesStartTime" TIMESTAMPTZ;
-    ALTER TABLE events ADD COLUMN IF NOT EXISTS "salesEndTime" TIMESTAMPTZ;
-    ALTER TABLE events ADD COLUMN IF NOT EXISTS "ageRestriction" TEXT;
-    ALTER TABLE events ADD COLUMN IF NOT EXISTS "refundPolicy" TEXT;
-    ALTER TABLE events ADD COLUMN IF NOT EXISTS "entryGuidelines" TEXT;
-    ALTER TABLE events ADD COLUMN IF NOT EXISTS "payoutAccountId" TEXT;
-    ALTER TABLE events ADD COLUMN IF NOT EXISTS "payoutBankName" TEXT;
-    ALTER TABLE events ADD COLUMN IF NOT EXISTS "payoutAccountNumber" TEXT;
-    ALTER TABLE events ADD COLUMN IF NOT EXISTS "payoutAccountName" TEXT;
-    ALTER TABLE events ADD COLUMN IF NOT EXISTS "ubuPrivilegeMode" BOOLEAN NOT NULL DEFAULT FALSE;
-    CREATE INDEX IF NOT EXISTS idx_events_organizerId ON events("organizerId");
+  const promise = (async () => {
+    try {
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS events (
+          id TEXT PRIMARY KEY,
+          "organizerId" TEXT NOT NULL REFERENCES auth_user(id),
+          title TEXT NOT NULL,
+          description TEXT NOT NULL DEFAULT '',
+          location TEXT NOT NULL,
+          "posterUrl" TEXT,
+          "ticketTemplateUrl" TEXT,
+          "coverBannerUrl" TEXT,
+          "googleMapsUrl" TEXT,
+          "salesStartTime" TIMESTAMPTZ,
+          "salesEndTime" TIMESTAMPTZ,
+          "limitPerOrder" INTEGER NOT NULL DEFAULT 4,
+          status TEXT NOT NULL DEFAULT 'draft',
+          "createdAt" TIMESTAMPTZ NOT NULL DEFAULT now(),
+          "updatedAt" TIMESTAMPTZ NOT NULL DEFAULT now()
+        );
+        ALTER TABLE events ADD COLUMN IF NOT EXISTS "ticketTemplateUrl" TEXT;
+        ALTER TABLE events ADD COLUMN IF NOT EXISTS "coverBannerUrl" TEXT;
+        ALTER TABLE events ADD COLUMN IF NOT EXISTS "googleMapsUrl" TEXT;
+        ALTER TABLE events ADD COLUMN IF NOT EXISTS "salesStartTime" TIMESTAMPTZ;
+        ALTER TABLE events ADD COLUMN IF NOT EXISTS "salesEndTime" TIMESTAMPTZ;
+        ALTER TABLE events ADD COLUMN IF NOT EXISTS "ageRestriction" TEXT;
+        ALTER TABLE events ADD COLUMN IF NOT EXISTS "refundPolicy" TEXT;
+        ALTER TABLE events ADD COLUMN IF NOT EXISTS "entryGuidelines" TEXT;
+        ALTER TABLE events ADD COLUMN IF NOT EXISTS "payoutAccountId" TEXT;
+        ALTER TABLE events ADD COLUMN IF NOT EXISTS "payoutBankName" TEXT;
+        ALTER TABLE events ADD COLUMN IF NOT EXISTS "payoutAccountNumber" TEXT;
+        ALTER TABLE events ADD COLUMN IF NOT EXISTS "payoutAccountName" TEXT;
+        ALTER TABLE events ADD COLUMN IF NOT EXISTS "ubuPrivilegeMode" BOOLEAN NOT NULL DEFAULT FALSE;
+        CREATE INDEX IF NOT EXISTS idx_events_organizerId ON events("organizerId");
 
-    CREATE TABLE IF NOT EXISTS event_sessions (
-      id TEXT PRIMARY KEY,
-      "eventId" TEXT NOT NULL REFERENCES events(id) ON DELETE CASCADE,
-      "startTime" TIMESTAMPTZ NOT NULL,
-      "endTime" TIMESTAMPTZ NOT NULL,
-      "admissionStartTime" TIMESTAMPTZ,
-      "admissionEndTime" TIMESTAMPTZ,
-      status TEXT NOT NULL DEFAULT 'draft',
-      "createdAt" TIMESTAMPTZ NOT NULL DEFAULT now(),
-      "updatedAt" TIMESTAMPTZ NOT NULL DEFAULT now()
-    );
-    CREATE INDEX IF NOT EXISTS idx_sessions_eventId ON event_sessions("eventId");
+        CREATE TABLE IF NOT EXISTS event_sessions (
+          id TEXT PRIMARY KEY,
+          "eventId" TEXT NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+          "startTime" TIMESTAMPTZ NOT NULL,
+          "endTime" TIMESTAMPTZ NOT NULL,
+          "admissionStartTime" TIMESTAMPTZ,
+          "admissionEndTime" TIMESTAMPTZ,
+          status TEXT NOT NULL DEFAULT 'draft',
+          "createdAt" TIMESTAMPTZ NOT NULL DEFAULT now(),
+          "updatedAt" TIMESTAMPTZ NOT NULL DEFAULT now()
+        );
+        CREATE INDEX IF NOT EXISTS idx_sessions_eventId ON event_sessions("eventId");
 
-    CREATE TABLE IF NOT EXISTS ticket_types (
-      id TEXT PRIMARY KEY,
-      "sessionId" TEXT NOT NULL REFERENCES event_sessions(id) ON DELETE CASCADE,
-      name TEXT NOT NULL,
-      price NUMERIC(12, 2) NOT NULL,
-      quota INTEGER NOT NULL,
-      description TEXT NOT NULL DEFAULT '',
-      "createdAt" TIMESTAMPTZ NOT NULL DEFAULT now(),
-      "updatedAt" TIMESTAMPTZ NOT NULL DEFAULT now()
-    );
-    CREATE INDEX IF NOT EXISTS idx_ticket_types_sessionId ON ticket_types("sessionId");
-    ALTER TABLE ticket_types ADD COLUMN IF NOT EXISTS "isStudentPrivilege" BOOLEAN NOT NULL DEFAULT FALSE;
-    ALTER TABLE ticket_types ADD COLUMN IF NOT EXISTS "studentPrice" NUMERIC(12, 2);
-    ALTER TABLE event_sessions ADD COLUMN IF NOT EXISTS "rejectionReason" TEXT;
+        CREATE TABLE IF NOT EXISTS ticket_types (
+          id TEXT PRIMARY KEY,
+          "sessionId" TEXT NOT NULL REFERENCES event_sessions(id) ON DELETE CASCADE,
+          name TEXT NOT NULL,
+          price NUMERIC(12, 2) NOT NULL,
+          quota INTEGER NOT NULL,
+          description TEXT NOT NULL DEFAULT '',
+          "createdAt" TIMESTAMPTZ NOT NULL DEFAULT now(),
+          "updatedAt" TIMESTAMPTZ NOT NULL DEFAULT now()
+        );
+        CREATE INDEX IF NOT EXISTS idx_ticket_types_sessionId ON ticket_types("sessionId");
+        ALTER TABLE ticket_types ADD COLUMN IF NOT EXISTS "isStudentPrivilege" BOOLEAN NOT NULL DEFAULT FALSE;
+        ALTER TABLE ticket_types ADD COLUMN IF NOT EXISTS "studentPrice" NUMERIC(12, 2);
+        ALTER TABLE event_sessions ADD COLUMN IF NOT EXISTS "rejectionReason" TEXT;
 
-    CREATE TABLE IF NOT EXISTS event_scanners (
-      id TEXT PRIMARY KEY,
-      "eventId" TEXT NOT NULL REFERENCES events(id) ON DELETE CASCADE,
-      "scannerId" TEXT NOT NULL REFERENCES auth_user(id) ON DELETE CASCADE,
-      "assignedAt" TIMESTAMPTZ NOT NULL DEFAULT now(),
-      UNIQUE("eventId", "scannerId")
-    );
-    CREATE INDEX IF NOT EXISTS idx_event_scanners_scannerId ON event_scanners("scannerId");
-    CREATE INDEX IF NOT EXISTS idx_event_scanners_eventId ON event_scanners("eventId");
+        CREATE TABLE IF NOT EXISTS event_scanners (
+          id TEXT PRIMARY KEY,
+          "eventId" TEXT NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+          "scannerId" TEXT NOT NULL REFERENCES auth_user(id) ON DELETE CASCADE,
+          "assignedAt" TIMESTAMPTZ NOT NULL DEFAULT now(),
+          UNIQUE("eventId", "scannerId")
+        );
+        CREATE INDEX IF NOT EXISTS idx_event_scanners_scannerId ON event_scanners("scannerId");
+        CREATE INDEX IF NOT EXISTS idx_event_scanners_eventId ON event_scanners("eventId");
 
-    CREATE TABLE IF NOT EXISTS event_primary_scanners (
-      "eventId" TEXT PRIMARY KEY REFERENCES events(id) ON DELETE CASCADE,
-      "scannerId" TEXT NOT NULL REFERENCES auth_user(id) ON DELETE CASCADE,
-      "scannerName" TEXT NOT NULL,
-      "scannerEmail" TEXT NOT NULL,
-      "deviceId" TEXT,
-      "assignedAt" TIMESTAMPTZ NOT NULL DEFAULT now(),
-      "assignedBy" TEXT NOT NULL
-    );
-    CREATE INDEX IF NOT EXISTS idx_event_primary_scanner ON event_primary_scanners("scannerId");
+        CREATE TABLE IF NOT EXISTS scanner_session_scopes (
+          "sessionToken" TEXT PRIMARY KEY,
+          "scannerId" TEXT NOT NULL,
+          "eventId" TEXT NOT NULL,
+          "createdAt" TIMESTAMPTZ NOT NULL DEFAULT now()
+        );
+        CREATE INDEX IF NOT EXISTS idx_scanner_scopes_scanner ON scanner_session_scopes ("scannerId", "eventId");
 
-    CREATE TABLE IF NOT EXISTS session_amendments (
-      id TEXT PRIMARY KEY,
-      "sessionId" TEXT NOT NULL REFERENCES event_sessions(id) ON DELETE CASCADE,
-      "eventId" TEXT NOT NULL REFERENCES events(id) ON DELETE CASCADE,
-      "organizerId" TEXT NOT NULL REFERENCES auth_user(id) ON DELETE CASCADE,
-      "startTime" TIMESTAMPTZ,
-      "endTime" TIMESTAMPTZ,
-      "admissionStartTime" TIMESTAMPTZ,
-      "admissionEndTime" TIMESTAMPTZ,
-      "ticketTypes" JSONB NOT NULL,
-      status TEXT NOT NULL DEFAULT 'pending',
-      "rejectionReason" TEXT,
-      "reviewedBy" TEXT REFERENCES auth_user(id) ON DELETE SET NULL,
-      "reviewedAt" TIMESTAMPTZ,
-      "createdAt" TIMESTAMPTZ NOT NULL DEFAULT now(),
-      "updatedAt" TIMESTAMPTZ NOT NULL DEFAULT now()
-    );
-    CREATE INDEX IF NOT EXISTS idx_session_amendments_sessionId ON session_amendments("sessionId");
-    CREATE INDEX IF NOT EXISTS idx_session_amendments_status ON session_amendments(status);
+        CREATE TABLE IF NOT EXISTS event_primary_scanners (
+          "eventId" TEXT PRIMARY KEY REFERENCES events(id) ON DELETE CASCADE,
+          "scannerId" TEXT NOT NULL REFERENCES auth_user(id) ON DELETE CASCADE,
+          "scannerName" TEXT NOT NULL,
+          "scannerEmail" TEXT NOT NULL,
+          "deviceId" TEXT,
+          "assignedAt" TIMESTAMPTZ NOT NULL DEFAULT now(),
+          "assignedBy" TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_event_primary_scanner ON event_primary_scanners("scannerId");
 
-    CREATE TABLE IF NOT EXISTS session_cancellations (
-      id TEXT PRIMARY KEY,
-      "sessionId" TEXT NOT NULL REFERENCES event_sessions(id) ON DELETE CASCADE,
-      "eventId" TEXT NOT NULL REFERENCES events(id) ON DELETE CASCADE,
-      "organizerId" TEXT NOT NULL REFERENCES auth_user(id) ON DELETE CASCADE,
-      reason TEXT NOT NULL,
-      status TEXT NOT NULL DEFAULT 'pending',
-      "rejectionReason" TEXT,
-      "reviewedBy" TEXT REFERENCES auth_user(id) ON DELETE SET NULL,
-      "reviewedAt" TIMESTAMPTZ,
-      "createdAt" TIMESTAMPTZ NOT NULL DEFAULT now(),
-      "updatedAt" TIMESTAMPTZ NOT NULL DEFAULT now()
-    );
-    CREATE INDEX IF NOT EXISTS idx_session_cancellations_session ON session_cancellations("sessionId");
-    CREATE INDEX IF NOT EXISTS idx_session_cancellations_status ON session_cancellations(status);
+        CREATE TABLE IF NOT EXISTS session_amendments (
+          id TEXT PRIMARY KEY,
+          "sessionId" TEXT NOT NULL REFERENCES event_sessions(id) ON DELETE CASCADE,
+          "eventId" TEXT NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+          "organizerId" TEXT NOT NULL REFERENCES auth_user(id) ON DELETE CASCADE,
+          "startTime" TIMESTAMPTZ,
+          "endTime" TIMESTAMPTZ,
+          "admissionStartTime" TIMESTAMPTZ,
+          "admissionEndTime" TIMESTAMPTZ,
+          "ticketTypes" JSONB NOT NULL,
+          status TEXT NOT NULL DEFAULT 'pending',
+          "rejectionReason" TEXT,
+          "reviewedBy" TEXT REFERENCES auth_user(id) ON DELETE SET NULL,
+          "reviewedAt" TIMESTAMPTZ,
+          "createdAt" TIMESTAMPTZ NOT NULL DEFAULT now(),
+          "updatedAt" TIMESTAMPTZ NOT NULL DEFAULT now()
+        );
+        CREATE INDEX IF NOT EXISTS idx_session_amendments_sessionId ON session_amendments("sessionId");
+        CREATE INDEX IF NOT EXISTS idx_session_amendments_status ON session_amendments(status);
 
-    ALTER TABLE event_sessions ADD COLUMN IF NOT EXISTS "specialRefundWindowStart" TIMESTAMPTZ;
-    ALTER TABLE event_sessions ADD COLUMN IF NOT EXISTS "specialRefundWindowEnd" TIMESTAMPTZ;
-    ALTER TABLE event_sessions ADD COLUMN IF NOT EXISTS "rescheduledFromStartTime" TIMESTAMPTZ;
-    ALTER TABLE event_sessions ADD COLUMN IF NOT EXISTS "rescheduledFromEndTime" TIMESTAMPTZ;
-    ALTER TABLE session_amendments ADD COLUMN IF NOT EXISTS "specialRefundWindowStart" TIMESTAMPTZ;
-    ALTER TABLE session_amendments ADD COLUMN IF NOT EXISTS "specialRefundWindowEnd" TIMESTAMPTZ;
-    ALTER TABLE event_scanners ADD COLUMN IF NOT EXISTS "boundDeviceId" TEXT;
-    ALTER TABLE event_scanners ADD COLUMN IF NOT EXISTS "boundAt" TIMESTAMPTZ;
-  `);
-  await ensureFeeSchema(pool);
-  eventSchemaInitialized.add(pool);
+        CREATE TABLE IF NOT EXISTS session_cancellations (
+          id TEXT PRIMARY KEY,
+          "sessionId" TEXT NOT NULL REFERENCES event_sessions(id) ON DELETE CASCADE,
+          "eventId" TEXT NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+          "organizerId" TEXT NOT NULL REFERENCES auth_user(id) ON DELETE CASCADE,
+          reason TEXT NOT NULL,
+          status TEXT NOT NULL DEFAULT 'pending',
+          "rejectionReason" TEXT,
+          "reviewedBy" TEXT REFERENCES auth_user(id) ON DELETE SET NULL,
+          "reviewedAt" TIMESTAMPTZ,
+          "createdAt" TIMESTAMPTZ NOT NULL DEFAULT now(),
+          "updatedAt" TIMESTAMPTZ NOT NULL DEFAULT now()
+        );
+        CREATE INDEX IF NOT EXISTS idx_session_cancellations_session ON session_cancellations("sessionId");
+        CREATE INDEX IF NOT EXISTS idx_session_cancellations_status ON session_cancellations(status);
+
+        ALTER TABLE event_sessions ADD COLUMN IF NOT EXISTS "specialRefundWindowStart" TIMESTAMPTZ;
+        ALTER TABLE event_sessions ADD COLUMN IF NOT EXISTS "specialRefundWindowEnd" TIMESTAMPTZ;
+        ALTER TABLE event_sessions ADD COLUMN IF NOT EXISTS "rescheduledFromStartTime" TIMESTAMPTZ;
+        ALTER TABLE event_sessions ADD COLUMN IF NOT EXISTS "rescheduledFromEndTime" TIMESTAMPTZ;
+        ALTER TABLE session_amendments ADD COLUMN IF NOT EXISTS "specialRefundWindowStart" TIMESTAMPTZ;
+        ALTER TABLE session_amendments ADD COLUMN IF NOT EXISTS "specialRefundWindowEnd" TIMESTAMPTZ;
+        ALTER TABLE event_scanners ADD COLUMN IF NOT EXISTS "boundDeviceId" TEXT;
+        ALTER TABLE event_scanners ADD COLUMN IF NOT EXISTS "boundAt" TIMESTAMPTZ;
+      `);
+      await ensureFeeSchema(pool);
+    } catch (err) {
+      eventSchemaPromises.delete(pool);
+      throw err;
+    }
+  })();
+  eventSchemaPromises.set(pool, promise);
+  return promise;
 }
 
 export async function createEventDraft(
@@ -286,13 +304,14 @@ export async function updateEventDraft(
   organizerId: string,
   eventInput: Partial<EventDraftInput>,
   sessionsInput?: SessionDraftInput[],
+  isOwner = false,
 ) {
   await ensureEventSchema(pool);
 
   return inTransaction(pool, async client => {
     const check = await client.query('SELECT "organizerId", status FROM events WHERE id = $1', [eventId]);
     if (check.rowCount === 0) throw new Error('ไม่พบงานคอนเสิร์ต');
-    if (check.rows[0].organizerId !== organizerId) {
+    if (!isOwner && check.rows[0].organizerId !== organizerId) {
       throw new Error('ไม่อนุญาต: คุณไม่ใช่ผู้จัดงานคอนเสิร์ตนี้');
     }
 
@@ -1126,6 +1145,7 @@ export async function submitSessionAmendment(
 ): Promise<{ success: boolean; amendmentId: string }> {
   await ensureEventSchema(pool);
   await ensureReservationSchema(pool);
+  await ensureTicketSchema(pool);
 
   return inTransaction(pool, async client => {
     // 1. Verify session exists and organizer owns the event
@@ -1221,6 +1241,7 @@ export async function submitSessionAmendment(
 export async function listPendingSessionAmendments(pool: Pool): Promise<SessionAmendmentRecord[]> {
   await ensureEventSchema(pool);
   await ensureReservationSchema(pool);
+  await ensureTicketSchema(pool);
 
   const res = await pool.query<{
     id: string;
@@ -1427,6 +1448,7 @@ export async function approveSessionAmendment(
 ): Promise<{ success: boolean; message: string }> {
   await ensureEventSchema(pool);
   await ensureReservationSchema(pool);
+  await ensureTicketSchema(pool);
 
   return inTransaction(pool, async client => {
     // 1. Check owner role

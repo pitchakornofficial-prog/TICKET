@@ -27,7 +27,7 @@ describe('Organizer Contact Owner Workspace (D-85, D-207, D-208, D-209)', () => 
     expect(contactContent).toContain('LINE Official Account');
     expect(contactContent).toContain('เวลาทำการของฝ่ายปฏิบัติการ');
     expect(contactContent).toContain('ที่อยู่สำนักงานใหญ่ (Headquarters)');
-    expect(contactContent).toContain('loadOwnerContactInfo');
+    expect(contactContent).toContain('loadSharedOwnerContactInfo');
     expect(contactContent).not.toMatch(/\p{Extended_Pictographic}/u);
   });
 

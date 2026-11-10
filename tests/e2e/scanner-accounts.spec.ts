@@ -27,11 +27,12 @@ test.describe('Scanner account assignment and scoping (TASK-009, AC-09)', () => 
     }
     await page.getByTestId('organizer-nav-events').click();
     await page.goto('/back-office/organizer#events');
-    await page.getByRole('button', { name: '+ สร้างงานคอนเสิร์ตใหม่' }).click();
+    await page.getByTestId('open-create-concert-btn').click();
     await page.getByLabel('ชื่องานคอนเสิร์ต').fill(eventTitle);
-    await page.getByLabel('สถานที่จัดงาน').fill('ศูนย์การประชุมแห่งชาติสิริกิติ์');
+    await page.getByRole('tab', { name: '2. สถานที่ & แผนที่' }).click();
+    await page.locator('#event-location').fill('ศูนย์การประชุมแห่งชาติสิริกิติ์');
     await saveEventDraft(page);
-    await expect(page.getByText('บันทึกงานคอนเสิร์ตสำเร็จ')).toBeVisible();
+    await expect(page.locator('#create-concert-title')).toBeHidden();
 
     // 3. Organizer assigns scanner to the event
     if (testInfo.project.name === 'mobile-chromium') {

@@ -85,18 +85,18 @@ describe('Organizer Workspace Overview View Redesign (D-114, D-210 to D-216)', (
     expect(overviewContent).toContain('progress-bar-fill');
   });
 
-  it('provides dual-mode visual analytics charts with bar chart and line chart (D-215)', () => {
+  it('removes visual analytics charts in favor of expanded executive KPIs and vertical performance grid (D-215)', () => {
     const overviewContent = readFileSync(
       join(rootDir, 'src/components/organizer-overview-view.tsx'),
       'utf8',
     );
-    expect(overviewContent).toContain('overview-charts-panel');
-    expect(overviewContent).toContain('overview-barchart');
-    expect(overviewContent).toContain('overview-linechart');
-    expect(overviewContent).toContain('chart-tab-btn');
-    expect(overviewContent).toContain('กราฟแท่งเปรียบเทียบรายคอนเสิร์ต');
-    expect(overviewContent).toContain('กราฟเส้นแนวโน้มยอดขาย');
-    expect(overviewContent).toContain('linechart-svg');
+    expect(overviewContent).not.toContain('overview-charts-panel');
+    expect(overviewContent).not.toContain('overview-barchart');
+    expect(overviewContent).not.toContain('overview-linechart');
+    expect(overviewContent).toContain('overview-4kpi-grid');
+    expect(overviewContent).toContain('kpi-hero-card');
+    expect(overviewContent).toContain('performance-filter-toolbar');
+    expect(overviewContent).toContain('overview-performance-grid');
   });
 
   it('defines borderless icons, universal "i" tooltips, and responsive styles in globals.css (D-216)', () => {
@@ -111,8 +111,10 @@ describe('Organizer Workspace Overview View Redesign (D-114, D-210 to D-216)', (
     expect(cssContent).toContain('D-210 to D-216: Organizer Overview Executive Redesign');
     expect(cssContent).toContain('.overview-workspace-container');
     expect(cssContent).toContain('.overview-5kpi-grid');
+    expect(cssContent).toContain('.overview-4kpi-grid');
     expect(cssContent).toContain('.overview-borderless-icon');
-    expect(cssContent).toContain('.overview-charts-card');
+    expect(cssContent).toContain('.overview-performance-grid');
+    expect(cssContent).toContain('.kpi-hero-card');
     expect(cssContent).toContain('.overview-concert-card');
     expect(cssContent).toContain('.soft-pulse-highlight');
   });

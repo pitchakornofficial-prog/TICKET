@@ -119,42 +119,39 @@ describe('Unified 1200px Workspace Width & Standardized Section Header Architect
     const ownerOverview = readFileSync(join(rootDir, 'src/components/owner-overview-dashboard.tsx'), 'utf8');
     const ownerPolicies = readFileSync(join(rootDir, 'src/components/owner-policies-view.tsx'), 'utf8');
 
-    // 1. Events: Header has no buttons; events-filter-actions holds create button
+    // 1. Events: Header has inline refresh button; events-filter-actions holds create button
     const eventsHeader = events.match(/<header className="events-management-header">([\s\S]*?)<\/header>/)?.[1] ?? '';
     expect(eventsHeader).not.toContain('<Button');
-    expect(eventsHeader).not.toContain('<button');
+    expect(eventsHeader).toContain('data-testid="events-refresh-btn"');
     expect(events).toContain('className="events-filter-actions"');
     expect(events).toContain('data-testid="open-create-concert-btn"');
 
-    // 2. News: Header has no buttons; news-filter-bar holds create button
+    // 2. News: Header has inline refresh button; news-filter-bar holds create button
     const newsHeader = news.match(/<header className="news-management-header">([\s\S]*?)<\/header>/)?.[1] ?? '';
     expect(newsHeader).not.toContain('<Button');
-    expect(newsHeader).not.toContain('<button');
+    expect(newsHeader).toContain('data-testid="news-refresh-btn"');
     expect(news).toContain('className="news-filter-bar"');
     expect(news).toContain('className="news-create-btn"');
 
-    // 3. Finance: Header has no buttons; finance-tabs-wrapper holds actions
+    // 3. Finance: Header has inline refresh button; finance-tabs-wrapper holds actions
     const financeHeader = finance.match(/<header className="finance-management-header">([\s\S]*?)<\/header>/)?.[1] ?? '';
     expect(financeHeader).not.toContain('<Button');
-    expect(financeHeader).not.toContain('<button');
+    expect(financeHeader).toContain('data-testid="finance-inline-refresh-btn"');
     expect(finance).toContain('className="finance-tabs-wrapper"');
     expect(finance).toContain('data-testid="finance-print-btn"');
     expect(finance).toContain('data-testid="finance-refresh-btn"');
 
-    // 4. Policies: Header has no buttons; policies-filter-actions holds print button
+    // 4. Policies: Header has inline refresh button; policies-filter-actions holds print button
     const policiesHeader = policies.match(/<header className="policies-management-header">([\s\S]*?)<\/header>/)?.[1] ?? '';
     expect(policiesHeader).not.toContain('<Button');
-    expect(policiesHeader).not.toContain('<button');
+    expect(policiesHeader).toContain('data-testid="policies-refresh-btn"');
     expect(policies).toContain('className="policies-filter-actions"');
     expect(policies).toContain('data-testid="policies-print-btn"');
 
-    // 5. Organizer Overview: Header has no buttons; overview-quick-actions-bar holds actions
-    const overviewHeader = overview.match(/<header className="overview-header-toolbar">([\s\S]*?)<\/header>/)?.[1] ?? '';
-    expect(overviewHeader).not.toContain('<Button');
-    expect(overviewHeader).not.toContain('<button');
-    expect(overview).toContain('className="overview-quick-actions-bar"');
-    expect(overview).toContain('data-testid="overview-create-event-btn"');
+    // 5. Organizer Overview: Inline borderless refresh button in header title row (D-258)
+    expect(overview).toContain('className="overview-inline-refresh-btn"');
     expect(overview).toContain('data-testid="overview-refresh-btn"');
+    expect(overview).toContain('data-testid="overview-create-event-btn"');
 
     // 6. Owner Policies: Header has no print button; policies-filter-actions holds print button
     const ownerPoliciesHeader = ownerPolicies.match(/<header className="policies-management-header">([\s\S]*?)<\/header>/)?.[1] ?? '';

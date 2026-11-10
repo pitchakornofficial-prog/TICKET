@@ -59,7 +59,7 @@ test.describe('Reservation expiry, refresh idempotency and quota release (TASK-0
 
     const sessionCard = page.locator('.pending-session-card', { hasText: eventTitle });
     await expect(sessionCard).toBeVisible();
-    await sessionCard.getByRole('button', { name: 'อนุมัติรอบนี้' }).click();
+    await sessionCard.getByRole('button', { name: 'อนุมัติด่วน' }).click();
     await expect(page.getByText(`อนุมัติรอบการแสดงของ "${eventTitle}" สำเร็จ`)).toBeVisible();
 
     await page.getByRole('button', { name: 'ออกจากระบบ', exact: true }).click();

@@ -1,15 +1,21 @@
 'use client';
 
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
+import { roleHome, isRole } from '@/lib/back-office-access';
 import { AlertIcon } from './alert-icon';
 import { EyeIcon, EyeOffIcon, LockIcon, MailIcon } from './icons';
 
 export function LoginForm() {
   const router = useRouter();
   const [pending, setPending] = useState(false);
+  const [hydrated, setHydrated] = useState(false);
   const [error, setError] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+
+  useEffect(() => {
+    setHydrated(true);
+  }, []);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -27,7 +33,10 @@ export function LoginForm() {
           : 'อีเมลหรือรหัสผ่านไม่ถูกต้อง กรุณาลองใหม่');
         return;
       }
-      router.replace('/back-office'); router.refresh();
+      const body = await response.json().catch(() => null);
+      const userRole = body?.user?.role;
+      const targetUrl = isRole(userRole) ? roleHome(userRole) : '/back-office';
+      router.replace(targetUrl); router.refresh();
     } catch { setError('เชื่อมต่อไม่สำเร็จ กรุณาลองใหม่อีกครั้ง'); }
     finally { setPending(false); }
   }
@@ -89,7 +98,7 @@ export function LoginForm() {
         </p>
       )}
 
-      <button className="primary-button login-submit-btn" type="submit" disabled={pending}>
+      <button className="primary-button login-submit-btn" type="submit" disabled={pending || !hydrated}>
         {pending ? 'กำลังเข้าสู่ระบบ…' : 'เข้าสู่ระบบ'}
       </button>
     </form>

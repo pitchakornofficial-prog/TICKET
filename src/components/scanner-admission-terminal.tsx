@@ -98,6 +98,11 @@ export function ScannerAdmissionTerminal({
   const [action, setAction] = useState<'entry' | 'exit'>('entry');
   const [ticketInput, setTicketInput] = useState('');
   const [loading, setLoading] = useState(false);
+  const [hydrated, setHydrated] = useState(false);
+
+  useEffect(() => {
+    setHydrated(true);
+  }, []);
   const [scanResult, setScanResult] = useState<ScanResult | null>(null);
   const [stats, setStats] = useState<AdmissionStats | null>(null);
   const [recentLogs, setRecentLogs] = useState<AdmissionLogItem[]>([]);
@@ -583,7 +588,7 @@ export function ScannerAdmissionTerminal({
                     type="submit"
                     id="scanner-submit-btn"
                     className="button button-primary terminal-submit-btn"
-                    disabled={loading || !ticketInput.trim()}
+                    disabled={loading || !hydrated || !ticketInput.trim()}
                   >
                     {loading ? 'กำลังตรวจ...' : action === 'entry' ? 'บันทึกเข้างาน' : 'บันทึกออก'}
                   </button>

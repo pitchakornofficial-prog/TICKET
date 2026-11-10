@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { reserveThroughCheckout } from '../support/purchase-journey';
 import { fixtureAccounts, fixturePassword } from '../support/auth-fixture';
 
 let nextIp = 1;
@@ -66,7 +67,7 @@ test.describe('Cancel session while payment is pending and refund timely amounts
 
     const sessionCard = ownerPage.locator('.pending-session-card', { hasText: eventTitle });
     await expect(sessionCard).toBeVisible();
-    await sessionCard.getByRole('button', { name: 'อนุมัติรอบนี้' }).click({ force: true });
+    await sessionCard.getByRole('button', { name: 'อนุมัติด่วน' }).click({ force: true });
     await expect(ownerPage.getByText(`อนุมัติรอบการแสดงของ "${eventTitle}" สำเร็จ`)).toBeVisible();
 
     // Use a nonzero customer fee to prove the full-refund branch includes it.
@@ -80,62 +81,11 @@ test.describe('Cancel session while payment is pending and refund timely amounts
     const buyerContext = await browser.newContext();
     const buyerPage = await buyerContext.newPage();
 
-    await buyerPage.goto(`/events/${createdEvent.id}`);
-    await expect(buyerPage.getByRole('heading', { name: eventTitle })).toBeVisible();
-
-    const enterQueueBtn = buyerPage.getByTestId('enter-queue-cta-btn').filter({ visible: true });
-    if (await enterQueueBtn.isVisible()) {
-      await enterQueueBtn.click();
-      const proceedBtn = buyerPage.locator('#proceed-to-checkout-btn');
-      await expect(proceedBtn).toBeVisible({ timeout: 10000 });
-      await proceedBtn.click();
-    } else {
-      await buyerPage.goto(`/events/${createdEvent.id}/checkout`);
-    }
-    await expect(buyerPage).toHaveURL(new RegExp(`/events/${createdEvent.id}/checkout`));
-
-    // Select 1 ticket
-    const addBtn = buyerPage.getByRole('button', { name: 'เพิ่มจำนวน Standing VIP' });
-    await addBtn.click();
-    await expect(buyerPage.getByText('รวมราคาบัตร (1 ใบ)')).toBeVisible();
-
-    // Guest checkout form
-    await buyerPage.getByLabel('ชื่อ-นามสกุล *').fill(guestName);
-    await buyerPage.getByLabel('อีเมล *').fill(guestEmail);
-    await buyerPage.getByLabel('เบอร์โทรศัพท์มือถือ *').fill(guestPhone);
-    await buyerPage.getByRole('button', { name: 'ขอรหัส OTP เพื่อซื้อบัตร' }).click();
-    await expect(buyerPage.getByText('ส่งรหัส OTP 6 หลักไปยังอีเมลของคุณเรียบร้อยแล้ว')).toBeVisible();
-
-    const otpRes = await request.get(
-      `/api/auth/test-inspect-reset-token?type=guest_otp&email=${encodeURIComponent(guestEmail)}`,
-    );
-    expect(otpRes.status()).toBe(200);
-    const { code } = await otpRes.json();
-
-    await buyerPage.getByLabel('รหัส OTP 6 หลัก *').fill(code);
-    await buyerPage.getByRole('button', { name: 'ยืนยันรหัส OTP' }).click();
-
-    const confirmModalBtn = buyerPage.getByRole('button', { name: 'ยืนยันและดำเนินการต่อ' });
-    if (await confirmModalBtn.isVisible()) {
-      await confirmModalBtn.click();
-    }
-    await expect(buyerPage.getByRole('heading', { name: 'ยืนยันอีเมลสำเร็จ (Guest Verified)' })).toBeVisible();
-
-    // Confirm reservation to navigate to Payment page
-    const confirmReserveBtn = buyerPage.locator('#confirm-reservation-btn');
-    await expect(confirmReserveBtn).toBeEnabled();
-    await confirmReserveBtn.scrollIntoViewIfNeeded();
-    await confirmReserveBtn.click({ force: true });
-
-    await expect(buyerPage).toHaveURL(/\/orders\/ORD-[A-Z0-9-]+\/payment$/);
-    await expect(buyerPage.getByText('กันบัตรสำเร็จ (Reserved)')).toBeVisible();
-
-    // PromptPay QR (auto-generated or click)
-    const qrImage = buyerPage.locator('#promptpay-qr-image');
-    await expect(qrImage).toBeVisible({ timeout: 15000 });
-
-    // Capture orderId directly from confirmed reservation card
-    const orderId = (await buyerPage.locator('#reservation-order-id').innerText()).trim();
+    const orderId = await reserveThroughCheckout(buyerPage, {
+      eventId: createdEvent.id,
+      buyer: { name: guestName, email: guestEmail, phone: guestPhone },
+      tickets: [{ name: 'Standing VIP', quantity: 1 }],
+    });
     expect(orderId).toMatch(/^ORD-/);
 
     // 4. Organizer submits cancellation request (AC-35, AC-108)

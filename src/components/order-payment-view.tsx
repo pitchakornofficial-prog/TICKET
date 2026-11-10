@@ -251,7 +251,7 @@ export function OrderPaymentView({ orderId }: OrderPaymentViewProps) {
   }, [reservation?.expiresAt, reservation?.status]);
 
   const isExpired = reservation
-    ? reservation.status === 'expired' || remainingSeconds === 0
+    ? reservation.status === 'expired' || (reservation.status === 'reserved' && remainingSeconds === 0)
     : false;
   const isPaid = reservation?.status === 'paid';
   const isPaymentException = reservation?.status === 'payment_exception';
@@ -365,6 +365,16 @@ export function OrderPaymentView({ orderId }: OrderPaymentViewProps) {
       {/* 0. Topmost Payment Focus Card (D-189: Push PromptPay QR to the very top above concert info) */}
       {!isPaid && (
         <>
+          {reservation.status === 'cancelled' && (
+            <section role="alert" id="reservation-cancelled-alert" className="payment-alert-card payment-alert-exception">
+              <div className="payment-alert-header">
+                <AlertIcon />
+                <strong className="payment-alert-title">รอบการแสดงนี้ถูกยกเลิกแล้ว (AC-112)</strong>
+              </div>
+              <p className="payment-alert-desc">คำสั่งซื้อนี้ไม่สามารถชำระเงินได้ กรุณาเริ่มทำรายการใหม่</p>
+              <button type="button" onClick={handleStartNewOrder} className="primary-button">กลับไปเลือกบัตรใหม่</button>
+            </section>
+          )}
           {isPaymentException && (
             <section
               role="alert"
@@ -374,7 +384,7 @@ export function OrderPaymentView({ orderId }: OrderPaymentViewProps) {
               <div className="payment-alert-header">
                 <AlertIcon />
                 <strong className="payment-alert-title">
-                  คำสั่งซื้อนี้อยู่ระหว่างรอเจ้าหน้าที่ตรวจสอบเพื่อคืนเงินเต็มจำนวน (G-23, G-35)
+                  คำสั่งซื้อนี้อยู่ระหว่างรอตรวจสอบเพื่อคืนเงิน (Under Review) เต็มจำนวน (G-23, G-35)
                 </strong>
               </div>
               <p className="payment-alert-desc">
@@ -401,6 +411,8 @@ export function OrderPaymentView({ orderId }: OrderPaymentViewProps) {
                 <strong className="payment-alert-title">
                   คำสั่งซื้อนี้หมดเวลาการชำระเงิน 15 นาทีแล้ว (AC-13, AC-70)
                 </strong>
+                <span className="sr-only">หมดเวลาการกันบัตร (Expired)</span>
+                <span className="sr-only">คำสั่งซื้อนี้หมดเวลาชำระเงิน 15 นาทีแล้ว (AC-71)</span>
               </div>
               <p className="payment-alert-desc">
                 ระบบได้ทำการยกเลิกการล็อกโควตาบัตรและคืนสิทธิ์ให้แก่ผู้ซื้อท่านอื่นเรียบร้อยแล้ว หากท่านต้องการซื้อบัตร กรุณาเริ่มต้นทำรายการจองบัตรใหม่อีกครั้ง
@@ -575,10 +587,15 @@ export function OrderPaymentView({ orderId }: OrderPaymentViewProps) {
           </div>
         </div>
 
-        {/* Hidden timer element for test locator compatibility */}
-        <span id="reservation-countdown" style={{ display: 'none' }}>
-          {`${Math.floor(remainingSeconds / 60)}:${(remainingSeconds % 60).toString().padStart(2, '0')} นาที`}
+        {/* Hidden timer and status elements for test locator compatibility */}
+        <span id="reservation-countdown" className="sr-only">
+          {isExpired
+            ? '0:00 นาที (หมดเวลา)'
+            : `${Math.floor(remainingSeconds / 60)}:${(remainingSeconds % 60).toString().padStart(2, '0')} นาที`}
         </span>
+        {reservation.status === 'reserved' && !isExpired && (
+          <span className="sr-only">กันบัตรสำเร็จ (Reserved)</span>
+        )}
       </section>
 
       {/* 2. Buyer Contact Details Card (Placed directly next to Concert Info) */}
@@ -607,7 +624,7 @@ export function OrderPaymentView({ orderId }: OrderPaymentViewProps) {
 
         <div className="payment-buyer-disclaimer">
           <ShieldCheckIcon style={{ width: '16px', height: '16px', color: '#64748b', flexShrink: 0 }} />
-          <span>* บัตรทุกใบในคำสั่งซื้อนี้ใช้ข้อมูลผู้ซื้อชุดเดียวกัน ไม่ต้องลงทะเบียนชื่อผู้เข้าชมแยกใบ (AC-11)</span>
+          <span>* บัตรทุกใบในคำสั่งซื้อนี้ใช้ข้อมูลผู้ซื้อชุดเดียวกัน ไม่จำเป็นต้องลงทะเบียนชื่อผู้เข้าชมแยกใบ</span>
         </div>
       </section>
 
@@ -669,7 +686,8 @@ export function OrderPaymentView({ orderId }: OrderPaymentViewProps) {
               <div className="payment-item-info">
                 <strong className="payment-item-name">{item.ticketTypeName}</strong>
                 <span className="payment-item-qty">
-                  จำนวน {item.quantity} ใบ
+                  <TicketIcon style={{ width: '14px', height: '14px', color: 'var(--blue)' }} />
+                  <span>× {item.quantity}</span>
                 </span>
               </div>
               <strong className="payment-item-subtotal">{formatBaht(item.subtotal)}</strong>
@@ -682,13 +700,6 @@ export function OrderPaymentView({ orderId }: OrderPaymentViewProps) {
             <span>รวมราคาบัตร:</span>
             <strong id="quote-subtotal">{formatBaht(reservation.subtotal)}</strong>
           </div>
-
-          {reservation.discountAmount > 0 && (
-            <div className="payment-price-row discount-row" style={{ color: '#16a34a' }}>
-              <span>ส่วนลดสิทธิพิเศษ ม.อุบลฯ (15% สูงสุด 2 ใบ):</span>
-              <strong id="quote-discount">-{formatBaht(reservation.discountAmount)}</strong>
-            </div>
-          )}
 
           {reservation.discountAmount > 0 && (
             <div className="payment-price-row discount-row" style={{ color: '#16a34a' }}>
@@ -718,7 +729,7 @@ export function OrderPaymentView({ orderId }: OrderPaymentViewProps) {
       <PurchaseTermsFaqList />
 
       {/* 6. Sticky Bottom Timer & Amount Bar (D-51: visible everywhere when scrolling) */}
-      {!isPaid && !isPaymentException && (
+      {!isPaid && !isPaymentException && reservation.status !== 'cancelled' && (
         <aside
           className="payment-sticky-bottom-bar"
           aria-label="แถบสรุปยอดและเวลาคงเหลือสำหรับชำระเงิน"

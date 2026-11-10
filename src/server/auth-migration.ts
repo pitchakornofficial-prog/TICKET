@@ -17,6 +17,26 @@ export async function migrateAuth(pool: Pool): Promise<void> {
     await ensureEventSchema(pool);
     const { ensureScannerScopeSchema } = await import('./scanner-scope.ts');
     await ensureScannerScopeSchema(pool);
+    const { ensureReservationSchema } = await import('./reservation.ts');
+    await ensureReservationSchema(pool);
+    const { ensureTicketSchema } = await import('./tickets.ts');
+    await ensureTicketSchema(pool);
+    const { ensureAdmissionSchema } = await import('./admission.ts');
+    await ensureAdmissionSchema(pool);
+    const { ensureRefundSchema } = await import('./refunds.ts');
+    await ensureRefundSchema(pool);
+    const { ensureReportSchema } = await import('./reports.ts');
+    await ensureReportSchema(pool);
+    const { ensureNewsSchema } = await import('./news.ts');
+    await ensureNewsSchema(pool);
+    const { ensureContactAuditSchema } = await import('./contact-correction.ts');
+    await ensureContactAuditSchema(pool);
+    const { ensureTicketDeliverySchema } = await import('./ticket-delivery.ts');
+    await ensureTicketDeliverySchema(pool);
+    const { ensurePrimaryScannerSchema } = await import('./primary-scanner.ts');
+    await ensurePrimaryScannerSchema(pool);
+    const { ensureUploadQuotaSchema } = await import('./upload-quota.ts');
+    await ensureUploadQuotaSchema(pool);
   } finally {
     try { await lock.query('SELECT pg_advisory_unlock($1)', [945162001]); }
     finally { lock.release(); }

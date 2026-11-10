@@ -1,7 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import type { Pool } from 'pg';
 import { inTransaction } from './database.ts';
-import { storage } from './storage';
+import { storage } from './storage.ts';
+import { ensureTicketSchema } from './tickets.ts';
 import {
   roundHalfUp,
   calculateOrganizerOrderFee,
@@ -9,7 +10,7 @@ import {
   type OrganizerFeeMode,
   ensureFeeSchema,
   isUbuEmail,
-} from './fees';
+} from './fees.ts';
 
 export interface MaskedBuyerContact {
   name: string;
@@ -264,6 +265,7 @@ export function ensureReportSchema(pool: Pool): Promise<void> {
 
 async function initializeReportSchema(pool: Pool): Promise<void> {
   await ensureFeeSchema(pool);
+  await ensureTicketSchema(pool);
   await inTransaction(pool, async client => {
     // All processes/pools use one lock before taking report DDL locks.
     await client.query('SELECT pg_advisory_xact_lock($1)', [945162028]);

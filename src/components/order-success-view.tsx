@@ -477,19 +477,33 @@ export function OrderSuccessView({ orderId }: OrderSuccessViewProps) {
                       }
                     >
                       {ticketImageUrls[tkt.id] ? (
-                        // biome-ignore lint/performance/noImgElement: Direct rendered ticket image (D-165, D-168)
-                        <img
-                          src={ticketImageUrls[tkt.id]}
-                          alt={`บัตรเข้างาน ${tkt.ticketCode} - ${tkt.eventTitle}`}
-                          className="classic-ticket-img"
-                          style={{
-                            width: '100%',
-                            height: 'auto',
-                            display: 'block',
-                            borderRadius: 0,
-                            boxShadow: '0 4px 18px rgba(15, 23, 42, 0.08)',
-                          }}
-                        />
+                        <>
+                          {/* biome-ignore lint/performance/noImgElement: Direct rendered ticket image (D-165, D-168) */}
+                          <img
+                            src={ticketImageUrls[tkt.id]}
+                            alt={`บัตรเข้างาน ${tkt.ticketCode} - ${tkt.eventTitle}`}
+                            className="classic-ticket-img"
+                            style={{
+                              width: '100%',
+                              height: 'auto',
+                              display: 'block',
+                              borderRadius: 0,
+                              boxShadow: '0 4px 18px rgba(15, 23, 42, 0.08)',
+                            }}
+                          />
+                          <span className="sr-only">
+                            {/* biome-ignore lint/performance/noImgElement: Data URL SVG QR representation */}
+                            <img
+                              id={`ticket-qr-${idx}`}
+                              src={tkt.qrCodeUrl}
+                              alt={`QR Code ${tkt.ticketCode}`}
+                              data-qr-payload={tkt.qrPayload}
+                            />
+                            <strong id={`ticket-code-${idx}`} data-qr-payload={tkt.qrPayload}>
+                              {tkt.ticketCode}
+                            </strong>
+                          </span>
+                        </>
                       ) : (
                         <>
                           {/* Left: Main Ticket Stub Area */}

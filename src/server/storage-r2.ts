@@ -1,6 +1,6 @@
 // ADR-0003: Cloudflare R2 driver (S3-compatible, AWS SigV4 ด้วย node:crypto ไม่เพิ่ม dependency)
 import { createHash, createHmac } from 'node:crypto';
-import type { PresignedUploadResult, StorageDriver, StorageItem } from './storage';
+import type { PresignedUploadResult, StorageDriver, StorageItem } from './storage.ts';
 
 export type R2Config = {
   accessKeyId: string;

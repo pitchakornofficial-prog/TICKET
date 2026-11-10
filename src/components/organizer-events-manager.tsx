@@ -20,6 +20,7 @@ import {
   ChevronDownIcon,
   XIcon,
   PencilSquareIcon,
+  RefreshIcon,
 } from './icons';
 import { TicketIcon } from './ticket-icon';
 import { AlertIcon } from './alert-icon';
@@ -122,6 +123,11 @@ export function OrganizerEventsManager({
   }, [initialHighlightEventId]);
   const [events, setEvents] = useState<EventItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [hydrated, setHydrated] = useState(false);
+
+  useEffect(() => {
+    setHydrated(true);
+  }, []);
   const [showForm, setShowForm] = useState(initialOpenCreate);
   const [showPreview, setShowPreview] = useState(false);
   const [wizardStep, setWizardStep] = useState<1 | 2 | 3 | 4 | 5>(1);
@@ -366,6 +372,13 @@ export function OrganizerEventsManager({
   const [selectedReportEventId, setSelectedReportEventId] = useState<string | null>(null);
 
   const filterSearchInputId = useId();
+  const [refreshing, setRefreshing] = useState(false);
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await loadEvents();
+    setRefreshing(false);
+  };
 
   const loadEvents = useCallback(async () => {
     try {
@@ -381,6 +394,26 @@ export function OrganizerEventsManager({
 
   useEffect(() => {
     loadEvents();
+    if (typeof window === 'undefined') return;
+    const onFocusOrVisible = () => {
+      if (document.visibilityState === 'visible') {
+        loadEvents();
+      }
+    };
+    window.addEventListener('focus', onFocusOrVisible);
+    window.addEventListener('hashchange', loadEvents);
+    document.addEventListener('visibilitychange', onFocusOrVisible);
+    const interval = setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        loadEvents();
+      }
+    }, 3000);
+    return () => {
+      window.removeEventListener('focus', onFocusOrVisible);
+      window.removeEventListener('hashchange', loadEvents);
+      document.removeEventListener('visibilitychange', onFocusOrVisible);
+      clearInterval(interval);
+    };
   }, [loadEvents]);
 
   // Handle local poster file preview
@@ -636,7 +669,7 @@ export function OrganizerEventsManager({
       setSuccess(
         editingEventId
           ? 'แก้ไขข้อมูลงานคอนเสิร์ตสำเร็จ'
-          : 'บันทึกงานคอนเสิร์ตฉบับร่างเรียบร้อยแล้ว ท่านสามารถกด "ดูตัวอย่าง" หรือ "ส่งขออนุมัติ" ได้จากการ์ดคอนเสิร์ต'
+          : 'บันทึกงานคอนเสิร์ตสำเร็จ: บันทึกงานคอนเสิร์ตฉบับร่างเรียบร้อยแล้ว ท่านสามารถกด "ดูตัวอย่าง" หรือ "ส่งขออนุมัติ" ได้จากการ์ดคอนเสิร์ต'
       );
       handleCloseModal();
       await loadEvents();
@@ -734,7 +767,7 @@ export function OrganizerEventsManager({
   }
 
   // Open amendment modal
-  async function _handleOpenAmendment(eventId: string) {
+  async function handleOpenAmendment(eventId: string) {
     setLoadingDetails(true);
     setAmendmentFeedback(null);
     setSelectedSessionId(null);
@@ -915,10 +948,23 @@ export function OrganizerEventsManager({
       {/* 1. Header with Title & Description (D-122, D-197 Tooltip 'i') */}
       <header className="events-management-header">
         <div className="events-management-title-wrap">
-          <h1 className="events-management-title">
+          <div className="organizer-header-title-row">
+            <h1 className="events-management-title">
             งานคอนเสิร์ตของคุณ
             <HeaderInfoTooltip text="ศูนย์จัดการคอนเสิร์ต สร้างงานใหม่ ตรวจสอบสถานะการอนุมัติ จัดการรอบการแสดง และดูรายงานการเงินแยกรายคอนเสิร์ต" />
           </h1>
+            <button
+              type="button"
+              className="organizer-inline-refresh-btn"
+              data-testid="events-refresh-btn"
+              onClick={handleRefresh}
+              disabled={refreshing || loading}
+              aria-label="รีเฟรชข้อมูลคอนเสิร์ต"
+              title="รีเฟรชข้อมูลคอนเสิร์ต"
+            >
+              <RefreshIcon className={`inline-refresh-icon ${refreshing ? 'animate-spin' : ''}`} />
+            </button>
+          </div>
           <p className="events-management-desc">
             สร้างฉบับร่าง จัดการรอบการแสดง ขอแก้ไขราคา หรือตรวจสอบรายงานการเงินแยกรายคอนเสิร์ต
           </p>
@@ -986,6 +1032,7 @@ export function OrganizerEventsManager({
             variant="primary"
             size="md"
             className="events-create-btn"
+            disabled={!hydrated}
             onClick={() => {
               setShowForm(true);
               setWizardStep(1);
@@ -2719,7 +2766,7 @@ export function OrganizerEventsManager({
                   <div className="events-card-metric-item">
                     <span>ราคาเริ่มต้น:</span>
                     <strong className="price-highlight">
-                      {ev.minPrice ? formatBaht(Number(ev.minPrice)) : '฿1,500'}
+                      {ev.minPrice != null ? formatBaht(Number(ev.minPrice)) : 'ไม่ระบุ'}
                     </strong>
                   </div>
                   <div className="events-card-metric-item">
@@ -2796,6 +2843,16 @@ export function OrganizerEventsManager({
 
                 {ev.status === 'approved' && (
                   <>
+                    <button
+                      type="button"
+                      className="events-action-btn btn-amendment"
+                      disabled={!hydrated}
+                      onClick={() => handleOpenAmendment(ev.id)}
+                      data-testid={`open-amendment-btn-${ev.id}`}
+                    >
+                      <PencilSquareIcon width={14} height={14} />
+                      <span>ขอแก้ไขรอบการแสดง</span>
+                    </button>
                     <Link
                       href={`/events/${ev.id}`}
                       target="_blank"
@@ -2809,6 +2866,7 @@ export function OrganizerEventsManager({
 
                     <button
                       type="button"
+                      disabled={!hydrated}
                       onClick={() => setSelectedReportEventId(selectedReportEventId === ev.id ? null : ev.id)}
                       data-testid={`open-money-report-btn-${ev.id}`}
                       className="events-action-btn btn-finance"
@@ -2819,6 +2877,7 @@ export function OrganizerEventsManager({
 
                     <button
                       type="button"
+                      disabled={!hydrated}
                       onClick={() => handleOpenCancellation(ev.id)}
                       data-testid={`open-cancellation-btn-${ev.id}`}
                       className="events-action-btn btn-cancel"

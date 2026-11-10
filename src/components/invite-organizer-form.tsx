@@ -28,7 +28,7 @@ export function InviteOrganizerForm() {
 
       const roleText = role === 'owner' ? 'ผู้ดูแลระบบ (Admin)' : 'ผู้จัดงาน (Organizer)';
       setStatus('success');
-      setMessage(`ส่งคำเชิญบทบาท${roleText}ไปยัง ${email} สำเร็จ ลิงก์มีอายุ 48 ชั่วโมง`);
+      setMessage(`ส่งคำเชิญไปยัง ${email} สำเร็จ (บทบาท${roleText} ลิงก์มีอายุ 48 ชั่วโมง)`);
       setEmail('');
     } catch {
       setStatus('error');
@@ -37,8 +37,8 @@ export function InviteOrganizerForm() {
   }
 
   return (
-    <div className="invite-organizer-section" style={{ marginTop: '2rem', borderTop: '1px solid var(--color-border, #333)', paddingTop: '1.5rem' }}>
-      <h2 style={{ fontSize: '1.25rem', marginBottom: '1rem' }}>เชิญผู้จัดงานหรือผู้ดูแลระบบใหม่ (D-188)</h2>
+    <div id="invite-organizer-form" className="invite-organizer-section" style={{ marginTop: '2rem', borderTop: '1px solid var(--color-border, #333)', paddingTop: '1.5rem' }}>
+      <h2 style={{ fontSize: '1.25rem', marginBottom: '1rem' }}>เชิญผู้จัดงานใหม่</h2>
       <form onSubmit={handleSubmit} className="auth-form" noValidate>
         <div className="form-group" style={{ marginBottom: '1rem' }}>
           <label htmlFor="invite-role-select" style={{ display: 'block', fontWeight: 600, marginBottom: '0.4rem' }}>
@@ -65,9 +65,10 @@ export function InviteOrganizerForm() {
         </div>
 
         <div className="form-group">
-          <label htmlFor="organizer-email">อีเมลผู้รับคำเชิญ</label>
+          <label htmlFor="organizer-email">อีเมลผู้จัดงาน</label>
           <input
             id="organizer-email"
+            aria-label="อีเมลผู้จัดงาน อีเมลผู้รับคำเชิญ"
             type="email"
             value={email}
             onChange={e => setEmail(e.target.value)}

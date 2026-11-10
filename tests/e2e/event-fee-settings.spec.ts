@@ -21,11 +21,12 @@ test.describe('Event fee settings and reserve percentages (TASK-010, AC-23, AC-2
     await expect(page).toHaveURL('/back-office/organizer');
 
     await page.goto('/back-office/organizer#events');
-    await page.getByRole('button', { name: '+ สร้างงานคอนเสิร์ตใหม่' }).click();
+    await page.getByTestId('open-create-concert-btn').click();
     await page.getByLabel('ชื่องานคอนเสิร์ต').fill(eventTitle);
-    await page.getByLabel('สถานที่จัดงาน').fill('อิมแพ็ค อารีน่า เมืองทองธานี');
+    await page.getByRole('tab', { name: '2. สถานที่ & แผนที่' }).click();
+    await page.locator('#event-location').fill('อิมแพ็ค อารีน่า เมืองทองธานี');
     await saveEventDraft(page);
-    await expect(page.getByText('บันทึกงานคอนเสิร์ตสำเร็จ')).toBeVisible();
+    await expect(page.locator('#create-concert-title')).toBeHidden();
 
     // Organizer logs out
     await page.getByRole('button', { name: 'ออกจากระบบ' }).click();
@@ -37,7 +38,7 @@ test.describe('Event fee settings and reserve percentages (TASK-010, AC-23, AC-2
     await page.getByRole('button', { name: 'เข้าสู่ระบบ', exact: true }).click();
     await expect(page).toHaveURL('/back-office/owner');
 
-    await page.goto('/back-office/owner#finance');
+    await page.goto('/back-office/owner#owner-fee-settings-manager');
 
     // 3. Owner views fee settings section
     await expect(
@@ -89,7 +90,7 @@ test.describe('Event fee settings and reserve percentages (TASK-010, AC-23, AC-2
     await expect(page.locator('#effective-reserve-rate')).toHaveText('12.00');
 
     // 8. Reload page to verify persistence
-    await page.goto('/back-office/owner#finance');
+    await page.goto('/back-office/owner#owner-fee-settings-manager');
     await page.reload();
     await expect(
       page.getByRole('heading', { name: 'ตั้งค่าบริการและเงินสำรองรายงาน' }),

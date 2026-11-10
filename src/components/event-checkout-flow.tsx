@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useTransition } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
@@ -88,11 +88,28 @@ export function EventCheckoutFlow({
   const [isBreakdownOpen, setIsBreakdownOpen] = useState(false);
   const [timeLeft, setTimeLeft] = useState(TOTAL_HOLD_SECONDS);
   const [isTimeoutModalOpen, setIsTimeoutModalOpen] = useState(false);
-  const [isPending, startTransition] = useTransition();
+  const [isPending, setIsPending] = useState(false);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const storageKey = `ticket_checkout_deadline_${eventId}`;
+    const rawQueue = sessionStorage.getItem(`ticket_queue_pass_${eventId}`);
+    let passDeadline: number | null = null;
+
+    if (rawQueue) {
+      try {
+        const parsedPass = JSON.parse(rawQueue);
+        if (parsedPass?.passedAt) {
+          const passTime = new Date(parsedPass.passedAt).getTime();
+          if (!Number.isNaN(passTime)) {
+            passDeadline = passTime + TOTAL_HOLD_SECONDS * 1000;
+          }
+        }
+      } catch {
+        // ignore parse error
+      }
+    }
+
     const stored = sessionStorage.getItem(storageKey);
     let deadline: number;
 
@@ -105,6 +122,10 @@ export function EventCheckoutFlow({
         setIsTimeoutModalOpen(true);
         return;
       }
+    } else if (passDeadline && passDeadline > Date.now()) {
+      // Initialize deadline from queue pass
+      deadline = passDeadline;
+      sessionStorage.setItem(storageKey, deadline.toString());
     } else {
       deadline = Date.now() + TOTAL_HOLD_SECONDS * 1000;
       sessionStorage.setItem(storageKey, deadline.toString());
@@ -259,13 +280,15 @@ export function EventCheckoutFlow({
     });
   }
 
-  function handleConfirmReservation(e?: React.FormEvent, explicitBuyer?: VerifiedBuyerInfo) {
+  function handleConfirmReservation(e?: React.FormEvent | React.MouseEvent, explicitBuyer?: VerifiedBuyerInfo) {
     if (e && typeof e.preventDefault === 'function') {
       e.preventDefault();
     }
     setError(null);
 
-    const activeBuyer = explicitBuyer || buyer;
+    const activeBuyer = (explicitBuyer && typeof explicitBuyer === 'object' && 'token' in explicitBuyer)
+      ? explicitBuyer
+      : buyer;
 
     if (totalTickets <= 0) {
       setError('กรุณาเลือกจำนวนบัตรอย่างน้อย 1 ใบ ในขั้นตอนที่ 1');
@@ -295,7 +318,8 @@ export function EventCheckoutFlow({
       .filter(([, qty]) => qty > 0)
       .map(([ticketTypeId, quantity]) => ({ ticketTypeId, quantity }));
 
-    startTransition(async () => {
+    setIsPending(true);
+    void (async () => {
       try {
         const res = await fetch('/api/public/checkout/reserve', {
           method: 'POST',
@@ -324,15 +348,28 @@ export function EventCheckoutFlow({
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : 'เกิดข้อผิดพลาดในการกันบัตร';
         setError(msg);
+      } finally {
+        setIsPending(false);
       }
-    });
+    })();
   }
+
+  const handleBackToDetails = () => {
+    try {
+      if (typeof window !== 'undefined') {
+        sessionStorage.removeItem(`ticket_checkout_deadline_${eventId}`);
+        sessionStorage.removeItem(`ticket_queue_pass_${eventId}`);
+      }
+    } catch {
+      // ignore storage errors
+    }
+  };
 
   if (sessions.length === 0) {
     return (
       <div className="event-detail-page">
         <nav className="detail-breadcrumb" aria-label="ย้อนกลับ">
-          <Link href={`/events/${eventId}`} className="back-link">
+          <Link href={`/events/${eventId}`} replace className="back-link" onClick={handleBackToDetails}>
             <ArrowLeftIcon /> ย้อนกลับไปหน้ารายละเอียดคอนเสิร์ต
           </Link>
         </nav>
@@ -351,7 +388,7 @@ export function EventCheckoutFlow({
   return (
     <div className="event-detail-page">
       <nav className="detail-breadcrumb" aria-label="ย้อนกลับ">
-        <Link href={`/events/${eventId}`} className="back-link">
+        <Link href={`/events/${eventId}`} replace className="back-link" onClick={handleBackToDetails}>
           <ArrowLeftIcon /> ย้อนกลับไปหน้ารายละเอียดคอนเสิร์ต
         </Link>
       </nav>
@@ -430,7 +467,15 @@ export function EventCheckoutFlow({
                 </span>
               </div>
 
-              <div className="session-tab-chips-grid">
+              <div
+                className={`session-tab-chips-grid ${
+                  sessions.length === 1
+                    ? 'session-layout-single'
+                    : sessions.length === 2
+                      ? 'session-layout-pair'
+                      : 'session-layout-scroll'
+                }`}
+              >
                 {sessions.map((s, idx) => {
                   const isSelected = s.id === selectedSession.id;
                   const isSingle = sessions.length === 1;
@@ -884,7 +929,7 @@ export function EventCheckoutFlow({
                 id="confirm-reservation-btn"
                 type="button"
                 aria-label={`ยืนยันการเลือกบัตร (${totalTickets} ใบ)`}
-                onClick={handleConfirmReservation}
+                onClick={() => handleConfirmReservation()}
                 disabled={totalTickets <= 0 || !buyer || isPending}
                 className="primary-button checkout-sticky-confirm-btn"
               >

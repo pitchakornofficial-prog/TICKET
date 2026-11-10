@@ -35,7 +35,29 @@ export function AdminDateTimeDisplay() {
 
     updateTime();
     const timer = setInterval(updateTime, 30000);
-    return () => clearInterval(timer);
+
+    // Dynamic sticky header height sync (D-249)
+    const topbar = document.querySelector('.admin-topbar') as HTMLElement | null;
+    let ro: ResizeObserver | null = null;
+    const updateHeight = () => {
+      if (topbar) {
+        document.documentElement.style.setProperty('--admin-topbar-height', `${topbar.offsetHeight}px`);
+      }
+    };
+    if (topbar) {
+      updateHeight();
+      if (typeof ResizeObserver !== 'undefined') {
+        ro = new ResizeObserver(() => updateHeight());
+        ro.observe(topbar);
+      }
+      window.addEventListener('resize', updateHeight);
+    }
+
+    return () => {
+      clearInterval(timer);
+      if (ro) ro.disconnect();
+      window.removeEventListener('resize', updateHeight);
+    };
   }, []);
 
   return (

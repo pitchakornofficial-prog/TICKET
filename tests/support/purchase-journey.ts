@@ -12,19 +12,18 @@ export async function reserveThroughCheckout(page: Page, input: {
     }
   }
   await page.getByLabel('ชื่อ-นามสกุล *').fill(input.buyer.name);
-  await page.getByLabel('อีเมล *').fill(input.buyer.email);
+  await page.getByLabel('อีเมลสำหรับรับบัตรและรหัส OTP *').fill(input.buyer.email);
   await page.getByLabel('เบอร์โทรศัพท์มือถือ *').fill(input.buyer.phone);
+  await page.getByRole('checkbox', { name: /ฉันได้อ่านและยอมรับ/ }).check();
   await page.getByRole('button', { name: 'ขอรหัส OTP เพื่อซื้อบัตร' }).click();
-  await expect(page.getByLabel('รหัส OTP 6 หลัก *')).toBeVisible();
+  const digits = page.getByRole('group', { name: 'ช่องกรอกรหัส OTP 6 หลัก' }).getByRole('textbox');
+  await expect(digits.first()).toBeVisible();
   const otp = await page.request.get(`/api/auth/test-inspect-reset-token?type=guest_otp&email=${encodeURIComponent(input.buyer.email)}`);
   expect(otp.status()).toBe(200);
   const { code } = await otp.json();
   expect(code).toMatch(/^\d{6}$/);
-  await page.getByLabel('รหัส OTP 6 หลัก *').fill(code);
-  await page.getByRole('button', { name: 'ยืนยันรหัส OTP', exact: true }).click();
-  await page.getByRole('button', { name: 'ยืนยันและดำเนินการต่อ', exact: true }).click();
-  await expect(page.getByRole('heading', { name: 'ยืนยันอีเมลสำเร็จ (Guest Verified)' })).toBeVisible();
-  await page.locator('#confirm-reservation-btn').click();
+  for (let index = 0; index < code.length; index++) await digits.nth(index).fill(code[index]);
+  await page.getByRole('button', { name: 'ยืนยันและไปหน้าชำระเงิน', exact: true }).click();
   await expect(page).toHaveURL(/\/orders\/ORD-[A-Z0-9-]+\/payment$/);
   await expect(page.locator('#promptpay-qr-image')).toBeVisible();
   return (await page.locator('#reservation-order-id').innerText()).trim();

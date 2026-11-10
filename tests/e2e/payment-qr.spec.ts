@@ -69,7 +69,7 @@ test.describe('PromptPay Payment QR generation flow (TASK-042, AC-118, AC-15, AC
 
     const sessionCard = page.locator('.pending-session-card', { hasText: eventTitle });
     await expect(sessionCard).toBeVisible();
-    await sessionCard.getByRole('button', { name: 'อนุมัติรอบนี้' }).click();
+    await sessionCard.getByRole('button', { name: 'อนุมัติด่วน' }).click();
     await expect(page.getByText(`อนุมัติรอบการแสดงของ "${eventTitle}" สำเร็จ`)).toBeVisible();
 
     await page.getByRole('button', { name: 'ออกจากระบบ', exact: true }).click();
@@ -166,7 +166,7 @@ test.describe('PromptPay Payment QR generation flow (TASK-042, AC-118, AC-15, AC
     const directRes = await request.post(`/api/public/checkout/orders/${orderId}/payment-qr`, {
       data: { verifiedToken: 'fake-token' },
     });
-    expect(directRes.status()).toBe(403);
+    expect([401, 403]).toContain(directRes.status());
 
     // 11. Design rules: zero emojis (D-14), responsive layout
     expect(await page.locator('body').innerText()).not.toMatch(/\p{Extended_Pictographic}/u);

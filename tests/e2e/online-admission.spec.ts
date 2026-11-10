@@ -77,7 +77,7 @@ test.describe('Online Admission Scanning Journey (TASK-020, AC-08, AC-39, AC-49,
 
     const sessionCard = page.locator('.pending-session-card', { hasText: eventTitle });
     await expect(sessionCard).toBeVisible();
-    await sessionCard.getByRole('button', { name: 'อนุมัติรอบนี้' }).click({ force: true });
+    await sessionCard.getByRole('button', { name: 'อนุมัติด่วน' }).click({ force: true });
     await expect(page.getByText(`อนุมัติรอบการแสดงของ "${eventTitle}" สำเร็จ`)).toBeVisible();
 
     await page.getByRole('button', { name: 'ออกจากระบบ', exact: true }).click({ force: true });

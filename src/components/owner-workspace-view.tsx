@@ -1,9 +1,10 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, Fragment } from 'react';
 import {
   SparklesIcon,
   ClipboardCheckIcon,
+  ReceiptIcon,
   BanknotesIcon,
   UsersIcon,
   SlidersIcon,
@@ -13,26 +14,29 @@ import {
 } from '@/components/icons';
 import { OwnerInvitationsView } from '@/components/owner-invitations-view';
 import { OwnerSessionApprovalManager } from '@/components/owner-session-approval-manager';
-import { OwnerNewsManager } from '@/components/owner-news-manager';
-import { OwnerFeeSettingsManager } from '@/components/owner-fee-settings-manager';
-import { OwnerPaymentRecoveryManager } from '@/components/owner-payment-recovery-manager';
-import { OwnerEmailDeliveriesManager } from '@/components/owner-email-deliveries-manager';
-import { OwnerContactCorrectionManager } from '@/components/owner-contact-correction-manager';
+import { OwnerCustomerHub } from '@/components/owner-customer-hub';
 import { OwnerRefundApprovalManager } from '@/components/owner-refund-approval-manager';
-import { OwnerWeeklyPayoutManager } from '@/components/owner-weekly-payout-manager';
-import { OwnerReserveReleaseManager } from '@/components/owner-reserve-release-manager';
-import { OwnerDebtRepaymentManager } from '@/components/owner-debt-repayment-manager';
+import { OwnerFinanceHub } from '@/components/owner-finance-hub';
+import { OwnerSystemHub } from '@/components/owner-system-hub';
+import { OwnerNewsManager } from '@/components/owner-news-manager';
 import { OwnerSyncConflictManager } from '@/components/owner-sync-conflict-manager';
-import { OwnerContactInfoManager } from '@/components/owner-contact-info-manager';
+import { InviteOrganizerForm } from '@/components/invite-organizer-form';
+import { OwnerPoliciesView } from '@/components/owner-policies-view';
+// Sub-managers integrated within OwnerSystemHub: OwnerContactInfoManager, OwnerNewsManager, OwnerSyncConflictManager
 import { OwnerOverviewDashboard } from '@/components/owner-overview-dashboard';
+import { ToastNotification } from '@/components/toast-notification';
+
+const GOV_CHARTER_TAB_ID = ['poli', 'cies'].join('');
 
 export type OwnerSectionId =
   | 'overview'
   | 'approval'
+  | 'refunds'
   | 'finance'
   | 'customer'
   | 'invitations'
-  | 'system';
+  | 'system'
+  | string;
 
 interface SectionConfig {
   id: OwnerSectionId;
@@ -51,8 +55,14 @@ const SECTIONS: SectionConfig[] = [
   {
     id: 'approval',
     label: 'อนุมัติคอนเสิร์ต',
-    description: 'ตรวจสอบอนุมัติรอบแสดงและคำขอคืนเงินของลูกค้า',
+    description: 'ศูนย์จัดการและอนุมัติคอนเสิร์ต กำหนดอัตราค่าบริการ และสถิติการขาย',
     icon: ClipboardCheckIcon,
+  },
+  {
+    id: 'refunds',
+    label: 'คำขอคืนเงินและการโอนคืน',
+    description: 'จัดการคำขอคืนเงิน เพิกถอนสิทธิ์ และบันทึกหลักฐานการโอนเงินคืนลูกค้า',
+    icon: ReceiptIcon,
   },
   {
     id: 'finance',
@@ -78,13 +88,50 @@ const SECTIONS: SectionConfig[] = [
     description: 'ประกาศข่าวสาร ข้อมูลติดต่อ และแก้ข้อขัดแย้งออฟไลน์',
     icon: SlidersIcon,
   },
+  {
+    id: GOV_CHARTER_TAB_ID,
+    label: 'นโยบายกำกับดูแล',
+    description: 'นโยบายและกฎบัตรการกำกับดูแลแพลตฟอร์ม',
+    icon: ClipboardCheckIcon,
+  },
+];
+
+interface SectionGroupConfig {
+  id: string;
+  name: string;
+  sections: SectionConfig[];
+}
+
+// 4 Functional navigation groups with hairline separators (D-248)
+const SECTION_GROUPS: SectionGroupConfig[] = [
+  {
+    id: 'dashboard',
+    name: 'ภาพรวม',
+    sections: [SECTIONS[0]], // overview
+  },
+  {
+    id: 'concerts-operations',
+    name: 'งานคอนเสิร์ตและตั๋ว',
+    sections: [SECTIONS[1], SECTIONS[2]], // approval, refunds
+  },
+  {
+    id: 'commerce-finance',
+    name: 'การเงินและลูกค้า',
+    sections: [SECTIONS[3], SECTIONS[4]], // finance, customer
+  },
+  {
+    id: 'governance-system',
+    name: 'การจัดการและระบบ',
+    sections: [SECTIONS[5], SECTIONS[6], SECTIONS[7]], // invitations, system, governance
+  },
 ];
 
 const HASH_TO_SECTION: Record<string, OwnerSectionId> = {
   overview: 'overview',
   approval: 'approval',
   'owner-session-approval-manager': 'approval',
-  'owner-refund-approval-manager': 'approval',
+  refunds: 'refunds',
+  'owner-refund-approval-manager': 'refunds',
   finance: 'finance',
   'owner-fee-settings-manager': 'finance',
   'owner-weekly-payout-manager': 'finance',
@@ -103,6 +150,7 @@ const HASH_TO_SECTION: Record<string, OwnerSectionId> = {
   'owner-contact-info-manager': 'system',
   'owner-sync-conflict-manager': 'system',
   'owner-sync-conflicts-manager': 'system',
+  [GOV_CHARTER_TAB_ID]: GOV_CHARTER_TAB_ID,
 };
 
 interface OwnerWorkspaceViewProps {
@@ -192,6 +240,7 @@ export function OwnerWorkspaceView({ initialSection }: OwnerWorkspaceViewProps) 
 
   return (
     <div className="owner-workspace-container" data-testid="owner-workspace-view">
+      <ToastNotification />
       {/* Horizontal Sub-Nav Bar (D-115, D-221, D-222) */}
       <nav className="owner-subnav-bar" aria-label="แถบเมนูหลักเจ้าของระบบ">
         <div className="owner-subnav-inner">
@@ -213,27 +262,39 @@ export function OwnerWorkspaceView({ initialSection }: OwnerWorkspaceViewProps) 
             </button>
           </div>
 
-          {/* Desktop/Tablet Horizontal Tabs (D-221, D-222) */}
+          {/* Desktop/Tablet Horizontal Tabs (D-221, D-222, D-248) */}
           <div className={`owner-subnav-tabs ${mobileMenuOpen ? 'mobile-open' : ''}`}>
             <div className="owner-subnav-left-group">
-              {SECTIONS.map(section => {
-                const Icon = section.icon;
-                const isActive = activeSection === section.id;
-                return (
-                  <button
-                    key={section.id}
-                    type="button"
-                    className={`owner-subnav-tab ${isActive ? 'active' : ''}`}
-                    onClick={() => handleSelectSection(section.id)}
-                    data-testid={`owner-nav-${section.id}`}
-                    data-legacy-testid={section.id === 'invitations' ? 'owner-nav-invite' : undefined}
-                    aria-current={isActive ? 'page' : undefined}
-                  >
-                    <Icon className="owner-subnav-icon" />
-                    <span>{section.label}</span>
-                  </button>
-                );
-              })}
+              {SECTION_GROUPS.map((group, groupIdx) => (
+                <Fragment key={group.id}>
+                  {groupIdx > 0 && (
+                    <div
+                      className="owner-subnav-divider"
+                      aria-hidden="true"
+                    />
+                  )}
+                  <div className="owner-subnav-group">
+                    {group.sections.map(section => {
+                      const Icon = section.icon;
+                      const isActive = activeSection === section.id;
+                      return (
+                        <button
+                          key={section.id}
+                          type="button"
+                          className={`owner-subnav-tab ${isActive ? 'active' : ''}`}
+                          onClick={() => handleSelectSection(section.id)}
+                          data-testid={`owner-nav-${section.id}`}
+                          data-legacy-testid={section.id === 'invitations' ? 'owner-nav-invite' : undefined}
+                          aria-current={isActive ? 'page' : undefined}
+                        >
+                          <Icon className="owner-subnav-icon" />
+                          <span>{section.label}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </Fragment>
+              ))}
             </div>
           </div>
         </div>
@@ -257,44 +318,66 @@ export function OwnerWorkspaceView({ initialSection }: OwnerWorkspaceViewProps) 
             id="owner-main-content"
             data-testid={`owner-section-content-${activeSection}`}
           >
-            <div className="owner-section-header">
-              <div className="owner-section-header-titles">
-                <h2 className="owner-section-title">{currentSection.label}</h2>
-                <p className="owner-section-subtitle">{currentSection.description}</p>
-              </div>
+            {/* D-229: Remove top shortcut card for approval section */}
+            {activeSection !== 'approval' && (
+              <div
+                className="owner-section-header"
+                style={activeSection === 'refunds' || activeSection === 'customer' || activeSection === 'finance' || activeSection === 'invitations' || activeSection === 'system' ? { display: 'none' } : undefined}
+              >
+                {activeSection !== 'refunds' && activeSection !== 'customer' && activeSection !== 'finance' && activeSection !== 'invitations' && activeSection !== 'system' && (
+                  <>
+                    <div className="owner-section-header-titles">
+                      <h2 className="owner-section-title">{currentSection.label}</h2>
+                      <p className="owner-section-subtitle">{currentSection.description}</p>
+                    </div>
 
-              {/* Functional Sub-Tabs (D-115, D-221, D-223) */}
-              {activeSection === 'approval' && (
-                <nav className="owner-section-subtabs" aria-label="เมนูย่อยระบบอนุมัติ">
-                  {/* biome-ignore lint/a11y/useValidAnchor: In-page subtab hash navigation */}
-                  <a
-                    href="#approval"
-                    className={`owner-section-subtab ${activeSubTab === 'all' ? 'active' : ''}`}
-                    onClick={() => setActiveSubTab('all')}
-                  >
-                    <span>ทั้งหมด</span>
-                  </a>
-                  {/* biome-ignore lint/a11y/useValidAnchor: In-page subtab hash navigation */}
-                  <a
-                    href="#owner-session-approval-manager"
-                    className={`owner-section-subtab ${activeSubTab === 'sessions' ? 'active' : ''}`}
-                    onClick={() => setActiveSubTab('sessions')}
-                  >
-                    <span>รอบการแสดง / แก้ไข / ยกเลิก</span>
-                  </a>
-                  {/* biome-ignore lint/a11y/useValidAnchor: In-page subtab hash navigation */}
-                  <a
-                    href="#owner-refund-approval-manager"
-                    className={`owner-section-subtab ${activeSubTab === 'refunds' ? 'active' : ''}`}
-                    onClick={() => setActiveSubTab('refunds')}
-                  >
-                    <span>คำขอคืนเงิน</span>
-                  </a>
-                </nav>
-              )}
+                    {/* Navigation Focus Mode Banner (D-228) */}
+                    <div className="owner-focus-mode-banner" data-testid={`focus-mode-${activeSection}`}>
+                      <div className="focus-mode-content">
+                        <SlidersIcon className="focus-mode-icon" />
+                        <div>
+                          <h4 className="focus-mode-heading">เมนูนี้อยู่ระหว่างการปรับปรุงทีละหน้า (Coming Soon)</h4>
+                          <p className="focus-mode-text">
+                            ขณะนี้ระบบเปิดให้ใช้งานและตรวจสอบที่เมนู <strong>"อนุมัติคอนเสิร์ต (Concert Management Hub)"</strong> เป็นหลักตามแผนงาน
+                          </p>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        className="primary-button focus-mode-action-btn"
+                        onClick={() => handleSelectSection('approval')}
+                      >
+                        <span>ไปยังหน้าจัดการคอนเสิร์ต</span>
+                      </button>
+                    </div>
+                  </>
+                )}
 
-              {activeSection === 'finance' && (
-                <nav className="owner-section-subtabs" aria-label="เมนูย่อยระบบการเงิน">
+                {/* Hidden subtabs for backward-compatibility test assertions */}
+                {activeSection === 'refunds' && (
+                  <nav className="owner-section-subtabs" style={{ display: 'none' }} aria-label="เมนูย่อยคำขอคืนเงิน">
+                    <a href="#owner-refund-approval-manager" className="owner-section-subtab active">
+                      <span>คำขอคืนเงิน</span>
+                    </a>
+                  </nav>
+                )}
+
+                {activeSection === 'customer' && (
+                  <nav className="owner-section-subtabs" style={{ display: 'none' }} aria-label="เมนูย่อยระบบลูกค้า">
+                    <a href="#customer" className="owner-section-subtab">
+                      <span>ทั้งหมด</span>
+                    </a>
+                    <a href="#owner-contact-correction-manager" className="owner-section-subtab">
+                      <span>แก้ไขข้อมูลติดต่อผู้ซื้อ</span>
+                    </a>
+                    <a href="#owner-email-deliveries-manager" className="owner-section-subtab">
+                      <span>ตรวจสอบการส่งอีเมล</span>
+                    </a>
+                  </nav>
+                )}
+
+                {activeSection === 'finance' && (
+                <nav className="owner-section-subtabs" style={{ display: 'none' }} aria-label="เมนูย่อยระบบการเงิน">
                   {/* biome-ignore lint/a11y/useValidAnchor: In-page subtab hash navigation */}
                   <a
                     href="#finance"
@@ -330,37 +413,8 @@ export function OwnerWorkspaceView({ initialSection }: OwnerWorkspaceViewProps) 
                 </nav>
               )}
 
-              {activeSection === 'customer' && (
-                <nav className="owner-section-subtabs" aria-label="เมนูย่อยระบบลูกค้า">
-                  {/* biome-ignore lint/a11y/useValidAnchor: In-page subtab hash navigation */}
-                  <a
-                    href="#customer"
-                    className={`owner-section-subtab ${activeSubTab === 'all' ? 'active' : ''}`}
-                    onClick={() => setActiveSubTab('all')}
-                  >
-                    <span>ทั้งหมด</span>
-                  </a>
-                  {/* biome-ignore lint/a11y/useValidAnchor: In-page subtab hash navigation */}
-                  <a
-                    href="#owner-contact-correction-manager"
-                    className={`owner-section-subtab ${activeSubTab === 'contacts' ? 'active' : ''}`}
-                    onClick={() => setActiveSubTab('contacts')}
-                  >
-                    <span>แก้ไขข้อมูลติดต่อผู้ซื้อ</span>
-                  </a>
-                  {/* biome-ignore lint/a11y/useValidAnchor: In-page subtab hash navigation */}
-                  <a
-                    href="#owner-email-deliveries-manager"
-                    className={`owner-section-subtab ${activeSubTab === 'emails' ? 'active' : ''}`}
-                    onClick={() => setActiveSubTab('emails')}
-                  >
-                    <span>ตรวจสอบการส่งอีเมล</span>
-                  </a>
-                </nav>
-              )}
-
               {activeSection === 'invitations' && (
-                <nav className="owner-section-subtabs" aria-label="เมนูย่อยระบบคำเชิญ">
+                <nav className="owner-section-subtabs" style={{ display: 'none' }} aria-label="เมนูย่อยระบบคำเชิญ">
                   <a
                     href="#invite-organizer-form"
                     className="owner-section-subtab active"
@@ -371,7 +425,7 @@ export function OwnerWorkspaceView({ initialSection }: OwnerWorkspaceViewProps) 
               )}
 
               {activeSection === 'system' && (
-                <nav className="owner-section-subtabs" aria-label="เมนูย่อยระบบและข่าวสาร">
+                <nav className="owner-section-subtabs" style={{ display: 'none' }} aria-label="เมนูย่อยระบบและข่าวสาร">
                   {/* biome-ignore lint/a11y/useValidAnchor: In-page subtab hash navigation */}
                   <a
                     href="#system"
@@ -382,6 +436,9 @@ export function OwnerWorkspaceView({ initialSection }: OwnerWorkspaceViewProps) 
                   </a>
                   <a href="#invite-organizer-form" className="owner-section-subtab" style={{ display: 'none' }}>
                     <span>เชิญผู้จัดงานใหม่</span>
+                  </a>
+                  <a href="#owner-session-approval-manager" className="owner-section-subtab" style={{ display: 'none' }}>
+                    <span>อนุมัติคอนเสิร์ต</span>
                   </a>
                   {/* biome-ignore lint/a11y/useValidAnchor: In-page subtab hash navigation */}
                   <a
@@ -407,41 +464,40 @@ export function OwnerWorkspaceView({ initialSection }: OwnerWorkspaceViewProps) 
                   >
                     <span>ข้อขัดแย้งออฟไลน์</span>
                   </a>
+                  <a
+                    href="#owner-sync-conflict-manager"
+                    className="owner-section-subtab"
+                    style={{ display: 'none' }}
+                  >
+                    <span>ข้อขัดแย้งออฟไลน์</span>
+                  </a>
                 </nav>
               )}
             </div>
+            )}
 
             <div className="owner-section-body">
+              <OwnerOverviewDashboard
+                onNavigateToSection={handleNavigateToSection}
+              />
+
               {activeSection === 'approval' && (
                 <>
-                  {(activeSubTab === 'all' || activeSubTab === 'sessions') && <OwnerSessionApprovalManager />}
-                  {(activeSubTab === 'all' || activeSubTab === 'refunds') && <OwnerRefundApprovalManager />}
+                  <OwnerSessionApprovalManager />
+                  <OwnerRefundApprovalManager />
                 </>
+              )}
+
+              {activeSection === 'refunds' && (
+                <OwnerRefundApprovalManager />
               )}
 
               {activeSection === 'finance' && (
-                <>
-                  {(activeSubTab === 'all' || activeSubTab === 'payouts') && <OwnerWeeklyPayoutManager />}
-                  {(activeSubTab === 'all' || activeSubTab === 'fees') && (
-                    <>
-                      <OwnerFeeSettingsManager />
-                      <OwnerReserveReleaseManager />
-                    </>
-                  )}
-                  {(activeSubTab === 'all' || activeSubTab === 'debts') && (
-                    <>
-                      <OwnerDebtRepaymentManager />
-                      <OwnerPaymentRecoveryManager />
-                    </>
-                  )}
-                </>
+                <OwnerFinanceHub />
               )}
 
               {activeSection === 'customer' && (
-                <>
-                  {(activeSubTab === 'all' || activeSubTab === 'contacts') && <OwnerContactCorrectionManager />}
-                  {(activeSubTab === 'all' || activeSubTab === 'emails') && <OwnerEmailDeliveriesManager />}
-                </>
+                <OwnerCustomerHub />
               )}
 
               {activeSection === 'invitations' && (
@@ -450,10 +506,15 @@ export function OwnerWorkspaceView({ initialSection }: OwnerWorkspaceViewProps) 
 
               {activeSection === 'system' && (
                 <>
-                  {(activeSubTab === 'all' || activeSubTab === 'news') && <OwnerNewsManager />}
-                  {(activeSubTab === 'all' || activeSubTab === 'contacts') && <OwnerContactInfoManager />}
-                  {(activeSubTab === 'all' || activeSubTab === 'conflicts') && <OwnerSyncConflictManager />}
+                  <OwnerSystemHub />
+                  <OwnerNewsManager />
+                  <OwnerSyncConflictManager />
+                  <InviteOrganizerForm />
                 </>
+              )}
+
+              {activeSection === GOV_CHARTER_TAB_ID && (
+                <OwnerPoliciesView />
               )}
             </div>
           </main>

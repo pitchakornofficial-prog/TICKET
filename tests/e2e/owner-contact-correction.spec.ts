@@ -31,11 +31,12 @@ test.describe('Owner Contact Correction Flow (TASK-019, AC-76, G-24)', () => {
     await expect(page).toHaveURL('/back-office/organizer');
 
     await page.goto('/back-office/organizer#events');
-    await page.getByRole('button', { name: '+ สร้างงานคอนเสิร์ตใหม่' }).click();
+    await page.getByTestId('open-create-concert-btn').click();
     await page.getByLabel('ชื่องานคอนเสิร์ต').fill(eventTitle);
-    await page.getByLabel('สถานที่จัดงาน').fill('พารากอน ฮอลล์');
+    await page.getByRole('tab', { name: '2. สถานที่ & แผนที่' }).click();
+    await page.locator('#event-location').fill('พารากอน ฮอลล์');
     await saveEventDraft(page);
-    await expect(page.getByText('บันทึกงานคอนเสิร์ตสำเร็จ')).toBeVisible();
+    await expect(page.locator('#create-concert-title')).toBeHidden();
 
     const eventsRes = await page.request.get('/api/events');
     const { events } = await eventsRes.json();
@@ -74,7 +75,7 @@ test.describe('Owner Contact Correction Flow (TASK-019, AC-76, G-24)', () => {
 
     const sessionCard = page.locator('.pending-session-card', { hasText: eventTitle });
     await expect(sessionCard).toBeVisible();
-    await sessionCard.getByRole('button', { name: 'อนุมัติรอบนี้' }).click({ force: true });
+    await sessionCard.getByRole('button', { name: 'อนุมัติด่วน' }).click({ force: true });
     await expect(page.getByText(`อนุมัติรอบการแสดงของ "${eventTitle}" สำเร็จ`)).toBeVisible();
 
     await page.getByRole('button', { name: 'ออกจากระบบ', exact: true }).click({ force: true });
@@ -199,7 +200,7 @@ test.describe('Owner Contact Correction Flow (TASK-019, AC-76, G-24)', () => {
     await freshPage.getByRole('button', { name: 'ยืนยันรหัส OTP' }).click({ force: true });
 
     // Order is revealed with original tickets and QR codes intact
-    await expect(freshPage.getByText(orderId)).toBeVisible();
+    await expect(freshPage.getByText(orderId).first()).toBeVisible();
     await expect(freshPage.getByText('ชำระเงินสำเร็จ')).toBeVisible();
     await expect(freshPage.getByText('รายการบัตรเข้างาน (2 ใบ)')).toBeVisible();
     const qrImages = freshPage.locator('img[alt^="QR Code บัตร"]');

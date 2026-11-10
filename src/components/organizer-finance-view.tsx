@@ -443,10 +443,23 @@ export function OrganizerFinanceView({
       {/* 1. Header Toolbar (D-122: Clean Baseline) */}
       <header className="finance-management-header">
         <div className="finance-management-title-wrap">
-          <h1 className="finance-management-title">
+          <div className="organizer-header-title-row">
+            <h1 className="finance-management-title">
             รายงานการเงินและยอดรับเงิน
             <HeaderInfoTooltip text="ตรวจสอบสรุปรายได้ ยอดขายสุทธิ ค่าบริการ เงินสำรอง ยอดพร้อมถอน และประวัติการรับเงินโอนจากแพลตฟอร์ม" />
           </h1>
+            <button
+              type="button"
+              className="organizer-inline-refresh-btn finance-inline-refresh-btn"
+              data-testid="finance-inline-refresh-btn"
+              onClick={handleRefresh}
+              disabled={loading || reportLoading}
+              aria-label="รีเฟรชข้อมูลรายงานการเงิน"
+              title="รีเฟรชข้อมูลรายงานการเงิน"
+            >
+              <RefreshIcon className={`inline-refresh-icon ${reportLoading ? 'animate-spin' : ''}`} />
+            </button>
+          </div>
           <p className="finance-management-desc">
             ตรวจสอบภาพรวมรายได้จากการขายบัตร ยอดเงินสุทธิพร้อมรับ และประวัติการโอนเงินรายสัปดาห์
           </p>
