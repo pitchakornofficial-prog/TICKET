@@ -28,7 +28,7 @@ describe('Event fee settings and reserve integration (TASK-010, AC-23, AC-24, AC
     const event1 = await createEventDraft(
       fixture.pool,
       orgId,
-      { title: 'งานเฟสติวัล A', location: 'อิมแพ็ค ชาเลนเจอร์' },
+      { title: 'งานเฟสติวัล A', location: 'อิมแพ็ค ชาเลนเจอร์', payoutBankName: 'Test Bank', payoutAccountNumber: '000123', payoutAccountName: 'Test Organizer' },
       [
         {
           startTime: '2026-11-15T18:00:00.000Z',
@@ -120,6 +120,9 @@ describe('Event fee settings and reserve integration (TASK-010, AC-23, AC-24, AC
     const ev1Item = allEvents.find(e => e.id === event1.id);
     const ev2Item = allEvents.find(e => e.id === event2.id);
     expect(ev1Item).toBeDefined();
+    expect(ev1Item?.payoutBankName).toBe('Test Bank');
+    expect(ev1Item?.payoutAccountNumber).toBe('000123');
+    expect(ev1Item?.payoutAccountName).toBe('Test Organizer');
     expect(ev1Item?.feeSettings.organizerFeeRate).toBe(5.5);
     expect(ev2Item).toBeDefined();
     expect(ev2Item?.feeSettings.organizerFeeRate).toBe(25000);

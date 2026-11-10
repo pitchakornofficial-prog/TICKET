@@ -97,15 +97,15 @@ describe('D-204 to D-209: Settings, Finance, and Contact Refinements & Real-Time
     expect(managerSrc).toContain('owner-contact-line');
     expect(managerSrc).toContain('owner-contact-hours');
     expect(managerSrc).toContain('owner-contact-address');
-    expect(managerSrc).toContain('saveOwnerContactInfo');
-    expect(managerSrc).toContain('resetOwnerContactInfo');
+    expect(managerSrc).toContain('saveSharedOwnerContactInfo');
+    expect(managerSrc).toContain('EMPTY_OWNER_CONTACT_INFO');
 
     // 4. OrganizerContactView reflects owner contact info dynamically
     const contactSrc = readFileSync(
       join(rootDir, 'src/components/organizer-contact-view.tsx'),
       'utf8',
     );
-    expect(contactSrc).toContain('loadOwnerContactInfo');
+    expect(contactSrc).toContain('loadSharedOwnerContactInfo');
     expect(contactSrc).toContain('EVENT_OWNER_CONTACT_CHANGED');
     expect(contactSrc).toContain('contactInfo.hotline');
     expect(contactSrc).toContain('contactInfo.email');

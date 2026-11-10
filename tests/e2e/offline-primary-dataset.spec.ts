@@ -32,9 +32,10 @@ test.describe('Offline Primary Dataset & Privacy Protection (TASK-032, AC-94, AC
 
     // Create Event
     await page.goto('/back-office/organizer#events');
-    await page.getByRole('button', { name: '+ สร้างงานคอนเสิร์ตใหม่' }).click();
+    await page.getByTestId('open-create-concert-btn').click();
     await page.getByLabel('ชื่องานคอนเสิร์ต').fill(eventTitle);
-    await page.getByLabel('สถานที่จัดงาน').fill('อิมแพ็ค ชาเลนเจอร์ ฮอลล์');
+    await page.getByRole('tab', { name: '2. สถานที่ & แผนที่' }).click();
+    await page.locator('#event-location').fill('อิมแพ็ค ชาเลนเจอร์ ฮอลล์');
     await saveEventDraft(page);
     await expect(page.getByText('บันทึกงานคอนเสิร์ตสำเร็จ')).toBeVisible({ timeout: 20000 });
 

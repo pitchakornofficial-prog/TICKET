@@ -31,11 +31,12 @@ test.describe('Organizer money report: sales, fees, payout readiness (TASK-028, 
     await expect(page).toHaveURL('/back-office/organizer');
 
     await page.goto('/back-office/organizer#events');
-    await page.getByRole('button', { name: '+ สร้างงานคอนเสิร์ตใหม่' }).click();
+    await page.getByTestId('open-create-concert-btn').click();
     await page.getByLabel('ชื่องานคอนเสิร์ต').fill(eventTitle);
-    await page.getByLabel('สถานที่จัดงาน').fill('อิมแพ็ค ชาเลนเจอร์');
+    await page.getByRole('tab', { name: '2. สถานที่ & แผนที่' }).click();
+    await page.locator('#event-location').fill('อิมแพ็ค ชาเลนเจอร์');
     await saveEventDraft(page);
-    await expect(page.getByText('บันทึกงานคอนเสิร์ตสำเร็จ')).toBeVisible();
+    await expect(page.locator('#create-concert-title')).toBeHidden();
 
     const eventsRes = await page.request.get('/api/events');
     const { events } = await eventsRes.json();
@@ -75,7 +76,7 @@ test.describe('Organizer money report: sales, fees, payout readiness (TASK-028, 
 
     const sessionCard = ownerPage.locator('.pending-session-card', { hasText: eventTitle });
     await expect(sessionCard).toBeVisible();
-    await sessionCard.getByRole('button', { name: 'อนุมัติรอบนี้' }).click({ force: true });
+    await sessionCard.getByRole('button', { name: 'อนุมัติด่วน' }).click({ force: true });
     await expect(ownerPage.getByText(`อนุมัติรอบการแสดงของ "${eventTitle}" สำเร็จ`)).toBeVisible();
 
     // Owner configures fees: 5% organizer fee, 20 THB customer fee, 10% reserve

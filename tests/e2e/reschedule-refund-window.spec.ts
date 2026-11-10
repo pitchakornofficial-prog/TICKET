@@ -36,11 +36,12 @@ test.describe('Reschedule session & special refund window (TASK-025, AC-38, AC-1
     await expect(page).toHaveURL('/back-office/organizer');
 
     await page.goto('/back-office/organizer#events');
-    await page.getByRole('button', { name: '+ สร้างงานคอนเสิร์ตใหม่' }).click();
+    await page.getByTestId('open-create-concert-btn').click();
     await page.getByLabel('ชื่องานคอนเสิร์ต').fill(eventTitle);
-    await page.getByLabel('สถานที่จัดงาน').fill('อิมแพ็ค อารีน่า เมืองทองธานี');
+    await page.getByRole('tab', { name: '2. สถานที่ & แผนที่' }).click();
+    await page.locator('#event-location').fill('อิมแพ็ค อารีน่า เมืองทองธานี');
     await saveEventDraft(page);
-    await expect(page.getByText('บันทึกงานคอนเสิร์ตสำเร็จ')).toBeVisible();
+    await expect(page.locator('#create-concert-title')).toBeHidden();
 
     const eventsRes = await page.request.get('/api/events');
     const { events } = await eventsRes.json();
@@ -80,7 +81,7 @@ test.describe('Reschedule session & special refund window (TASK-025, AC-38, AC-1
 
     const sessionCard = ownerPage.locator('.pending-session-card', { hasText: eventTitle });
     await expect(sessionCard).toBeVisible();
-    await sessionCard.getByRole('button', { name: 'อนุมัติรอบนี้' }).click({ force: true });
+    await sessionCard.getByRole('button', { name: 'อนุมัติด่วน' }).click({ force: true });
     await expect(ownerPage.getByText(`อนุมัติรอบการแสดงของ "${eventTitle}" สำเร็จ`)).toBeVisible();
 
     // 3. Guest visits public concert page in isolated buyerContext and buys 1 ticket

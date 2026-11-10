@@ -11,20 +11,22 @@ import {
 } from '@/components/icons';
 import { HeaderInfoTooltip } from './header-info-tooltip';
 import {
-  loadOwnerContactInfo,
+  EMPTY_OWNER_CONTACT_INFO,
+  loadSharedOwnerContactInfo,
   EVENT_OWNER_CONTACT_CHANGED,
   type OwnerContactInfo,
 } from '@/lib/owner-contact-sync';
 
 export function OrganizerContactView() {
-  const [contactInfo, setContactInfo] = useState<OwnerContactInfo>(() => loadOwnerContactInfo());
+  const [contactInfo, setContactInfo] = useState<OwnerContactInfo>(EMPTY_OWNER_CONTACT_INFO);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
   useEffect(() => {
     const handleUpdate = () => {
-      setContactInfo(loadOwnerContactInfo());
+      loadSharedOwnerContactInfo().then(setContactInfo).catch(() => setToastMessage('โหลดข้อมูลติดต่อไม่สำเร็จ'));
     };
+    handleUpdate();
     window.addEventListener(EVENT_OWNER_CONTACT_CHANGED, handleUpdate);
     window.addEventListener('storage', handleUpdate);
     return () => {

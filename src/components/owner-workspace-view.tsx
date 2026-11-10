@@ -18,6 +18,10 @@ import { OwnerFeeSettingsManager } from '@/components/owner-fee-settings-manager
 import { OwnerPaymentRecoveryManager } from '@/components/owner-payment-recovery-manager';
 import { OwnerEmailDeliveriesManager } from '@/components/owner-email-deliveries-manager';
 import { OwnerContactCorrectionManager } from '@/components/owner-contact-correction-manager';
+import { OwnerCustomerHub } from '@/components/owner-customer-hub';
+import { OwnerFinanceHub } from '@/components/owner-finance-hub';
+import { OwnerSystemHub } from '@/components/owner-system-hub';
+import { ToastNotification } from '@/components/toast-notification';
 import { OwnerRefundApprovalManager } from '@/components/owner-refund-approval-manager';
 import { OwnerWeeklyPayoutManager } from '@/components/owner-weekly-payout-manager';
 import { OwnerReserveReleaseManager } from '@/components/owner-reserve-release-manager';
@@ -192,6 +196,7 @@ export function OwnerWorkspaceView({ initialSection }: OwnerWorkspaceViewProps) 
 
   return (
     <div className="owner-workspace-container" data-testid="owner-workspace-view">
+      <ToastNotification />
       {/* Horizontal Sub-Nav Bar (D-115, D-221, D-222) */}
       <nav className="owner-subnav-bar" aria-label="แถบเมนูหลักเจ้าของระบบ">
         <div className="owner-subnav-inner">
@@ -421,14 +426,15 @@ export function OwnerWorkspaceView({ initialSection }: OwnerWorkspaceViewProps) 
 
               {activeSection === 'finance' && (
                 <>
-                  {(activeSubTab === 'all' || activeSubTab === 'payouts') && <OwnerWeeklyPayoutManager />}
-                  {(activeSubTab === 'all' || activeSubTab === 'fees') && (
+                  {activeSubTab === 'all' && <OwnerFinanceHub />}
+                  {activeSubTab === 'payouts' && <OwnerWeeklyPayoutManager />}
+                  {activeSubTab === 'fees' && (
                     <>
                       <OwnerFeeSettingsManager />
                       <OwnerReserveReleaseManager />
                     </>
                   )}
-                  {(activeSubTab === 'all' || activeSubTab === 'debts') && (
+                  {activeSubTab === 'debts' && (
                     <>
                       <OwnerDebtRepaymentManager />
                       <OwnerPaymentRecoveryManager />
@@ -439,8 +445,9 @@ export function OwnerWorkspaceView({ initialSection }: OwnerWorkspaceViewProps) 
 
               {activeSection === 'customer' && (
                 <>
-                  {(activeSubTab === 'all' || activeSubTab === 'contacts') && <OwnerContactCorrectionManager />}
-                  {(activeSubTab === 'all' || activeSubTab === 'emails') && <OwnerEmailDeliveriesManager />}
+                  {activeSubTab === 'all' && <OwnerCustomerHub />}
+                  {activeSubTab === 'contacts' && <OwnerContactCorrectionManager />}
+                  {activeSubTab === 'emails' && <OwnerEmailDeliveriesManager />}
                 </>
               )}
 
@@ -450,9 +457,10 @@ export function OwnerWorkspaceView({ initialSection }: OwnerWorkspaceViewProps) 
 
               {activeSection === 'system' && (
                 <>
-                  {(activeSubTab === 'all' || activeSubTab === 'news') && <OwnerNewsManager />}
-                  {(activeSubTab === 'all' || activeSubTab === 'contacts') && <OwnerContactInfoManager />}
-                  {(activeSubTab === 'all' || activeSubTab === 'conflicts') && <OwnerSyncConflictManager />}
+                  {activeSubTab === 'all' && <OwnerSystemHub />}
+                  {activeSubTab === 'news' && <OwnerNewsManager />}
+                  {activeSubTab === 'contacts' && <OwnerContactInfoManager />}
+                  {activeSubTab === 'conflicts' && <OwnerSyncConflictManager />}
                 </>
               )}
             </div>

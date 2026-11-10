@@ -251,7 +251,7 @@ export function OrderPaymentView({ orderId }: OrderPaymentViewProps) {
   }, [reservation?.expiresAt, reservation?.status]);
 
   const isExpired = reservation
-    ? reservation.status === 'expired' || remainingSeconds === 0
+    ? reservation.status === 'expired' || (reservation.status === 'reserved' && remainingSeconds === 0)
     : false;
   const isPaid = reservation?.status === 'paid';
   const isPaymentException = reservation?.status === 'payment_exception';
@@ -365,6 +365,16 @@ export function OrderPaymentView({ orderId }: OrderPaymentViewProps) {
       {/* 0. Topmost Payment Focus Card (D-189: Push PromptPay QR to the very top above concert info) */}
       {!isPaid && (
         <>
+          {reservation.status === 'cancelled' && (
+            <section role="alert" id="reservation-cancelled-alert" className="payment-alert-card payment-alert-exception">
+              <div className="payment-alert-header">
+                <AlertIcon />
+                <strong className="payment-alert-title">รอบการแสดงนี้ถูกยกเลิกแล้ว (AC-112)</strong>
+              </div>
+              <p className="payment-alert-desc">คำสั่งซื้อนี้ไม่สามารถชำระเงินได้ กรุณาเริ่มทำรายการใหม่</p>
+              <button type="button" onClick={handleStartNewOrder} className="primary-button">กลับไปเลือกบัตรใหม่</button>
+            </section>
+          )}
           {isPaymentException && (
             <section
               role="alert"
@@ -718,7 +728,7 @@ export function OrderPaymentView({ orderId }: OrderPaymentViewProps) {
       <PurchaseTermsFaqList />
 
       {/* 6. Sticky Bottom Timer & Amount Bar (D-51: visible everywhere when scrolling) */}
-      {!isPaid && !isPaymentException && (
+      {!isPaid && !isPaymentException && reservation.status !== 'cancelled' && (
         <aside
           className="payment-sticky-bottom-bar"
           aria-label="แถบสรุปยอดและเวลาคงเหลือสำหรับชำระเงิน"

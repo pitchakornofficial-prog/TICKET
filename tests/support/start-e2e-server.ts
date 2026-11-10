@@ -58,6 +58,8 @@ const proxy = createServer(async (req, res) => {
       },
     },
     upstreamRes => {
+      upstreamRes.on('error', () => res.destroy());
+      res.on('error', () => upstreamRes.destroy());
       const headers = { ...upstreamRes.headers };
       if (typeof headers.location === 'string') {
         headers.location = headers.location.replace(':3101', ':3100');
@@ -87,6 +89,8 @@ proxy.on('upgrade', (req, clientSocket, _head) => {
   });
 
   upstream.on('upgrade', (upstreamRes, upstreamSocket, upstreamHead) => {
+    clientSocket.on('error', () => upstreamSocket.destroy());
+    upstreamSocket.on('error', () => clientSocket.destroy());
     clientSocket.write(
       `HTTP/1.1 101 Switching Protocols\r\n${Object.entries(upstreamRes.headers)
         .map(([k, v]) => `${k}: ${v}`)

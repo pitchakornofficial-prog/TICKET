@@ -1,37 +1,47 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { PhoneIcon, MailIcon, ChatBubbleLeftRightIcon, ClockIcon, CheckCircleIcon } from './icons';
 import { Button } from './ui';
 import {
-  loadOwnerContactInfo,
-  saveOwnerContactInfo,
-  resetOwnerContactInfo,
+  EMPTY_OWNER_CONTACT_INFO,
+  loadSharedOwnerContactInfo,
+  saveSharedOwnerContactInfo,
   type OwnerContactInfo,
 } from '@/lib/owner-contact-sync';
 
 export function OwnerContactInfoManager() {
-  const [info, setInfo] = useState<OwnerContactInfo>(() => loadOwnerContactInfo());
+  const [info, setInfo] = useState<OwnerContactInfo>(EMPTY_OWNER_CONTACT_INFO);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  useEffect(() => {
+    loadSharedOwnerContactInfo().then(setInfo).catch(() => setErrorMessage('โหลดข้อมูลติดต่อไม่สำเร็จ'));
+  }, []);
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    saveOwnerContactInfo(info);
-    setSuccessMessage('บันทึกข้อมูลติดต่อเจ้าของระบบเรียบร้อยแล้ว ข้อมูลจะอัปเดตไปยังหน้าติดต่อของผู้จัดงานทันที');
-    setTimeout(() => {
-      setSuccessMessage(null);
-    }, 4000);
+    setErrorMessage(null);
+    setSuccessMessage(null);
+    try {
+      await saveSharedOwnerContactInfo(info);
+      setSuccessMessage('บันทึกข้อมูลติดต่อเรียบร้อยแล้ว');
+    } catch {
+      setErrorMessage('บันทึกข้อมูลติดต่อไม่สำเร็จ');
+    }
   };
 
-  const handleReset = () => {
-    const confirmed = window.confirm('คุณต้องการรีเซ็ตข้อมูลติดต่อกลับเป็นค่าเริ่มต้นของระบบใช่หรือไม่?');
-    if (!confirmed) return;
-    const defaultData = resetOwnerContactInfo();
-    setInfo(defaultData);
-    setSuccessMessage('รีเซ็ตข้อมูลติดต่อกลับเป็นค่าเริ่มต้นเรียบร้อยแล้ว');
-    setTimeout(() => {
-      setSuccessMessage(null);
-    }, 4000);
+  const handleReset = async () => {
+    if (!window.confirm('ล้างข้อมูลติดต่อที่บันทึกไว้ใช่หรือไม่?')) return;
+    setErrorMessage(null);
+    setSuccessMessage(null);
+    try {
+      await saveSharedOwnerContactInfo(EMPTY_OWNER_CONTACT_INFO);
+      setInfo(EMPTY_OWNER_CONTACT_INFO);
+      setSuccessMessage('ล้างข้อมูลติดต่อเรียบร้อยแล้ว');
+    } catch {
+      setErrorMessage('ล้างข้อมูลติดต่อไม่สำเร็จ');
+    }
   };
 
   return (
@@ -56,6 +66,7 @@ export function OwnerContactInfoManager() {
           <span>{successMessage}</span>
         </div>
       )}
+      {errorMessage && <div className="status-banner error" role="alert">{errorMessage}</div>}
 
       <form onSubmit={handleSubmit} className="owner-contact-form">
         {/* 1. Hotline Section */}

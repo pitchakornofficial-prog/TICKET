@@ -1,5 +1,5 @@
 import type { Pool } from 'pg';
-import { ensureGuestOtpSchema } from '../../src/server/guest-otp.ts';
+import { ensureGuestOtpSchema, hashOtpCode } from '../../src/server/guest-otp.ts';
 
 export async function handleTestInspectRequest(
   pool: Pool,
@@ -54,7 +54,20 @@ export async function handleTestInspectRequest(
     const emails = getCapturedEmails().filter((e) => e.to === email);
     const lastEmail = emails.at(-1);
     const match = lastEmail?.text?.match(/\b(\d{6})\b/) || lastEmail?.subject?.match(/\b(\d{6})\b/);
-    const code = match ? match[1] : otpRes.rows[0].code;
+    let code = match ? match[1] : otpRes.rows[0].code;
+    // This endpoint runs only in the isolated test proxy, separate from the
+    // application process that captures mail in memory. Recover its test OTP.
+    if (/^[a-f0-9]{64}$/.test(code)) {
+      const hash = code;
+      code = '';
+      for (let value = 100000; value <= 999999; value++) {
+        const candidate = String(value);
+        if (hashOtpCode(candidate, otpRes.rows[0].requestId) === hash) {
+          code = candidate;
+          break;
+        }
+      }
+    }
 
     return {
       status: 200,

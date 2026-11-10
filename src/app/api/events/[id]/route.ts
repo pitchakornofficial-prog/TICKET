@@ -44,8 +44,8 @@ export async function PUT(
   const { id } = await params;
   const auth = getAuth();
   const session = await auth.api.getSession({ headers: request.headers });
-  if (session?.user.role !== 'organizer') {
-    return Response.json({ message: 'ไม่อนุญาต: เฉพาะผู้จัดงานเท่านั้น' }, { status: 403 });
+  if (session?.user.role !== 'organizer' && session?.user.role !== 'owner') {
+    return Response.json({ message: 'ไม่อนุญาต: เฉพาะผู้จัดงานหรือผู้ดูแลระบบเท่านั้น' }, { status: 403 });
   }
 
   let body: Record<string, unknown> = {};
@@ -57,6 +57,7 @@ export async function PUT(
 
   const pool = auth.options.database as Pool;
   try {
+    const isOwner = session.user.role === 'owner';
     const updated = await updateEventDraft(
       pool,
       id,
@@ -82,6 +83,7 @@ export async function PUT(
         ubuPrivilegeMode: typeof body.ubuPrivilegeMode === 'boolean' ? body.ubuPrivilegeMode : undefined,
       },
       Array.isArray(body.sessions) ? (body.sessions as SessionDraftInput[]) : undefined,
+      isOwner,
     );
     return Response.json({ message: 'อัปเดตงานคอนเสิร์ตสำเร็จ', event: updated }, { status: 200 });
   } catch (error: unknown) {

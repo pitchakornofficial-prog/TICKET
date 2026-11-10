@@ -734,7 +734,7 @@ export function OrganizerEventsManager({
   }
 
   // Open amendment modal
-  async function _handleOpenAmendment(eventId: string) {
+  async function handleOpenAmendment(eventId: string) {
     setLoadingDetails(true);
     setAmendmentFeedback(null);
     setSelectedSessionId(null);
@@ -2719,7 +2719,7 @@ export function OrganizerEventsManager({
                   <div className="events-card-metric-item">
                     <span>ราคาเริ่มต้น:</span>
                     <strong className="price-highlight">
-                      {ev.minPrice ? formatBaht(Number(ev.minPrice)) : '฿1,500'}
+                      {ev.minPrice != null ? formatBaht(Number(ev.minPrice)) : 'ไม่ระบุ'}
                     </strong>
                   </div>
                   <div className="events-card-metric-item">
@@ -2796,6 +2796,15 @@ export function OrganizerEventsManager({
 
                 {ev.status === 'approved' && (
                   <>
+                    <button
+                      type="button"
+                      className="events-action-btn btn-amendment"
+                      onClick={() => handleOpenAmendment(ev.id)}
+                      data-testid={`open-amendment-btn-${ev.id}`}
+                    >
+                      <PencilSquareIcon width={14} height={14} />
+                      <span>ขอแก้ไขรอบการแสดง</span>
+                    </button>
                     <Link
                       href={`/events/${ev.id}`}
                       target="_blank"

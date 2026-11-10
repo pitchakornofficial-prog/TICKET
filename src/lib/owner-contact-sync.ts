@@ -73,3 +73,23 @@ export function resetOwnerContactInfo(): OwnerContactInfo {
   }
   return DEFAULT_OWNER_CONTACT_INFO;
 }
+
+export const EMPTY_OWNER_CONTACT_INFO: OwnerContactInfo = {
+  hotline: '', hotlineBadge: '', hotlineNote: '', email: '', emailBadge: '', emailNote: '',
+  lineId: '', lineBadge: '', lineNote: '', operatingHours: '', operatingHoursNote: '', address: '', addressNote: '',
+};
+
+export async function loadSharedOwnerContactInfo(): Promise<OwnerContactInfo> {
+  const response = await fetch('/api/owner/contact-info', { cache: 'no-store' });
+  if (!response.ok) throw new Error('โหลดข้อมูลติดต่อไม่สำเร็จ');
+  const result = await response.json();
+  return result.contact || EMPTY_OWNER_CONTACT_INFO;
+}
+
+export async function saveSharedOwnerContactInfo(contact: OwnerContactInfo): Promise<void> {
+  const response = await fetch('/api/owner/contact-info', {
+    method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(contact),
+  });
+  if (!response.ok) throw new Error('บันทึกข้อมูลติดต่อไม่สำเร็จ');
+  window.dispatchEvent(new CustomEvent(EVENT_OWNER_CONTACT_CHANGED));
+}

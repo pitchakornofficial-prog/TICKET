@@ -21,7 +21,8 @@
   --shadow-subtle: 0 1px 3px rgba(0, 0, 0, 0.04), 0 1px 2px rgba(0, 0, 0, 0.02);
   --shadow-floating: 0 10px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.03);
   --shadow-floating-hover: 0 20px 30px -10px rgba(0, 0, 0, 0.09), 0 10px 15px -5px rgba(0, 0, 0, 0.04);
-  --border-card: 1px solid rgba(226, 232, 240, 0.85);
+  /* Persistent Sticky Navigation Topbar Height (D-249) */
+  --admin-topbar-height: 61px;
 }
 * { box-sizing: border-box; }
 html { background: var(--black); scroll-padding-bottom: 140px; }
@@ -2323,8 +2324,11 @@ textarea.text-input {
   gap: 0;
 }
 
-/* Admin Top Header Bar */
+/* Admin Top Header Bar (D-76, D-249) */
 .admin-topbar {
+  position: sticky;
+  top: 0;
+  z-index: 50;
   background: #ffffff;
   border: 1px solid #e2e8f0;
   border-radius: 14px 14px 0 0;
@@ -12323,6 +12327,9 @@ button.terminal-submit-btn:active {
 }
 
 .organizer-subnav-bar {
+  position: sticky;
+  top: var(--admin-topbar-height, 61px);
+  z-index: 45;
   background: #ffffff;
   border: 1px solid #e2e8f0;
   border-top: none;
@@ -19563,18 +19570,18 @@ button.terminal-submit-btn:active {
 }
 
 /* ==========================================================================
-   D-115: Owner Back-Office Modernization & Unified Workspace Layout
+   D-115: Owner Back-Office Modernization & Unified Workspace Layout (D-248, D-249)
    ========================================================================== */
 
 .owner-subnav-bar {
+  position: sticky;
+  top: var(--admin-topbar-height, 61px);
+  z-index: 45;
   background: #ffffff;
   border: 1px solid #e2e8f0;
   border-top: none;
-  border-top-left-radius: 0;
-  border-top-right-radius: 0;
-  border-bottom-left-radius: 14px;
-  border-bottom-right-radius: 14px;
-  padding: 0.5rem 1rem 0.65rem;
+  border-radius: 0 0 14px 14px;
+  padding: 0.5rem 1.35rem;
   box-shadow: 0 4px 16px -2px rgba(15, 23, 42, 0.04);
   margin-top: 0;
   margin-bottom: 1.5rem;
@@ -19607,6 +19614,22 @@ button.terminal-submit-btn:active {
   gap: 0.35rem;
 }
 
+/* 4-Group Navigation Layout with Hairline Dividers (D-248) */
+.owner-subnav-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.owner-subnav-divider {
+  width: 1px;
+  height: 18px;
+  background-color: #cbd5e1;
+  margin: 0 0.5rem;
+  align-self: center;
+  flex-shrink: 0;
+}
+
 .owner-subnav-right-group {
   display: flex;
   align-items: center;
@@ -19616,30 +19639,34 @@ button.terminal-submit-btn:active {
 .owner-subnav-tab {
   display: inline-flex;
   align-items: center;
-  gap: 0.5rem;
-  padding: 0.5rem 0.95rem;
-  border-radius: 8px;
-  border: 1px solid transparent;
+  gap: 0.45rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: 0;
+  border: none;
+  border-bottom: 2px solid transparent;
   background: transparent;
   color: #64748b;
   font-size: 0.88rem;
-  font-weight: 600;
+  font-weight: 500;
   cursor: pointer;
-  transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: all 0.15s ease;
   white-space: nowrap;
   font-family: inherit;
+  margin-bottom: -1px;
 }
 
 .owner-subnav-tab:hover {
-  background: #f8fafc;
+  background: transparent;
   color: #0f172a;
 }
 
 .owner-subnav-tab.active {
-  background: #0f172a;
-  border-color: #0f172a;
-  color: #ffffff;
-  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.16);
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid #0f172a;
+  color: #0f172a;
+  font-weight: 700;
+  box-shadow: none;
 }
 
 .owner-subnav-icon {
@@ -19651,7 +19678,7 @@ button.terminal-submit-btn:active {
 }
 
 .owner-subnav-tab.active .owner-subnav-icon {
-  color: #ffffff;
+  color: #0f172a;
 }
 
 .owner-subnav-tab.invite-quick-btn {
@@ -19713,9 +19740,9 @@ button.terminal-submit-btn:active {
 }
 
 /* Universal Back-Office Monochrome Buttons (D-124, D-223) */
-.owner-section-body button:not(.owner-subnav-tab):not(.header-info-tooltip-btn):not(.chart-tab-btn):not(.time-pill-btn),
-.owner-main-content button:not(.owner-subnav-tab):not(.header-info-tooltip-btn):not(.chart-tab-btn):not(.time-pill-btn),
-.owner-workspace-container button:not(.owner-subnav-tab):not(.owner-mobile-menu-btn):not(.chart-tab-btn):not(.time-pill-btn):not(.header-info-tooltip-btn):not(.banner-action-btn):not(.overview-create-btn):not(.overview-refresh-btn) {
+.owner-section-body button:not(.owner-subnav-tab):not(.header-info-tooltip-btn):not(.chart-tab-btn):not(.time-pill-btn):not(.secondary-button):not(.button-secondary):not(.secondary):not(.danger-button):not(.reject-btn):not(.hub-filter-tab):not(.pipeline-status-tab):not(.events-status-tab):not(.hub-search-clear):not(.review-modal-backdrop):not(.review-modal-close):not(.feedback-close-btn):not(.overview-card-btn):not(.top-concert-item):not(.launchpad-card):not(.top-concert-view-all-btn):not(.activity-jump-btn),
+.owner-main-content button:not(.owner-subnav-tab):not(.header-info-tooltip-btn):not(.chart-tab-btn):not(.time-pill-btn):not(.secondary-button):not(.button-secondary):not(.secondary):not(.danger-button):not(.reject-btn):not(.hub-filter-tab):not(.pipeline-status-tab):not(.events-status-tab):not(.hub-search-clear):not(.review-modal-backdrop):not(.review-modal-close):not(.feedback-close-btn):not(.overview-card-btn):not(.top-concert-item):not(.launchpad-card):not(.top-concert-view-all-btn):not(.activity-jump-btn),
+.owner-workspace-container button:not(.owner-subnav-tab):not(.owner-mobile-menu-btn):not(.chart-tab-btn):not(.time-pill-btn):not(.header-info-tooltip-btn):not(.banner-action-btn):not(.overview-create-btn):not(.overview-refresh-btn):not(.secondary-button):not(.button-secondary):not(.secondary):not(.danger-button):not(.reject-btn):not(.hub-filter-tab):not(.pipeline-status-tab):not(.events-status-tab):not(.hub-search-clear):not(.review-modal-backdrop):not(.review-modal-close):not(.feedback-close-btn):not(.overview-card-btn):not(.top-concert-item):not(.launchpad-card):not(.top-concert-view-all-btn):not(.activity-jump-btn) {
   font-family: inherit;
   font-size: 0.875rem;
   font-weight: 600;
@@ -19735,8 +19762,8 @@ button.terminal-submit-btn:active {
   border: 1px solid #0f172a;
 }
 
-.owner-section-body button:hover:not(:disabled),
-.owner-main-content button:hover:not(:disabled) {
+.owner-section-body button:not(.secondary-button):not(.button-secondary):not(.secondary):not(.danger-button):not(.reject-btn):not(.hub-filter-tab):not(.pipeline-status-tab):not(.events-status-tab):not(.hub-search-clear):not(.review-modal-backdrop):not(.review-modal-close):not(.feedback-close-btn):hover:not(:disabled),
+.owner-main-content button:not(.secondary-button):not(.button-secondary):not(.secondary):not(.danger-button):not(.reject-btn):not(.hub-filter-tab):not(.pipeline-status-tab):not(.events-status-tab):not(.hub-search-clear):not(.review-modal-backdrop):not(.review-modal-close):not(.feedback-close-btn):hover:not(:disabled) {
   background-color: #1e293b;
   border-color: #1e293b;
   transform: translateY(-1px);
@@ -19750,30 +19777,85 @@ button.terminal-submit-btn:active {
   transform: none;
 }
 
+.owner-workspace-container button.secondary,
+.owner-workspace-container button.button-secondary,
+.owner-workspace-container .secondary-button,
 .owner-section-body button.secondary,
 .owner-section-body button.button-secondary,
 .owner-main-content button.secondary,
 .owner-main-content button.button-secondary,
 .owner-section-body .secondary-button,
-.owner-main-content .secondary-button {
+.owner-main-content .secondary-button,
+.row-action-btn.secondary-button,
+button.secondary-button {
   background-color: #ffffff;
   color: #0f172a;
   border: 1px solid #cbd5e1;
 }
 
+.owner-workspace-container button.secondary:hover:not(:disabled),
+.owner-workspace-container button.button-secondary:hover:not(:disabled),
+.owner-workspace-container .secondary-button:hover:not(:disabled),
 .owner-section-body button.secondary:hover:not(:disabled),
 .owner-main-content button.secondary:hover:not(:disabled),
 .owner-section-body .secondary-button:hover:not(:disabled),
-.owner-main-content .secondary-button:hover:not(:disabled) {
+.owner-main-content .secondary-button:hover:not(:disabled),
+.row-action-btn.secondary-button:hover:not(:disabled),
+button.secondary-button:hover:not(:disabled) {
   background-color: #f8fafc;
   border-color: #94a3b8;
   color: #0f172a;
 }
 
-/* Universal Back-Office Enterprise Soft Floating Cards (D-223) */
-.owner-section-body > div,
+button.danger-button,
+button.reject-btn,
+.danger-button,
+.reject-btn,
+.row-action-btn.danger-button,
+.row-action-btn.reject-btn,
+.owner-section-body .danger-button,
+.owner-section-body .reject-btn,
+.owner-section-body button.danger-button,
+.owner-section-body button.reject-btn,
+.owner-main-content .danger-button,
+.owner-main-content .reject-btn,
+.owner-main-content button.danger-button,
+.owner-main-content button.reject-btn,
+.owner-workspace-container .danger-button,
+.owner-workspace-container .reject-btn,
+.owner-workspace-container button.danger-button,
+.owner-workspace-container button.reject-btn {
+  background-color: #ffffff;
+  color: #dc2626;
+  border: 1px solid #fca5a5;
+}
+
+button.danger-button:hover:not(:disabled),
+button.reject-btn:hover:not(:disabled),
+.danger-button:hover:not(:disabled),
+.reject-btn:hover:not(:disabled),
+.row-action-btn.danger-button:hover:not(:disabled),
+.row-action-btn.reject-btn:hover:not(:disabled),
+.owner-section-body .danger-button:hover:not(:disabled),
+.owner-section-body .reject-btn:hover:not(:disabled),
+.owner-section-body button.danger-button:hover:not(:disabled),
+.owner-section-body button.reject-btn:hover:not(:disabled),
+.owner-main-content .danger-button:hover:not(:disabled),
+.owner-main-content .reject-btn:hover:not(:disabled),
+.owner-main-content button.danger-button:hover:not(:disabled),
+.owner-main-content button.reject-btn:hover:not(:disabled),
+.owner-workspace-container .danger-button:hover:not(:disabled),
+.owner-workspace-container .reject-btn:hover:not(:disabled),
+.owner-workspace-container button.danger-button:hover:not(:disabled),
+.owner-workspace-container button.reject-btn:hover:not(:disabled) {
+  background-color: #fef2f2;
+  border-color: #f87171;
+  color: #b91c1c;
+}
+
+/* Universal Back-Office Enterprise Soft Floating Cards (D-223, D-247, D-250, D-252) */
+.owner-section-body > div:not(.owner-concert-management-hub):not(.owner-refund-management-hub):not(.owner-customer-management-hub):not(.owner-finance-management-hub):not(.owner-invitations-management-hub):not(.owner-system-management-hub),
 .owner-approvals-section,
-.owner-refund-manager-card,
 .owner-fee-settings-card,
 .form-card {
   background: #ffffff;
@@ -19948,8 +20030,11 @@ button.terminal-submit-btn:active {
     border-top: 1px solid #f1f5f9;
   }
 
-  .owner-subnav-tabs.mobile-open {
+  .owner-subnav-tabs.mobile-open,
+  .organizer-subnav-tabs.mobile-open {
     display: flex;
+    max-height: calc(100vh - var(--admin-topbar-height, 61px) - 60px);
+    overflow-y: auto;
   }
 
   .owner-subnav-left-group,
@@ -19958,6 +20043,23 @@ button.terminal-submit-btn:active {
     width: 100%;
     align-items: stretch;
     gap: 0.25rem;
+  }
+
+  /* Mobile Grouping & Horizontal Dividers (D-248) */
+  .owner-subnav-group {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    align-items: stretch;
+    gap: 0.25rem;
+  }
+
+  .owner-subnav-divider {
+    width: 100%;
+    height: 1px;
+    background-color: #e2e8f0;
+    margin: 0.45rem 0;
+    align-self: stretch;
   }
 
   .owner-subnav-right-group {
@@ -22180,3 +22282,2580 @@ button.terminal-submit-btn:active {
     grid-template-columns: 1fr;
   }
 }
+
+/* ========================================================
+   CONCERT MANAGEMENT & APPROVAL HUB (D-225, D-226, D-227, D-228)
+   ======================================================== */
+
+/* 1. Navigation Focus Mode & Coming Soon Badges (D-228) */
+.owner-subnav-tab.coming-soon-tab {
+  color: #94a3b8;
+  background-color: #f8fafc;
+  border-color: #e2e8f0;
+}
+
+.owner-subnav-tab.coming-soon-tab:hover {
+  background-color: #f1f5f9;
+  color: #64748b;
+  border-color: #cbd5e1;
+}
+
+.subnav-coming-soon-pill {
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: #64748b;
+  background-color: #e2e8f0;
+  padding: 1px 6px;
+  border-radius: 9999px;
+  margin-left: 4px;
+}
+
+.owner-focus-mode-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background-color: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 12px;
+  padding: 1rem 1.25rem;
+  margin-bottom: 1.5rem;
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.04);
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.focus-mode-content {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+}
+
+.focus-mode-icon {
+  width: 24px;
+  height: 24px;
+  color: #64748b;
+  flex-shrink: 0;
+}
+
+.focus-mode-heading {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0 0 0.2rem 0;
+}
+
+.focus-mode-text {
+  font-size: 0.825rem;
+  color: #64748b;
+  margin: 0;
+}
+
+/* 2. Concert & Refund Management Hub Pipeline (D-225, D-233, D-234, D-235, D-247) */
+.owner-concert-management-hub {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  padding: 0;
+}
+
+.owner-section-body > div.owner-concert-management-hub,
+.owner-section-body > div.owner-refund-management-hub,
+.owner-refund-management-hub,
+.owner-section-body > div.owner-customer-management-hub,
+.owner-customer-management-hub,
+.owner-section-body > div.owner-finance-management-hub,
+.owner-finance-management-hub,
+.owner-section-body > div.owner-invitations-management-hub,
+.owner-invitations-management-hub,
+.owner-section-body > div.owner-system-management-hub,
+.owner-system-management-hub {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  padding: 0;
+  width: 100%;
+}
+
+.hub-top-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 1.25rem;
+  margin-bottom: 0.25rem;
+}
+
+.hub-header-left {
+  flex: 1;
+  min-width: 280px;
+}
+
+.pipeline-title {
+  font-size: 1.35rem;
+  font-weight: 800;
+  color: #0f172a;
+  margin: 0 0 0.35rem 0;
+  letter-spacing: -0.01em;
+}
+
+.pipeline-subtitle {
+  font-size: 0.875rem;
+  color: #64748b;
+  margin: 0;
+}
+
+.hub-header-right {
+  flex-shrink: 0;
+}
+
+.hub-search-box {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  background-color: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  padding: 0 0.85rem;
+  height: 38px;
+  min-height: 38px;
+  width: 290px;
+  max-width: 100%;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
+  transition: all 0.15s ease;
+  box-sizing: border-box;
+}
+
+.hub-search-box:focus-within {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+}
+
+.hub-search-icon {
+  width: 16px;
+  height: 16px;
+  color: #64748b;
+  flex-shrink: 0;
+}
+
+.hub-search-input {
+  border: none;
+  background: transparent;
+  outline: none;
+  font-family: inherit;
+  font-size: 0.85rem;
+  color: #0f172a;
+  width: 100%;
+}
+
+.hub-search-clear {
+  border: none;
+  background: transparent;
+  padding: 2px;
+  cursor: pointer;
+  color: #94a3b8;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.hub-search-clear:hover {
+  color: #0f172a;
+}
+
+/* Underline Status Filter Tabs (D-234, D-245) */
+.hub-filter-tabs-bar,
+.pipeline-status-tabs {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  border-bottom: 1px solid #e2e8f0;
+  padding-bottom: 0;
+  margin-bottom: 1.5rem;
+  overflow-x: auto;
+}
+
+.hub-filter-tab,
+.pipeline-status-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  box-shadow: none;
+  border-bottom: 2px solid transparent;
+  padding: 0.65rem 0.2rem;
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: #64748b;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  font-family: inherit;
+  white-space: nowrap;
+  margin-bottom: -1px;
+}
+
+.hub-filter-tab:hover,
+.pipeline-status-tab:hover {
+  background: transparent;
+  color: #0f172a;
+}
+
+.hub-filter-tab.is-active,
+.hub-filter-tab.active,
+.pipeline-status-tab.active {
+  background: transparent;
+  color: #0f172a;
+  font-weight: 700;
+  border-bottom: 2px solid #0f172a;
+  box-shadow: none;
+}
+
+.hub-tab-badge,
+.status-counter-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 1px 6px;
+  border-radius: 9999px;
+  background-color: #f1f5f9;
+  color: #64748b;
+}
+
+.hub-filter-tab.is-active .hub-tab-badge,
+.hub-filter-tab.active .hub-tab-badge,
+.pipeline-status-tab.active .status-counter-pill {
+  background-color: #0f172a;
+  color: #ffffff;
+}
+
+/* Balanced Hub Toolbar: Tabs on Left + Search/Sort/Refresh on Right (D-245) */
+.hub-toolbar-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.25rem;
+  border-bottom: 1px solid #e2e8f0;
+  margin-bottom: 1.5rem;
+  flex-wrap: wrap;
+}
+
+.hub-toolbar-row .hub-filter-tabs-bar {
+  margin-bottom: 0;
+  border-bottom: none;
+}
+
+.hub-toolbar-tools-right {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  margin-bottom: -1px;
+  flex-wrap: wrap;
+}
+
+.hub-sort-select,
+.hub-filter-select,
+.search-filter-select,
+.admin-filter-select,
+.form-select-control {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  background-color: #ffffff;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='%2364748b'%3E%3Cpath fill-rule='evenodd' d='M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z' clip-rule='evenodd'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.75rem center;
+  background-size: 16px 16px;
+  height: 38px;
+  min-height: 38px;
+  padding: 0 2.2rem 0 0.85rem;
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: #0f172a;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  cursor: pointer;
+  outline: none;
+  font-family: inherit;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, background-color 0.15s ease;
+  box-sizing: border-box;
+}
+
+.hub-sort-select:hover,
+.hub-filter-select:hover,
+.search-filter-select:hover,
+.admin-filter-select:hover,
+.form-select-control:hover {
+  border-color: #94a3b8;
+  background-color: #fcfdfe;
+}
+
+.hub-sort-select:focus,
+.hub-filter-select:focus,
+.search-filter-select:focus,
+.admin-filter-select:focus,
+.form-select-control:focus {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+  outline: none;
+  background-color: #ffffff;
+}
+
+.hub-refresh-btn {
+  padding: 0 0.85rem;
+  font-size: 0.825rem;
+  font-weight: 600;
+  height: 38px;
+  min-height: 38px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  border-radius: 8px;
+  border: 1px solid #cbd5e1;
+  background-color: #ffffff;
+  color: #0f172a;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
+  box-sizing: border-box;
+}
+
+.hub-refresh-btn:hover {
+  background-color: #f8fafc;
+  border-color: #94a3b8;
+}
+
+.hub-refresh-btn:focus {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+  outline: none;
+}
+
+/* Pagination Bar (D-244) */
+.hub-pagination-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-top: 1.5rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid #e2e8f0;
+  flex-wrap: wrap;
+}
+
+.pagination-info {
+  font-size: 0.85rem;
+  color: #64748b;
+  font-weight: 500;
+}
+
+.pagination-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.pagination-current-page {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #0f172a;
+  padding: 0 0.35rem;
+}
+
+.pagination-btn {
+  padding: 0.35rem 0.75rem;
+  font-size: 0.8rem;
+  min-height: 32px;
+  height: 32px;
+}
+
+.section-title-strip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+}
+
+.section-heading-text {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0;
+}
+
+.section-count-badge {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #475569;
+  background-color: #f1f5f9;
+  padding: 3px 10px;
+  border-radius: 9999px;
+  border: 1px solid #e2e8f0;
+}
+
+/* 3. Concert Cards Grid & Card System */
+.concert-cards-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.concert-management-card {
+  background-color: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  padding: 1.5rem;
+  box-shadow: 0 4px 20px -2px rgba(15, 23, 42, 0.05);
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  transition: border-color 0.18s ease;
+}
+
+.concert-management-card:hover {
+  border-color: #cbd5e1;
+}
+
+.card-top-row {
+  display: flex;
+  gap: 1.25rem;
+  align-items: flex-start;
+}
+
+.card-poster-thumb {
+  width: 90px;
+  height: 112px;
+  border-radius: 10px;
+  overflow: hidden;
+  background-color: #f1f5f9;
+  flex-shrink: 0;
+  border: 1px solid #e2e8f0;
+}
+
+.poster-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.poster-placeholder {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #94a3b8;
+}
+
+.placeholder-icon {
+  width: 32px;
+  height: 32px;
+}
+
+.card-info-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.card-title-badges {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  flex-wrap: wrap;
+}
+
+.card-event-name {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0;
+}
+
+.concert-management-card .status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 6px;
+}
+
+.concert-management-card .status-badge.pending {
+  background-color: #f1f5f9;
+  color: #0f172a;
+  border: 1px solid #cbd5e1;
+}
+
+.concert-management-card .status-badge.approved {
+  background-color: #0f172a;
+  color: #ffffff;
+}
+
+.concert-management-card .status-badge.revision,
+.concert-management-card .status-badge.cancellation {
+  background-color: #fef2f2;
+  color: #991b1b;
+  border: 1px solid #fecaca;
+}
+
+.concert-management-card .status-badge.ubu-badge {
+  background-color: #e0f2fe;
+  color: #0369a1;
+  border: 1px solid #bae6fd;
+}
+
+.card-meta-line {
+  font-size: 0.85rem;
+  color: #475569;
+  margin: 0;
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.card-actions-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  padding-top: 1rem;
+  border-top: 1px solid #f1f5f9;
+}
+
+/* 4. Dedicated Concert Analytics View (D-226) */
+.dedicated-concert-analytics-view {
+  background-color: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  padding: 1.75rem;
+  box-shadow: 0 4px 20px -2px rgba(15, 23, 42, 0.05);
+  display: flex;
+  flex-direction: column;
+  gap: 1.75rem;
+}
+
+.analytics-view-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 1rem;
+  padding-bottom: 1.25rem;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.analytics-event-title {
+  font-size: 1.35rem;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0.65rem 0 0.35rem 0;
+}
+
+.analytics-event-meta {
+  font-size: 0.875rem;
+  color: #64748b;
+  margin: 0;
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.concert-analytics-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1rem;
+}
+
+@media (max-width: 1024px) {
+  .concert-analytics-kpi-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 640px) {
+  .concert-analytics-kpi-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.analytics-kpi-card {
+  background-color: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.kpi-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.kpi-card-label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #64748b;
+}
+
+.borderless-kpi-icon {
+  width: 20px;
+  height: 20px;
+  color: #0f172a;
+}
+
+.kpi-card-value {
+  font-size: 1.35rem;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.kpi-card-sub {
+  font-size: 0.75rem;
+  color: #94a3b8;
+  margin: 0;
+}
+
+.kpi-progress-bar-wrap {
+  width: 100%;
+  height: 6px;
+  background-color: #e2e8f0;
+  border-radius: 9999px;
+  overflow: hidden;
+  margin: 0.25rem 0;
+}
+
+.kpi-progress-fill {
+  height: 100%;
+  background-color: #0f172a;
+  border-radius: 9999px;
+}
+
+.kpi-exceptions-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  font-size: 0.8rem;
+}
+
+.kpi-exception-item {
+  display: flex;
+  justify-content: space-between;
+  color: #475569;
+}
+
+.analytics-tier-breakdown-card {
+  background-color: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 1.25rem;
+}
+
+.card-inner-heading {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0 0 1rem 0;
+}
+
+.enterprise-analytics-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.owner-workspace-container .dedicated-concert-analytics-view .enterprise-analytics-table tr th {
+  text-align: left;
+  padding: 0.75rem 1rem;
+  border-bottom: 2px solid #e2e8f0;
+  color: #475569;
+  font-weight: 600;
+}
+
+.owner-workspace-container .dedicated-concert-analytics-view .enterprise-analytics-table tr td {
+  padding: 0.85rem 1rem;
+  border-bottom: 1px solid #f1f5f9;
+  color: #0f172a;
+}
+
+.stock-pill {
+  display: inline-flex;
+  padding: 2px 8px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  border-radius: 4px;
+}
+
+.stock-pill.in-stock {
+  background-color: #dcfce7;
+  color: #166534;
+}
+
+/* 5. Modals & Drawers (D-225, D-227) */
+.admin-full-concert-review-modal,
+.admin-edit-drawer-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  padding: 1.5rem;
+}
+
+.review-modal-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(15, 23, 42, 0.6);
+  backdrop-filter: blur(4px);
+  z-index: 9999;
+}
+
+.review-modal-backdrop[role="dialog"] {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+}
+
+.review-modal-dialog {
+  position: relative;
+  z-index: 10000;
+  background-color: #ffffff;
+  border-radius: 16px;
+  box-shadow: 0 20px 40px -15px rgba(0, 0, 0, 0.25);
+  max-width: 760px;
+  width: 100%;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid #cbd5e1;
+}
+
+.review-modal-dialog.edit-dialog {
+  max-width: 680px;
+}
+
+.review-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: 1.25rem 1.5rem;
+  border-bottom: 1px solid #f1f5f9;
+  background-color: #f8fafc;
+}
+
+.review-modal-heading {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0;
+}
+
+.review-modal-sub {
+  font-size: 0.8rem;
+  color: #64748b;
+  margin: 0.25rem 0 0 0;
+}
+
+.review-modal-close {
+  background: transparent;
+  border: none;
+  color: #64748b;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.review-modal-close:hover {
+  background-color: #e2e8f0;
+  color: #0f172a;
+}
+
+.review-modal-body {
+  padding: 1.5rem;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.review-modal-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  padding: 1rem 1.5rem;
+  border-top: 1px solid #f1f5f9;
+  background-color: #f8fafc;
+}
+
+.review-summary-card {
+  background-color: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 1.15rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.summary-title {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0;
+}
+
+.summary-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+}
+
+.review-summary-card .summary-grid .summary-label {
+  font-size: 0.75rem;
+  color: #64748b;
+  font-weight: 600;
+}
+
+.summary-val {
+  font-size: 0.875rem;
+  color: #0f172a;
+  font-weight: 600;
+  margin: 0.15rem 0 0 0;
+}
+
+.payout-details-box {
+  background-color: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  padding: 0.85rem;
+  font-size: 0.85rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.session-review-block {
+  background-color: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 0.85rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.session-time-header {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0;
+}
+
+.ticket-types-pill-grid {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.ticket-type-pill {
+  background-color: #f1f5f9;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  padding: 0.4rem 0.65rem;
+  font-size: 0.8rem;
+  display: flex;
+  gap: 0.4rem;
+  align-items: center;
+}
+
+.quota-tag {
+  color: #64748b;
+}
+
+.student-tag {
+  color: #0369a1;
+  font-weight: 700;
+}
+
+.adj-input {
+  width: 100%;
+  padding: 0.55rem 0.75rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  font-family: inherit;
+  font-size: 0.875rem;
+  box-sizing: border-box;
+}
+
+.rejection-textarea {
+  width: 100%;
+  padding: 0.55rem 0.75rem;
+  border: 1px solid #fca5a5;
+  background-color: #fff5f5;
+  border-radius: 8px;
+  font-family: inherit;
+  font-size: 0.875rem;
+  box-sizing: border-box;
+  margin-top: 0.35rem;
+}
+
+/* 6. Admin Edit Drawer & Audit Trail (D-227) */
+.edit-form-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 1.15rem;
+}
+
+.form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.form-field label {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: #334155;
+}
+
+.text-input {
+  width: 100%;
+  padding: 0.55rem 0.75rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  font-family: inherit;
+  font-size: 0.875rem;
+  box-sizing: border-box;
+  background-color: #ffffff;
+}
+
+.form-row-two-col {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+
+.form-row-three-col {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 1rem;
+}
+
+@media (max-width: 640px) {
+  .form-row-two-col,
+  .form-row-three-col {
+    grid-template-columns: 1fr;
+  }
+}
+
+.audit-trail-history-box {
+  background-color: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.audit-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.audit-header h4 {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0;
+}
+
+.audit-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.audit-log-item {
+  background-color: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 0.85rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.audit-log-meta {
+  font-size: 0.8rem;
+  color: #64748b;
+}
+
+.audit-changes-list {
+  margin: 0;
+  padding-left: 1.25rem;
+  font-size: 0.825rem;
+  color: #0f172a;
+}
+
+.no-audit-text {
+  font-size: 0.825rem;
+  color: #94a3b8;
+  margin: 0;
+}
+
+/* ========================================================
+   HORIZONTAL ROW CARDS & PIPELINE DIVIDERS (D-229, D-230, D-231, D-232)
+   ======================================================== */
+
+.concert-management-pipeline {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  padding: 0;
+}
+
+.hub-section-divider {
+  border: none;
+  border-top: 1px solid #e2e8f0;
+  margin: 2.25rem 0 1.75rem 0;
+}
+
+.concert-horizontal-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  width: 100%;
+}
+
+.hub-list-container,
+.payable-concerts-list,
+.payout-history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  width: 100%;
+}
+
+.concert-horizontal-row-card {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 2rem;
+  background-color: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 1.5rem 1.75rem;
+  box-shadow: 0 2px 8px -2px rgba(15, 23, 42, 0.04);
+  transition: all 0.18s ease;
+  box-sizing: border-box;
+  width: 100%;
+}
+
+.concert-horizontal-row-card:hover {
+  border-color: #cbd5e1;
+  box-shadow: 0 4px 16px -2px rgba(15, 23, 42, 0.08);
+}
+
+.row-card-left {
+  flex-shrink: 0;
+  width: 88px;
+  height: 110px;
+  border-radius: 8px;
+  overflow: hidden;
+  background-color: #f8fafc;
+  border: 1px solid #e2e8f0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.row-poster-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.row-poster-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  width: 100%;
+  height: 100%;
+  color: #64748b;
+  text-align: center;
+  padding: 0.25rem;
+}
+
+.row-placeholder-icon {
+  width: 26px;
+  height: 26px;
+  color: #64748b;
+}
+
+.row-placeholder-tag {
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  color: #475569;
+}
+
+.row-card-left.amendment-thumb {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  background-color: #eff6ff;
+  border-color: #bfdbfe;
+  color: #1d4ed8;
+}
+
+.row-card-left.amendment-thumb .row-placeholder-icon {
+  color: #1d4ed8;
+}
+
+.row-card-left.amendment-thumb .row-placeholder-tag {
+  color: #1e40af;
+}
+
+.row-card-left.cancellation-thumb {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  background-color: #fef2f2;
+  border-color: #fecaca;
+  color: #b91c1c;
+}
+
+.row-card-left.cancellation-thumb .row-placeholder-icon {
+  color: #b91c1c;
+}
+
+.row-card-left.cancellation-thumb .row-placeholder-tag {
+  color: #991b1b;
+}
+
+.row-poster-placeholder.live-placeholder {
+  background-color: #f8fafc;
+  color: #0f172a;
+}
+
+.row-poster-placeholder.rejected-placeholder {
+  background-color: #fffbeb;
+  border-color: #fde68a;
+  color: #b45309;
+}
+
+.row-card-center {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.row-header-line,
+.row-card-badge-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.15rem;
+  flex-wrap: wrap;
+}
+
+.row-title-badge-line {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.row-event-title {
+  font-size: 1.125rem;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0;
+}
+
+.row-badges-wrap {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  flex-wrap: wrap;
+}
+
+.row-meta-strip {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  font-size: 0.85rem;
+  color: #475569;
+}
+
+.row-meta-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.row-meta-item strong {
+  color: #334155;
+  font-weight: 600;
+}
+
+.row-meta-dot {
+  color: #cbd5e1;
+  font-weight: 700;
+}
+
+.row-tags-strip {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-top: 0.15rem;
+}
+
+.row-detail-pill {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.775rem;
+  padding: 0.2rem 0.55rem;
+  border-radius: 6px;
+  background-color: #f8fafc;
+  color: #475569;
+  border: 1px solid #e2e8f0;
+  font-weight: 500;
+}
+
+.row-detail-pill.payout-pill {
+  background-color: #f0fdf4;
+  color: #166534;
+  border-color: #bbf7d0;
+}
+
+.row-description-line {
+  font-size: 0.85rem;
+  color: #475569;
+  margin: 0;
+  line-height: 1.45;
+}
+
+.row-description-line.text-warning {
+  color: #991b1b;
+  background-color: #fef2f2;
+  padding: 0.35rem 0.65rem;
+  border-radius: 6px;
+  border: 1px solid #fee2e2;
+  display: inline-block;
+}
+
+.row-card-right {
+  flex: 0 0 240px;
+  width: 240px;
+  min-width: 240px;
+  max-width: 240px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  align-items: stretch;
+  justify-content: center;
+  padding-left: 1.75rem;
+  border-left: 1px solid #e2e8f0;
+  box-sizing: border-box;
+}
+
+.row-action-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  width: 100%;
+  height: 38px;
+  min-height: 38px;
+  padding: 0 0.85rem;
+  font-size: 0.825rem;
+  font-weight: 600;
+  white-space: nowrap;
+  border-radius: 8px;
+  box-sizing: border-box;
+}
+
+.row-action-btn .btn-icon {
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
+}
+
+@media (max-width: 900px) {
+  .concert-horizontal-row-card {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 1.25rem;
+    padding: 1.25rem;
+  }
+
+  .row-card-center {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .row-card-right {
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    flex: 1 1 auto;
+    flex-direction: row;
+    flex-wrap: wrap;
+    border-left: none;
+    border-top: 1px solid #e2e8f0;
+    padding-left: 0;
+    padding-top: 1.25rem;
+    gap: 0.75rem;
+  }
+
+  .row-card-right .row-action-btn {
+    flex: 1 1 auto;
+  }
+}
+
+/* ==========================================================================
+   D-250: Customer & Orders Hub Modernization & Balanced Toolbar
+   ========================================================================== */
+.customer-hub-title-block {
+  margin-bottom: 0.25rem;
+}
+
+.customer-hub-title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0 0 0.35rem;
+  letter-spacing: -0.02em;
+}
+
+.customer-hub-subtitle {
+  font-size: 0.9rem;
+  color: #64748b;
+  margin: 0;
+  line-height: 1.5;
+}
+
+.customer-cards-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.customer-buyer-headline {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.customer-name-title {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0;
+}
+
+.customer-contact-tags {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.85rem;
+  color: #475569;
+  flex-wrap: wrap;
+}
+
+.contact-tag-item strong {
+  color: #1e293b;
+  font-weight: 600;
+}
+
+.order-code-badge {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.825rem;
+  font-weight: 700;
+  color: #0f172a;
+  background-color: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  padding: 0.15rem 0.45rem;
+}
+
+.row-detail-pill.amendment-pill {
+  background-color: #eff6ff;
+  color: #1d4ed8;
+  border-color: #bfdbfe;
+}
+
+.row-detail-pill.danger-pill {
+  background-color: #fef2f2;
+  color: #b91c1c;
+  border-color: #fecaca;
+}
+
+.row-detail-pill.total-pill {
+  background-color: #f8fafc;
+  color: #0f172a;
+  border-color: #cbd5e1;
+}
+
+.row-detail-pill strong {
+  color: #0f172a;
+}
+
+.audit-diff-box {
+  background-color: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 0.65rem 0.95rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  font-size: 0.85rem;
+}
+
+.audit-diff-line {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.diff-label {
+  font-weight: 600;
+  color: #475569;
+  min-width: 60px;
+}
+
+.diff-old {
+  color: #991b1b;
+  text-decoration: line-through;
+  background-color: #fee2e2;
+  padding: 0.1rem 0.35rem;
+  border-radius: 4px;
+}
+
+.diff-arrow {
+  color: #94a3b8;
+  font-weight: 700;
+}
+
+.diff-new {
+  color: #166534;
+  font-weight: 600;
+  background-color: #dcfce7;
+  padding: 0.1rem 0.35rem;
+  border-radius: 4px;
+}
+
+.audit-reason-line {
+  font-size: 0.825rem;
+  color: #475569;
+  line-height: 1.45;
+}
+
+.audit-reason-line strong {
+  color: #334155;
+}
+
+.clean-success-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 3rem 1.5rem;
+}
+
+.empty-success-icon {
+  width: 44px;
+  height: 44px;
+  color: #16a34a;
+  margin-bottom: 0.75rem;
+}
+
+/* Modals for Customer Hub (D-250) */
+.admin-full-dialog-modal {
+  position: relative;
+  background-color: #ffffff;
+  border-radius: 16px;
+  box-shadow: 0 20px 40px -15px rgba(0, 0, 0, 0.25);
+  max-width: 640px;
+  width: 100%;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid #cbd5e1;
+  z-index: 10000;
+}
+
+.admin-full-dialog-modal form {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  flex: 1;
+  min-height: 0;
+}
+
+.admin-full-dialog-modal.edit-contact-dialog,
+.admin-full-dialog-modal.audit-history-dialog,
+.admin-full-dialog-modal.order-details-dialog,
+.admin-full-dialog-modal.payout-transfer-dialog,
+.admin-full-dialog-modal.payout-proof-dialog,
+.admin-full-dialog-modal.payout-report-dialog,
+.admin-full-dialog-modal.invite-dialog,
+.admin-full-dialog-modal.user-details-dialog,
+.admin-full-dialog-modal.news-dialog,
+.admin-full-dialog-modal.news-approval-dialog {
+  max-width: 640px;
+  width: 100%;
+}
+
+.badge-payout-ready {
+  background-color: #f0fdf4;
+  color: #166534;
+  border: 1px solid #bbf7d0;
+}
+
+.badge-payout-cutoff {
+  background-color: #f8fafc;
+  color: #475569;
+  border: 1px solid #cbd5e1;
+}
+
+.dialog-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: 1.25rem 1.5rem;
+  border-bottom: 1px solid #f1f5f9;
+  background-color: #f8fafc;
+}
+
+.modal-header-titles {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.modal-category-tag {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.modal-concert-title {
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0;
+}
+
+.modal-close-icon-btn {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 0.35rem;
+  border-radius: 6px;
+  color: #64748b;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+}
+
+.modal-close-icon-btn:hover {
+  background-color: #e2e8f0;
+  color: #0f172a;
+}
+
+.dialog-modal-body {
+  padding: 1.5rem;
+  overflow-y: auto;
+  max-height: calc(85vh - 130px);
+}
+
+.dialog-modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  padding: 1rem 1.5rem;
+  border-top: 1px solid #f1f5f9;
+  background-color: #f8fafc;
+}
+
+.modal-summary-card {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 0.75rem;
+  background-color: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 1rem 1.25rem;
+  margin-bottom: 1.25rem;
+}
+
+.summary-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  font-size: 0.85rem;
+}
+
+.admin-full-dialog-modal .modal-summary-card .summary-label {
+  color: #64748b;
+  font-size: 0.775rem;
+}
+
+.summary-val {
+  color: #0f172a;
+  word-break: break-word;
+}
+
+.modal-form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+
+@media (max-width: 600px) {
+  .modal-form-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.form-group-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.modal-field-label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #334155;
+}
+
+.modal-text-input {
+  height: 38px;
+  min-height: 38px;
+  padding: 0 0.75rem;
+  border-radius: 8px;
+  border: 1px solid #cbd5e1;
+  font-size: 0.875rem;
+  color: #0f172a;
+  background-color: #ffffff;
+  outline: none;
+  transition: border-color 0.15s ease;
+  box-sizing: border-box;
+}
+
+.modal-text-input:focus {
+  border-color: #0f172a;
+  box-shadow: 0 0 0 2px rgba(15, 23, 42, 0.08);
+}
+
+.modal-textarea-input {
+  padding: 0.65rem 0.75rem;
+  border-radius: 8px;
+  border: 1px solid #cbd5e1;
+  font-size: 0.875rem;
+  color: #0f172a;
+  background-color: #ffffff;
+  outline: none;
+  transition: border-color 0.15s ease;
+  box-sizing: border-box;
+  font-family: inherit;
+  resize: vertical;
+}
+
+.modal-textarea-input:focus {
+  border-color: #0f172a;
+  box-shadow: 0 0 0 2px rgba(15, 23, 42, 0.08);
+}
+
+.field-hint-text {
+  font-size: 0.775rem;
+  color: #64748b;
+  line-height: 1.4;
+}
+
+.modal-footer-btn {
+  height: 38px;
+  min-height: 38px;
+  padding: 0 1.25rem;
+  font-size: 0.85rem;
+}
+
+.audit-timeline-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.timeline-item-card {
+  background-color: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 1rem 1.15rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.timeline-header-line {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  font-size: 0.825rem;
+}
+
+.timeline-step-badge {
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 0.15rem 0.5rem;
+  border-radius: 6px;
+  background-color: #eff6ff;
+  color: #1e40af;
+  border: 1px solid #bfdbfe;
+}
+
+.timeline-time {
+  color: #64748b;
+}
+
+.timeline-admin strong {
+  color: #0f172a;
+}
+
+/* ==========================================================================
+   D-251: Universal Top-Center Floating Toast Notification with Countdown
+   ========================================================================== */
+.top-center-toast-notification {
+  position: fixed;
+  top: 1.25rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 10000;
+  max-width: 580px;
+  width: calc(100% - 2rem);
+  border-radius: 12px;
+  background-color: #ffffff;
+  box-shadow: 0 12px 32px -4px rgba(15, 23, 42, 0.16), 0 4px 6px -2px rgba(15, 23, 42, 0.05);
+  overflow: hidden;
+  animation: toastSlideDown 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: all 0.2s ease;
+  box-sizing: border-box;
+}
+
+@keyframes toastSlideDown {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -16px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0) scale(1);
+  }
+}
+
+.top-center-toast-notification.toast-success {
+  background-color: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  color: #166534;
+}
+
+.top-center-toast-notification.toast-error {
+  background-color: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #991b1b;
+}
+
+.toast-content-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.85rem 1.15rem;
+}
+
+.toast-icon-wrap {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+}
+
+.toast-icon-svg {
+  width: 20px;
+  height: 20px;
+}
+
+.toast-success .toast-icon-wrap {
+  color: #166534;
+}
+
+.toast-error .toast-icon-wrap {
+  color: #dc2626;
+}
+
+.toast-message-wrap {
+  flex: 1;
+  min-width: 0;
+}
+
+.toast-message-text {
+  margin: 0;
+  font-size: 0.875rem;
+  font-weight: 600;
+  line-height: 1.4;
+  word-break: break-word;
+}
+
+.toast-actions-wrap {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+
+.toast-timer-pill {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 0.15rem 0.5rem;
+  border-radius: 9999px;
+  background-color: rgba(15, 23, 42, 0.08);
+  color: inherit;
+  font-variant-numeric: tabular-nums;
+}
+
+.toast-close-btn {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.25rem;
+  border-radius: 6px;
+  color: inherit;
+  opacity: 0.7;
+  transition: opacity 0.15s ease;
+}
+
+.toast-close-btn:hover {
+  opacity: 1;
+  background-color: rgba(15, 23, 42, 0.06);
+}
+
+.toast-close-icon {
+  width: 16px;
+  height: 16px;
+}
+
+.toast-progress-track {
+  width: 100%;
+  height: 3px;
+  background-color: rgba(15, 23, 42, 0.06);
+}
+
+.toast-progress-bar {
+  height: 100%;
+  transition: width 0.1s linear;
+}
+
+.toast-success .toast-progress-bar {
+  background-color: #22c55e;
+}
+
+.toast-error .toast-progress-bar {
+  background-color: #ef4444;
+}
+
+/* ==========================================================================
+   D-255: System & News Hub Modernization & Live Preview Card
+   ========================================================================== */
+.owner-contacts-layout {
+  display: grid;
+  grid-template-columns: 1fr 420px;
+  gap: 2rem;
+  align-items: flex-start;
+}
+
+@media (max-width: 1024px) {
+  .owner-contacts-layout {
+    grid-template-columns: 1fr;
+    gap: 1.5rem;
+  }
+}
+
+.contacts-form-side {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.contacts-subgroup-card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 1.5rem;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+}
+
+.contacts-subgroup-title-row {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  margin-bottom: 1.25rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.contacts-subgroup-title {
+  font-size: 1rem;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0;
+}
+
+.contacts-preview-side {
+  position: sticky;
+  top: 90px;
+}
+
+.contact-live-preview-card {
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 14px;
+  box-shadow: 0 4px 16px -2px rgba(15, 23, 42, 0.08);
+  overflow: hidden;
+}
+
+.preview-card-header {
+  background: #0f172a;
+  color: #ffffff;
+  padding: 1rem 1.25rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.preview-badge-live {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  background: rgba(34, 197, 94, 0.2);
+  color: #4ade80;
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 0.2rem 0.5rem;
+  border-radius: 9999px;
+  border: 1px solid rgba(34, 197, 94, 0.4);
+}
+
+.preview-card-body {
+  padding: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  background: #f8fafc;
+}
+
+.preview-item-box {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 0.85rem 1rem;
+}
+
+.preview-item-label {
+  font-size: 0.75rem;
+  color: #64748b;
+  font-weight: 600;
+  margin-bottom: 0.25rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.preview-item-val {
+  font-size: 0.925rem;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0 0 0.2rem 0;
+}
+
+.preview-item-desc {
+  font-size: 0.775rem;
+  color: #64748b;
+  margin: 0;
+  line-height: 1.4;
+}
+
+/* ==========================================================================
+   D-256: Back-Office Owner Overview Modernization & Flat Canvas Layout
+   ========================================================================== */
+
+.owner-overview-section.flat-overview-section {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  padding: 0;
+  margin-bottom: 0.5rem;
+}
+
+.owner-overview-wrapper .overview-card-btn {
+  background-color: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  color: #0f172a;
+  padding: 1.15rem 1.25rem;
+  box-shadow: 0 2px 8px -2px rgba(15, 23, 42, 0.04);
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+  width: 100%;
+}
+
+.owner-overview-wrapper .overview-card-btn:hover {
+  background-color: #f8fafc;
+  border-color: #cbd5e1;
+  box-shadow: 0 6px 16px -2px rgba(15, 23, 42, 0.08);
+  transform: translateY(-2px);
+}
+
+.owner-overview-wrapper .overview-card-count.count-warn {
+  color: #b45309;
+  background-color: #fef3c7;
+  border: 1px solid #fde68a;
+  font-weight: 700;
+  font-size: 0.85rem;
+  padding: 0.2rem 0.6rem;
+  border-radius: 9999px;
+}
+
+.owner-overview-wrapper .overview-card-count.count-ok {
+  color: #15803d;
+  background-color: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  font-weight: 700;
+  font-size: 0.85rem;
+  padding: 0.2rem 0.6rem;
+  border-radius: 9999px;
+}
+
+.owner-overview-wrapper .overview-card-label {
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: #0f172a;
+  margin-top: 0.75rem;
+}
+
+.owner-overview-wrapper .overview-card-sub {
+  font-size: 0.75rem;
+  color: #64748b;
+  margin-top: 0.25rem;
+}
+
+.overview-analytics-grid-two-col {
+  display: grid;
+  grid-template-columns: 1fr 380px;
+  gap: 1.5rem;
+  align-items: stretch;
+}
+
+@media (max-width: 1024px) {
+  .overview-analytics-grid-two-col {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Top 5 Performing Concerts Card (D-256) */
+.overview-top-concerts-card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  padding: 1.35rem 1.5rem;
+  box-shadow: 0 4px 20px -2px rgba(15, 23, 42, 0.04);
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.top-concerts-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding-bottom: 0.85rem;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.top-concerts-title-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.top-concerts-title {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.top-concerts-subtitle {
+  font-size: 0.775rem;
+  color: #64748b;
+  margin: 0;
+}
+
+.top-concerts-view-all-btn {
+  background: transparent;
+  border: none;
+  color: #2563eb;
+  font-size: 0.775rem;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  cursor: pointer;
+  padding: 0.25rem 0.5rem;
+  border-radius: 6px;
+  transition: all 0.15s ease;
+  font-family: inherit;
+}
+
+.top-concerts-view-all-btn:hover {
+  background-color: #eff6ff;
+  color: #1d4ed8;
+}
+
+.top-concerts-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.top-concert-item {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  padding: 0.75rem 0.85rem;
+  border-radius: 10px;
+  border: 1px solid #f1f5f9;
+  background-color: #ffffff;
+  color: #0f172a;
+  text-align: left;
+  font-family: inherit;
+  width: 100%;
+  transition: all 0.15s ease;
+  cursor: pointer;
+}
+
+.top-concert-item:hover {
+  background-color: #f8fafc;
+  border-color: #cbd5e1;
+  box-shadow: 0 2px 8px -2px rgba(15, 23, 42, 0.05);
+}
+
+.top-concert-rank-col {
+  flex-shrink: 0;
+}
+
+.top-concert-rank-badge {
+  font-size: 0.75rem;
+  font-weight: 800;
+  padding: 0.25rem 0.55rem;
+  border-radius: 6px;
+  display: inline-block;
+  min-width: 28px;
+  text-align: center;
+}
+
+.top-concert-rank-badge.rank-1 {
+  background: #fef3c7;
+  color: #92400e;
+  border: 1px solid #fde68a;
+}
+
+.top-concert-rank-badge.rank-2 {
+  background: #f1f5f9;
+  color: #334155;
+  border: 1px solid #cbd5e1;
+}
+
+.top-concert-rank-badge.rank-3 {
+  background: #fed7aa;
+  color: #9a3412;
+  border: 1px solid #ffedd5;
+}
+
+.top-concert-rank-badge.rank-4,
+.top-concert-rank-badge.rank-5 {
+  background: #f8fafc;
+  color: #64748b;
+  border: 1px solid #e2e8f0;
+}
+
+.top-concert-info-col {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.top-concert-name-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+
+.top-concert-name {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #0f172a;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.top-concert-revenue {
+  font-size: 0.825rem;
+  font-weight: 700;
+  color: #1e293b;
+  flex-shrink: 0;
+}
+
+.top-concert-progress-row {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.top-concert-progress-track {
+  width: 100%;
+  height: 6px;
+  background-color: #f1f5f9;
+  border-radius: 9999px;
+  overflow: hidden;
+}
+
+.top-concert-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #3b82f6 0%, #1d4ed8 100%);
+  border-radius: 9999px;
+  transition: width 0.3s ease;
+}
+
+.top-concert-sold-ratio {
+  font-size: 0.72rem;
+  color: #64748b;
+}
+
+/* Recent Operational Activity Section (D-256) */
+.overview-recent-activity-section {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  padding: 1.35rem 1.5rem;
+  box-shadow: 0 4px 20px -2px rgba(15, 23, 42, 0.04);
+  display: flex;
+  flex-direction: column;
+  gap: 1.15rem;
+}
+
+.activity-section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  padding-bottom: 0.85rem;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.activity-title-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.activity-section-title {
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.activity-section-subtitle {
+  font-size: 0.775rem;
+  color: #64748b;
+  margin: 0;
+}
+
+.activity-live-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.725rem;
+  font-weight: 700;
+  color: #15803d;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  padding: 0.25rem 0.65rem;
+  border-radius: 9999px;
+}
+
+.activity-live-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 9999px;
+  background-color: #22c55e;
+  box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.25);
+  animation: pulse-dot 2s infinite ease-in-out;
+}
+
+@keyframes pulse-dot {
+  0% { transform: scale(0.95); opacity: 0.8; }
+  50% { transform: scale(1.2); opacity: 1; }
+  100% { transform: scale(0.95); opacity: 0.8; }
+}
+
+.activity-items-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.activity-item-card {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.85rem 1rem;
+  background: #fafafa;
+  border: 1px solid #f1f5f9;
+  border-radius: 12px;
+  gap: 1rem;
+  transition: all 0.15s ease;
+}
+
+.activity-item-card:hover {
+  background: #ffffff;
+  border-color: #cbd5e1;
+  box-shadow: 0 2px 8px -2px rgba(15, 23, 42, 0.05);
+}
+
+.activity-item-left {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  flex: 1;
+  min-width: 0;
+}
+
+.activity-icon-avatar {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.activity-icon-avatar.type-session {
+  background: #eff6ff;
+  color: #2563eb;
+  border: 1px solid #bfdbfe;
+}
+
+.activity-icon-avatar.type-refund {
+  background: #fef2f2;
+  color: #dc2626;
+  border: 1px solid #fecaca;
+}
+
+.activity-icon-avatar.type-payout {
+  background: #f0fdf4;
+  color: #16a34a;
+  border: 1px solid #bbf7d0;
+}
+
+.activity-icon-avatar.type-news {
+  background: #faf5ff;
+  color: #9333ea;
+  border: 1px solid #e9d5ff;
+}
+
+.activity-icon-avatar.type-customer {
+  background: #f0fdfa;
+  color: #0d9488;
+  border: 1px solid #99f6e4;
+}
+
+.activity-content-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  flex: 1;
+  min-width: 0;
+}
+
+.activity-title-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.activity-title-text {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.activity-timestamp {
+  font-size: 0.72rem;
+  color: #94a3b8;
+  margin-left: auto;
+}
+
+.activity-desc-text {
+  font-size: 0.775rem;
+  color: #64748b;
+  margin: 0;
+  line-height: 1.4;
+}
+
+.activity-item-right {
+  flex-shrink: 0;
+}
+
+@media (max-width: 768px) {
+  .activity-item-card {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.75rem;
+  }
+  .activity-item-right {
+    display: flex;
+    justify-content: flex-end;
+  }
+  .activity-timestamp {
+    margin-left: 0;
+  }
+}
+
+/* Launchpad Section Header & Styling (D-256) */
+.launchpad-section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 0.85rem;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.launchpad-section-title {
+  font-size: 1rem;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0;
+}
+
+.launchpad-section-sub {
+  font-size: 0.775rem;
+  color: #64748b;
+}
+
+.overview-launchpad-grid.compact-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1rem;
+}
+
+@media (max-width: 900px) {
+  .overview-launchpad-grid.compact-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 540px) {
+  .overview-launchpad-grid.compact-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+
+
+
+
+
