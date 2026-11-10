@@ -7,6 +7,7 @@ import { Button, Badge } from '@/components/ui';
 import { HeaderInfoTooltip } from './header-info-tooltip';
 import {
   CheckCircleIcon,
+  RefreshIcon,
   AlertTriangleIcon,
   UsersIcon,
   UserPlusIcon,
@@ -150,6 +151,16 @@ export function OrganizerScannerManager() {
   const [submitting, setSubmitting] = useState(false);
   const [settingPrimaryId, setSettingPrimaryId] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await loadEvents();
+    if (selectedEventId) {
+      await loadEventData(selectedEventId);
+    }
+    setRefreshing(false);
+  };
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
 
@@ -693,10 +704,23 @@ export function OrganizerScannerManager() {
       {/* Top Header (D-119) */}
       <div className="scanner-workspace-header">
         <div className="scanner-workspace-title-wrap">
-          <h1 id="organizer-scanner-heading" className="scanner-workspace-title">
+          <div className="organizer-header-title-row">
+            <h1 id="organizer-scanner-heading" className="scanner-workspace-title">
             เจ้าหน้าที่และอุปกรณ์สแกนบัตร
             <HeaderInfoTooltip text="จัดการบัญชีทีมงานสแกนบัตรหน้างาน กำหนดสิทธิ์รายคอนเสิร์ต และตรวจสอบความพร้อมในการตรวจบัตรเข้างาน" />
           </h1>
+            <button
+              type="button"
+              className="organizer-inline-refresh-btn"
+              data-testid="scanners-refresh-btn"
+              onClick={handleRefresh}
+              disabled={refreshing || loadingEvents || loadingScanners}
+              aria-label="รีเฟรชข้อมูลเจ้าหน้าที่สแกน"
+              title="รีเฟรชข้อมูลเจ้าหน้าที่สแกน"
+            >
+              <RefreshIcon className={`inline-refresh-icon ${refreshing ? 'animate-spin' : ''}`} />
+            </button>
+          </div>
           <p className="scanner-workspace-desc card-caption">
             เพิ่มและจัดการทีมสแกนเนอร์ ตรวจสอบสถานะการเชื่อมต่อ และควบคุมประตูเข้างาน
           </p>

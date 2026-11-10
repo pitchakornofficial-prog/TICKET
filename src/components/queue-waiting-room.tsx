@@ -21,30 +21,93 @@ interface QueueWaitingRoomProps {
 
 const TOTAL_QUEUE_COUNT = 36;
 
+function getDeterministicQueueNumber(id: string): string {
+  let hash = 0;
+  for (let i = 0; i < id.length; i++) {
+    hash = (hash << 5) - hash + id.charCodeAt(i);
+    hash |= 0;
+  }
+  const num = 100 + Math.abs(hash % 899);
+  return `A-${num}`;
+}
+
 export function QueueWaitingRoom({
   eventId,
   eventTitle,
   eventLocation,
 }: QueueWaitingRoomProps) {
   const router = useRouter();
-  const [queueNumber] = useState(() => {
-    const num = Math.floor(100 + Math.random() * 899);
-    return `A-${num}`;
-  });
+  const [queueNumber, setQueueNumber] = useState(() => getDeterministicQueueNumber(eventId));
   const [peopleAhead, setPeopleAhead] = useState(TOTAL_QUEUE_COUNT);
   const [isReady, setIsReady] = useState(false);
+
+  useEffect(() => {
+    // Generate or restore client queue number safely after hydration to avoid SSR mismatch
+    try {
+      const savedPass = sessionStorage.getItem(`ticket_queue_pass_${eventId}`);
+      if (savedPass) {
+        const parsed = JSON.parse(savedPass);
+        if (parsed.queueNumber) {
+          setQueueNumber(parsed.queueNumber);
+          return;
+        }
+      }
+      const randomNum = `A-${Math.floor(100 + Math.random() * 899)}`;
+      setQueueNumber(randomNum);
+    } catch {
+      // Ignore storage errors in restricted contexts
+    }
+  }, [eventId]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    // Direct back navigation prevention: pressing back navigates directly to event details and replaces queue entry
+    const handlePopState = () => {
+      window.location.replace(`/events/${eventId}`);
+    };
+
+    const handlePageShow = (event: PageTransitionEvent) => {
+      if (event.persisted) {
+        window.location.replace(`/events/${eventId}`);
+      }
+    };
+
+    window.history.pushState({ inQueue: true }, '', window.location.href);
+    window.addEventListener('popstate', handlePopState);
+    window.addEventListener('pageshow', handlePageShow);
+
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+      window.removeEventListener('pageshow', handlePageShow);
+    };
+  }, [eventId]);
+
+  useEffect(() => {
+    // Clear any stale checkout deadline from previous sessions when entering queue
+    try {
+      if (typeof window !== 'undefined') {
+        sessionStorage.removeItem(`ticket_checkout_deadline_${eventId}`);
+      }
+    } catch {
+      // Ignore storage errors in restricted contexts
+    }
+  }, [eventId]);
 
   useEffect(() => {
     if (peopleAhead <= 0) {
       setIsReady(true);
       if (typeof window !== 'undefined') {
+        const nowIso = new Date().toISOString();
+        const freshDeadline = Date.now() + 15 * 60 * 1000;
         sessionStorage.setItem(
           `ticket_queue_pass_${eventId}`,
           JSON.stringify({
             queueNumber,
-            passedAt: new Date().toISOString(),
+            passedAt: nowIso,
           }),
         );
+        sessionStorage.setItem(`ticket_checkout_deadline_${eventId}`, freshDeadline.toString());
       }
       const redirectTimer = setTimeout(() => {
         router.push(`/events/${eventId}/checkout`);
@@ -61,13 +124,16 @@ export function QueueWaitingRoom({
 
   const handleProceedNow = () => {
     if (typeof window !== 'undefined') {
+      const nowIso = new Date().toISOString();
+      const freshDeadline = Date.now() + 15 * 60 * 1000;
       sessionStorage.setItem(
         `ticket_queue_pass_${eventId}`,
         JSON.stringify({
           queueNumber,
-          passedAt: new Date().toISOString(),
+          passedAt: nowIso,
         }),
       );
+      sessionStorage.setItem(`ticket_checkout_deadline_${eventId}`, freshDeadline.toString());
     }
     router.push(`/events/${eventId}/checkout`);
   };
@@ -89,7 +155,7 @@ export function QueueWaitingRoom({
   return (
     <div className="event-detail-page">
       <nav className="detail-breadcrumb" aria-label="ย้อนกลับ">
-        <Link href={`/events/${eventId}`} className="back-link">
+        <Link href={`/events/${eventId}`} replace className="back-link">
           <ArrowLeftIcon /> ย้อนกลับไปหน้ารายละเอียดคอนเสิร์ต
         </Link>
       </nav>
@@ -123,7 +189,11 @@ export function QueueWaitingRoom({
           <div className="queue-metrics-grid">
             <div className="queue-metric-box">
               <span className="queue-metric-label">หมายเลขคิวของคุณ</span>
-              <strong className="queue-metric-value highlight" id="queue-number-display">
+              <strong
+                className="queue-metric-value highlight"
+                id="queue-number-display"
+                suppressHydrationWarning
+              >
                 {queueNumber}
               </strong>
             </div>

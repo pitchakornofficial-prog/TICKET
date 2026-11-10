@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, it, expect } from 'vitest';
+import { isWithinTimeframe } from '../../src/components/news-list-client';
 
 describe('News domain unit tests (TASK-008, AC-04)', () => {
   it('truncates snippet properly when content exceeds 200 characters', () => {
@@ -51,9 +52,7 @@ describe('News domain unit tests (TASK-008, AC-04)', () => {
     expect(newsDetailPage).not.toMatch(/\p{Extended_Pictographic}/u);
   });
 
-  it('implements D-71: timeframe filter logic for today, week, month, and year', async () => {
-    const { isWithinTimeframe } = await import('../../src/components/news-list-client');
-
+  it('implements D-71: timeframe filter logic for today, week, month, and year', () => {
     const now = new Date();
 
     const todayIso = now.toISOString();

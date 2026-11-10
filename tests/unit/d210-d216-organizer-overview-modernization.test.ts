@@ -120,24 +120,30 @@ describe('D-210 to D-216: Organizer Overview Executive Redesign, Multi-Period KP
     expect(css).toContain('.soft-pulse-highlight');
   });
 
-  it('verifies D-215: Dual-mode interactive visual analytics charts (bar & line charts with time filter)', () => {
+  it('verifies D-215: Removal of visual analytics charts in favor of expanded executive KPIs and horizontal performance list with search, filter, and pagination', () => {
     const overviewSrc = readFileSync(
       join(rootDir, 'src/components/organizer-overview-view.tsx'),
       'utf8',
     );
-    expect(overviewSrc).toContain('overview-charts-card');
-    expect(overviewSrc).toContain('overview-charts-panel');
-    expect(overviewSrc).toContain('กราฟแท่งเปรียบเทียบรายคอนเสิร์ต');
-    expect(overviewSrc).toContain('กราฟเส้นแนวโน้มยอดขาย');
-    expect(overviewSrc).toContain('overview-barchart');
-    expect(overviewSrc).toContain('overview-linechart');
-    expect(overviewSrc).toContain('barchart-bar-track');
-    expect(overviewSrc).toContain('barchart-bar-fill');
-    expect(overviewSrc).toContain('linechart-svg');
-    expect(overviewSrc).toContain('linechart-hover-tooltip');
-    expect(overviewSrc).toContain('วันนี้ (24 ชม.)');
-    expect(overviewSrc).toContain('7 วันล่าสุด');
-    expect(overviewSrc).toContain('30 วันล่าสุด');
+    expect(overviewSrc).not.toContain('overview-charts-card');
+    expect(overviewSrc).not.toContain('overview-charts-panel');
+    expect(overviewSrc).not.toContain('overview-barchart');
+    expect(overviewSrc).not.toContain('overview-linechart');
+
+    // 4-Card Hero Grid
+    expect(overviewSrc).toContain('overview-4kpi-grid');
+    expect(overviewSrc).toContain('kpi-hero-card');
+    expect(overviewSrc).toContain('overview-kpi-breakdown-box');
+    expect(overviewSrc).toContain('highlight-net-row');
+
+    // Performance Toolbar & Horizontal Row Cards & Pagination
+    expect(overviewSrc).toContain('performance-filter-toolbar');
+    expect(overviewSrc).toContain('filter-search-input');
+    expect(overviewSrc).toContain('perf-filter-select');
+    expect(overviewSrc).toContain('overview-performance-grid');
+    expect(overviewSrc).toContain('horizontal-card');
+    expect(overviewSrc).not.toContain('concert-vcard-media');
+    expect(overviewSrc).toContain('overview-pagination-bar');
   });
 
   it('verifies D-216: Borderless icons and universal "i" tooltips across all cards and sections', () => {
@@ -149,13 +155,49 @@ describe('D-210 to D-216: Organizer Overview Executive Redesign, Multi-Period KP
     expect(overviewSrc).not.toContain('overview-kpi-icon-wrap bg-blue');
     expect(overviewSrc).not.toContain('overview-kpi-icon-wrap bg-green');
 
-    // Tooltip on overview header, KPIs, charts, and concert cards
+    // Tooltip on overview header, KPIs, and concert cards
     expect(overviewSrc).toContain('<HeaderInfoTooltip text="ศูนย์รวมภาพรวมสถิติคอนเสิร์ตของคุณ');
     expect(overviewSrc).toContain('<HeaderInfoTooltip text="จำนวนคอนเสิร์ตที่ผ่านการอนุมัติ');
     expect(overviewSrc).toContain('<HeaderInfoTooltip text="ยอดขายบัตรรวมทุกงานคอนเสิร์ตก่อนหักค่าบริการระบบ');
-    expect(overviewSrc).toContain('<HeaderInfoTooltip text="ยอดเงินจากการจำหน่ายบัตรที่ทำรายการสำเร็จภายในวันนี้');
-    expect(overviewSrc).toContain('<HeaderInfoTooltip text="วิเคราะห์เปรียบเทียบยอดขายระหว่างแต่ละคอนเสิร์ต');
+    expect(overviewSrc).toContain('<HeaderInfoTooltip text="ยอดเงินจากการจำหน่ายบัตรแบ่งตามช่วงเวลา');
     expect(overviewSrc).toContain('<HeaderInfoTooltip text="สรุปยอดจำหน่ายบัตร รายได้รวม ยอดหักค่าบริการ');
+  });
+
+  it('verifies D-257 to D-261: Typographic hierarchy, inline borderless refresh, semantic colors, symbol cleanup, and container flattening', () => {
+    const overviewSrc = readFileSync(
+      join(rootDir, 'src/components/organizer-overview-view.tsx'),
+      'utf8',
+    );
+    const css = readFileSync(join(rootDir, 'src/app/globals.css'), 'utf8');
+
+    // D-258: Inline Borderless Refresh in header title row without quick-actions-bar container
+    expect(overviewSrc).toContain('overview-header-title-row');
+    expect(overviewSrc).toContain('overview-inline-refresh-btn');
+    expect(overviewSrc).toContain('inline-refresh-icon');
+    expect(overviewSrc).not.toContain('overview-quick-actions-bar');
+    expect(css).toContain('.overview-header-title-row');
+    expect(css).toContain('.overview-inline-refresh-btn');
+
+    // D-257: Typography scale and hierarchy (H1 1.5rem > H2 1.15rem)
+    expect(css).toContain('.overview-header-title {');
+    expect(css).toContain('font-size: 1.5rem;');
+    expect(css).toContain('.overview-performance-section .section-title {');
+    expect(css).toContain('font-size: 1.15rem;');
+    expect(css).toContain('.overview-performance-section .section-subtitle {');
+    expect(css).toContain('font-size: 0.825rem;');
+
+    // D-259: Neutral icons & semantic colors
+    expect(overviewSrc).toContain('overview-borderless-icon text-slate-500');
+    expect(overviewSrc).not.toContain('overview-borderless-icon text-indigo');
+    expect(overviewSrc).not.toContain('overview-borderless-icon text-blue');
+    expect(overviewSrc).not.toContain('overview-borderless-icon text-purple');
+    expect(overviewSrc).not.toContain('overview-borderless-icon text-amber');
+
+    // D-260: Removal of calculation symbol clutter (- and =) in finance zone
+    expect(overviewSrc).not.toContain('finance-metric-divider');
+
+    // D-261: Flattened containers
+    expect(css).toContain('.concert-card-zone-finance');
   });
 
   it('ensures 100% Zero Emojis (D-14) compliance across all touched files', () => {

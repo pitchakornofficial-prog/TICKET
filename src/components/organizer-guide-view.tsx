@@ -9,6 +9,7 @@ import {
   ChevronDownIcon,
   CheckCircleIcon,
   AlertTriangleIcon,
+  RefreshIcon,
 } from '@/components/icons';
 import { TicketIcon } from '@/components/ticket-icon';
 import { Button, Badge } from '@/components/ui';
@@ -242,6 +243,12 @@ const GUIDE_MODULES: GuideModule[] = [
 ];
 
 export function OrganizerGuideView() {
+  const [refreshing, setRefreshing] = useState(false);
+
+  const handleRefresh = () => {
+    setRefreshing(true);
+    setTimeout(() => setRefreshing(false), 400);
+  };
   const [searchQuery, setSearchQuery] = useState('');
   const [expandedModules, setExpandedModules] = useState<Record<string, boolean>>({
     scanning: false,
@@ -317,10 +324,23 @@ export function OrganizerGuideView() {
         {/* Header Toolbar */}
         <header className="guide-page-header">
           <div className="guide-header-text">
+            <div className="organizer-header-title-row">
             <h1 className="guide-page-title">
               คู่มือการใช้งานระบบสำหรับผู้จัดงาน
               <HeaderInfoTooltip text="คู่มือขั้นตอนการจัดคอนเสิร์ต การตั้งค่ารอบการแสดง การตั้งค่าราคาบัตร และคำแนะนำการใช้งานระบบทุกฟังก์ชัน" />
             </h1>
+            <button
+              type="button"
+              className="organizer-inline-refresh-btn"
+              data-testid="guide-refresh-btn"
+              onClick={handleRefresh}
+              disabled={refreshing}
+              aria-label="รีเฟรชข้อมูลคู่มือ"
+              title="รีเฟรชข้อมูลคู่มือ"
+            >
+              <RefreshIcon className={`inline-refresh-icon ${refreshing ? 'animate-spin' : ''}`} />
+            </button>
+          </div>
             <p className="guide-page-desc">
               รวบรวมแนวทางปฏิบัติ ขั้นตอนการทำงาน และกฎเกณฑ์สำคัญในการจัดการคอนเสิร์ต การสแกนบัตร และการเงินบนแพลตฟอร์ม TICKET
             </p>

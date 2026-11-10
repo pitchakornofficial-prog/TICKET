@@ -617,7 +617,7 @@ export function OrderPaymentView({ orderId }: OrderPaymentViewProps) {
 
         <div className="payment-buyer-disclaimer">
           <ShieldCheckIcon style={{ width: '16px', height: '16px', color: '#64748b', flexShrink: 0 }} />
-          <span>* บัตรทุกใบในคำสั่งซื้อนี้ใช้ข้อมูลผู้ซื้อชุดเดียวกัน ไม่ต้องลงทะเบียนชื่อผู้เข้าชมแยกใบ (AC-11)</span>
+          <span>* บัตรทุกใบในคำสั่งซื้อนี้ใช้ข้อมูลผู้ซื้อชุดเดียวกัน ไม่จำเป็นต้องลงทะเบียนชื่อผู้เข้าชมแยกใบ</span>
         </div>
       </section>
 
@@ -679,7 +679,8 @@ export function OrderPaymentView({ orderId }: OrderPaymentViewProps) {
               <div className="payment-item-info">
                 <strong className="payment-item-name">{item.ticketTypeName}</strong>
                 <span className="payment-item-qty">
-                  จำนวน {item.quantity} ใบ
+                  <TicketIcon style={{ width: '14px', height: '14px', color: 'var(--blue)' }} />
+                  <span>× {item.quantity}</span>
                 </span>
               </div>
               <strong className="payment-item-subtotal">{formatBaht(item.subtotal)}</strong>
@@ -692,13 +693,6 @@ export function OrderPaymentView({ orderId }: OrderPaymentViewProps) {
             <span>รวมราคาบัตร:</span>
             <strong id="quote-subtotal">{formatBaht(reservation.subtotal)}</strong>
           </div>
-
-          {reservation.discountAmount > 0 && (
-            <div className="payment-price-row discount-row" style={{ color: '#16a34a' }}>
-              <span>ส่วนลดสิทธิพิเศษ ม.อุบลฯ (15% สูงสุด 2 ใบ):</span>
-              <strong id="quote-discount">-{formatBaht(reservation.discountAmount)}</strong>
-            </div>
-          )}
 
           {reservation.discountAmount > 0 && (
             <div className="payment-price-row discount-row" style={{ color: '#16a34a' }}>
