@@ -263,6 +263,10 @@
               {
                 "Name": "EMAIL_FROM",
                 "Value": "TICKET <noreply@ticket.phatysd.me>"
+              },
+              {
+                "Name": "DATABASE_POOL_MAX",
+                "Value": "50"
               }
             ],
             "Secrets": [
