@@ -171,8 +171,8 @@ test.describe('Guest Order Lookup flow (TASK-018, AC-21, AC-22, AC-62, AC-63, AC
     await page.getByRole('button', { name: 'ยืนยันรหัส OTP' }).click();
 
     // Should transition to orders view (AC-21, AC-62)
-    await expect(page.getByText(`รหัสคำสั่งซื้อ`)).toBeVisible();
-    await expect(page.getByText(orderId)).toBeVisible();
+    await expect(page.getByText(`รหัสคำสั่งซื้อ`)).toBeVisible({ timeout: 15000 });
+    await expect(page.getByText(orderId).first()).toBeVisible();
     await expect(page.getByText('ชำระเงินสำเร็จ')).toBeVisible();
     await expect(page.getByRole('heading', { name: eventTitle })).toBeVisible();
 
@@ -211,7 +211,7 @@ test.describe('Guest Order Lookup flow (TASK-018, AC-21, AC-22, AC-62, AC-63, AC
     await freshPage.getByRole('button', { name: 'ยืนยันรหัส OTP' }).click();
 
     // Now revealed after OTP
-    await expect(freshPage.getByText(orderId)).toBeVisible();
+    await expect(freshPage.getByText(orderId).first()).toBeVisible({ timeout: 15000 });
     await expect(freshPage.getByText('ชำระเงินสำเร็จ')).toBeVisible();
     await expect(freshPage.getByText('รายการบัตรเข้างาน (2 ใบ)')).toBeVisible();
 

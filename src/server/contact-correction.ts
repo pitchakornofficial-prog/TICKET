@@ -37,23 +37,35 @@ export interface PaidOrderForCorrection {
   auditLogs?: OrderContactAuditRecord[];
 }
 
+const contactAuditSchemaReady = new WeakMap<Pool, Promise<void>>();
+
 export async function ensureContactAuditSchema(pool: Pool): Promise<void> {
-  await ensureReservationSchema(pool);
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS order_contact_audit_logs (
-      id TEXT PRIMARY KEY,
-      "orderId" TEXT NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
-      "correctedByUserId" TEXT NOT NULL,
-      "correctedByName" TEXT NOT NULL,
-      "previousEmail" TEXT NOT NULL,
-      "previousPhone" TEXT NOT NULL,
-      "newEmail" TEXT NOT NULL,
-      "newPhone" TEXT NOT NULL,
-      reason TEXT NOT NULL,
-      "createdAt" TIMESTAMPTZ NOT NULL DEFAULT now()
-    );
-    CREATE INDEX IF NOT EXISTS idx_contact_audit_order ON order_contact_audit_logs("orderId");
-  `);
+  let promise = contactAuditSchemaReady.get(pool);
+  if (!promise) {
+    promise = (async () => {
+      await ensureReservationSchema(pool);
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS order_contact_audit_logs (
+          id TEXT PRIMARY KEY,
+          "orderId" TEXT NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+          "correctedByUserId" TEXT NOT NULL,
+          "correctedByName" TEXT NOT NULL,
+          "previousEmail" TEXT NOT NULL,
+          "previousPhone" TEXT NOT NULL,
+          "newEmail" TEXT NOT NULL,
+          "newPhone" TEXT NOT NULL,
+          reason TEXT NOT NULL,
+          "createdAt" TIMESTAMPTZ NOT NULL DEFAULT now()
+        );
+        CREATE INDEX IF NOT EXISTS idx_contact_audit_order ON order_contact_audit_logs("orderId");
+      `);
+    })().catch((err) => {
+      contactAuditSchemaReady.delete(pool);
+      throw err;
+    });
+    contactAuditSchemaReady.set(pool, promise);
+  }
+  await promise;
 }
 
 /**

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { readFileSync, existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 describe('D-268 & D-270: Universal Bespoke 1:1 Skeleton Screen & Shimmer Engine', () => {
@@ -26,7 +26,6 @@ describe('D-268 & D-270: Universal Bespoke 1:1 Skeleton Screen & Shimmer Engine'
 
   it('provides loading.tsx skeletons for all major discovery, purchase, and workspace routes', () => {
     const routes = [
-      'src/app/loading.tsx',
       'src/app/events/[id]/loading.tsx',
       'src/app/events/[id]/checkout/loading.tsx',
       'src/app/news/loading.tsx',
@@ -34,7 +33,6 @@ describe('D-268 & D-270: Universal Bespoke 1:1 Skeleton Screen & Shimmer Engine'
       'src/app/orders/[id]/payment/loading.tsx',
       'src/app/orders/[id]/success/loading.tsx',
       'src/app/my-tickets/loading.tsx',
-      'src/app/back-office/loading.tsx',
     ];
 
     for (const route of routes) {
@@ -48,11 +46,9 @@ describe('D-268 & D-270: Universal Bespoke 1:1 Skeleton Screen & Shimmer Engine'
   });
 
   it('verifies D-270 Root Loading Bleed Elimination & Decoupling', () => {
-    // 1. Root loading.tsx is a Minimal Neutral Route Bridge (DOES NOT contain home-specific banner or catalog grid)
-    const rootLoadingContent = readFileSync(resolve(rootDir, 'src/app/loading.tsx'), 'utf-8');
-    expect(rootLoadingContent).not.toContain('skeleton-home-banner');
-    expect(rootLoadingContent).not.toContain('catalog-events-grid');
-    expect(rootLoadingContent).not.toContain('catalog-tabs');
+    // 1. No root-level loading.tsx: a root Suspense boundary streams HTTP 200 before
+    // access checks run, which made unauthorized back-office routes return 200 instead of 404.
+    expect(existsSync(resolve(rootDir, 'src/app/loading.tsx'))).toBe(false);
 
     // 2. Dedicated HomeCatalogSkeleton component exists with full 1:1 fidelity
     const homeSkeletonPath = resolve(rootDir, 'src/components/home-catalog-skeleton.tsx');
@@ -116,14 +112,13 @@ describe('D-268 & D-270: Universal Bespoke 1:1 Skeleton Screen & Shimmer Engine'
     expect(newsDetailContent).toContain('news-detail-cover');
     expect(newsDetailContent).toContain('news-related-concert-card');
 
-    // 7. Back Office Skeleton
-    const backOfficeContent = readFileSync(resolve(rootDir, 'src/app/back-office/loading.tsx'), 'utf-8');
-    expect(backOfficeContent).toContain('admin-topbar');
+    // 7. Back Office intentionally has no loading boundary: a streamed skeleton would
+    // commit HTTP 200 before role access is known, so unauthorized workspaces could not return 404.
+    expect(existsSync(resolve(rootDir, 'src/app/back-office/loading.tsx'))).toBe(false);
   });
 
   it('verifies 100% Zero Emojis compliance (D-14) in all skeleton files', () => {
     const filesToCheck = [
-      'src/app/loading.tsx',
       'src/components/home-catalog-skeleton.tsx',
       'src/app/events/[id]/loading.tsx',
       'src/app/events/[id]/checkout/loading.tsx',
@@ -132,7 +127,6 @@ describe('D-268 & D-270: Universal Bespoke 1:1 Skeleton Screen & Shimmer Engine'
       'src/app/orders/[id]/payment/loading.tsx',
       'src/app/orders/[id]/success/loading.tsx',
       'src/app/my-tickets/loading.tsx',
-      'src/app/back-office/loading.tsx',
       'tests/unit/d268-universal-skeleton-screens.test.ts',
     ];
 

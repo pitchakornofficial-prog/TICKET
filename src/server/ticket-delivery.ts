@@ -33,25 +33,36 @@ function ticketOrderUrl(orderId: string, override?: string): string {
   return url.toString();
 }
 
+const ticketDeliverySchemaPromises = new WeakMap<Pool, Promise<void>>();
+
 export async function ensureTicketDeliverySchema(pool: Pool): Promise<void> {
-  await ensureTicketSchema(pool);
-  await ensureReservationSchema(pool);
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS ticket_email_deliveries (
-      id TEXT PRIMARY KEY,
-      "orderId" TEXT NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
-      "recipientEmail" TEXT NOT NULL,
-      status TEXT NOT NULL DEFAULT 'pending',
-      "messageId" TEXT,
-      error TEXT,
-      "retryCount" INTEGER NOT NULL DEFAULT 0,
-      "sentAt" TIMESTAMPTZ,
-      "createdAt" TIMESTAMPTZ NOT NULL DEFAULT now(),
-      "updatedAt" TIMESTAMPTZ NOT NULL DEFAULT now()
-    );
-    CREATE INDEX IF NOT EXISTS idx_ticket_deliveries_order ON ticket_email_deliveries("orderId");
-    CREATE INDEX IF NOT EXISTS idx_ticket_deliveries_status ON ticket_email_deliveries(status);
-  `);
+  const existing = ticketDeliverySchemaPromises.get(pool);
+  if (existing) return existing;
+  const promise = (async () => {
+    await ensureTicketSchema(pool);
+    await ensureReservationSchema(pool);
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS ticket_email_deliveries (
+        id TEXT PRIMARY KEY,
+        "orderId" TEXT NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+        "recipientEmail" TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'pending',
+        "messageId" TEXT,
+        error TEXT,
+        "retryCount" INTEGER NOT NULL DEFAULT 0,
+        "sentAt" TIMESTAMPTZ,
+        "createdAt" TIMESTAMPTZ NOT NULL DEFAULT now(),
+        "updatedAt" TIMESTAMPTZ NOT NULL DEFAULT now()
+      );
+      CREATE INDEX IF NOT EXISTS idx_ticket_deliveries_order ON ticket_email_deliveries("orderId");
+      CREATE INDEX IF NOT EXISTS idx_ticket_deliveries_status ON ticket_email_deliveries(status);
+    `);
+  })().catch((err) => {
+    ticketDeliverySchemaPromises.delete(pool);
+    throw err;
+  });
+  ticketDeliverySchemaPromises.set(pool, promise);
+  await promise;
 }
 
 /**

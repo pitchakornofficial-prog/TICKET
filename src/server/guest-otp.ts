@@ -60,41 +60,56 @@ export interface GuestVerifiedSession {
   expiresAt: string;
 }
 
+const guestOtpSchemaPromises = new WeakMap<Pool, Promise<void>>();
+
 export async function ensureGuestOtpSchema(pool: Pool): Promise<void> {
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS guest_otp (
-      id TEXT PRIMARY KEY,
-      email TEXT NOT NULL,
-      purpose TEXT NOT NULL,
-      code TEXT NOT NULL,
-      "requestId" TEXT NOT NULL,
-      "expiresAt" TIMESTAMPTZ NOT NULL,
-      "consumedAt" TIMESTAMPTZ,
-      "createdAt" TIMESTAMPTZ NOT NULL DEFAULT now()
-    );
-    CREATE INDEX IF NOT EXISTS idx_guest_otp_lookup ON guest_otp(email, purpose, "createdAt" DESC);
-    CREATE INDEX IF NOT EXISTS idx_guest_otp_request ON guest_otp("requestId");
+  const existing = guestOtpSchemaPromises.get(pool);
+  if (existing) {
+    return existing;
+  }
+  const promise = (async () => {
+    try {
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS guest_otp (
+          id TEXT PRIMARY KEY,
+          email TEXT NOT NULL,
+          purpose TEXT NOT NULL,
+          code TEXT NOT NULL,
+          "requestId" TEXT NOT NULL,
+          "expiresAt" TIMESTAMPTZ NOT NULL,
+          "consumedAt" TIMESTAMPTZ,
+          "createdAt" TIMESTAMPTZ NOT NULL DEFAULT now()
+        );
+        CREATE INDEX IF NOT EXISTS idx_guest_otp_lookup ON guest_otp(email, purpose, "createdAt" DESC);
+        CREATE INDEX IF NOT EXISTS idx_guest_otp_request ON guest_otp("requestId");
 
-    CREATE TABLE IF NOT EXISTS guest_otp_tracking (
-      key TEXT PRIMARY KEY,
-      "requestCount" INTEGER NOT NULL DEFAULT 0,
-      "lastRequestAt" TIMESTAMPTZ NOT NULL,
-      "failCount" INTEGER NOT NULL DEFAULT 0,
-      "lastFailAt" TIMESTAMPTZ,
-      "blockedUntil" TIMESTAMPTZ
-    );
+        CREATE TABLE IF NOT EXISTS guest_otp_tracking (
+          key TEXT PRIMARY KEY,
+          "requestCount" INTEGER NOT NULL DEFAULT 0,
+          "lastRequestAt" TIMESTAMPTZ NOT NULL,
+          "failCount" INTEGER NOT NULL DEFAULT 0,
+          "lastFailAt" TIMESTAMPTZ,
+          "blockedUntil" TIMESTAMPTZ
+        );
 
-    CREATE TABLE IF NOT EXISTS guest_verified_sessions (
-      token TEXT PRIMARY KEY,
-      email TEXT NOT NULL,
-      name TEXT NOT NULL,
-      phone TEXT NOT NULL,
-      purpose TEXT NOT NULL,
-      "verifiedAt" TIMESTAMPTZ NOT NULL DEFAULT now(),
-      "expiresAt" TIMESTAMPTZ NOT NULL
-    );
-    CREATE INDEX IF NOT EXISTS idx_guest_verified_email ON guest_verified_sessions(email);
-  `);
+        CREATE TABLE IF NOT EXISTS guest_verified_sessions (
+          token TEXT PRIMARY KEY,
+          email TEXT NOT NULL,
+          name TEXT NOT NULL,
+          phone TEXT NOT NULL,
+          purpose TEXT NOT NULL,
+          "verifiedAt" TIMESTAMPTZ NOT NULL DEFAULT now(),
+          "expiresAt" TIMESTAMPTZ NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_guest_verified_email ON guest_verified_sessions(email);
+      `);
+    } catch (err) {
+      guestOtpSchemaPromises.delete(pool);
+      throw err;
+    }
+  })();
+  guestOtpSchemaPromises.set(pool, promise);
+  return promise;
 }
 
 export function validateBuyerDetails(input: Partial<GuestBuyerDetails>): {
@@ -202,6 +217,11 @@ export async function requestGuestOtp(
     const globalTrackKey = `${email}:global`;
     const trackKey = `${email}:${purpose}`;
 
+    const trackRes = await client.query(
+      'SELECT "requestCount", "lastRequestAt", "failCount", "lastFailAt", "blockedUntil" FROM guest_otp_tracking WHERE key = $1 FOR UPDATE',
+      [trackKey],
+    );
+
     // 1. Global Email-level rate limit & cooldown checks (Issue #6: anti-purpose switching bypass)
     const globalTrackRes = await client.query(
       'SELECT "requestCount", "lastRequestAt" FROM guest_otp_tracking WHERE key = $1 FOR UPDATE',
@@ -241,11 +261,6 @@ export async function requestGuestOtp(
     } else {
       globalRequestCount = 1;
     }
-
-    const trackRes = await client.query(
-      'SELECT "requestCount", "lastRequestAt", "failCount", "lastFailAt", "blockedUntil" FROM guest_otp_tracking WHERE key = $1 FOR UPDATE',
-      [trackKey],
-    );
 
     let failCount = 0;
     let lastFailAt: Date | null = null;
@@ -580,10 +595,14 @@ export async function verifyGuestOtp(
       return { success: false, error: 'รหัส OTP นี้ถูกใช้งานไปแล้ว', code: 'REPLAY' };
     }
 
-    // Reset fail count on successful verification
+    // Reset fail count on successful verification and clear global cooldown so verified user can immediately perform order lookup
     await client.query(
       `UPDATE guest_otp_tracking SET "failCount" = 0, "lastFailAt" = NULL, "blockedUntil" = NULL WHERE key = $1`,
       [trackKey],
+    );
+    await client.query(
+      `UPDATE guest_otp_tracking SET "lastRequestAt" = $1 WHERE key = $2`,
+      [new Date(nowMs - (OTP_RESEND_COOLDOWN_SECONDS + 1) * 1000), `${email}:global`],
     );
 
     // Create verified session (NQ-06 implementation choice)

@@ -69,76 +69,91 @@ export interface RefundRequestSummary {
   items: RefundRequestItem[];
 }
 
+const refundSchemaPromises = new WeakMap<Pool, Promise<void>>();
+
 export async function ensureRefundSchema(pool: Pool): Promise<void> {
-  const check = await pool.query(`SELECT to_regclass('refund_requests') AS tbl`);
-  if (check.rows[0]?.tbl) return;
+  const existing = refundSchemaPromises.get(pool);
+  if (existing) {
+    return existing;
+  }
+  const promise = (async () => {
+    try {
+      const check = await pool.query(`SELECT to_regclass('refund_requests') AS tbl`);
+      if (check.rows[0]?.tbl) return;
 
-  await ensureTicketSchema(pool);
-  await ensureAdmissionSchema(pool);
-  await ensureGuestOtpSchema(pool);
+      await ensureTicketSchema(pool);
+      await ensureAdmissionSchema(pool);
+      await ensureGuestOtpSchema(pool);
 
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS refund_requests (
-      id TEXT PRIMARY KEY,
-      "orderId" TEXT NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
-      "buyerEmail" TEXT NOT NULL,
-      "buyerPhone" TEXT NOT NULL,
-      "buyerName" TEXT NOT NULL,
-      "requestedAmount" NUMERIC(12, 2) NOT NULL,
-      reason TEXT NOT NULL,
-      status TEXT NOT NULL DEFAULT 'pending',
-      "bankName" TEXT,
-      "bankAccountNo" TEXT,
-      "bankAccountName" TEXT,
-      "submittedAt" TIMESTAMPTZ NOT NULL DEFAULT now(),
-      "reviewedAt" TIMESTAMPTZ,
-      "reviewedByUserId" TEXT REFERENCES auth_user(id),
-      "reviewedByName" TEXT,
-      "rejectionReason" TEXT,
-      "createdAt" TIMESTAMPTZ NOT NULL DEFAULT now(),
-      "updatedAt" TIMESTAMPTZ NOT NULL DEFAULT now()
-    );
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS refund_requests (
+          id TEXT PRIMARY KEY,
+          "orderId" TEXT NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+          "buyerEmail" TEXT NOT NULL,
+          "buyerPhone" TEXT NOT NULL,
+          "buyerName" TEXT NOT NULL,
+          "requestedAmount" NUMERIC(12, 2) NOT NULL,
+          reason TEXT NOT NULL,
+          status TEXT NOT NULL DEFAULT 'pending',
+          "bankName" TEXT,
+          "bankAccountNo" TEXT,
+          "bankAccountName" TEXT,
+          "submittedAt" TIMESTAMPTZ NOT NULL DEFAULT now(),
+          "reviewedAt" TIMESTAMPTZ,
+          "reviewedByUserId" TEXT REFERENCES auth_user(id),
+          "reviewedByName" TEXT,
+          "rejectionReason" TEXT,
+          "createdAt" TIMESTAMPTZ NOT NULL DEFAULT now(),
+          "updatedAt" TIMESTAMPTZ NOT NULL DEFAULT now()
+        );
 
-    CREATE INDEX IF NOT EXISTS idx_refund_requests_order ON refund_requests("orderId");
-    CREATE INDEX IF NOT EXISTS idx_refund_requests_email ON refund_requests("buyerEmail");
-    CREATE INDEX IF NOT EXISTS idx_refund_requests_status ON refund_requests(status);
+        CREATE INDEX IF NOT EXISTS idx_refund_requests_order ON refund_requests("orderId");
+        CREATE INDEX IF NOT EXISTS idx_refund_requests_email ON refund_requests("buyerEmail");
+        CREATE INDEX IF NOT EXISTS idx_refund_requests_status ON refund_requests(status);
 
-    CREATE TABLE IF NOT EXISTS refund_request_items (
-      id TEXT PRIMARY KEY,
-      "refundRequestId" TEXT NOT NULL REFERENCES refund_requests(id) ON DELETE CASCADE,
-      "ticketId" TEXT NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
-      "ticketCode" TEXT NOT NULL,
-      "ticketPrice" NUMERIC(12, 2) NOT NULL,
-      "createdAt" TIMESTAMPTZ NOT NULL DEFAULT now()
-    );
+        CREATE TABLE IF NOT EXISTS refund_request_items (
+          id TEXT PRIMARY KEY,
+          "refundRequestId" TEXT NOT NULL REFERENCES refund_requests(id) ON DELETE CASCADE,
+          "ticketId" TEXT NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
+          "ticketCode" TEXT NOT NULL,
+          "ticketPrice" NUMERIC(12, 2) NOT NULL,
+          "createdAt" TIMESTAMPTZ NOT NULL DEFAULT now()
+        );
 
-    CREATE INDEX IF NOT EXISTS idx_refund_items_request ON refund_request_items("refundRequestId");
-    CREATE INDEX IF NOT EXISTS idx_refund_items_ticket ON refund_request_items("ticketId");
+        CREATE INDEX IF NOT EXISTS idx_refund_items_request ON refund_request_items("refundRequestId");
+        CREATE INDEX IF NOT EXISTS idx_refund_items_ticket ON refund_request_items("ticketId");
 
-    CREATE TABLE IF NOT EXISTS refund_liabilities (
-      id TEXT PRIMARY KEY,
-      "refundRequestId" TEXT NOT NULL REFERENCES refund_requests(id) ON DELETE CASCADE,
-      "orderId" TEXT NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
-      "eventId" TEXT NOT NULL REFERENCES events(id) ON DELETE CASCADE,
-      "sessionId" TEXT NOT NULL REFERENCES event_sessions(id) ON DELETE CASCADE,
-      amount NUMERIC(12, 2) NOT NULL,
-      status TEXT NOT NULL DEFAULT 'unpaid',
-      "approvedAt" TIMESTAMPTZ NOT NULL DEFAULT now(),
-      "settledAt" TIMESTAMPTZ,
-      "createdAt" TIMESTAMPTZ NOT NULL DEFAULT now()
-    );
+        CREATE TABLE IF NOT EXISTS refund_liabilities (
+          id TEXT PRIMARY KEY,
+          "refundRequestId" TEXT NOT NULL REFERENCES refund_requests(id) ON DELETE CASCADE,
+          "orderId" TEXT NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+          "eventId" TEXT NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+          "sessionId" TEXT NOT NULL REFERENCES event_sessions(id) ON DELETE CASCADE,
+          amount NUMERIC(12, 2) NOT NULL,
+          status TEXT NOT NULL DEFAULT 'unpaid',
+          "approvedAt" TIMESTAMPTZ NOT NULL DEFAULT now(),
+          "settledAt" TIMESTAMPTZ,
+          "createdAt" TIMESTAMPTZ NOT NULL DEFAULT now()
+        );
 
-    CREATE UNIQUE INDEX IF NOT EXISTS idx_refund_liabilities_request ON refund_liabilities("refundRequestId");
-    CREATE INDEX IF NOT EXISTS idx_refund_liabilities_event ON refund_liabilities("eventId");
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_refund_liabilities_request ON refund_liabilities("refundRequestId");
+        CREATE INDEX IF NOT EXISTS idx_refund_liabilities_event ON refund_liabilities("eventId");
 
-    ALTER TABLE refund_requests ADD COLUMN IF NOT EXISTS "transferredAt" TIMESTAMPTZ;
-    ALTER TABLE refund_requests ADD COLUMN IF NOT EXISTS "transferredAmount" NUMERIC(12, 2);
-    ALTER TABLE refund_requests ADD COLUMN IF NOT EXISTS "transferProofKey" TEXT;
-    ALTER TABLE refund_requests ADD COLUMN IF NOT EXISTS "transferProofUrl" TEXT;
-    ALTER TABLE refund_requests ADD COLUMN IF NOT EXISTS "transferNote" TEXT;
-    ALTER TABLE refund_requests ADD COLUMN IF NOT EXISTS "transferFailureReason" TEXT;
-    ALTER TABLE refund_requests ADD COLUMN IF NOT EXISTS "transferFailedAt" TIMESTAMPTZ;
-  `);
+        ALTER TABLE refund_requests ADD COLUMN IF NOT EXISTS "transferredAt" TIMESTAMPTZ;
+        ALTER TABLE refund_requests ADD COLUMN IF NOT EXISTS "transferredAmount" NUMERIC(12, 2);
+        ALTER TABLE refund_requests ADD COLUMN IF NOT EXISTS "transferProofKey" TEXT;
+        ALTER TABLE refund_requests ADD COLUMN IF NOT EXISTS "transferProofUrl" TEXT;
+        ALTER TABLE refund_requests ADD COLUMN IF NOT EXISTS "transferNote" TEXT;
+        ALTER TABLE refund_requests ADD COLUMN IF NOT EXISTS "transferFailureReason" TEXT;
+        ALTER TABLE refund_requests ADD COLUMN IF NOT EXISTS "transferFailedAt" TIMESTAMPTZ;
+      `);
+    } catch (err) {
+      refundSchemaPromises.delete(pool);
+      throw err;
+    }
+  })();
+  refundSchemaPromises.set(pool, promise);
+  return promise;
 }
 
 /**
@@ -848,6 +863,7 @@ export async function approveRefundRequest(
     const ticketIds = tickets.map(t => t.id);
 
     // 3. Re-verify admission status (AC-88: cannot refund if ever admitted)
+    await ensureAdmissionSchema(pool);
     const admCheck = await client.query<{ ticketId: string; ticketCode: string }>(
       `SELECT DISTINCT t.id AS "ticketId", t."ticketCode"
        FROM ticket_admission_logs tal

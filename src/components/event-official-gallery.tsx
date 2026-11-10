@@ -151,7 +151,7 @@ export function EventOfficialGallery({
         <h2 id="cat-gallery-title" className="category-heading">
           <CameraIcon style={{ width: '22px', height: '22px', color: 'var(--blue)' }} />
           ภาพเพิ่มเติมจากผู้จัด (Event Gallery)
-          <span className="sr-only">สำหรับ {eventTitle}</span>
+          <span className="sr-only" aria-hidden="true">สำหรับ {eventTitle}</span>
         </h2>
       </div>
 

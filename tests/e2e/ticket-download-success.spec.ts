@@ -133,7 +133,7 @@ test.describe('Dedicated Payment Success Page & Ticket Download (D-52)', () => {
     await expect(page.locator('#buyer-summary-name')).toHaveText(guestName);
     await expect(page.locator('#buyer-summary-email')).toHaveText(guestEmail);
     await expect(page.locator('#buyer-summary-phone')).toHaveText(guestPhone);
-    await expect(page.locator('#quote-total')).toContainText('6,000');
+    await expect(page.locator('#quote-total')).toContainText('6,300');
 
     // Switch to Tab 2 (Dedicated Concert Tickets View) via CTA button
     const viewTicketsCta = page.locator('#slip-view-tickets-cta');

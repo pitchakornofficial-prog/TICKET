@@ -47,69 +47,84 @@ export interface PaymentRecoveryCaseDetail {
   updatedAt: string;
 }
 
+const paymentSchemaPromises = new WeakMap<Pool, Promise<void>>();
+
 export async function ensurePaymentSchema(pool: Pool): Promise<void> {
-  await ensureReservationSchema(pool);
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS payment_charges (
-      id TEXT PRIMARY KEY,
-      "orderId" TEXT NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
-      amount INTEGER NOT NULL,
-      currency TEXT NOT NULL DEFAULT 'thb',
-      status TEXT NOT NULL DEFAULT 'pending',
-      "qrCodeUrl" TEXT NOT NULL,
-      "expiresAt" TIMESTAMPTZ NOT NULL,
-      "paidAt" TIMESTAMPTZ,
-      "createdAt" TIMESTAMPTZ NOT NULL DEFAULT now(),
-      "updatedAt" TIMESTAMPTZ NOT NULL DEFAULT now(),
-      "promptpayData" TEXT,
-      "livemode" BOOLEAN NOT NULL DEFAULT false,
-      "idempotencyKey" TEXT
-    );
-    ALTER TABLE payment_charges ADD COLUMN IF NOT EXISTS "promptpayData" TEXT;
-    ALTER TABLE payment_charges ADD COLUMN IF NOT EXISTS "livemode" BOOLEAN NOT NULL DEFAULT false;
-    ALTER TABLE payment_charges ADD COLUMN IF NOT EXISTS "idempotencyKey" TEXT;
-    ALTER TABLE payment_charges ADD COLUMN IF NOT EXISTS "stripeEventId" TEXT;
-    ALTER TABLE payment_charges ADD COLUMN IF NOT EXISTS "stripeApiVersion" TEXT;
-    CREATE INDEX IF NOT EXISTS idx_payment_charges_order ON payment_charges("orderId");
-    CREATE INDEX IF NOT EXISTS idx_payment_charges_status ON payment_charges(status);
-    CREATE UNIQUE INDEX IF NOT EXISTS idx_payment_charges_order_active ON payment_charges("orderId") WHERE status = 'pending';
+  const existing = paymentSchemaPromises.get(pool);
+  if (existing) {
+    return existing;
+  }
+  const promise = (async () => {
+    try {
+      await ensureReservationSchema(pool);
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS payment_charges (
+          id TEXT PRIMARY KEY,
+          "orderId" TEXT NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+          amount INTEGER NOT NULL,
+          currency TEXT NOT NULL DEFAULT 'thb',
+          status TEXT NOT NULL DEFAULT 'pending',
+          "qrCodeUrl" TEXT NOT NULL,
+          "expiresAt" TIMESTAMPTZ NOT NULL,
+          "paidAt" TIMESTAMPTZ,
+          "createdAt" TIMESTAMPTZ NOT NULL DEFAULT now(),
+          "updatedAt" TIMESTAMPTZ NOT NULL DEFAULT now(),
+          "promptpayData" TEXT,
+          "livemode" BOOLEAN NOT NULL DEFAULT false,
+          "idempotencyKey" TEXT
+        );
+        ALTER TABLE payment_charges ADD COLUMN IF NOT EXISTS "promptpayData" TEXT;
+        ALTER TABLE payment_charges ADD COLUMN IF NOT EXISTS "livemode" BOOLEAN NOT NULL DEFAULT false;
+        ALTER TABLE payment_charges ADD COLUMN IF NOT EXISTS "idempotencyKey" TEXT;
+        ALTER TABLE payment_charges ADD COLUMN IF NOT EXISTS "stripeEventId" TEXT;
+        ALTER TABLE payment_charges ADD COLUMN IF NOT EXISTS "stripeApiVersion" TEXT;
+        CREATE INDEX IF NOT EXISTS idx_payment_charges_order ON payment_charges("orderId");
+        CREATE INDEX IF NOT EXISTS idx_payment_charges_status ON payment_charges(status);
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_payment_charges_order_active ON payment_charges("orderId") WHERE status = 'pending';
 
-    CREATE TABLE IF NOT EXISTS stripe_webhook_events (
-      id TEXT PRIMARY KEY,
-      "eventType" TEXT NOT NULL,
-      "intentId" TEXT NOT NULL,
-      "orderId" TEXT NOT NULL,
-      "apiVersion" TEXT,
-      "livemode" BOOLEAN NOT NULL DEFAULT false,
-      "eventCreated" TIMESTAMPTZ NOT NULL,
-      "receivedAt" TIMESTAMPTZ NOT NULL DEFAULT now(),
-      status TEXT NOT NULL DEFAULT 'processed'
-    );
-    CREATE INDEX IF NOT EXISTS idx_stripe_events_order ON stripe_webhook_events("orderId");
-    CREATE INDEX IF NOT EXISTS idx_stripe_events_intent ON stripe_webhook_events("intentId");
+        CREATE TABLE IF NOT EXISTS stripe_webhook_events (
+          id TEXT PRIMARY KEY,
+          "eventType" TEXT NOT NULL,
+          "intentId" TEXT NOT NULL,
+          "orderId" TEXT NOT NULL,
+          "apiVersion" TEXT,
+          "livemode" BOOLEAN NOT NULL DEFAULT false,
+          "eventCreated" TIMESTAMPTZ NOT NULL,
+          "receivedAt" TIMESTAMPTZ NOT NULL DEFAULT now(),
+          status TEXT NOT NULL DEFAULT 'processed'
+        );
+        CREATE INDEX IF NOT EXISTS idx_stripe_events_order ON stripe_webhook_events("orderId");
+        CREATE INDEX IF NOT EXISTS idx_stripe_events_intent ON stripe_webhook_events("intentId");
 
-    CREATE TABLE IF NOT EXISTS payment_recovery_cases (
-      id TEXT PRIMARY KEY,
-      "orderId" TEXT NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
-      "chargeId" TEXT NOT NULL UNIQUE REFERENCES payment_charges(id) ON DELETE CASCADE,
-      reason TEXT NOT NULL,
-      amount NUMERIC(12, 2) NOT NULL,
-      "customerFee" NUMERIC(12, 2) NOT NULL,
-      subtotal NUMERIC(12, 2) NOT NULL,
-      status TEXT NOT NULL DEFAULT 'pending_review',
-      "providerPaidAt" TIMESTAMPTZ NOT NULL,
-      "orderExpiresAt" TIMESTAMPTZ NOT NULL,
-      "buyerName" TEXT NOT NULL,
-      "buyerEmail" TEXT NOT NULL,
-      "buyerPhone" TEXT NOT NULL,
-      notes TEXT,
-      "createdAt" TIMESTAMPTZ NOT NULL DEFAULT now(),
-      "updatedAt" TIMESTAMPTZ NOT NULL DEFAULT now()
-    );
-    CREATE INDEX IF NOT EXISTS idx_recovery_cases_order ON payment_recovery_cases("orderId");
-    CREATE INDEX IF NOT EXISTS idx_recovery_cases_charge ON payment_recovery_cases("chargeId");
-    CREATE INDEX IF NOT EXISTS idx_recovery_cases_status ON payment_recovery_cases(status);
-  `);
+        CREATE TABLE IF NOT EXISTS payment_recovery_cases (
+          id TEXT PRIMARY KEY,
+          "orderId" TEXT NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
+          "chargeId" TEXT NOT NULL UNIQUE REFERENCES payment_charges(id) ON DELETE CASCADE,
+          reason TEXT NOT NULL,
+          amount NUMERIC(12, 2) NOT NULL,
+          "customerFee" NUMERIC(12, 2) NOT NULL,
+          subtotal NUMERIC(12, 2) NOT NULL,
+          status TEXT NOT NULL DEFAULT 'pending_review',
+          "providerPaidAt" TIMESTAMPTZ NOT NULL,
+          "orderExpiresAt" TIMESTAMPTZ NOT NULL,
+          "buyerName" TEXT NOT NULL,
+          "buyerEmail" TEXT NOT NULL,
+          "buyerPhone" TEXT NOT NULL,
+          notes TEXT,
+          "createdAt" TIMESTAMPTZ NOT NULL DEFAULT now(),
+          "updatedAt" TIMESTAMPTZ NOT NULL DEFAULT now()
+        );
+        CREATE INDEX IF NOT EXISTS idx_recovery_cases_order ON payment_recovery_cases("orderId");
+        CREATE INDEX IF NOT EXISTS idx_recovery_cases_charge ON payment_recovery_cases("chargeId");
+        CREATE INDEX IF NOT EXISTS idx_recovery_cases_status ON payment_recovery_cases(status);
+      `);
+    } catch (err) {
+      paymentSchemaPromises.delete(pool);
+      throw err;
+    }
+  })();
+  paymentSchemaPromises.set(pool, promise);
+  return promise;
 }
 
 

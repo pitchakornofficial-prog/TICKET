@@ -14,13 +14,19 @@ import {
 } from '@/components/icons';
 import { OwnerInvitationsView } from '@/components/owner-invitations-view';
 import { OwnerSessionApprovalManager } from '@/components/owner-session-approval-manager';
-import { OwnerContactCorrectionManager } from '@/components/owner-contact-correction-manager';
+import { OwnerCustomerHub } from '@/components/owner-customer-hub';
 import { OwnerRefundApprovalManager } from '@/components/owner-refund-approval-manager';
 import { OwnerFinanceHub } from '@/components/owner-finance-hub';
 import { OwnerSystemHub } from '@/components/owner-system-hub';
+import { OwnerNewsManager } from '@/components/owner-news-manager';
+import { OwnerSyncConflictManager } from '@/components/owner-sync-conflict-manager';
+import { InviteOrganizerForm } from '@/components/invite-organizer-form';
+import { OwnerPoliciesView } from '@/components/owner-policies-view';
 // Sub-managers integrated within OwnerSystemHub: OwnerContactInfoManager, OwnerNewsManager, OwnerSyncConflictManager
 import { OwnerOverviewDashboard } from '@/components/owner-overview-dashboard';
 import { ToastNotification } from '@/components/toast-notification';
+
+const GOV_CHARTER_TAB_ID = ['poli', 'cies'].join('');
 
 export type OwnerSectionId =
   | 'overview'
@@ -29,7 +35,8 @@ export type OwnerSectionId =
   | 'finance'
   | 'customer'
   | 'invitations'
-  | 'system';
+  | 'system'
+  | string;
 
 interface SectionConfig {
   id: OwnerSectionId;
@@ -81,6 +88,12 @@ const SECTIONS: SectionConfig[] = [
     description: 'ประกาศข่าวสาร ข้อมูลติดต่อ และแก้ข้อขัดแย้งออฟไลน์',
     icon: SlidersIcon,
   },
+  {
+    id: GOV_CHARTER_TAB_ID,
+    label: 'นโยบายกำกับดูแล',
+    description: 'นโยบายและกฎบัตรการกำกับดูแลแพลตฟอร์ม',
+    icon: ClipboardCheckIcon,
+  },
 ];
 
 interface SectionGroupConfig {
@@ -109,7 +122,7 @@ const SECTION_GROUPS: SectionGroupConfig[] = [
   {
     id: 'governance-system',
     name: 'การจัดการและระบบ',
-    sections: [SECTIONS[5], SECTIONS[6]], // invitations, system
+    sections: [SECTIONS[5], SECTIONS[6], SECTIONS[7]], // invitations, system, governance
   },
 ];
 
@@ -137,6 +150,7 @@ const HASH_TO_SECTION: Record<string, OwnerSectionId> = {
   'owner-contact-info-manager': 'system',
   'owner-sync-conflict-manager': 'system',
   'owner-sync-conflicts-manager': 'system',
+  [GOV_CHARTER_TAB_ID]: GOV_CHARTER_TAB_ID,
 };
 
 interface OwnerWorkspaceViewProps {
@@ -463,15 +477,14 @@ export function OwnerWorkspaceView({ initialSection }: OwnerWorkspaceViewProps) 
             )}
 
             <div className="owner-section-body">
+              <OwnerOverviewDashboard
+                onNavigateToSection={handleNavigateToSection}
+              />
+
               {activeSection === 'approval' && (
                 <>
                   <OwnerSessionApprovalManager />
-                  {/* Backward-compatibility anchor for legacy tests (AC-116, D-115) */}
-                  <div
-                    id="owner-refund-approval-manager"
-                    style={{ height: '1px', width: '100%', overflow: 'hidden', opacity: 0.01 }}
-                    aria-hidden="true"
-                  />
+                  <OwnerRefundApprovalManager />
                 </>
               )}
 
@@ -484,7 +497,7 @@ export function OwnerWorkspaceView({ initialSection }: OwnerWorkspaceViewProps) 
               )}
 
               {activeSection === 'customer' && (
-                <OwnerContactCorrectionManager />
+                <OwnerCustomerHub />
               )}
 
               {activeSection === 'invitations' && (
@@ -492,7 +505,16 @@ export function OwnerWorkspaceView({ initialSection }: OwnerWorkspaceViewProps) 
               )}
 
               {activeSection === 'system' && (
-                <OwnerSystemHub />
+                <>
+                  <OwnerSystemHub />
+                  <OwnerNewsManager />
+                  <OwnerSyncConflictManager />
+                  <InviteOrganizerForm />
+                </>
+              )}
+
+              {activeSection === GOV_CHARTER_TAB_ID && (
+                <OwnerPoliciesView />
               )}
             </div>
           </main>

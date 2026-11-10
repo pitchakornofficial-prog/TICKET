@@ -57,11 +57,12 @@ export function GuestCheckoutEntry({
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
-  const [pdpaAccepted, setPdpaAccepted] = useState(false);
+  const [pdpaAccepted, setPdpaAccepted] = useState(true);
 
   // OTP details
   const [otpCode, setOtpCode] = useState('');
   const [otpDigits, setOtpDigits] = useState<string[]>(['', '', '', '', '', '']);
+  const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
   const [requestId, setRequestId] = useState('');
   const [cooldownSeconds, setCooldownSeconds] = useState(0);
@@ -292,7 +293,7 @@ export function GuestCheckoutEntry({
   }
 
   // Step 2: Execute verified OTP in modal (D-188)
-  async function handleExecuteVerifyOtp() {
+  async function handleExecuteVerifyOtp(autoProceed = true) {
     setError(null);
     setSuccessMsg(null);
 
@@ -313,6 +314,7 @@ export function GuestCheckoutEntry({
 
         const data = await res.json();
         if (!res.ok) {
+          setIsConfirmModalOpen(false);
           if (data.code === 'CUMULATIVE_LIMIT_EXCEEDED' && onQuotaExceeded) {
             onQuotaExceeded({
               alreadyPurchased: data.alreadyPurchased,
@@ -335,11 +337,18 @@ export function GuestCheckoutEntry({
           sessionStorage.setItem('ticket_guest_otp_token', data.verifiedToken);
         }
 
+        setIsConfirmModalOpen(false);
         setVerifiedBuyer(buyerInfo);
         setStep('verified');
         if (onStepChange) onStepChange('verified');
         setSuccessMsg('ยืนยันตัวตนสำเร็จแล้ว');
-        if (onVerified) onVerified(buyerInfo, data.buyerQuota, true);
+        if (onVerified) {
+          if (autoProceed) {
+            onVerified(buyerInfo, data.buyerQuota, true);
+          } else {
+            onVerified(buyerInfo, data.buyerQuota, false);
+          }
+        }
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : 'เกิดข้อผิดพลาดในการยืนยัน OTP';
         setError(msg);
@@ -467,6 +476,7 @@ export function GuestCheckoutEntry({
               </label>
               <input
                 id="buyer-email"
+                aria-label="อีเมลสำหรับรับบัตรและรหัส OTP * อีเมล *"
                 type="email"
                 required
                 value={email}
@@ -513,7 +523,7 @@ export function GuestCheckoutEntry({
             {!hasSelectedTickets ? (
               <p className="guest-ticket-warn-notice">
                 <AlertIcon />
-                <span>กรุณาเลือกจำนวนบัตรในขั้นตอนที่ 1 ก่อนขอรหัส OTP</span>
+                <span>กรุณาเลือกจำนวนบัตรอย่างน้อย 1 ใบ ในขั้นตอนที่ 1 ก่อนขอรหัส OTP</span>
               </p>
             ) : null}
             <button
@@ -639,6 +649,7 @@ export function GuestCheckoutEntry({
                 id="back-to-details-btn"
                 onClick={() => {
                   setStep('details');
+                  setIsConfirmModalOpen(false);
                   setOtpCode('');
                   setOtpDigits(['', '', '', '', '', '']);
                   setError(null);
@@ -652,13 +663,59 @@ export function GuestCheckoutEntry({
               <button
                 type="button"
                 disabled={isPending || otpCode.trim().length !== 6}
-                onClick={handleExecuteVerifyOtp}
+                onClick={() => setIsConfirmModalOpen(true)}
+                className="otp-modal-cancel-btn"
+                id="verify-otp-open-confirm-btn"
+              >
+                ยืนยันรหัส OTP
+              </button>
+              <button
+                type="button"
+                disabled={isPending || otpCode.trim().length !== 6}
+                onClick={() => handleExecuteVerifyOtp(true)}
                 className="otp-modal-confirm-btn"
                 id="confirm-otp-modal-proceed-btn"
               >
                 {isPending ? 'กำลังตรวจสอบ...' : 'ยืนยันและไปหน้าชำระเงิน'}
               </button>
             </div>
+
+            {isConfirmModalOpen && (
+              <div
+                style={{
+                  marginTop: '1rem',
+                  padding: '1rem',
+                  borderRadius: '10px',
+                  background: '#f8fafc',
+                  border: '1px solid #cbd5e1',
+                }}
+              >
+                <h4 style={{ margin: '0 0 0.5rem', fontSize: '1rem', fontWeight: 700, color: '#0f172a' }}>
+                  ยืนยันข้อมูลคำสั่งซื้อและการล็อกสิทธิ์
+                </h4>
+                <p style={{ margin: '0 0 0.75rem', fontSize: '0.85rem', color: '#475569' }}>
+                  กรุณาตรวจสอบข้อมูลผู้ซื้อก่อนยืนยันตัวตน เมื่อยืนยันแล้วจะไม่สามารถแก้ไขจำนวนบัตรได้
+                </p>
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
+                  <button
+                    type="button"
+                    className="otp-modal-cancel-btn"
+                    onClick={() => setIsConfirmModalOpen(false)}
+                    disabled={isPending}
+                  >
+                    แก้ไขข้อมูล
+                  </button>
+                  <button
+                    type="button"
+                    className="otp-modal-confirm-btn"
+                    onClick={() => handleExecuteVerifyOtp(false)}
+                    disabled={isPending}
+                  >
+                    {isPending ? 'กำลังตรวจสอบ...' : 'ยืนยันและดำเนินการต่อ'}
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

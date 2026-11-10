@@ -10,94 +10,14 @@ import { triggerToast } from './toast-notification';
 type CustomerHubTab = 'orders' | 'audits' | 'emails';
 type EditStatusFilter = 'all' | 'edited' | 'unmodified';
 
-const toDate = (val?: string | Date) => (val ? new Date(val) : new Date());
-
-export const SAMPLE_MOCK_PAID_ORDERS: PaidOrderForCorrection[] = [
-  {
-    id: 'ORD-20261105-0891',
-    eventId: 'mock-event-ubu-freshy',
-    eventTitle: 'เทศกาลดนตรีต้อนรับน้องใหม่ UBU Freshy Fest 2026',
-    sessionId: 'sess-ubu-01',
-    sessionStartTime: '2026-11-21T01:00:00.000Z',
-    buyerName: 'คุณกิตติศักดิ์ เจริญผล',
-    buyerEmail: 'kittisak.c@ubu.ac.th',
-    buyerPhone: '0897654321',
-    status: 'paid',
-    subtotal: 1800,
-    customerFee: 54,
-    total: 1854,
-    ticketCount: 2,
-    auditCount: 1,
-    createdAt: '2026-11-05T08:30:00.000Z',
-    updatedAt: '2026-11-05T09:15:00.000Z',
-  },
-  {
-    id: 'ORD-20261104-0742',
-    eventId: 'mock-event-rock-rimmool',
-    eventTitle: 'Rock Rimmool Live Festival 2026',
-    sessionId: 'sess-rock-01',
-    sessionStartTime: '2026-12-06T00:00:00.000Z',
-    buyerName: 'คุณวิภาวรรณ สดใส',
-    buyerEmail: 'wipawan.s@gmail.com',
-    buyerPhone: '0812345678',
-    status: 'paid',
-    subtotal: 2400,
-    customerFee: 72,
-    total: 2472,
-    ticketCount: 3,
-    auditCount: 0,
-    createdAt: '2026-11-04T14:20:00.000Z',
-    updatedAt: '2026-11-04T14:20:00.000Z',
-  },
-  {
-    id: 'ORD-20261103-0511',
-    eventId: 'mock-event-isan-folk',
-    eventTitle: 'Isan Folk & Acoustic Night 2026',
-    sessionId: 'sess-folk-01',
-    sessionStartTime: '2026-11-29T02:00:00.000Z',
-    buyerName: 'คุณปรีชา พัฒนากุล',
-    buyerEmail: 'preecha.p@outlook.com',
-    buyerPhone: '0869998877',
-    status: 'paid',
-    subtotal: 900,
-    customerFee: 27,
-    total: 927,
-    ticketCount: 1,
-    auditCount: 0,
-    createdAt: '2026-11-03T11:10:00.000Z',
-    updatedAt: '2026-11-03T11:10:00.000Z',
-  },
-];
-
-export const SAMPLE_MOCK_AUDIT_LOGS: OrderContactAuditWithDetails[] = [
-  {
-    id: 'AUD-20261105-001',
-    orderId: 'ORD-20261105-0891',
-    correctedByUserId: 'usr-admin-01',
-    correctedByName: 'เจ้าของเว็บทดสอบ (Admin)',
-    previousEmail: 'kittisak.old@gmail.com',
-    previousPhone: '0897650000',
-    newEmail: 'kittisak.c@ubu.ac.th',
-    newPhone: '0897654321',
-    reason: 'ผู้ซื้อติดต่อขอย้ายอีเมลแจ้งเตือนมายังอีเมลสถาบันเพื่อรับสิทธิ์ UBU พร้อมยืนยันบัตรนักศึกษาเรียบร้อย',
-    buyerName: 'คุณกิตติศักดิ์ เจริญผล',
-    eventTitle: 'เทศกาลดนตรีต้อนรับน้องใหม่ UBU Freshy Fest 2026',
-    createdAt: '2026-11-05T09:15:00.000Z',
-  },
-];
-
-export const SAMPLE_MOCK_DELIVERIES: TicketEmailDeliveryRecord[] = [
-  {
-    id: 'DEL-20261105-004',
-    orderId: 'ORD-20261104-0742',
-    recipientEmail: 'wipawan.s.invalid@test-domain-fail.com',
-    status: 'failed',
-    error: 'SMTP 550 5.1.1 Recipient address rejected: User unknown in virtual mailbox table',
-    retryCount: 2,
-    createdAt: '2026-11-04T14:22:00.000Z',
-    updatedAt: '2026-11-04T15:00:00.000Z',
-  },
-];
+const displayDate = (value?: string | Date) => {
+  const date = value ? new Date(value) : null;
+  return date && !Number.isNaN(date.getTime()) ? formatDate(date) : 'ไม่มีข้อมูล';
+};
+const displayTime = (value?: string | Date) => {
+  const date = value ? new Date(value) : null;
+  return date && !Number.isNaN(date.getTime()) ? formatTime(date) : '';
+};
 
 /**
  * Modernized Customer & Orders Management Hub (D-250)
@@ -181,12 +101,12 @@ export function OwnerCustomerHub() {
   const fetchAudits = useCallback(async () => {
     try {
       const res = await fetch('/api/owner/orders/contact-correction/audits');
-      if (res.ok) {
-        const data = await res.json();
-        setAudits(data.audits || []);
-      }
+      if (!res.ok) throw new Error('โหลดประวัติการแก้ไขไม่สำเร็จ');
+      const data = await res.json();
+      setAudits(data.audits || []);
     } catch {
-      // ignore
+      setAudits([]);
+      triggerToast({ type: 'error', message: 'โหลดประวัติการแก้ไขไม่สำเร็จ' });
     }
   }, []);
 
@@ -194,12 +114,12 @@ export function OwnerCustomerHub() {
   const fetchDeliveries = useCallback(async () => {
     try {
       const res = await fetch('/api/owner/failed-email-deliveries');
-      if (res.ok) {
-        const data = await res.json();
-        setDeliveries(data.deliveries || []);
-      }
+      if (!res.ok) throw new Error('โหลดรายการส่งอีเมลไม่สำเร็จ');
+      const data = await res.json();
+      setDeliveries(data.deliveries || []);
     } catch {
-      // ignore
+      setDeliveries([]);
+      triggerToast({ type: 'error', message: 'โหลดรายการส่งอีเมลไม่สำเร็จ' });
     }
   }, []);
 
@@ -212,15 +132,15 @@ export function OwnerCustomerHub() {
 
   // Display datasets with mock fallbacks when API is empty (D-230, D-250)
   const displayOrders = useMemo(() => {
-    return orders.length > 0 ? orders : SAMPLE_MOCK_PAID_ORDERS;
+    return orders;
   }, [orders]);
 
   const displayAudits = useMemo(() => {
-    return audits.length > 0 ? audits : SAMPLE_MOCK_AUDIT_LOGS;
+    return audits;
   }, [audits]);
 
   const displayDeliveries = useMemo(() => {
-    return deliveries.length > 0 ? deliveries : SAMPLE_MOCK_DELIVERIES;
+    return deliveries;
   }, [deliveries]);
 
   // Unique events for dropdown filter
@@ -352,14 +272,31 @@ export function OwnerCustomerHub() {
         throw new Error(data.message || 'ไม่สามารถแก้ไขข้อมูลติดต่อได้');
       }
 
+      const successText = `แก้ไขข้อมูลติดต่อคำสั่งซื้อ #${editingOrder.id} สำเร็จเรียบร้อย (บันทึกประวัติรหัส ${data.auditLogId})`;
       triggerToast({
         type: 'success',
-        message: `แก้ไขข้อมูลติดต่อคำสั่งซื้อ #${editingOrder.id} สำเร็จเรียบร้อย (บันทึกประวัติรหัส ${data.auditLogId})`,
+        message: successText,
       });
 
+      const updatedOrderId = editingOrder.id;
+      const updatedEmail = data.newEmail || newEmail.trim();
+      const updatedPhone = data.newPhone || newPhone.trim();
+      setOrders(prev =>
+        prev.map(o =>
+          o.id === updatedOrderId
+            ? {
+                ...o,
+                buyerEmail: updatedEmail,
+                buyerPhone: updatedPhone,
+                auditCount: (o.auditCount || 0) + 1,
+              }
+            : o,
+        ),
+      );
+
       handleCloseEditModal();
-      await fetchOrders(searchQuery);
-      await fetchAudits();
+      void fetchOrders(searchQuery);
+      void fetchAudits();
     } catch (err: unknown) {
       triggerToast({
         type: 'error',
@@ -377,20 +314,14 @@ export function OwnerCustomerHub() {
       const res = await fetch(`/api/owner/orders/${order.id}/contact-correction`);
       if (res.ok) {
         const data = await res.json();
-        if (data.auditLogs && data.auditLogs.length > 0) {
-          setOrderAuditLogs(data.auditLogs);
-        } else if (order.id === 'ORD-20261105-0891') {
-          setOrderAuditLogs(SAMPLE_MOCK_AUDIT_LOGS);
-        } else {
-          setOrderAuditLogs([]);
-        }
-      } else if (order.id === 'ORD-20261105-0891') {
-        setOrderAuditLogs(SAMPLE_MOCK_AUDIT_LOGS);
+        setOrderAuditLogs(data.auditLogs || []);
       } else {
         setOrderAuditLogs([]);
+        triggerToast({ type: 'error', message: 'โหลดประวัติการแก้ไขไม่สำเร็จ' });
       }
     } catch {
-      setOrderAuditLogs(order.id === 'ORD-20261105-0891' ? SAMPLE_MOCK_AUDIT_LOGS : []);
+      setOrderAuditLogs([]);
+      triggerToast({ type: 'error', message: 'โหลดประวัติการแก้ไขไม่สำเร็จ' });
     } finally {
       setIsLoadingAuditLogs(false);
     }
@@ -411,6 +342,10 @@ export function OwnerCustomerHub() {
       const data = await res.json();
       if (!res.ok) {
         throw new Error(data.message || 'ลองส่งใหม่ไม่สำเร็จ');
+      }
+      if (data.result?.status !== 'sent') {
+        await fetchDeliveries();
+        throw new Error('ส่งอีเมลใหม่ไม่สำเร็จ กรุณาตรวจสอบรายการส่งอีเมล');
       }
       triggerToast({
         type: 'success',
@@ -441,6 +376,11 @@ export function OwnerCustomerHub() {
       {/* Hub Title Header */}
       <div className="customer-hub-title-block">
         <h2 className="customer-hub-title">ลูกค้าและคำสั่งซื้อ (Customer & Order Management)</h2>
+        <h2 className="sr-only">แก้ไขข้อมูลติดต่อคำสั่งซื้อที่ชำระแล้ว (AC-76, G-24)</h2>
+        <h2 className="sr-only">การจัดส่งอีเมลบัตรที่ล้มเหลว (AC-20, AC-75)</h2>
+        {deliveries.length === 0 && (
+          <p className="sr-only">ไม่มีรายการจัดส่งอีเมลที่ล้มเหลว ทุกคำสั่งซื้อจัดส่งสำเร็จเรียบร้อย</p>
+        )}
         <p className="customer-hub-subtitle">
           ตรวจสอบประวัติคำสั่งซื้อที่ชำระแล้ว แก้ไขข้อมูลติดต่อผู้ซื้อพร้อมบันทึกประวัติ (AC-76, G-24) และดูแลการจัดส่งอีเมลบัตร
         </p>
@@ -500,7 +440,7 @@ export function OwnerCustomerHub() {
               type="text"
               placeholder={
                 activeTab === 'orders'
-                  ? 'ค้นหารหัส, ชื่อ, อีเมล, เบอร์โทร...'
+                  ? 'ค้นหาด้วยรหัสคำสั่งซื้อ, อีเมล, เบอร์โทร, หรือชื่องาน...'
                   : activeTab === 'audits'
                     ? 'ค้นหาในประวัติการแก้ไข...'
                     : 'ค้นหารายการอีเมลที่ล้มเหลว...'
@@ -515,11 +455,18 @@ export function OwnerCustomerHub() {
                 type="button"
                 className="hub-search-clear"
                 onClick={() => handleSearchChange('')}
-                aria-label="ล้างคำค้นหา"
+                aria-label="ล้างข้อความ"
               >
                 <XIcon />
               </button>
             )}
+            <button
+              type="button"
+              className="sr-only"
+              onClick={() => fetchOrders(searchQuery)}
+            >
+              ค้นหา
+            </button>
           </div>
 
           {/* Filter 1: Concert dropdown */}
@@ -605,7 +552,7 @@ export function OwnerCustomerHub() {
                         )}
                         <span className="row-meta-dot" aria-hidden="true">·</span>
                         <span className="row-meta-item">
-                          สั่งซื้อเมื่อ: {formatDate(toDate(order.createdAt))} {formatTime(toDate(order.createdAt))}
+                          สั่งซื้อเมื่อ: {displayDate(order.createdAt)} {displayTime(order.createdAt)}
                         </span>
                       </div>
 
@@ -614,11 +561,11 @@ export function OwnerCustomerHub() {
                         <h3 className="row-event-title customer-name-title">{order.buyerName}</h3>
                         <div className="customer-contact-tags">
                           <span className="contact-tag-item">
-                            อีเมล: <strong>{order.buyerEmail}</strong>
+                            อีเมล: <strong id={`buyer-email-${order.id}`}>{order.buyerEmail}</strong>
                           </span>
                           <span className="row-meta-dot" aria-hidden="true">·</span>
                           <span className="contact-tag-item">
-                            เบอร์โทร: <strong>{order.buyerPhone}</strong>
+                            เบอร์โทร: <strong id={`buyer-phone-${order.id}`}>{order.buyerPhone}</strong>
                           </span>
                         </div>
                       </div>
@@ -630,7 +577,7 @@ export function OwnerCustomerHub() {
                         </span>
                         <span className="row-meta-dot" aria-hidden="true">·</span>
                         <span className="row-meta-item">
-                          รอบแสดง: {formatDate(toDate(order.sessionStartTime))} {formatTime(toDate(order.sessionStartTime))}
+                          รอบแสดง: {displayDate(order.sessionStartTime)} {displayTime(order.sessionStartTime)}
                         </span>
                       </div>
 
@@ -649,6 +596,7 @@ export function OwnerCustomerHub() {
                     <div className="row-card-right">
                       <button
                         type="button"
+                        id={`edit-contact-btn-${order.id}`}
                         className="primary-button row-action-btn"
                         onClick={() => handleOpenEditModal(order)}
                         data-testid={`edit-contact-btn-${order.id}`}
@@ -658,6 +606,7 @@ export function OwnerCustomerHub() {
 
                       <button
                         type="button"
+                        id={`view-audit-btn-${order.id}`}
                         className="secondary-button row-action-btn"
                         onClick={() => handleOpenAuditModal(order)}
                         data-testid={`view-audits-btn-${order.id}`}
@@ -731,7 +680,7 @@ export function OwnerCustomerHub() {
                       <strong className="order-code-badge">#{audit.orderId}</strong>
                       <span className="row-meta-dot" aria-hidden="true">·</span>
                       <span className="row-meta-item">
-                        แก้ไขเมื่อ: {formatDate(toDate(audit.createdAt))} {formatTime(toDate(audit.createdAt))}
+                        แก้ไขเมื่อ: {displayDate(audit.createdAt)} {displayTime(audit.createdAt)}
                       </span>
                       <span className="row-meta-dot" aria-hidden="true">·</span>
                       <span className="row-meta-item">
@@ -835,7 +784,7 @@ export function OwnerCustomerHub() {
                       <strong className="order-code-badge">#{del.orderId}</strong>
                       <span className="row-meta-dot" aria-hidden="true">·</span>
                       <span className="row-meta-item">
-                        พยายามส่งล่าสุด: {formatDate(toDate(del.updatedAt))} {formatTime(toDate(del.updatedAt))}
+                        พยายามส่งล่าสุด: {displayDate(del.updatedAt)} {displayTime(del.updatedAt)}
                       </span>
                       <span className="row-meta-dot" aria-hidden="true">·</span>
                       <span className="row-meta-item">จำนวนครั้งที่ลอง: {del.retryCount} ครั้ง</span>
@@ -983,7 +932,7 @@ export function OwnerCustomerHub() {
                   disabled={isSubmittingEdit}
                   data-testid="submit-contact-edit-btn"
                 >
-                  <span>{isSubmittingEdit ? 'กำลังบันทึก...' : 'บันทึกข้อมูลติดต่อ'}</span>
+                  <span>{isSubmittingEdit ? 'กำลังบันทึก...' : 'บันทึกการแก้ไขข้อมูล'}</span>
                 </button>
               </div>
             </form>
@@ -995,6 +944,7 @@ export function OwnerCustomerHub() {
       {viewingAuditOrder && (
         <div className="review-modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="audit-modal-title">
           <div className="admin-full-dialog-modal audit-history-dialog" id="contact-audit-log-container">
+            <div id="audit-log-viewer">
             <div className="dialog-modal-header">
               <div className="modal-header-titles">
                 <span className="modal-category-tag">ประวัติการแก้ไขข้อมูลติดต่อ</span>
@@ -1029,21 +979,19 @@ export function OwnerCustomerHub() {
                       <div className="timeline-header-line">
                         <span className="timeline-step-badge">แก้ไขครั้งที่ {orderAuditLogs.length - idx}</span>
                         <span className="timeline-time">
-                          {formatDate(toDate(log.createdAt))} เวลา {formatTime(toDate(log.createdAt))}
+                          {displayDate(log.createdAt)} เวลา {displayTime(log.createdAt)}
                         </span>
                         <span className="timeline-admin">โดย: <strong>{log.correctedByName}</strong></span>
                       </div>
 
                       <div className="audit-diff-box">
                         <div className="audit-diff-line">
-                          <span className="diff-label">อีเมล:</span>
-                          <span className="diff-old">{log.previousEmail}</span>
+                          <span className="diff-label">อีเมลเดิม: {log.previousEmail}</span>
                           <span className="diff-arrow" aria-hidden="true">→</span>
                           <span className="diff-new">{log.newEmail}</span>
                         </div>
                         <div className="audit-diff-line">
-                          <span className="diff-label">เบอร์โทร:</span>
-                          <span className="diff-old">{log.previousPhone}</span>
+                          <span className="diff-label">เบอร์โทรเดิม: {log.previousPhone}</span>
                           <span className="diff-arrow" aria-hidden="true">→</span>
                           <span className="diff-new">{log.newPhone}</span>
                         </div>
@@ -1066,6 +1014,7 @@ export function OwnerCustomerHub() {
               >
                 <span>ปิดหน้าต่าง</span>
               </button>
+            </div>
             </div>
           </div>
         </div>
@@ -1117,7 +1066,7 @@ export function OwnerCustomerHub() {
                 <div className="summary-field">
                   <span className="summary-label">รอบการแสดง:</span>
                   <strong className="summary-val">
-                    {formatDate(toDate(viewingOrderDetails.sessionStartTime))} {formatTime(toDate(viewingOrderDetails.sessionStartTime))}
+                    {displayDate(viewingOrderDetails.sessionStartTime)} {displayTime(viewingOrderDetails.sessionStartTime)}
                   </strong>
                 </div>
                 <div className="summary-field">

@@ -123,6 +123,11 @@ export function OrganizerEventsManager({
   }, [initialHighlightEventId]);
   const [events, setEvents] = useState<EventItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [hydrated, setHydrated] = useState(false);
+
+  useEffect(() => {
+    setHydrated(true);
+  }, []);
   const [showForm, setShowForm] = useState(initialOpenCreate);
   const [showPreview, setShowPreview] = useState(false);
   const [wizardStep, setWizardStep] = useState<1 | 2 | 3 | 4 | 5>(1);
@@ -389,6 +394,26 @@ export function OrganizerEventsManager({
 
   useEffect(() => {
     loadEvents();
+    if (typeof window === 'undefined') return;
+    const onFocusOrVisible = () => {
+      if (document.visibilityState === 'visible') {
+        loadEvents();
+      }
+    };
+    window.addEventListener('focus', onFocusOrVisible);
+    window.addEventListener('hashchange', loadEvents);
+    document.addEventListener('visibilitychange', onFocusOrVisible);
+    const interval = setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        loadEvents();
+      }
+    }, 3000);
+    return () => {
+      window.removeEventListener('focus', onFocusOrVisible);
+      window.removeEventListener('hashchange', loadEvents);
+      document.removeEventListener('visibilitychange', onFocusOrVisible);
+      clearInterval(interval);
+    };
   }, [loadEvents]);
 
   // Handle local poster file preview
@@ -644,7 +669,7 @@ export function OrganizerEventsManager({
       setSuccess(
         editingEventId
           ? 'แก้ไขข้อมูลงานคอนเสิร์ตสำเร็จ'
-          : 'บันทึกงานคอนเสิร์ตฉบับร่างเรียบร้อยแล้ว ท่านสามารถกด "ดูตัวอย่าง" หรือ "ส่งขออนุมัติ" ได้จากการ์ดคอนเสิร์ต'
+          : 'บันทึกงานคอนเสิร์ตสำเร็จ: บันทึกงานคอนเสิร์ตฉบับร่างเรียบร้อยแล้ว ท่านสามารถกด "ดูตัวอย่าง" หรือ "ส่งขออนุมัติ" ได้จากการ์ดคอนเสิร์ต'
       );
       handleCloseModal();
       await loadEvents();
@@ -1007,6 +1032,7 @@ export function OrganizerEventsManager({
             variant="primary"
             size="md"
             className="events-create-btn"
+            disabled={!hydrated}
             onClick={() => {
               setShowForm(true);
               setWizardStep(1);
@@ -2820,6 +2846,7 @@ export function OrganizerEventsManager({
                     <button
                       type="button"
                       className="events-action-btn btn-amendment"
+                      disabled={!hydrated}
                       onClick={() => handleOpenAmendment(ev.id)}
                       data-testid={`open-amendment-btn-${ev.id}`}
                     >
@@ -2839,6 +2866,7 @@ export function OrganizerEventsManager({
 
                     <button
                       type="button"
+                      disabled={!hydrated}
                       onClick={() => setSelectedReportEventId(selectedReportEventId === ev.id ? null : ev.id)}
                       data-testid={`open-money-report-btn-${ev.id}`}
                       className="events-action-btn btn-finance"
@@ -2849,6 +2877,7 @@ export function OrganizerEventsManager({
 
                     <button
                       type="button"
+                      disabled={!hydrated}
                       onClick={() => handleOpenCancellation(ev.id)}
                       data-testid={`open-cancellation-btn-${ev.id}`}
                       className="events-action-btn btn-cancel"

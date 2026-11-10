@@ -17,6 +17,7 @@ import { OwnerFeeSettingsManager } from './owner-fee-settings-manager';
 import { OwnerReserveReleaseManager } from './owner-reserve-release-manager';
 import { OwnerDebtRepaymentManager } from './owner-debt-repayment-manager';
 import { OwnerPaymentRecoveryManager } from './owner-payment-recovery-manager';
+import { OwnerWeeklyPayoutManager } from './owner-weekly-payout-manager';
 
 export type FinanceHubTab = 'ready' | 'history' | 'reserves';
 
@@ -103,7 +104,7 @@ export function OwnerFinanceHub() {
       const res = await fetch('/api/owner/events/fee-settings', { cache: 'no-store' });
       if (res.ok) {
         const data = await res.json();
-        if (Array.isArray(data.events) && data.events.length > 0) {
+        if (Array.isArray(data.events)) {
           const eventsList = data.events;
           const liveConcerts: PayableConcertItem[] = [];
           const livePayouts: PayoutRecordItem[] = [];
@@ -112,7 +113,9 @@ export function OwnerFinanceHub() {
             try {
               const repRes = await fetch(`/api/owner/events/${ev.id}/money-report`, { cache: 'no-store' });
               if (repRes.ok) {
-                const repData: EventMoneyReportDetail = await repRes.json();
+                const payload = await repRes.json();
+                const repData: EventMoneyReportDetail = payload.report;
+                if (!repData) throw new Error('ไม่พบข้อมูลรายงานการเงิน');
                 liveConcerts.push({
                   id: ev.id,
                   title: ev.title,
@@ -120,20 +123,20 @@ export function OwnerFinanceHub() {
                   organizerName: ev.organizerName || 'ผู้จัดงาน',
                   organizerEmail: ev.organizerEmail || '',
                   location: ev.location || 'สถานที่จัดแสดง',
-                  sessionTime: repData.sessions?.[0]?.sessionStartTime || new Date().toISOString(),
+                  sessionTime: repData.sessions?.[0]?.sessionStartTime || '',
                   status: ev.status === 'approved' ? 'เปิดขายบัตรแล้ว' : ev.status,
                   cycleStatus: repData.payableAmount > 0 ? 'ready' : 'cutoff',
-                  cutoffDate: new Date().toISOString(),
-                  payoutBankName: (ev as { payoutBankName?: string }).payoutBankName || 'ธนาคารกสิกรไทย (KBANK)',
-                  payoutAccountNumber: (ev as { payoutAccountNumber?: string }).payoutAccountNumber || '123-4-56789-0',
-                  payoutAccountName: (ev as { payoutAccountName?: string }).payoutAccountName || ev.organizerName || 'ผู้จัดงาน',
-                  isBankVerified: true,
+                  cutoffDate: '',
+                  payoutBankName: (ev as { payoutBankName?: string }).payoutBankName || '',
+                  payoutAccountNumber: (ev as { payoutAccountNumber?: string }).payoutAccountNumber || '',
+                  payoutAccountName: (ev as { payoutAccountName?: string }).payoutAccountName || '',
+                  isBankVerified: false,
                   grossSales: repData.grossSales || 0,
                   customerFee: 0,
                   platformFee: repData.organizerFee || 0,
                   netSales: repData.netSales || 0,
                   netEntitlement: repData.netEntitlement || 0,
-                  reservePercentage: repData.reservePercentage || 10,
+                  reservePercentage: repData.reservePercentage ?? 0,
                   reserveTarget: repData.reserveTarget || 0,
                   actualHeldReserve: repData.actualHeldReserve || 0,
                   totalPaidOut: repData.totalPaidOut || 0,
@@ -150,30 +153,37 @@ export function OwnerFinanceHub() {
                       amount: p.amount,
                       paidAt: p.paidAt,
                       status: p.status,
-                      payoutBankName: (ev as { payoutBankName?: string }).payoutBankName || 'ธนาคารกสิกรไทย (KBANK)',
-                      payoutAccountNumber: (ev as { payoutAccountNumber?: string }).payoutAccountNumber || '123-4-56789-0',
-                      payoutAccountName: (ev as { payoutAccountName?: string }).payoutAccountName || ev.organizerName || 'ผู้จัดงาน',
+                      payoutBankName: (ev as { payoutBankName?: string }).payoutBankName || '',
+                      payoutAccountNumber: (ev as { payoutAccountNumber?: string }).payoutAccountNumber || '',
+                      payoutAccountName: (ev as { payoutAccountName?: string }).payoutAccountName || '',
                       transferProofKey: p.transferProofKey,
                       transferProofUrl: p.transferProofUrl,
                       transferNote: p.transferNote,
-                      transferRef: (p as { transferRef?: string }).transferRef || `TXN-${p.id}`,
-                      recordedByName: p.recordedByName || 'เจ้าของระบบ TICKET',
+                      transferRef: (p as { transferRef?: string }).transferRef || '',
+                      recordedByName: p.recordedByName || null,
                       createdAt: p.createdAt,
                     });
                   }
                 }
               }
+              else {
+                throw new Error('โหลดรายงานการเงินไม่สำเร็จ');
+              }
             } catch {
-              // Ignore single event report failure
+              triggerToast({ type: 'error', message: `โหลดรายงานการเงินของ ${ev.title} ไม่สำเร็จ` });
             }
           }
 
           setPayableConcerts(liveConcerts);
           setPayoutHistory(livePayouts);
         }
+      } else {
+        throw new Error('โหลดรายชื่องานไม่สำเร็จ');
       }
     } catch {
-      triggerToast({ message: 'โหลดข้อมูลการเงินไม่สำเร็จ', type: 'error' });
+      setPayableConcerts([]);
+      setPayoutHistory([]);
+      triggerToast({ type: 'error', message: 'โหลดข้อมูลการเงินไม่สำเร็จ กรุณาลองใหม่' });
     } finally {
       setIsLoadingData(false);
     }
@@ -189,7 +199,7 @@ export function OwnerFinanceHub() {
     setTransferAmount(concert.payableAmount.toString());
     setTransferDate(new Date().toISOString().slice(0, 10));
     setTransferTime(new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }).replace(':', '.'));
-    setTransferRefCode(`KBANK-TXN-${Date.now().toString().slice(-6)}`);
+    setTransferRefCode('');
     setTransferNote(`โอนเงินรอบสัปดาห์ คอนเสิร์ต ${concert.title}`);
     setTransferFile(null);
   };
@@ -215,50 +225,29 @@ export function OwnerFinanceHub() {
 
     setIsSubmittingTransfer(true);
     try {
-      let transferProofKey: string | undefined;
-      let transferProofUrl: string | undefined;
-
-      if (transferFile) {
-        const formData = new FormData();
-        formData.append('file', transferFile);
-        formData.append('visibility', 'private');
-        const uploadRes = await fetch('/api/upload', { method: 'POST', body: formData });
-        if (!uploadRes.ok) {
-          triggerToast({ message: 'อัปโหลดหลักฐานการโอนไม่สำเร็จ', type: 'error' });
-          return;
-        }
-        const uploadData = await uploadRes.json();
-        transferProofKey = uploadData.key;
-        transferProofUrl = uploadData.url;
-      }
-
-      const payoutRes = await fetch(`/api/owner/events/${editingPayoutConcert.id}/payouts`, {
+      if (!transferFile) throw new Error('กรุณาแนบหลักฐานการโอนเงิน');
+      const formData = new FormData();
+      formData.append('file', transferFile);
+      formData.append('visibility', 'private');
+      const uploadRes = await fetch('/api/upload', { method: 'POST', body: formData });
+      if (!uploadRes.ok) throw new Error('อัปโหลดหลักฐานการโอนไม่สำเร็จ');
+      const uploadData = await uploadRes.json();
+      if (!uploadData.key) throw new Error('ไม่พบหลักฐานการโอนที่อัปโหลด');
+      const response = await fetch(`/api/owner/events/${editingPayoutConcert.id}/payouts`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           amount: numAmount,
           status: 'completed',
-          paidAt: `${transferDate}T${transferTime.replace('.', ':')}:00.000Z`,
-          transferProofKey,
-          transferProofUrl,
-          transferNote: transferNote.trim() || undefined,
+          paidAt: new Date(`${transferDate}T${transferTime.replace('.', ':')}:00+07:00`).toISOString(),
+          transferProofKey: uploadData.key,
+          transferProofUrl: uploadData.url,
+          transferNote: [`อ้างอิง: ${transferRefCode.trim()}`, transferNote.trim()].filter(Boolean).join(' | '),
         }),
       });
-      if (!payoutRes.ok) {
-        const errData = await payoutRes.json().catch(() => ({}));
-        triggerToast({
-          message: errData.message || 'บันทึกการโอนเงินไม่สำเร็จ',
-          type: 'error',
-        });
-        return;
-      }
-
+      if (!response.ok) throw new Error('บันทึกการโอนเงินไม่สำเร็จ');
       await fetchData();
-
-      triggerToast({
-        message: `บันทึกการโอนเงินจำนวน ${formatBaht(numAmount)} ให้ "${editingPayoutConcert.organizerName}" สำเร็จเรียบร้อย`,
-        type: 'success',
-      });
+      triggerToast({ message: 'บันทึกการโอนเงินสำเร็จ', type: 'success' });
 
       handleCloseTransferModal();
     } catch {
@@ -314,15 +303,10 @@ export function OwnerFinanceHub() {
     });
   }, [payoutHistory, searchQuery, selectedConcertFilter, selectedStatusFilter]);
 
-  // Real proof file served by the owner-only proof endpoint
-  const proofSlipUrl = viewingProofPayout
-    ? `/api/owner/payouts/${encodeURIComponent(viewingProofPayout.id)}/proof`
-    : '';
-
   return (
     <div
-      id="owner-weekly-payout-manager"
-      data-testid="owner-weekly-payout-manager"
+      id="owner-finance-hub"
+      data-testid="owner-finance-hub"
       className="owner-finance-management-hub"
     >
       {/* 1. Header Line */}
@@ -492,7 +476,7 @@ export function OwnerFinanceHub() {
                     </span>
                     <span className="row-meta-dot" aria-hidden="true">•</span>
                     <span className="row-meta-item">
-                      ตัดรอบข้อมูล: {formatDate(new Date(concert.cutoffDate))} 23:59 น.
+                      ตัดรอบข้อมูล: {concert.cutoffDate ? formatDate(new Date(concert.cutoffDate)) : 'ไม่มีข้อมูล'}
                     </span>
                   </div>
 
@@ -575,7 +559,8 @@ export function OwnerFinanceHub() {
 
                     <div className="formula-cell">
                       <span style={{ color: '#64748b', fontSize: '0.75rem' }}>โอนแล้วสะสม (P):</span>
-                      <strong data-testid="owner-total-paid-out" style={{ display: 'block', color: '#0284c7' }}>
+                      {/* Test id compat: owner-total-paid-out */}
+                      <strong data-testid={`hub-total-paid-out-${concert.id}`} style={{ display: 'block', color: '#0284c7' }}>
                         -{formatBaht(concert.totalPaidOut)}
                       </strong>
                     </div>
@@ -592,8 +577,9 @@ export function OwnerFinanceHub() {
                       <span style={{ color: concert.payableAmount > 0 ? '#166534' : '#64748b', fontSize: '0.75rem', fontWeight: 700 }}>
                         ยอดพร้อมโอนสุทธิ (A_pay):
                       </span>
+                      {/* Test id compat: owner-payable-amount */}
                       <strong
-                        data-testid="owner-payable-amount"
+                        data-testid={`hub-payable-amount-${concert.id}`}
                         style={{
                           display: 'block',
                           fontSize: '1.05rem',
@@ -675,7 +661,7 @@ export function OwnerFinanceHub() {
                       ธนาคาร: {payout.payoutBankName} ({payout.payoutAccountNumber})
                     </span>
                     <span className="row-detail-pill">
-                      บันทึกโดย: <strong>{payout.recordedByName || 'เจ้าของระบบ TICKET'}</strong>
+                      บันทึกโดย: <strong>{payout.recordedByName || 'ไม่มีข้อมูล'}</strong>
                     </span>
                   </div>
 
@@ -729,15 +715,14 @@ export function OwnerFinanceHub() {
         </div>
       )}
 
-      {/* TAB 3: เงินสำรองและหนี้ค้างชำระ (Preserving existing governance managers) */}
-      {activeTab === 'reserves' && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-          <OwnerFeeSettingsManager />
-          <OwnerReserveReleaseManager />
-          <OwnerDebtRepaymentManager />
-          <OwnerPaymentRecoveryManager />
-        </div>
-      )}
+      {/* TAB 3 & Integrated Governance Managers (Weekly Payout, Fee Settings, Reserve Release, Debt & Recovery) */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem', marginTop: '1.5rem' }}>
+        <OwnerWeeklyPayoutManager />
+        <OwnerFeeSettingsManager />
+        <OwnerReserveReleaseManager />
+        <OwnerDebtRepaymentManager />
+        <OwnerPaymentRecoveryManager />
+      </div>
 
       {/* =========================================================================
           MODAL 1: All-in-One Transfer & Slip Attachment Modal (Q3 -> C1)
@@ -987,39 +972,15 @@ export function OwnerFinanceHub() {
             <div className="dialog-modal-body" style={{ textAlign: 'center' }}>
               {proofModalTab === 'slip' ? (
                 <div>
-                  <div
-                    style={{
-                      display: 'flex',
-                      justifyContent: 'center',
-                      padding: '1rem',
-                      backgroundColor: '#f1f5f9',
-                      borderRadius: '8px',
-                    }}
-                  >
-                    {/* biome-ignore lint/performance/noImgElement: Data URL SVG Bank Slip */}
-                    <img
-                      src={proofSlipUrl}
-                      alt="สลิปหลักฐานการโอนเงิน"
-                      style={{
-                        maxWidth: '100%',
-                        height: 'auto',
-                        borderRadius: '0',
-                        boxShadow: '0 8px 24px rgba(0,0,0,0.12)',
-                      }}
-                    />
-                  </div>
-
-                  <div style={{ marginTop: '1rem', display: 'flex', justifyContent: 'center' }}>
+                  {viewingProofPayout.transferProofKey ? (
                     <a
-                      href={proofSlipUrl}
-                      download={`payout-proof-${viewingProofPayout.id}`}
+                      href={`/api/owner/payouts/${encodeURIComponent(viewingProofPayout.id)}/proof`}
                       className="primary-button modal-footer-btn"
-                      style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}
                     >
                       <DownloadIcon style={{ width: '16px', height: '16px' }} />
-                      <span>ดาวน์โหลดสลิปหลักฐาน</span>
+                      <span>เปิดหลักฐานการโอนจริง</span>
                     </a>
-                  </div>
+                  ) : <p>ไม่มีหลักฐานการโอนที่บันทึกไว้</p>}
                 </div>
               ) : (
                 <div className="modal-summary-card" style={{ textAlign: 'left', marginTop: '0.5rem' }}>
@@ -1043,7 +1004,7 @@ export function OwnerFinanceHub() {
                   </div>
                   <div className="summary-field">
                     <span className="summary-label">ผู้โอน:</span>
-                    <strong className="summary-val">บจก. ทิกเก็ต เทคโนโลยี (โดย {viewingProofPayout.recordedByName})</strong>
+                    <strong className="summary-val">{viewingProofPayout.recordedByName || 'ไม่มีข้อมูล'}</strong>
                   </div>
                   <div className="summary-field">
                     <span className="summary-label">ผู้รับเงิน:</span>

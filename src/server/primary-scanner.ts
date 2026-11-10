@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import type { Pool } from 'pg';
-import { ensureEventSchema } from './events';
-import { ensureTicketSchema } from './tickets';
-import { ensureAdmissionSchema } from './admission';
+import { ensureEventSchema } from './events.ts';
+import { ensureTicketSchema } from './tickets.ts';
+import { ensureAdmissionSchema } from './admission.ts';
 
 export interface PrimaryScannerRecord {
   eventId: string;
@@ -118,59 +118,74 @@ export interface OfflineDataset {
   isOfflineHalted?: boolean;
 }
 
+const primaryScannerSchemaPromises = new WeakMap<Pool, Promise<void>>();
+
 export async function ensurePrimaryScannerSchema(pool: Pool): Promise<void> {
-  await ensureEventSchema(pool);
-  await ensureTicketSchema(pool);
-  await ensureAdmissionSchema(pool);
+  const existing = primaryScannerSchemaPromises.get(pool);
+  if (existing) {
+    return existing;
+  }
+  const promise = (async () => {
+    try {
+      await ensureEventSchema(pool);
+      await ensureTicketSchema(pool);
+      await ensureAdmissionSchema(pool);
 
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS event_primary_scanners (
-      "eventId" TEXT PRIMARY KEY REFERENCES events(id) ON DELETE CASCADE,
-      "scannerId" TEXT NOT NULL REFERENCES auth_user(id) ON DELETE CASCADE,
-      "scannerName" TEXT NOT NULL,
-      "scannerEmail" TEXT NOT NULL,
-      "deviceId" TEXT,
-      "assignedAt" TIMESTAMPTZ NOT NULL DEFAULT now(),
-      "assignedBy" TEXT NOT NULL
-    );
-    CREATE INDEX IF NOT EXISTS idx_event_primary_scanner ON event_primary_scanners("scannerId");
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS event_primary_scanners (
+          "eventId" TEXT PRIMARY KEY REFERENCES events(id) ON DELETE CASCADE,
+          "scannerId" TEXT NOT NULL REFERENCES auth_user(id) ON DELETE CASCADE,
+          "scannerName" TEXT NOT NULL,
+          "scannerEmail" TEXT NOT NULL,
+          "deviceId" TEXT,
+          "assignedAt" TIMESTAMPTZ NOT NULL DEFAULT now(),
+          "assignedBy" TEXT NOT NULL
+        );
+        CREATE INDEX IF NOT EXISTS idx_event_primary_scanner ON event_primary_scanners("scannerId");
 
-    CREATE TABLE IF NOT EXISTS event_offline_controls (
-      "eventId" TEXT PRIMARY KEY REFERENCES events(id) ON DELETE CASCADE,
-      "offlineStatus" TEXT NOT NULL DEFAULT 'active',
-      "haltReason" TEXT,
-      "haltDetails" TEXT,
-      "haltedAt" TIMESTAMPTZ,
-      "haltedBy" TEXT,
-      "resumedAt" TIMESTAMPTZ,
-      "resumedBy" TEXT,
-      "updatedAt" TIMESTAMPTZ NOT NULL DEFAULT now()
-    );
+        CREATE TABLE IF NOT EXISTS event_offline_controls (
+          "eventId" TEXT PRIMARY KEY REFERENCES events(id) ON DELETE CASCADE,
+          "offlineStatus" TEXT NOT NULL DEFAULT 'active',
+          "haltReason" TEXT,
+          "haltDetails" TEXT,
+          "haltedAt" TIMESTAMPTZ,
+          "haltedBy" TEXT,
+          "resumedAt" TIMESTAMPTZ,
+          "resumedBy" TEXT,
+          "updatedAt" TIMESTAMPTZ NOT NULL DEFAULT now()
+        );
 
-    CREATE TABLE IF NOT EXISTS primary_scanner_handovers (
-      id TEXT PRIMARY KEY,
-      "eventId" TEXT NOT NULL REFERENCES events(id) ON DELETE CASCADE,
-      "oldScannerId" TEXT,
-      "oldScannerName" TEXT,
-      "newScannerId" TEXT,
-      "newScannerName" TEXT,
-      action TEXT NOT NULL,
-      "oldScannerPendingCount" INT DEFAULT 0,
-      "newScannerSyncedAt" TIMESTAMPTZ,
-      reason TEXT,
-      "actorId" TEXT NOT NULL,
-      "actorName" TEXT,
-      "createdAt" TIMESTAMPTZ NOT NULL DEFAULT now()
-    );
-    CREATE INDEX IF NOT EXISTS idx_handovers_event ON primary_scanner_handovers("eventId");
+        CREATE TABLE IF NOT EXISTS primary_scanner_handovers (
+          id TEXT PRIMARY KEY,
+          "eventId" TEXT NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+          "oldScannerId" TEXT,
+          "oldScannerName" TEXT,
+          "newScannerId" TEXT,
+          "newScannerName" TEXT,
+          action TEXT NOT NULL,
+          "oldScannerPendingCount" INT DEFAULT 0,
+          "newScannerSyncedAt" TIMESTAMPTZ,
+          reason TEXT,
+          "actorId" TEXT NOT NULL,
+          "actorName" TEXT,
+          "createdAt" TIMESTAMPTZ NOT NULL DEFAULT now()
+        );
+        CREATE INDEX IF NOT EXISTS idx_handovers_event ON primary_scanner_handovers("eventId");
 
-    CREATE TABLE IF NOT EXISTS scanner_dataset_syncs (
-      "eventId" TEXT NOT NULL REFERENCES events(id) ON DELETE CASCADE,
-      "scannerId" TEXT NOT NULL REFERENCES auth_user(id) ON DELETE CASCADE,
-      "syncedAt" TIMESTAMPTZ NOT NULL DEFAULT now(),
-      PRIMARY KEY ("eventId", "scannerId")
-    );
-  `);
+        CREATE TABLE IF NOT EXISTS scanner_dataset_syncs (
+          "eventId" TEXT NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+          "scannerId" TEXT NOT NULL REFERENCES auth_user(id) ON DELETE CASCADE,
+          "syncedAt" TIMESTAMPTZ NOT NULL DEFAULT now(),
+          PRIMARY KEY ("eventId", "scannerId")
+        );
+      `);
+    } catch (err) {
+      primaryScannerSchemaPromises.delete(pool);
+      throw err;
+    }
+  })();
+  primaryScannerSchemaPromises.set(pool, promise);
+  return promise;
 }
 
 /**

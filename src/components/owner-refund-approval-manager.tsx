@@ -415,8 +415,7 @@ export function OwnerRefundApprovalManager() {
               setFilterStatus('pending');
               setCurrentPage(1);
             }}
-            role="tab"
-            aria-selected={filterStatus === 'pending'}
+            aria-pressed={filterStatus === 'pending'}
           >
             <span>รอตรวจสอบ</span>
             <span className="hub-tab-badge status-counter-pill">{pendingCount}</span>
@@ -429,8 +428,7 @@ export function OwnerRefundApprovalManager() {
               setFilterStatus('approved');
               setCurrentPage(1);
             }}
-            role="tab"
-            aria-selected={filterStatus === 'approved'}
+            aria-pressed={filterStatus === 'approved'}
           >
             <span>รอโอนเงินคืน (Approved)</span>
             <span className="hub-tab-badge status-counter-pill">{approvedCount}</span>
@@ -443,8 +441,7 @@ export function OwnerRefundApprovalManager() {
               setFilterStatus('completed');
               setCurrentPage(1);
             }}
-            role="tab"
-            aria-selected={filterStatus === 'completed'}
+            aria-pressed={filterStatus === 'completed'}
           >
             <span>โอนสำเร็จแล้ว (Completed)</span>
             <span className="hub-tab-badge status-counter-pill">{completedCount}</span>
@@ -609,7 +606,7 @@ export function OwnerRefundApprovalManager() {
                       className="row-detail-pill"
                       style={{ fontWeight: 700, color: '#0f172a', backgroundColor: '#f1f5f9' }}
                     >
-                      ยอดเงินคืนสุทธิ: {formatBaht(req.requestedAmount)}
+                      ยอดเงินคืนสุทธิ: <strong>{formatBaht(req.requestedAmount)}</strong>
                     </span>
                     <span className="row-detail-pill">
                       เหตุผล: {req.reason}

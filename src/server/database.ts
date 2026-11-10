@@ -10,8 +10,8 @@ export function createDatabasePool(
   }
   return new Pool({
     connectionString,
-    max: 5,
-    connectionTimeoutMillis: 5000,
+    max: 15,
+    connectionTimeoutMillis: 15000,
     idleTimeoutMillis: 10000,
   });
 }

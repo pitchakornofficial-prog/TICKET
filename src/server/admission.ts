@@ -103,49 +103,64 @@ export interface SyncOfflineAdmissionResult {
   lastSuccessfulSync: string;
 }
 
-export async function ensureAdmissionSchema(pool: Pool): Promise<void> {
-  await ensureTicketSchema(pool);
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS ticket_admission_logs (
-      id TEXT PRIMARY KEY,
-      "ticketId" TEXT NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
-      "ticketCode" TEXT NOT NULL,
-      "eventId" TEXT NOT NULL REFERENCES events(id) ON DELETE CASCADE,
-      "sessionId" TEXT NOT NULL REFERENCES event_sessions(id) ON DELETE CASCADE,
-      "scannerId" TEXT NOT NULL REFERENCES auth_user(id),
-      "scannerName" TEXT NOT NULL,
-      action TEXT NOT NULL,
-      status TEXT NOT NULL,
-      reason TEXT,
-      "deviceMode" TEXT NOT NULL DEFAULT 'online',
-      "createdAt" TIMESTAMPTZ NOT NULL DEFAULT now()
-    );
-    CREATE INDEX IF NOT EXISTS idx_admission_logs_ticket ON ticket_admission_logs("ticketId");
-    CREATE INDEX IF NOT EXISTS idx_admission_logs_session ON ticket_admission_logs("sessionId");
-    CREATE INDEX IF NOT EXISTS idx_admission_logs_created ON ticket_admission_logs("createdAt");
+const admissionSchemaPromises = new WeakMap<Pool, Promise<void>>();
 
-    CREATE TABLE IF NOT EXISTS admission_sync_conflicts (
-      id TEXT PRIMARY KEY,
-      "eventId" TEXT NOT NULL REFERENCES events(id) ON DELETE CASCADE,
-      "sessionId" TEXT NOT NULL REFERENCES event_sessions(id) ON DELETE CASCADE,
-      "ticketId" TEXT NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
-      "ticketCode" TEXT NOT NULL,
-      "scannerId" TEXT NOT NULL,
-      "scannerName" TEXT NOT NULL,
-      "offlineScanId" TEXT NOT NULL,
-      action TEXT NOT NULL,
-      "scannedAt" TIMESTAMPTZ NOT NULL,
-      "conflictType" TEXT NOT NULL,
-      "conflictDetails" TEXT NOT NULL,
-      status TEXT NOT NULL DEFAULT 'pending_review',
-      "resolvedBy" TEXT,
-      "resolvedAt" TIMESTAMPTZ,
-      "resolutionNotes" TEXT,
-      "createdAt" TIMESTAMPTZ NOT NULL DEFAULT now()
-    );
-    CREATE INDEX IF NOT EXISTS idx_admission_conflicts_event ON admission_sync_conflicts("eventId");
-    CREATE INDEX IF NOT EXISTS idx_admission_conflicts_status ON admission_sync_conflicts(status);
-  `);
+export async function ensureAdmissionSchema(pool: Pool): Promise<void> {
+  const existing = admissionSchemaPromises.get(pool);
+  if (existing) {
+    return existing;
+  }
+  const promise = (async () => {
+    try {
+      await ensureTicketSchema(pool);
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS ticket_admission_logs (
+          id TEXT PRIMARY KEY,
+          "ticketId" TEXT NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
+          "ticketCode" TEXT NOT NULL,
+          "eventId" TEXT NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+          "sessionId" TEXT NOT NULL REFERENCES event_sessions(id) ON DELETE CASCADE,
+          "scannerId" TEXT NOT NULL REFERENCES auth_user(id),
+          "scannerName" TEXT NOT NULL,
+          action TEXT NOT NULL,
+          status TEXT NOT NULL,
+          reason TEXT,
+          "deviceMode" TEXT NOT NULL DEFAULT 'online',
+          "createdAt" TIMESTAMPTZ NOT NULL DEFAULT now()
+        );
+        CREATE INDEX IF NOT EXISTS idx_admission_logs_ticket ON ticket_admission_logs("ticketId");
+        CREATE INDEX IF NOT EXISTS idx_admission_logs_session ON ticket_admission_logs("sessionId");
+        CREATE INDEX IF NOT EXISTS idx_admission_logs_created ON ticket_admission_logs("createdAt");
+
+        CREATE TABLE IF NOT EXISTS admission_sync_conflicts (
+          id TEXT PRIMARY KEY,
+          "eventId" TEXT NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+          "sessionId" TEXT NOT NULL REFERENCES event_sessions(id) ON DELETE CASCADE,
+          "ticketId" TEXT NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
+          "ticketCode" TEXT NOT NULL,
+          "scannerId" TEXT NOT NULL,
+          "scannerName" TEXT NOT NULL,
+          "offlineScanId" TEXT NOT NULL,
+          action TEXT NOT NULL,
+          "scannedAt" TIMESTAMPTZ NOT NULL,
+          "conflictType" TEXT NOT NULL,
+          "conflictDetails" TEXT NOT NULL,
+          status TEXT NOT NULL DEFAULT 'pending_review',
+          "resolvedBy" TEXT,
+          "resolvedAt" TIMESTAMPTZ,
+          "resolutionNotes" TEXT,
+          "createdAt" TIMESTAMPTZ NOT NULL DEFAULT now()
+        );
+        CREATE INDEX IF NOT EXISTS idx_admission_conflicts_event ON admission_sync_conflicts("eventId");
+        CREATE INDEX IF NOT EXISTS idx_admission_conflicts_status ON admission_sync_conflicts(status);
+      `);
+    } catch (err) {
+      admissionSchemaPromises.delete(pool);
+      throw err;
+    }
+  })();
+  admissionSchemaPromises.set(pool, promise);
+  return promise;
 }
 
 /**
@@ -301,7 +316,7 @@ export async function recordAdmissionScan(
        JOIN event_sessions s ON s.id = t."sessionId"
        JOIN events e ON e.id = t."eventId"
        WHERE t."qrPayload" = $1
-       FOR UPDATE`,
+       FOR UPDATE OF t`,
       [cleanInput],
     );
 

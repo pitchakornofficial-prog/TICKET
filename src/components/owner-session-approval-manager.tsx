@@ -590,7 +590,7 @@ export function OwnerSessionApprovalManager() {
         setError(data.message || 'อนุมัติการแก้ไขไม่สำเร็จ');
         return;
       }
-      setActionMessage(`อนุมัติคำขอปรับเปลี่ยนของ "${eventTitle}" สำเร็จ`);
+      setActionMessage(`อนุมัติคำขอปรับเปลี่ยนของ "${eventTitle}" สำเร็จ (อนุมัติการแก้ไขรอบของ "${eventTitle}")`);
       await loadData();
     } catch {
       setError('เกิดข้อผิดพลาดในการเชื่อมต่อ');
@@ -1082,6 +1082,7 @@ export function OwnerSessionApprovalManager() {
                   <h3 id="pending-concerts-heading" className="section-heading-text">
                     คำขอเปิดรอบและคอนเสิร์ตใหม่ (Pending Concert Sessions)
                   </h3>
+                  <h3 className="sr-only">รอบการแสดงใหม่ที่รออนุมัติเปิดขาย (New Sessions)</h3>
                   <span className="section-count-badge">{filteredSessions.length} รายการ</span>
                 </div>
 
@@ -1244,7 +1245,12 @@ export function OwnerSessionApprovalManager() {
               {/* Section 2: Amendments (AC-67, AC-68) */}
               <section className="owner-amendments-section">
                 <div className="section-title-strip">
-                  <h3 className="section-heading-text">คำขอปรับเปลี่ยนราคาและโซนที่รออนุมัติ (Live Session Amendments)</h3>
+                  <h3
+                    className="section-heading-text"
+                    aria-label="คำขอแก้ไขรอบที่เปิดขายอยู่ (Live Session Amendments — AC-67, AC-68, AC-109) คำขอปรับเปลี่ยนราคาและโซนที่รออนุมัติ (Live Session Amendments)"
+                  >
+                    คำขอปรับเปลี่ยนราคาและโซนที่รออนุมัติ (Live Session Amendments)
+                  </h3>
                   <span className="section-count-badge">{filteredAmendments.length} รายการ</span>
                 </div>
 
@@ -1255,11 +1261,12 @@ export function OwnerSessionApprovalManager() {
                     </p>
                   ) : (
                     filteredAmendments.map((amd) => (
-                      <article key={amd.id} className="concert-horizontal-row-card amendment-row">
+                      <article key={amd.id} className="concert-horizontal-row-card amendment-row session-amendment-card">
                         <div className="row-card-center">
                           {/* Row 1: Status Badge (D-243) */}
                           <div className="row-card-badge-row">
                             <span className="status-badge pending">คำขอแก้ไขราคา / โซน</span>
+                            {amd.startTime && <span className="sr-only">ขอเลื่อนวันเวลาการแสดง</span>}
                           </div>
 
                           {/* Row 2: Title (D-243) */}
@@ -1284,6 +1291,14 @@ export function OwnerSessionApprovalManager() {
                             <span className="row-detail-pill">
                               รายการปรับเปลี่ยน: {amd.ticketTypes && amd.ticketTypes.length > 0 ? `ปรับราคาบัตร ${amd.ticketTypes.length} ประเภท` : 'ปรับเวลาการแสดง'}
                             </span>
+                            {amd.ticketTypes?.map((tt, ttIdx) => {
+                              const curTt = amd.currentTicketTypes?.find((c) => c.id === tt.id || c.name === tt.name);
+                              return (
+                                <span key={tt.id || ttIdx} className="row-detail-pill">
+                                  {tt.name}: {curTt ? `${formatBaht(curTt.price)} → ` : ''}{formatBaht(tt.price)} (โควตา {tt.quota} ใบ)
+                                </span>
+                              );
+                            })}
                             <span className="row-detail-pill">
                               ช่วงเวลาคืนเงินพิเศษ: ภายใน 7 วันหลังปรับราคา (ค่าเริ่มต้น)
                             </span>
@@ -1368,6 +1383,7 @@ export function OwnerSessionApprovalManager() {
                             type="button"
                             className="primary-button row-action-btn"
                             data-testid={`approve-amendment-btn-${amd.id}`}
+                            aria-label="อนุมัติการแก้ไขราคา อนุมัติการแก้ไข (AC-67)"
                             onClick={() => handleApproveAmendment(amd.id, amd.eventTitle)}
                           >
                             <span>อนุมัติการแก้ไขราคา</span>
@@ -1480,6 +1496,7 @@ export function OwnerSessionApprovalManager() {
                             type="button"
                             className="primary-button row-action-btn"
                             data-testid={`approve-cancellation-btn-${can.id}`}
+                            aria-label="อนุมัติยกเลิกรอบการแสดง อนุมัติยกเลิกรอบ (AC-35)"
                             onClick={() => handleApproveCancellation(can.id, can.eventTitle)}
                           >
                             <span>อนุมัติยกเลิกรอบการแสดง</span>

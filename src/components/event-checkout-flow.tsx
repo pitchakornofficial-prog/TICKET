@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useTransition } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
@@ -88,7 +88,7 @@ export function EventCheckoutFlow({
   const [isBreakdownOpen, setIsBreakdownOpen] = useState(false);
   const [timeLeft, setTimeLeft] = useState(TOTAL_HOLD_SECONDS);
   const [isTimeoutModalOpen, setIsTimeoutModalOpen] = useState(false);
-  const [isPending, startTransition] = useTransition();
+  const [isPending, setIsPending] = useState(false);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -113,11 +113,7 @@ export function EventCheckoutFlow({
     const stored = sessionStorage.getItem(storageKey);
     let deadline: number;
 
-    if (passDeadline && passDeadline > Date.now()) {
-      // Prioritize fresh deadline from queue pass
-      deadline = passDeadline;
-      sessionStorage.setItem(storageKey, deadline.toString());
-    } else if (stored) {
+    if (stored) {
       const parsed = parseInt(stored, 10);
       if (!Number.isNaN(parsed) && parsed > Date.now()) {
         deadline = parsed;
@@ -126,6 +122,10 @@ export function EventCheckoutFlow({
         setIsTimeoutModalOpen(true);
         return;
       }
+    } else if (passDeadline && passDeadline > Date.now()) {
+      // Initialize deadline from queue pass
+      deadline = passDeadline;
+      sessionStorage.setItem(storageKey, deadline.toString());
     } else {
       deadline = Date.now() + TOTAL_HOLD_SECONDS * 1000;
       sessionStorage.setItem(storageKey, deadline.toString());
@@ -280,13 +280,15 @@ export function EventCheckoutFlow({
     });
   }
 
-  function handleConfirmReservation(e?: React.FormEvent, explicitBuyer?: VerifiedBuyerInfo) {
+  function handleConfirmReservation(e?: React.FormEvent | React.MouseEvent, explicitBuyer?: VerifiedBuyerInfo) {
     if (e && typeof e.preventDefault === 'function') {
       e.preventDefault();
     }
     setError(null);
 
-    const activeBuyer = explicitBuyer || buyer;
+    const activeBuyer = (explicitBuyer && typeof explicitBuyer === 'object' && 'token' in explicitBuyer)
+      ? explicitBuyer
+      : buyer;
 
     if (totalTickets <= 0) {
       setError('กรุณาเลือกจำนวนบัตรอย่างน้อย 1 ใบ ในขั้นตอนที่ 1');
@@ -316,7 +318,8 @@ export function EventCheckoutFlow({
       .filter(([, qty]) => qty > 0)
       .map(([ticketTypeId, quantity]) => ({ ticketTypeId, quantity }));
 
-    startTransition(async () => {
+    setIsPending(true);
+    void (async () => {
       try {
         const res = await fetch('/api/public/checkout/reserve', {
           method: 'POST',
@@ -345,8 +348,10 @@ export function EventCheckoutFlow({
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : 'เกิดข้อผิดพลาดในการกันบัตร';
         setError(msg);
+      } finally {
+        setIsPending(false);
       }
-    });
+    })();
   }
 
   const handleBackToDetails = () => {
@@ -924,7 +929,7 @@ export function EventCheckoutFlow({
                 id="confirm-reservation-btn"
                 type="button"
                 aria-label={`ยืนยันการเลือกบัตร (${totalTickets} ใบ)`}
-                onClick={handleConfirmReservation}
+                onClick={() => handleConfirmReservation()}
                 disabled={totalTickets <= 0 || !buyer || isPending}
                 className="primary-button checkout-sticky-confirm-btn"
               >

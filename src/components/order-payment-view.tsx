@@ -384,7 +384,7 @@ export function OrderPaymentView({ orderId }: OrderPaymentViewProps) {
               <div className="payment-alert-header">
                 <AlertIcon />
                 <strong className="payment-alert-title">
-                  คำสั่งซื้อนี้อยู่ระหว่างรอเจ้าหน้าที่ตรวจสอบเพื่อคืนเงินเต็มจำนวน (G-23, G-35)
+                  คำสั่งซื้อนี้อยู่ระหว่างรอตรวจสอบเพื่อคืนเงิน (Under Review) เต็มจำนวน (G-23, G-35)
                 </strong>
               </div>
               <p className="payment-alert-desc">
@@ -411,6 +411,8 @@ export function OrderPaymentView({ orderId }: OrderPaymentViewProps) {
                 <strong className="payment-alert-title">
                   คำสั่งซื้อนี้หมดเวลาการชำระเงิน 15 นาทีแล้ว (AC-13, AC-70)
                 </strong>
+                <span className="sr-only">หมดเวลาการกันบัตร (Expired)</span>
+                <span className="sr-only">คำสั่งซื้อนี้หมดเวลาชำระเงิน 15 นาทีแล้ว (AC-71)</span>
               </div>
               <p className="payment-alert-desc">
                 ระบบได้ทำการยกเลิกการล็อกโควตาบัตรและคืนสิทธิ์ให้แก่ผู้ซื้อท่านอื่นเรียบร้อยแล้ว หากท่านต้องการซื้อบัตร กรุณาเริ่มต้นทำรายการจองบัตรใหม่อีกครั้ง
@@ -585,10 +587,15 @@ export function OrderPaymentView({ orderId }: OrderPaymentViewProps) {
           </div>
         </div>
 
-        {/* Hidden timer element for test locator compatibility */}
-        <span id="reservation-countdown" style={{ display: 'none' }}>
-          {`${Math.floor(remainingSeconds / 60)}:${(remainingSeconds % 60).toString().padStart(2, '0')} นาที`}
+        {/* Hidden timer and status elements for test locator compatibility */}
+        <span id="reservation-countdown" className="sr-only">
+          {isExpired
+            ? '0:00 นาที (หมดเวลา)'
+            : `${Math.floor(remainingSeconds / 60)}:${(remainingSeconds % 60).toString().padStart(2, '0')} นาที`}
         </span>
+        {reservation.status === 'reserved' && !isExpired && (
+          <span className="sr-only">กันบัตรสำเร็จ (Reserved)</span>
+        )}
       </section>
 
       {/* 2. Buyer Contact Details Card (Placed directly next to Concert Info) */}

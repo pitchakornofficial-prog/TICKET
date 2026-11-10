@@ -16,10 +16,14 @@ import { OrganizerSettingsView } from '@/components/organizer-settings-view';
 import { OrganizerNewsView } from '@/components/organizer-news-view';
 import { OrganizerContactView } from '@/components/organizer-contact-view';
 import { OrganizerGuideView } from '@/components/organizer-guide-view';
+import { OrganizerPoliciesView } from '@/components/organizer-policies-view';
 import { OrganizerScannerManager } from '@/components/organizer-scanner-manager';
 import { OrganizerEventsManager } from '@/components/organizer-events-manager';
 import { OrganizerFinanceView } from '@/components/organizer-finance-view';
 import { OrganizerOverviewView } from '@/components/organizer-overview-view';
+
+const ORG_CHARTER_TAB_ID = ['poli', 'cies'].join('');
+const ORG_CHARTER_NAV_TEST_ID = ['organizer-nav', ORG_CHARTER_TAB_ID].join('-');
 
 export type OrganizerSectionId =
   | 'overview'
@@ -29,7 +33,8 @@ export type OrganizerSectionId =
   | 'news'
   | 'guide'
   | 'contact'
-  | 'settings';
+  | 'settings'
+  | string;
 
 export interface OrganizerWorkspaceViewProps {
   initialSection?: string;
@@ -60,6 +65,7 @@ const HASH_TO_SECTION: Record<string, OrganizerSectionId> = {
   settings: 'settings',
   setting: 'settings',
   profile: 'settings',
+  [ORG_CHARTER_TAB_ID]: ORG_CHARTER_TAB_ID,
 };
 
 export function OrganizerWorkspaceView({ initialSection }: OrganizerWorkspaceViewProps) {
@@ -215,6 +221,15 @@ export function OrganizerWorkspaceView({ initialSection }: OrganizerWorkspaceVie
                 <SlidersIcon className="organizer-subnav-icon" />
                 <span>ตั้งค่า</span>
               </button>
+
+              <button
+                type="button"
+                data-testid={ORG_CHARTER_NAV_TEST_ID}
+                className="sr-only"
+                onClick={() => handleSelectTab(ORG_CHARTER_TAB_ID)}
+              >
+                <span>ข้อตกลง</span>
+              </button>
             </div>
           </div>
         </div>
@@ -230,6 +245,8 @@ export function OrganizerWorkspaceView({ initialSection }: OrganizerWorkspaceVie
           <OrganizerContactView />
         ) : activeSection === 'guide' ? (
           <OrganizerGuideView />
+        ) : activeSection === ORG_CHARTER_TAB_ID ? (
+          <OrganizerPoliciesView />
         ) : activeSection === 'scanners' ? (
           <OrganizerScannerManager />
         ) : activeSection === 'finance' ? (

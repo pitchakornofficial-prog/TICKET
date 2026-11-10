@@ -200,7 +200,7 @@ test.describe('Owner Contact Correction Flow (TASK-019, AC-76, G-24)', () => {
     await freshPage.getByRole('button', { name: 'ยืนยันรหัส OTP' }).click({ force: true });
 
     // Order is revealed with original tickets and QR codes intact
-    await expect(freshPage.getByText(orderId)).toBeVisible();
+    await expect(freshPage.getByText(orderId).first()).toBeVisible();
     await expect(freshPage.getByText('ชำระเงินสำเร็จ')).toBeVisible();
     await expect(freshPage.getByText('รายการบัตรเข้างาน (2 ใบ)')).toBeVisible();
     const qrImages = freshPage.locator('img[alt^="QR Code บัตร"]');

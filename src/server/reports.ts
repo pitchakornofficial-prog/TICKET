@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import type { Pool } from 'pg';
 import { inTransaction } from './database.ts';
-import { storage } from './storage';
-import { ensureTicketSchema } from './tickets';
+import { storage } from './storage.ts';
+import { ensureTicketSchema } from './tickets.ts';
 import {
   roundHalfUp,
   calculateOrganizerOrderFee,
@@ -10,7 +10,7 @@ import {
   type OrganizerFeeMode,
   ensureFeeSchema,
   isUbuEmail,
-} from './fees';
+} from './fees.ts';
 
 export interface MaskedBuyerContact {
   name: string;

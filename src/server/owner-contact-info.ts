@@ -1,5 +1,5 @@
 import type { Pool } from 'pg';
-import { inTransaction } from './database';
+import { inTransaction } from './database.ts';
 
 export const CONTACT_FIELDS = [
   'hotline', 'hotlineBadge', 'hotlineNote', 'email', 'emailBadge', 'emailNote',

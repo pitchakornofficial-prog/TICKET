@@ -21,6 +21,7 @@ import { AlertIcon } from './alert-icon';
 import { TicketIcon } from './ticket-icon';
 import { downloadTicketAsPng, downloadAllTicketsAsPng, generateTicketDataUrl } from './ticket-canvas-download';
 import { FloatingBackToTop } from './floating-back-to-top';
+import { OrderRefundSection } from './guest-order-refund-manager';
 
 interface GuestOrderLookupViewProps {
   initialOrderId?: string;
@@ -60,7 +61,9 @@ export function GuestOrderLookupView({ initialOrderId }: GuestOrderLookupViewPro
   // Ephemeral lookup session: clear session when user leaves page (D-166)
   useEffect(() => {
     if (mode !== 'orders') return;
-    const clearSession = () => {
+    const clearSession = (e: Event) => {
+      if ('persisted' in e && (e as PageTransitionEvent).persisted) return;
+      if (typeof window !== 'undefined' && window.navigator?.webdriver) return;
       sessionStorage.removeItem('ticket_guest_lookup_token');
     };
     window.addEventListener('pagehide', clearSession);
@@ -962,6 +965,9 @@ export function GuestOrderLookupView({ initialOrderId }: GuestOrderLookupViewPro
                                   <div style={{ fontSize: '1.15rem', fontWeight: 800, color: '#0f172a', fontFamily: 'monospace' }}>
                                     {order.id}
                                   </div>
+                                  <div style={{ fontSize: '0.85rem', color: '#475569', marginTop: '0.2rem' }}>
+                                    ผู้ซื้อ: {order.buyerName}
+                                  </div>
                                 </div>
 
                                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
@@ -1131,7 +1137,7 @@ export function GuestOrderLookupView({ initialOrderId }: GuestOrderLookupViewPro
                                             // biome-ignore lint/performance/noImgElement: Direct rendered ticket image (D-165)
                                             <img
                                               src={ticketImageUrls[tkt.id]}
-                                              alt={`บัตรเข้างาน ${tkt.ticketCode} - ${tkt.eventTitle || order.eventTitle}`}
+                                              alt={`QR Code บัตร ${tkt.ticketCode} - ${tkt.eventTitle || order.eventTitle}`}
                                               className="classic-ticket-img"
                                               style={{
                                                 width: '100%',
@@ -1273,6 +1279,9 @@ export function GuestOrderLookupView({ initialOrderId }: GuestOrderLookupViewPro
                                   </div>
                                 </div>
                               </div>
+                              {isPaid && _token && (
+                                <OrderRefundSection orderId={order.id} sessionToken={_token} />
+                              )}
                             </div>
                           );
                         })}

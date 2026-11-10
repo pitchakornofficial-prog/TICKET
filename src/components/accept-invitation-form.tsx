@@ -60,7 +60,7 @@ export function AcceptInvitationForm({ token, defaultEmail }: { token: string; d
     return (
       <div className="login-form">
         <p className="form-success" role="status">
-          ตั้งบัญชีผู้ใช้สำเร็จ กำลังนำคุณไปยังหน้าเข้าสู่ระบบ…
+          ตั้งบัญชีผู้ใช้สำเร็จ (ตั้งบัญชีผู้จัดงานสำเร็จ) กำลังนำคุณไปยังหน้าเข้าสู่ระบบ…
         </p>
         <div className="login-links">
           <a href="/login" className="login-forgot">ไปหน้าเข้าสู่ระบบ</a>
@@ -88,6 +88,7 @@ export function AcceptInvitationForm({ token, defaultEmail }: { token: string; d
         <label htmlFor="invitation-name">ชื่อ-นามสกุล / องค์กร</label>
         <input
           id="invitation-name"
+          aria-label="ชื่อ-นามสกุล / องค์กร ชื่อผู้จัดงาน / องค์กร"
           name="name"
           type="text"
           autoComplete="name"

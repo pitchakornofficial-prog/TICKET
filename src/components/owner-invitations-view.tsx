@@ -46,122 +46,6 @@ export type InvitationsHubTab = 'invitations' | 'organizers' | 'admins';
 export type InvitationStatusFilter = 'all' | 'pending' | 'accepted' | 'expired';
 export type AccountStatusFilter = 'all' | 'active' | 'suspended';
 
-const SAMPLE_MOCK_INVITATIONS: OrganizerInvitationItem[] = [
-  {
-    id: 'inv-01',
-    email: 'organizer.soundwave@ubu.ac.th',
-    role: 'organizer',
-    status: 'pending',
-    token: 'token-soundwave-2026-abc1',
-    expiresAt: new Date(Date.now() + 36 * 3600 * 1000).toISOString(),
-    createdAt: new Date(Date.now() - 12 * 3600 * 1000).toISOString(),
-  },
-  {
-    id: 'inv-02',
-    email: 'partner.livefest@gmail.com',
-    role: 'organizer',
-    status: 'pending',
-    token: 'token-livefest-2026-xyz2',
-    expiresAt: new Date(Date.now() + 24 * 3600 * 1000).toISOString(),
-    createdAt: new Date(Date.now() - 24 * 3600 * 1000).toISOString(),
-  },
-  {
-    id: 'inv-03',
-    email: 'smo.ubu.activity@gmail.com',
-    role: 'organizer',
-    status: 'accepted',
-    token: 'token-smo-ubu-accepted',
-    expiresAt: new Date(Date.now() - 48 * 3600 * 1000).toISOString(),
-    createdAt: new Date(Date.now() - 96 * 3600 * 1000).toISOString(),
-    acceptedAt: new Date(Date.now() - 50 * 3600 * 1000).toISOString(),
-  },
-  {
-    id: 'inv-04',
-    email: 'admin.support@ticket.in.th',
-    role: 'owner',
-    status: 'accepted',
-    token: 'token-admin-support',
-    expiresAt: new Date(Date.now() - 120 * 3600 * 1000).toISOString(),
-    createdAt: new Date(Date.now() - 160 * 3600 * 1000).toISOString(),
-    acceptedAt: new Date(Date.now() - 130 * 3600 * 1000).toISOString(),
-  },
-  {
-    id: 'inv-05',
-    email: 'old.partner@expired-domain.com',
-    role: 'organizer',
-    status: 'expired',
-    token: 'token-expired-partner',
-    expiresAt: new Date(Date.now() - 24 * 3600 * 1000).toISOString(),
-    createdAt: new Date(Date.now() - 72 * 3600 * 1000).toISOString(),
-  },
-];
-
-const SAMPLE_MOCK_ORGANIZERS: UserAccountItem[] = [
-  {
-    id: 'org-01',
-    name: 'สโมสรนักศึกษา มหาวิทยาลัยอุบลราชธานี',
-    email: 'smo.ubu.activity@gmail.com',
-    role: 'organizer',
-    status: 'active',
-    createdAt: '2026-09-15T09:00:00Z',
-    lastLoginAt: '2026-11-06T18:24:00Z',
-    activeConcertsCount: 2,
-    phone: '081-998-7654',
-    notes: 'ผู้จัดงานหลักของคอนเสิร์ต UBU Freshy Fest 2026 บัญชีได้รับการรับรองและลงนามสัญญาแล้ว',
-  },
-  {
-    id: 'org-02',
-    name: 'บจก. ริมมูล มิวสิค โปรดักชั่น',
-    email: 'contact@rimmoolmusic.co.th',
-    role: 'organizer',
-    status: 'active',
-    createdAt: '2026-10-01T11:30:00Z',
-    lastLoginAt: '2026-11-05T14:10:00Z',
-    activeConcertsCount: 1,
-    phone: '089-123-4567',
-    notes: 'ผู้จัดงานคอนเสิร์ต Rock Rimmool Live Festival 2026 บัญชีธนาคารกสิกรไทยผ่านการยืนยัน',
-  },
-  {
-    id: 'org-03',
-    name: 'กลุ่มศิลปินเพลงอีสานร่วมสมัย',
-    email: 'isanfolk.live@outlook.com',
-    role: 'organizer',
-    status: 'active',
-    createdAt: '2026-10-10T14:00:00Z',
-    lastLoginAt: '2026-11-04T10:45:00Z',
-    activeConcertsCount: 1,
-    phone: '086-999-8877',
-    notes: 'ผู้จัดงาน Isan Folk & Acoustic Night 2026 บัญชีธนาคารไทยพาณิชย์ผ่านการยืนยัน',
-  },
-];
-
-const SAMPLE_MOCK_ADMINS: UserAccountItem[] = [
-  {
-    id: 'admin-01',
-    name: 'เจ้าของเว็บทดสอบ (TICKET Super Admin)',
-    email: 'owner@example.com',
-    role: 'owner',
-    status: 'active',
-    createdAt: '2026-08-01T00:00:00Z',
-    lastLoginAt: '2026-11-07T02:30:00Z',
-    activeConcertsCount: 0,
-    phone: '02-123-4567',
-    notes: 'ผู้ดูแลระบบสูงสุด (Super Administrator) มีสิทธิ์อนุมัติคอนเสิร์ต จัดการการเงิน และดูแลระบบ',
-  },
-  {
-    id: 'admin-02',
-    name: 'พิชญา ผู้ดูแลระบบฝ่ายการเงิน (Finance Lead)',
-    email: 'pitchaya.finance@ticket.in.th',
-    role: 'owner',
-    status: 'active',
-    createdAt: '2026-09-01T08:00:00Z',
-    lastLoginAt: '2026-11-06T17:15:00Z',
-    activeConcertsCount: 0,
-    phone: '085-432-1098',
-    notes: 'ดูแลการตรวจสอบยอดขาย ตรวจสอบสลิปโอนเงิน และยืนยันรอบจ่ายเงินประจำสัปดาห์',
-  },
-];
-
 export function OwnerInvitationsView() {
   const [activeTab, setActiveTab] = useState<InvitationsHubTab>('invitations');
   const [searchQuery, setSearchQuery] = useState('');
@@ -169,13 +53,13 @@ export function OwnerInvitationsView() {
   const [accountStatusFilter, setAccountStatusFilter] = useState<AccountStatusFilter>('all');
 
   // Invitations state
-  const [invitations, setInvitations] = useState<OrganizerInvitationItem[]>(SAMPLE_MOCK_INVITATIONS);
+  const [invitations, setInvitations] = useState<OrganizerInvitationItem[]>([]);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
   const [_historyError, setHistoryError] = useState<string | null>(null);
 
   // Accounts state
-  const [organizers] = useState<UserAccountItem[]>(SAMPLE_MOCK_ORGANIZERS);
-  const [admins] = useState<UserAccountItem[]>(SAMPLE_MOCK_ADMINS);
+  const [organizers] = useState<UserAccountItem[]>([]);
+  const [admins] = useState<UserAccountItem[]>([]);
 
   // Create Invite Modal state
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
@@ -196,16 +80,12 @@ export function OwnerInvitationsView() {
       const res = await fetch('/api/owner/invitations');
       if (res.ok) {
         const data = await res.json();
-        if (data.invitations && data.invitations.length > 0) {
-          setInvitations(data.invitations);
-        } else {
-          setInvitations(SAMPLE_MOCK_INVITATIONS);
-        }
+        setInvitations(Array.isArray(data.invitations) ? data.invitations : []);
       } else {
-        setInvitations(SAMPLE_MOCK_INVITATIONS);
+        setInvitations([]);
       }
     } catch {
-      setInvitations(SAMPLE_MOCK_INVITATIONS);
+      setInvitations([]);
     } finally {
       setIsLoadingHistory(false);
     }

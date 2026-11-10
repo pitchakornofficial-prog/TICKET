@@ -185,16 +185,31 @@ export async function resolveScannerSessionScopedEventId(
   return null;
 }
 
+const scannerScopeSchemaPromises = new WeakMap<Pool, Promise<void>>();
+
 export async function ensureScannerScopeSchema(pool: Pool): Promise<void> {
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS scanner_session_scopes (
-      "sessionToken" TEXT PRIMARY KEY,
-      "scannerId" TEXT NOT NULL,
-      "eventId" TEXT NOT NULL,
-      "createdAt" TIMESTAMPTZ NOT NULL DEFAULT now()
-    );
-    CREATE INDEX IF NOT EXISTS idx_scanner_scopes_scanner ON scanner_session_scopes ("scannerId", "eventId");
-  `);
+  const existing = scannerScopeSchemaPromises.get(pool);
+  if (existing) {
+    return existing;
+  }
+  const promise = (async () => {
+    try {
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS scanner_session_scopes (
+          "sessionToken" TEXT PRIMARY KEY,
+          "scannerId" TEXT NOT NULL,
+          "eventId" TEXT NOT NULL,
+          "createdAt" TIMESTAMPTZ NOT NULL DEFAULT now()
+        );
+        CREATE INDEX IF NOT EXISTS idx_scanner_scopes_scanner ON scanner_session_scopes ("scannerId", "eventId");
+      `);
+    } catch (err) {
+      scannerScopeSchemaPromises.delete(pool);
+      throw err;
+    }
+  })();
+  scannerScopeSchemaPromises.set(pool, promise);
+  return promise;
 }
 
 export async function recordScannerSessionScope(
@@ -267,10 +282,23 @@ export async function verifyScannerSessionEventScope(
 
   // 3. Fail-closed: If cookies are sent (e.g. device/session cookies) but status is unscoped
   if (cookieHeader && scopeResolution.status === 'unscoped') {
-    return {
-      allowed: false,
-      reason: 'ไม่อนุญาต: ไม่พบคุกกี้หรือข้อมูลขอบเขตงานคอนเสิร์ตของเจ้าหน้าที่สแกน (Missing Event Scope)',
-    };
+    const hasSessionToken = Boolean(extractSessionTokenFromCookie(cookieHeader));
+    if (!hasSessionToken || !target.scannerId) {
+      return {
+        allowed: false,
+        reason: 'ไม่อนุญาต: ไม่พบคุกกี้หรือข้อมูลขอบเขตงานคอนเสิร์ตของเจ้าหน้าที่สแกน (Missing Event Scope)',
+      };
+    }
+    const assignRes = await pool.query(
+      'SELECT 1 FROM event_scanners WHERE "eventId" = $1 AND "scannerId" = $2',
+      [targetEventId, target.scannerId],
+    );
+    if (!assignRes.rowCount || assignRes.rowCount === 0) {
+      return {
+        allowed: false,
+        reason: 'ไม่อนุญาต: ไม่พบคุกกี้หรือข้อมูลขอบเขตงานคอนเสิร์ตของเจ้าหน้าที่สแกน (Missing Event Scope)',
+      };
+    }
   }
 
   // 5. Device binding re-verification for scanner role (D-104)

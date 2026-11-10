@@ -168,11 +168,11 @@ export function OwnerOverviewDashboard({
               sumGross += ev.minPrice * Math.round(ev.totalQuota * 0.45);
             }
           }
-          setTotalGrossRevenue(sumGross > 0 ? sumGross : 1850000);
+          setTotalGrossRevenue(sumGross);
         }
       } catch {
         // Non-blocking fallback
-        setTotalGrossRevenue(1850000);
+        setTotalGrossRevenue(0);
       }
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'เกิดข้อผิดพลาดในการดึงข้อมูล');
@@ -193,36 +193,25 @@ export function OwnerOverviewDashboard({
 
   // Bar chart metrics (D-224, D-256)
   const barChartEvents = useMemo(() => {
-    if (events.length > 0) {
-      return events.map((ev, index) => {
-        const quota = ev.totalQuota || 1200;
-        const price = ev.minPrice || 800;
-        const soldRatio = 0.35 + (index % 5) * 0.12;
-        const soldCount = Math.round(quota * Math.min(0.95, soldRatio));
-        const estimatedSales = soldCount * price;
-        return {
-          id: ev.id,
-          title: ev.title,
-          status: ev.status || 'approved',
-          soldCount,
-          quota,
-          sales: estimatedSales,
-        };
-      });
-    }
-
-    // Default sample data if no events returned yet
-    return [
-      { id: 'sample-1', title: 'UBU Freshy Fest 2026', status: 'approved', soldCount: 1450, quota: 1500, sales: 870000 },
-      { id: 'sample-2', title: 'Isan Indie Music Wave', status: 'approved', soldCount: 820, quota: 1000, sales: 492000 },
-      { id: 'sample-3', title: 'Mun River Rock Night', status: 'pending_approval', soldCount: 310, quota: 800, sales: 186000 },
-      { id: 'sample-4', title: 'Mekong Jazz & Blues Festival', status: 'approved', soldCount: 420, quota: 600, sales: 252000 },
-      { id: 'sample-5', title: 'Esan Acoustic Jam Session', status: 'approved', soldCount: 260, quota: 350, sales: 130000 },
-    ];
+    return events.map((ev, index) => {
+      const quota = ev.totalQuota || 0;
+      const price = ev.minPrice || 0;
+      const soldRatio = 0.35 + (index % 5) * 0.12;
+      const soldCount = Math.round(quota * Math.min(0.95, soldRatio));
+      const estimatedSales = soldCount * price;
+      return {
+        id: ev.id,
+        title: ev.title,
+        status: ev.status || 'approved',
+        soldCount,
+        quota,
+        sales: estimatedSales,
+      };
+    });
   }, [events]);
 
   const maxBarSales = useMemo(() => {
-    return Math.max(...barChartEvents.map((e) => e.sales), 100000);
+    return Math.max(...barChartEvents.map((e) => e.sales), 1);
   }, [barChartEvents]);
 
   // Top 5 Performing Concerts (D-256)
@@ -233,7 +222,7 @@ export function OwnerOverviewDashboard({
 
   // Line chart trend data (D-224, D-256)
   const lineChartData = useMemo(() => {
-    const baseRevenue = totalGrossRevenue > 0 ? totalGrossRevenue : 1850000;
+    const baseRevenue = totalGrossRevenue;
     if (timeRange === 'today') {
       return [
         { label: '00:00', value: Math.round(baseRevenue * 0.005), date: 'วันนี้ 00:00' },
@@ -266,72 +255,70 @@ export function OwnerOverviewDashboard({
   }, [timeRange, totalGrossRevenue]);
 
   const maxLineValue = useMemo(() => {
-    return Math.max(...lineChartData.map((d) => d.value), 100000);
+    return Math.max(...lineChartData.map((d) => d.value), 1);
   }, [lineChartData]);
 
-  // Recent Operational Activity Data (D-256: Live Stream)
-  const recentActivities: RecentActivityItem[] = [
-    {
-      id: 'act-1',
-      type: 'session',
-      title: 'ผู้จัดงาน soundbkk ส่งรอบการแสดงใหม่ขออนุมัติ',
-      description: 'คอนเสิร์ต UBU Freshy Fest 2026 เพิ่มรอบวันอาทิตย์ที่ 15 พ.ย. โควตา 800 ที่นั่ง',
-      timestamp: '10 นาทีที่แล้ว',
-      badgeLabel: 'รออนุมัติ',
-      badgeVariant: 'warning',
-      section: 'approval',
-      targetManagerId: 'owner-session-approval-manager',
-      actionText: 'ตรวจสอบรอบแสดง',
-    },
-    {
-      id: 'act-2',
-      type: 'refund',
-      title: 'ลูกค้ายื่นคำขอคืนเงิน Order #ORD-7741',
-      description: 'Mun River Rock Night · ยอดเงินขอคืนสุทธิ 2,400 บาท (บัตร Regular 2 ใบ)',
-      timestamp: '25 นาทีที่แล้ว',
-      badgeLabel: 'รอตรวจสอบ',
-      badgeVariant: 'warning',
-      section: 'refunds',
-      targetManagerId: 'owner-refund-approval-manager',
-      actionText: 'ตรวจสอบคำขอ',
-    },
-    {
-      id: 'act-3',
-      type: 'payout',
-      title: 'บันทึกการโอนเงินรอบสัปดาห์สำเร็จ: รอบ #PAY-8821',
-      description: 'โอนเงินเข้าบัญชี บจก. ซาวด์ แอนด์ โชว์ ยอดโอนสุทธิ 145,000 บาท พร้อมแนบสลิปแล้ว',
-      timestamp: '1 ชั่วโมงที่แล้ว',
-      badgeLabel: 'โอนสำเร็จ',
-      badgeVariant: 'success',
-      section: 'finance',
-      targetManagerId: 'owner-weekly-payout-manager',
-      actionText: 'ดูประวัติการเงิน',
-    },
-    {
-      id: 'act-4',
-      type: 'news',
-      title: 'ประกาศข่าวสารระบบและแจ้งเตือนผู้จัดงาน',
-      description: 'แจ้งกำหนดการปิดปรับปรุงเซิร์ฟเวอร์สแกนบัตรออฟไลน์ประจำสัปดาห์ วันจันทร์ 02:00 - 04:00 น.',
-      timestamp: '3 ชั่วโมงที่แล้ว',
-      badgeLabel: 'เผยแพร่แล้ว',
-      badgeVariant: 'info',
-      section: 'system',
-      targetManagerId: 'owner-news-manager',
-      actionText: 'ดูศูนย์ข่าวสาร',
-    },
-    {
-      id: 'act-5',
-      type: 'customer',
-      title: 'อัปเดตข้อมูลติดต่อผู้ซื้อสำหรับ Order #ORD-6629',
-      description: 'แก้ไขเบอร์โทรศัพท์และส่งอีเมลยืนยันบัตรคอนเสิร์ตซ้ำสำเร็จแล้ว',
-      timestamp: '5 ชั่วโมงที่แล้ว',
-      badgeLabel: 'แก้ไขสำเร็จ',
-      badgeVariant: 'neutral',
-      section: 'customer',
-      targetManagerId: 'owner-contact-correction-manager',
-      actionText: 'ตรวจสอบคำสั่งซื้อ',
-    },
-  ];
+  // Recent Operational Activity Data (D-256: Live Stream from real counts)
+  const recentActivities: RecentActivityItem[] = useMemo(() => {
+    const items: RecentActivityItem[] = [];
+    if ((counts?.pendingSessions ?? 0) > 0) {
+      items.push({
+        id: 'act-sessions',
+        type: 'session',
+        title: `มีรายการรอบแสดงหรือคำขอเปลี่ยนแปลงรออนุมัติ ${counts?.pendingSessions} รายการ`,
+        description: 'ตรวจสอบรอบการแสดงใหม่และคำขอแก้ไขจากผู้จัดงาน',
+        timestamp: 'ล่าสุด',
+        badgeLabel: 'รออนุมัติ',
+        badgeVariant: 'warning',
+        section: 'approval',
+        targetManagerId: 'owner-session-approval-manager',
+        actionText: 'ตรวจสอบรอบแสดง',
+      });
+    }
+    if ((counts?.pendingRefunds ?? 0) > 0) {
+      items.push({
+        id: 'act-refunds',
+        type: 'refund',
+        title: `มีคำขอคืนเงินรอการตรวจสอบ ${counts?.pendingRefunds} รายการ`,
+        description: 'ตรวจสอบคำขอคืนเงินของลูกค้าและดำเนินการอนุมัติหรือปฏิเสธ',
+        timestamp: 'ล่าสุด',
+        badgeLabel: 'รอตรวจสอบ',
+        badgeVariant: 'warning',
+        section: 'refunds',
+        targetManagerId: 'owner-refund-approval-manager',
+        actionText: 'ตรวจสอบคำขอ',
+      });
+    }
+    if ((counts?.paymentExceptions ?? 0) > 0) {
+      items.push({
+        id: 'act-payments',
+        type: 'payout',
+        title: `มีรายการชำระเงินต้องตรวจสอบพิเศษ ${counts?.paymentExceptions} รายการ`,
+        description: 'ตรวจสอบรายการชำระเงินล่าช้าหรือรอการจัดสรรบัตรเพิ่มเติม',
+        timestamp: 'ล่าสุด',
+        badgeLabel: 'ต้องตรวจสอบ',
+        badgeVariant: 'warning',
+        section: 'finance',
+        targetManagerId: 'owner-payment-recovery-manager',
+        actionText: 'ดูรายการชำระเงิน',
+      });
+    }
+    if ((counts?.failedEmails ?? 0) > 0) {
+      items.push({
+        id: 'act-emails',
+        type: 'customer',
+        title: `มีรายการส่งอีเมลตั๋วไม่สำเร็จ ${counts?.failedEmails} รายการ`,
+        description: 'ตรวจสอบที่อยู่อีเมลผู้ซื้อและสั่งส่งตั๋วซ้ำ',
+        timestamp: 'ล่าสุด',
+        badgeLabel: 'ส่งไม่สำเร็จ',
+        badgeVariant: 'warning',
+        section: 'customer',
+        targetManagerId: 'owner-email-deliveries-manager',
+        actionText: 'จัดการอีเมล',
+      });
+    }
+    return items;
+  }, [counts]);
 
   const getStatusLabel = (status: string) => {
     switch (status) {

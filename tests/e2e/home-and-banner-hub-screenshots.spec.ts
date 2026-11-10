@@ -1,9 +1,6 @@
 import { testClientIp } from '../support/client-context';
 import { expect, test } from '@playwright/test';
 import { fixtureAccounts, fixturePassword } from '../support/auth-fixture';
-import { join } from 'node:path';
-
-const ARTIFACT_DIR = 'C:\\Users\\pitch\\.gemini\\antigravity\\brain\\f3b17a1f-dda0-4cba-b956-acb5931d57f6';
 
 test.beforeEach(async ({ context }, testInfo) => {
   await context.setExtraHTTPHeaders({ 'x-forwarded-for': testClientIp(testInfo) });
@@ -18,7 +15,7 @@ test('captures screenshots of pure image homepage banner and owner banner hub', 
   await page.goto('/');
   await page.waitForTimeout(1000);
   await page.screenshot({
-    path: join(ARTIFACT_DIR, `homepage-pure-banner${suffix}`),
+    path: testInfo.outputPath(`homepage-pure-banner${suffix}`),
     fullPage: false,
   });
 
@@ -41,7 +38,7 @@ test('captures screenshots of pure image homepage banner and owner banner hub', 
 
   // Capture Banners Tab List
   await page.screenshot({
-    path: join(ARTIFACT_DIR, `owner-system-banners-tab${suffix}`),
+    path: testInfo.outputPath(`owner-system-banners-tab${suffix}`),
     fullPage: true,
   });
 
@@ -51,7 +48,7 @@ test('captures screenshots of pure image homepage banner and owner banner hub', 
     await addBannerBtn.click();
     await page.waitForTimeout(600);
     await page.screenshot({
-      path: join(ARTIFACT_DIR, `owner-system-banner-modal${suffix}`),
+      path: testInfo.outputPath(`owner-system-banner-modal${suffix}`),
       fullPage: false,
     });
   }
