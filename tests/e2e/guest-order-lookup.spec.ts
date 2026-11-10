@@ -2,6 +2,7 @@ import { testClientIp, createIsolatedBrowserContext } from '../support/client-co
 import { saveEventDraft } from '../support/event-draft';
 import { expect, test } from '@playwright/test';
 import { fixtureAccounts, fixturePassword } from '../support/auth-fixture';
+import { reserveThroughCheckout } from '../support/purchase-journey';
 
 test.beforeEach(async ({ context }, testInfo) => {
   await context.setExtraHTTPHeaders({ 'x-forwarded-for': testClientIp(testInfo) });
@@ -77,57 +78,12 @@ test.describe('Guest Order Lookup flow (TASK-018, AC-21, AC-22, AC-62, AC-63, AC
     await page.getByRole('button', { name: 'ออกจากระบบ', exact: true }).click();
     await expect(page).toHaveURL('/login');
 
-    // 3. Guest visits concert detail page and completes purchase
-    await page.goto(`/events/${createdEvent.id}`);
-    await expect(page.getByRole('heading', { name: eventTitle })).toBeVisible();
-
-    const enterQueueBtn = page.getByTestId('enter-queue-cta-btn').filter({ visible: true });
-    if (await enterQueueBtn.isVisible()) {
-      await enterQueueBtn.click();
-      const proceedBtn = page.locator('#proceed-to-checkout-btn');
-      await expect(proceedBtn).toBeVisible({ timeout: 10000 });
-      await proceedBtn.click();
-    } else {
-      await page.goto(`/events/${createdEvent.id}/checkout`);
-    }
-    await expect(page).toHaveURL(new RegExp(`/events/${createdEvent.id}/checkout`));
-
-    // Select 2 tickets
-    const addBtn = page.getByRole('button', { name: 'เพิ่มจำนวน บัตร โซน A' });
-    await addBtn.click();
-    await addBtn.click();
-    await expect(page.getByText('รวมราคาบัตร (2 ใบ)')).toBeVisible();
-
-    // Fill guest details and request OTP
-    await page.getByLabel('ชื่อ-นามสกุล *').fill(guestName);
-    await page.getByLabel('อีเมล *').fill(guestEmail);
-    await page.getByLabel('เบอร์โทรศัพท์มือถือ *').fill(guestPhone);
-    await page.getByRole('button', { name: 'ขอรหัส OTP เพื่อซื้อบัตร' }).click();
-
-    await expect(page.getByText('ส่งรหัส OTP 6 หลักไปยังอีเมลของคุณเรียบร้อยแล้ว')).toBeVisible();
-
-    const otpRes = await request.get(
-      `/api/auth/test-inspect-reset-token?type=guest_otp&email=${encodeURIComponent(guestEmail)}`,
-    );
-    expect(otpRes.status()).toBe(200);
-    const { code } = await otpRes.json();
-
-    await page.getByLabel('รหัส OTP 6 หลัก *').fill(code);
-    await page.getByRole('button', { name: 'ยืนยันรหัส OTP' }).click();
-
-    // Pre-verification modal
-    await expect(page.getByRole('heading', { name: 'ยืนยันข้อมูลคำสั่งซื้อและการล็อกสิทธิ์' })).toBeVisible();
-    await page.getByRole('button', { name: 'ยืนยันและดำเนินการต่อ' }).click();
-    await expect(page.getByRole('heading', { name: 'ยืนยันอีเมลสำเร็จ (Guest Verified)' })).toBeVisible();
-
-    // Confirm reservation to navigate to Payment page
-    const confirmReserveBtn = page.locator('#confirm-reservation-btn');
-    await expect(confirmReserveBtn).toBeEnabled();
-    await confirmReserveBtn.scrollIntoViewIfNeeded();
-    await confirmReserveBtn.click({ force: true });
-
-    await expect(page).toHaveURL(/\/orders\/ORD-[A-Z0-9-]+\/payment$/);
-    const orderId = (await page.locator('#reservation-order-id').innerText()).trim();
+    // 3. Guest completes purchase and reservation
+    const orderId = await reserveThroughCheckout(page, {
+      eventId: createdEvent.id,
+      buyer: { name: guestName, email: guestEmail, phone: guestPhone },
+      tickets: [{ name: 'บัตร โซน A', quantity: 2 }],
+    });
     expect(orderId).toMatch(/^ORD-/);
 
     // PromptPay QR (auto-generated) and simulate payment

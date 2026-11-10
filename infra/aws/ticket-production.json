@@ -265,6 +265,10 @@
                 "Value": "TICKET <noreply@ticket.phatysd.me>"
               },
               {
+                "Name": "SES_REGION",
+                "Value": "ap-southeast-1"
+              },
+              {
                 "Name": "DATABASE_POOL_MAX",
                 "Value": "50"
               }
@@ -283,9 +287,15 @@
                 }
               },
               {
-                "Name": "RESEND_API_KEY",
+                "Name": "SES_ACCESS_KEY_ID",
                 "ValueFrom": {
-                  "Fn::Sub": "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/ticket/production/RESEND_API_KEY"
+                  "Fn::Sub": "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/ticket/production/SES_ACCESS_KEY_ID"
+                }
+              },
+              {
+                "Name": "SES_SECRET_ACCESS_KEY",
+                "ValueFrom": {
+                  "Fn::Sub": "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/ticket/production/SES_SECRET_ACCESS_KEY"
                 }
               },
               {

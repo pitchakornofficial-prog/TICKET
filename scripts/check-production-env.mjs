@@ -11,7 +11,7 @@ export function productionConfigErrors(env) {
     if (!env[name]?.trim()) errors.push(`${name} is required`);
   };
   for (const name of ['DATABASE_URL', 'BETTER_AUTH_URL', 'BETTER_AUTH_SECRET',
-    'RESEND_API_KEY', 'EMAIL_FROM', 'STRIPE_SECRET_KEY', 'STRIPE_PUBLISHABLE_KEY',
+    'EMAIL_FROM', 'STRIPE_SECRET_KEY', 'STRIPE_PUBLISHABLE_KEY',
     'STRIPE_WEBHOOK_SECRET', 'R2_ACCESS_KEY_ID', 'R2_SECRET_ACCESS_KEY', 'R2_BUCKET']) requireValue(name);
   try {
     const url = new URL(env.DATABASE_URL);
@@ -23,7 +23,13 @@ export function productionConfigErrors(env) {
     if (url.protocol !== 'https:' || url.username || url.password || url.pathname !== '/' || url.search || url.hash) throw new Error();
   } catch { errors.push('BETTER_AUTH_URL must be an HTTPS origin'); }
   if ((env.BETTER_AUTH_SECRET?.length || 0) < 32) errors.push('BETTER_AUTH_SECRET must have at least 32 characters');
-  if (!env.RESEND_API_KEY?.startsWith('re_')) errors.push('RESEND_API_KEY must be a Resend API key');
+  const sesAccessKey = env.SES_ACCESS_KEY_ID?.trim() || env.AWS_ACCESS_KEY_ID?.trim();
+  const sesSecretKey = env.SES_SECRET_ACCESS_KEY?.trim() || env.AWS_SECRET_ACCESS_KEY?.trim();
+  if (!sesAccessKey) errors.push('SES_ACCESS_KEY_ID or AWS_ACCESS_KEY_ID is required for Amazon SES');
+  else if (!['AKIA', 'ASIA'].some(prefix => sesAccessKey.startsWith(prefix))) errors.push('SES_ACCESS_KEY_ID or AWS_ACCESS_KEY_ID must be a valid AWS access key ID (e.g. AKIA...)');
+  if (!sesSecretKey) errors.push('SES_SECRET_ACCESS_KEY or AWS_SECRET_ACCESS_KEY is required for Amazon SES');
+  const sesRegion = env.SES_REGION?.trim() || env.AWS_REGION?.trim();
+  if (sesRegion && !/^[a-z]{2}-[a-z]+-\d+$/.test(sesRegion)) errors.push('SES_REGION or AWS_REGION must be a valid AWS region identifier (e.g. ap-southeast-1)');
   if (!/^[^\r\n]*@[^\s<>]+\.[^\s<>]+>?$/.test(env.EMAIL_FROM || '') ||
     /\.(invalid|local|example|test)>?$/i.test(env.EMAIL_FROM || '')) errors.push('EMAIL_FROM must use a verified public email domain');
   const stripeMode = staging ? 'test' : 'live';

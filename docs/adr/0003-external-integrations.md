@@ -1,4 +1,4 @@
-# ADR-0003: Stripe PromptPay, Resend และ Cloudflare R2
+# ADR-0003: Stripe PromptPay, Amazon SES และ Cloudflare R2
 
 - Status: accepted
 - Date: 2026-10-19
@@ -15,9 +15,15 @@
 ## Decision
 
 - Stripe PromptPay (Agreed, ผู้ใช้ 2026-10-30 ผ่าน grill-workflow): แทน Omise สำหรับรับชำระด้วย QR รายคำสั่งซื้อ รับ webhook และตรวจผลกับผู้ให้บริการ
-- Resend: ส่ง OTP อีเมล บัตร และลิงก์คำสั่งซื้อ
+- Amazon SES: ส่งอีเมลธุรกรรมทั้งหมด รวม OTP บัตร ลิงก์คำสั่งซื้อ คำเชิญ และ reset; แทน Resend ตามการตัดสินใจ 2026-11-11
 - Cloudflare R2: เก็บรูปและไฟล์หลักฐานแยกจากเครื่องเว็บ การเลือก AWS ไม่ได้เปลี่ยน R2 เป็น S3
 - คง manual transfer สำหรับ refund และ organizer payout ตาม domain rules
+
+## Email provider change — 2026-11-11
+
+ผู้ใช้ยืนยันเปลี่ยน Resend เป็น Amazon SES สำหรับอีเมลของระบบทั้งหมด โดยคงพฤติกรรมและความปลอดภัยเดิม รวม local capture/test transport; แทนข้อตกลง Resend เดิมและข้อความคง Resend ใน production baseline ด้านล่าง ซึ่งเก็บเป็นประวัติ ไม่เปลี่ยน R2. ก่อน production ต้อง verify identity/domain ใน SES Region ที่ใช้ ขอ production access และยืนยัน quota ต่อวัน/วินาทีรองรับ peak รวม OTP และ retry; ติดตาม bounce/complaint และผลล้มเหลวตามสเปก. การเลือก provider ไม่ใช่การ provision, ขออนุมัติ หรือหลักฐานส่งถึง inbox. ราคาและแผนให้ตรวจตาม Region และบัญชีจริงก่อนใช้งาน.
+
+[SES production access](https://docs.aws.amazon.com/ses/latest/dg/request-production-access.html) · [SES pricing](https://aws.amazon.com/ses/pricing/) · [SES sending quotas](https://docs.aws.amazon.com/ses/latest/dg/manage-sending-quotas.html)
 
 ## Payment provider change — 2026-10-30
 
@@ -60,7 +66,7 @@ PromptPay refund ผ่าน Omise ไม่ได้ จึงสอดคล�
 ยังไม่ได้ร้องขอ อ่าน หรือบันทึก credentials และไม่มี infrastructure ที่ setup นี้สร้างขึ้น
 รายละเอียด local test substitutes และ sandbox เป็นงาน specification/implementation ภายหลัง
 
-## Production readiness and cost planning (2026-10-30)
+## Production readiness and cost planning (2026-10-30; email superseded 2026-11-11)
 
 - ใช้ Stripe PromptPay แทน Omise ตามข้อตกลงด้านบน; คง Resend และ Cloudflare R2; secret storage/network/DNS baseline อ้างอิง [ADR-0002](0002-local-first-and-aws-production.md) ไม่เปลี่ยน R2 เป็น S3 หรือ Resend เป็น SES
 - ยื่น merchant/KYC และขอเปิด PromptPay พร้อม verify sending domain ของ Resend ล่วงหน้าก่อนเปิดขาย
