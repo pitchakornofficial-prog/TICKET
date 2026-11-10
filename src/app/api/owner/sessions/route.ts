@@ -33,10 +33,13 @@ export async function POST(request: Request) {
     sessionId?: string;
     action?: 'approve' | 'reject';
     rejectionReason?: string;
+    organizerFeeMode?: 'percentage' | 'per_ticket' | 'flat_fee';
     organizerFeeRate?: number;
+    organizerFeePrivilegeRate?: number;
+    customerFeeMode?: 'percentage' | 'per_ticket' | 'per_order';
+    customerFeeRate?: number;
     reservePercentage?: number;
     ubuPrivilegeMode?: boolean;
-    organizerFeePrivilegeRate?: number;
   } = {};
 
   try {
@@ -63,9 +66,12 @@ export async function POST(request: Request) {
 
     const result = await approveSession(pool, body.sessionId, session.user.id);
 
-    // Apply custom fee settings if provided (D-219)
+    // Apply custom fee settings if provided (D-219, D-274)
     if (
       body.organizerFeeRate !== undefined ||
+      body.organizerFeeMode !== undefined ||
+      body.customerFeeRate !== undefined ||
+      body.customerFeeMode !== undefined ||
       body.reservePercentage !== undefined ||
       body.ubuPrivilegeMode !== undefined ||
       body.organizerFeePrivilegeRate !== undefined
@@ -76,7 +82,7 @@ export async function POST(request: Request) {
           pool,
           result.eventId,
           {
-            organizerFeeMode: 'percentage',
+            organizerFeeMode: (body.organizerFeeMode || existingFee.organizerFeeMode || 'percentage') as 'percentage' | 'per_ticket' | 'flat_fee',
             organizerFeeRate: Number(body.organizerFeeRate ?? existingFee.organizerFeeRate ?? 3),
             organizerFeePrivilegeRate: Number(
               body.organizerFeePrivilegeRate ?? existingFee.organizerFeePrivilegeRate ?? 0,
@@ -85,8 +91,8 @@ export async function POST(request: Request) {
               body.ubuPrivilegeMode !== undefined
                 ? Boolean(body.ubuPrivilegeMode)
                 : Boolean(existingFee.ubuPrivilegeMode),
-            customerFeeMode: existingFee.customerFeeMode || 'per_ticket',
-            customerFeeRate: Number(existingFee.customerFeeRate || 0),
+            customerFeeMode: (body.customerFeeMode || existingFee.customerFeeMode || 'per_ticket') as 'percentage' | 'per_ticket' | 'per_order',
+            customerFeeRate: Number(body.customerFeeRate ?? existingFee.customerFeeRate ?? 0),
             reservePercentage: Number(body.reservePercentage ?? existingFee.reservePercentage ?? 0),
           },
           session.user.id,

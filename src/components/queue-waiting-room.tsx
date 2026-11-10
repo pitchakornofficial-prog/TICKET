@@ -188,6 +188,10 @@ export function QueueWaitingRoom({
   }, [peopleAhead, isReady, eventId, queueNumber, router]);
 
   const handleProceedNow = () => {
+    if (!isReady && peopleAhead > 0) {
+      // D-273: Bypassing queue is strictly locked when queue has people ahead
+      return;
+    }
     if (typeof window !== 'undefined') {
       const nowIso = new Date().toISOString();
       const freshDeadline = Date.now() + 15 * 60 * 1000;
@@ -344,26 +348,45 @@ export function QueueWaitingRoom({
             </div>
           </div>
 
-          {/* Action Button */}
+          {/* Action Button (D-273: Lockout bypassing while waiting in queue) */}
           <div className="queue-actions">
-            <button
-              id="proceed-to-checkout-btn"
-              type="button"
-              onClick={handleProceedNow}
-              className="primary-button"
-              style={{ width: '100%', fontSize: '1.05rem', fontWeight: 600 }}
-            >
-              {isReady || peopleAhead <= 0
-                ? 'เข้าสู่หน้าเลือกบัตรและกรอกข้อมูลทันที'
-                : 'ข้ามคิวเข้าสู่หน้าเลือกบัตร (สำหรับทดสอบระบบ)'}
-            </button>
+            {isReady || peopleAhead <= 0 ? (
+              <button
+                id="proceed-to-checkout-btn"
+                type="button"
+                onClick={handleProceedNow}
+                className="primary-button"
+                style={{ width: '100%', fontSize: '1.05rem', fontWeight: 600 }}
+              >
+                เข้าสู่หน้าเลือกบัตรและกรอกข้อมูลทันที
+              </button>
+            ) : (
+              <button
+                id="proceed-to-checkout-btn"
+                type="button"
+                disabled
+                className="secondary-button"
+                style={{
+                  width: '100%',
+                  fontSize: '1rem',
+                  fontWeight: 600,
+                  opacity: 0.65,
+                  cursor: 'not-allowed',
+                  background: 'var(--card-bg, #f8fafc)',
+                  color: 'var(--muted, #64748b)',
+                  border: '1px solid var(--line, #e2e8f0)',
+                }}
+              >
+                กรุณารอตามลำดับคิว (ระบบจะพาเข้าสู่หน้าซื้อบัตรอัตโนมัติเมื่อถึงคิว)
+              </button>
+            )}
 
             <div className="queue-security-footer">
               <span>
-                <ShieldCheckIcon /> ป้องกันบอทและล็อกโควตาแบบ Atomic Transaction
+                <ShieldCheckIcon /> ป้องกันการลัดคิวและล็อกโควตาแบบ Atomic Transaction
               </span>
               <span>
-                <UsersIcon /> จำกัดสิทธิ์เข้าทำรายการ 200 คนพร้อมกัน (D-271)
+                <UsersIcon /> จำกัดสิทธิ์เข้าทำรายการ 200 คนพร้อมกัน (D-271, D-273)
               </span>
             </div>
           </div>

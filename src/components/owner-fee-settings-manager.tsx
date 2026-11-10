@@ -26,10 +26,20 @@ interface EventSummary {
   };
 }
 
+interface EventTicketTypeItem {
+  id: string;
+  name: string;
+  price: number;
+  quota: number;
+  isStudentPrivilege?: boolean;
+  studentPrice?: number | null;
+}
+
 export function OwnerFeeSettingsManager() {
   const [events, setEvents] = useState<EventSummary[]>([]);
   const [selectedEventId, setSelectedEventId] = useState<string>('');
   const selectedEventIdRef = useRef<string>('');
+  const [selectedEventTickets, setSelectedEventTickets] = useState<EventTicketTypeItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [isPending, startTransition] = useTransition();
@@ -44,7 +54,7 @@ export function OwnerFeeSettingsManager() {
   const [organizerFeePrivilegeRate, setOrganizerFeePrivilegeRate] = useState<number>(0);
   const [ubuPrivilegeMode, setUbuPrivilegeMode] = useState<boolean>(false);
 
-  const selectEvent = useCallback((ev: EventSummary) => {
+  const selectEvent = useCallback(async (ev: EventSummary) => {
     selectedEventIdRef.current = ev.id;
     setSelectedEventId(ev.id);
     const fs = ev.feeSettings;
@@ -56,6 +66,33 @@ export function OwnerFeeSettingsManager() {
     setOrganizerFeeLocked(Boolean(fs.organizerFeeLocked));
     setOrganizerFeePrivilegeRate(fs.organizerFeePrivilegeRate ?? 0);
     setUbuPrivilegeMode(Boolean(fs.ubuPrivilegeMode));
+
+    try {
+      const res = await fetch(`/api/events/${ev.id}`);
+      if (res.ok) {
+        const data = await res.json();
+        const rawTickets: EventTicketTypeItem[] = [];
+        if (data.event?.sessions) {
+          for (const s of data.event.sessions) {
+            if (s.ticketTypes) {
+              for (const tt of s.ticketTypes) {
+                rawTickets.push({
+                  id: tt.id,
+                  name: tt.name,
+                  price: Number(tt.price),
+                  quota: Number(tt.quota),
+                  isStudentPrivilege: Boolean(tt.isStudentPrivilege),
+                  studentPrice: tt.studentPrice != null ? Number(tt.studentPrice) : null,
+                });
+              }
+            }
+          }
+        }
+        setSelectedEventTickets(rawTickets);
+      }
+    } catch {
+      setSelectedEventTickets([]);
+    }
   }, []);
 
   const loadEvents = useCallback(async () => {
@@ -217,9 +254,59 @@ export function OwnerFeeSettingsManager() {
                   งานที่เลือก
                 </span>
                 <h3 style={{ margin: '0.3rem 0 0.2rem', fontSize: '1.15rem' }}>{selectedEvent.title}</h3>
-                <p style={{ margin: 0, fontSize: '0.9rem', color: 'var(--muted)' }}>
+                <p style={{ margin: '0 0 0.8rem', fontSize: '0.9rem', color: 'var(--muted)' }}>
                   สถานที่: {selectedEvent.location} | ผู้จัดงาน: {selectedEvent.organizerName} ({selectedEvent.organizerEmail})
                 </p>
+
+                {/* Tickets Breakdown for Admin Visibility */}
+                <div style={{ marginTop: '0.6rem', padding: '0.75rem 0.9rem', background: '#f1f5f9', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.45rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+                    <span style={{ fontSize: '0.85rem', fontWeight: 600, color: '#0f172a' }}>
+                      ประเภทบัตรและราคาที่ผู้จัดสร้างไว้ (Ticket Breakdown & Shared Quota)
+                    </span>
+                    <span style={{ fontSize: '0.75rem', color: '#64748b' }}>
+                      แอดมินเห็นราคาและโควตาก่อนกำหนดค่าบริการ
+                    </span>
+                  </div>
+                  {selectedEventTickets.length > 0 ? (
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: '0.6rem' }}>
+                      {selectedEventTickets.map(tt => (
+                        <div key={tt.id} style={{ background: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '6px', padding: '0.55rem 0.75rem' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.25rem' }}>
+                            <strong style={{ fontSize: '0.88rem', color: '#0f172a' }}>{tt.name}</strong>
+                            <span style={{ fontSize: '0.74rem', background: '#eff6ff', color: '#1848ed', padding: '2px 6px', borderRadius: '4px', fontWeight: 600 }}>
+                              โควตารวม {tt.quota} ใบ
+                            </span>
+                          </div>
+                          {tt.isStudentPrivilege ? (
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.15rem', background: '#f8fafc', padding: '0.3rem 0.45rem', borderRadius: '4px', border: '1px dashed #cbd5e1' }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem' }}>
+                                <span style={{ color: '#475569' }}>ราคาคนทั่วไป:</span>
+                                <strong style={{ color: '#0f172a' }}>{tt.price.toLocaleString()} บาท</strong>
+                              </div>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem' }}>
+                                <span style={{ color: '#1848ed' }}>ราคาสิทธิ์ ม.อุบลฯ:</span>
+                                <strong style={{ color: '#1848ed' }}>{(tt.studentPrice ?? 99).toLocaleString()} บาท</strong>
+                              </div>
+                              <span style={{ fontSize: '0.7rem', color: '#64748b' }}>
+                                ใช้โควตาเดียวกัน {tt.quota} ใบ (ไม่แยกโซน)
+                              </span>
+                            </div>
+                          ) : (
+                            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.82rem' }}>
+                              <span style={{ color: '#475569' }}>ราคาปกติ:</span>
+                              <strong style={{ color: '#0f172a' }}>{tt.price.toLocaleString()} บาท</strong>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p style={{ margin: 0, fontSize: '0.8rem', color: '#64748b' }}>
+                      กำลังโหลดข้อมูลประเภทบัตรของงานนี้...
+                    </p>
+                  )}
+                </div>
               </div>
 
               {/* Organizer Fee Settings (AC-23) */}

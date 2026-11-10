@@ -90,6 +90,26 @@ export function EventCheckoutFlow({
   const [isTimeoutModalOpen, setIsTimeoutModalOpen] = useState(false);
   const [isPending, setIsPending] = useState(false);
 
+  // D-273: Enforce queue gating at checkout to prevent bypassing via direct URL
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const verifyAccess = async () => {
+      try {
+        const savedToken = sessionStorage.getItem(`ticket_queue_token_${eventId}`);
+        const res = await fetch(`/api/events/${eventId}/queue/status?token=${savedToken || ''}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (!data.allowed && data.peopleAhead > 0) {
+            router.replace(`/events/${eventId}/queue`);
+          }
+        }
+      } catch {
+        // ignore network error
+      }
+    };
+    verifyAccess();
+  }, [eventId, router]);
+
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const storageKey = `ticket_checkout_deadline_${eventId}`;

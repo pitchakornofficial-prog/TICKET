@@ -217,6 +217,44 @@ export async function getOrCreateQueueEntry(
   }
 }
 
+export async function verifyQueueAccess(
+  pool: Pool,
+  eventId: string,
+  entryToken?: string | null,
+): Promise<boolean> {
+  try {
+    await ensureQueueSchema(pool);
+
+    await pool.query(
+      `UPDATE event_queue_entries
+       SET status = 'expired', "updatedAt" = now()
+       WHERE "eventId" = $1 AND status IN ('active', 'waiting') AND "expiresAt" < now()`,
+      [eventId],
+    );
+
+    const activeRes = await pool.query(
+      `SELECT COUNT(*)::int AS count FROM event_queue_entries WHERE "eventId" = $1 AND status = 'active'`,
+      [eventId],
+    );
+    const activeCount = activeRes.rows[0]?.count ?? 0;
+
+    if (activeCount < QUEUE_CAPACITY) {
+      return true;
+    }
+
+    if (!entryToken) return false;
+
+    const entryRes = await pool.query(
+      `SELECT status, "expiresAt" FROM event_queue_entries WHERE id = $1 AND "eventId" = $2`,
+      [entryToken, eventId],
+    );
+    const entry = entryRes.rows[0];
+    return !!(entry && entry.status === 'active' && new Date(entry.expiresAt) > new Date());
+  } catch {
+    return true;
+  }
+}
+
 export async function completeQueueEntry(pool: Pool, eventId: string, entryToken: string): Promise<void> {
   try {
     await ensureQueueSchema(pool);
