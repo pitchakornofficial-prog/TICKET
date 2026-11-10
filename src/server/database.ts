@@ -8,9 +8,12 @@ export function createDatabasePool(
   if (!['postgres:', 'postgresql:'].includes(url.protocol)) {
     throw new Error('DATABASE_URL must use PostgreSQL');
   }
+  const maxPoolSize = process.env.DATABASE_POOL_MAX
+    ? parseInt(process.env.DATABASE_POOL_MAX, 10)
+    : 25;
   return new Pool({
     connectionString,
-    max: 15,
+    max: maxPoolSize,
     connectionTimeoutMillis: 15000,
     idleTimeoutMillis: 10000,
   });
