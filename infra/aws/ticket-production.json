@@ -1,6 +1,14 @@
 {
   "AWSTemplateFormatVersion": "2010-09-09",
   "Description": "TICKET production operations preparation",
+  "Parameters": {
+    "WebImage": {
+      "Type": "String",
+      "Description": "Web runner image pinned by digest (ECR repo@sha256:...), built from Dockerfile target runner for linux/arm64",
+      "AllowedPattern": "^[0-9]+\\.dkr\\.ecr\\.[a-z0-9-]+\\.amazonaws\\.com/[a-z0-9._/-]+@sha256:[a-f0-9]{64}$",
+      "ConstraintDescription": "Must be an ECR image pinned by sha256 digest"
+    }
+  },
   "Resources": {
     "Cluster": {
       "Type": "AWS::ECS::Cluster",
@@ -233,7 +241,9 @@
         "ContainerDefinitions": [
           {
             "Name": "web",
-            "Image": "901708383730.dkr.ecr.ap-southeast-1.amazonaws.com/ticket-workload-test@sha256:16b404bff33b7cd29d3d9fa9c79440f6fe76137efdf167c5976245ae1f14a1bd",
+            "Image": {
+              "Ref": "WebImage"
+            },
             "Essential": true,
             "PortMappings": [
               {
