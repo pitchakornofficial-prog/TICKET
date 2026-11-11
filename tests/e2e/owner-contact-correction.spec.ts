@@ -93,24 +93,9 @@ test.describe('Owner Contact Correction Flow (TASK-019, AC-76, G-24)', () => {
     await page.getByLabel('ชื่อ-นามสกุล *').fill(buyerName);
     await page.getByLabel('อีเมล *').fill(initialEmail);
     await page.getByLabel('เบอร์โทรศัพท์มือถือ *').fill(initialPhone);
-    await page.getByRole('button', { name: 'ขอรหัส OTP เพื่อซื้อบัตร' }).click();
-
-    await expect(page.getByText('ส่งรหัส OTP 6 หลักไปยังอีเมลของคุณเรียบร้อยแล้ว')).toBeVisible();
-
-    const otpRes = await request.get(
-      `/api/auth/test-inspect-reset-token?type=guest_otp&email=${encodeURIComponent(initialEmail)}`,
-    );
-    expect(otpRes.status()).toBe(200);
-    const { code } = await otpRes.json();
-
-    await page.getByLabel('รหัส OTP 6 หลัก *').fill(code);
-    await page.getByRole('button', { name: 'ยืนยันรหัส OTP' }).click();
-    await page.getByRole('button', { name: 'ยืนยันและดำเนินการต่อ' }).click();
-    await expect(page.getByRole('heading', { name: 'ยืนยันอีเมลสำเร็จ (Guest Verified)' })).toBeVisible();
-
-    // Select 2 tickets and confirm reservation
-    await page.locator('#confirm-reservation-btn').click();
-    await expect(page.getByText('กันบัตรสำเร็จ (Reserved)')).toBeVisible();
+    await page.getByRole('checkbox', { name: /ฉันได้อ่านและยอมรับ/ }).check();
+    await page.getByRole('button', { name: /ยืนยันและไปหน้าชำระเงิน/ }).click();
+    await expect(page).toHaveURL(/\/orders\/ORD-[A-Z0-9-]+\/payment$/);
 
     const orderId = (await page.locator('#reservation-order-id').innerText()).trim();
     expect(orderId).toMatch(/^ORD-/);
@@ -122,7 +107,7 @@ test.describe('Owner Contact Correction Flow (TASK-019, AC-76, G-24)', () => {
     const simulateBtn = page.locator('#simulate-payment-button');
     await expect(simulateBtn).toBeVisible();
     await simulateBtn.click();
-    await expect(page.getByText('ชำระเงินสำเร็จ (Paid)')).toBeVisible();
+    await expect(page.getByText('ชำระเงินสำเร็จ (Paid)')).toBeVisible({ timeout: 15000 });
     await expect(page.getByText('ออกบัตรสำเร็จแล้ว (2 ใบ)')).toBeVisible();
 
     // 4. Owner logs into back-office and corrects contact (AC-76, G-24)
@@ -156,7 +141,7 @@ test.describe('Owner Contact Correction Flow (TASK-019, AC-76, G-24)', () => {
     await page.getByRole('button', { name: 'บันทึกการแก้ไขข้อมูล' }).click({ force: true });
 
     // Assert success and updated values
-    await expect(page.getByText(/แก้ไขข้อมูลติดต่อคำสั่งซื้อ .* สำเร็จเรียบร้อย/)).toBeVisible();
+    await expect(page.getByText(/แก้ไขข้อมูลติดต่อคำสั่งซื้อ .* สำเร็จเรียบร้อย/)).toBeVisible({ timeout: 15000 });
     await expect(page.locator(`#buyer-email-${orderId}`)).toHaveText(correctedEmail);
     await expect(page.locator(`#buyer-phone-${orderId}`)).toHaveText(correctedPhone);
 

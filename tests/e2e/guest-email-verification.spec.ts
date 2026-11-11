@@ -8,9 +8,8 @@ test.beforeEach(async ({ context }, testInfo) => {
 });
 
 test.describe('Guest checkout email verification and details entry (TASK-011, AC-57, AC-58, AC-59, AC-60)', () => {
-  test('guest provides name, email, phone, completes 6-digit OTP verification, and wrong attempts show error', async ({
+  test('guest enters valid buyer details and proceeds directly to payment', async ({
     page,
-    request,
   }, testInfo) => {
     const eventTitle = `คอนเสิร์ตยืนยันอีเมล ${testInfo.project.name}`;
     const guestEmail = `buyer-${testInfo.project.name}@ticket.invalid`;
@@ -94,70 +93,46 @@ test.describe('Guest checkout email verification and details entry (TASK-011, AC
     // Verify GuestCheckoutEntry is visible
     await expect(page.getByRole('heading', { name: 'ข้อมูลผู้ซื้อและยืนยันอีเมล (Guest Checkout)' })).toBeVisible();
 
-    // D-45: Verify OTP request button is disabled with guidance when totalTickets === 0
-    await expect(page.getByRole('button', { name: 'ขอรหัส OTP เพื่อซื้อบัตร' })).toBeDisabled();
+    // D-45: Require a ticket before checkout.
+    const submit = page.getByRole('button', { name: /ยืนยันและไปหน้าชำระเงิน/ });
+    await expect(submit).toBeDisabled();
     await expect(
-      page.getByText('กรุณาเลือกจำนวนบัตรอย่างน้อย 1 ใบ ในขั้นตอนที่ 1 ก่อนขอรหัส OTP'),
+      page.getByText('กรุณาเลือกจำนวนบัตรอย่างน้อย 1 ใบ ในขั้นตอนที่ 1 ก่อนดำเนินการ'),
     ).toBeVisible();
 
     // Select 1 ticket to unlock buyer details form (D-45 satisfied)
     const addTicketBtn = page.getByRole('button', { name: /เพิ่มจำนวน/ }).first();
     await addTicketBtn.click();
-    await expect(page.getByRole('button', { name: 'ขอรหัส OTP เพื่อซื้อบัตร' })).toBeEnabled();
+    await expect(submit).toBeEnabled();
+    await page.getByRole('checkbox', { name: /ฉันได้อ่านและยอมรับ/ }).check();
 
     // 4. Test missing required fields (AC-60)
     // Missing all fields -> submit
-    await page.getByRole('button', { name: 'ขอรหัส OTP เพื่อซื้อบัตร' }).click();
+    await submit.click();
     await expect(page.getByText('กรุณากรอกชื่อ-นามสกุล')).toBeVisible();
 
     // Fill name only -> submit
     await page.getByLabel('ชื่อ-นามสกุล *').fill(guestName);
-    await page.getByRole('button', { name: 'ขอรหัส OTP เพื่อซื้อบัตร' }).click();
+    await submit.click();
     await expect(page.getByText('กรุณากรอกอีเมล')).toBeVisible();
 
     // Fill invalid email -> submit
-    await page.getByLabel('อีเมล *').fill('not-an-email');
-    await page.getByRole('button', { name: 'ขอรหัส OTP เพื่อซื้อบัตร' }).click();
+    await page.getByLabel('อีเมลสำหรับรับบัตรและรหัส OTP *').fill('not-an-email');
+    await submit.click();
     await expect(page.getByText('รูปแบบอีเมลไม่ถูกต้อง')).toBeVisible();
 
     // Fill valid email, missing phone -> submit
-    await page.getByLabel('อีเมล *').fill(guestEmail);
-    await page.getByRole('button', { name: 'ขอรหัส OTP เพื่อซื้อบัตร' }).click();
+    await page.getByLabel('อีเมลสำหรับรับบัตรและรหัส OTP *').fill(guestEmail);
+    await submit.click();
     await expect(page.getByText('กรุณากรอกเบอร์โทรศัพท์')).toBeVisible();
 
     // 5. Fill complete valid details (AC-60 satisfied)
     await page.getByLabel('เบอร์โทรศัพท์มือถือ *').fill(guestPhone);
-    await page.getByRole('button', { name: 'ขอรหัส OTP เพื่อซื้อบัตร' }).click();
-
-    // 6. Arrive at OTP step
-    await expect(page.getByText('ส่งรหัส OTP 6 หลักไปยังอีเมลของคุณเรียบร้อยแล้ว')).toBeVisible();
-    await expect(page.getByLabel('รหัส OTP 6 หลัก *')).toBeVisible();
-
-    // Inspect generated OTP code from loopback test endpoint
-    const otpRes = await request.get(
-      `/api/auth/test-inspect-reset-token?type=guest_otp&email=${encodeURIComponent(guestEmail)}`,
-    );
-    expect(otpRes.status()).toBe(200);
-    const { code } = await otpRes.json();
-    expect(code).toMatch(/^\d{6}$/);
-
-    // 7. Test wrong OTP submission (AC-57 / AC-59)
-    await page.getByLabel('รหัส OTP 6 หลัก *').fill('000000');
-    await page.getByRole('button', { name: 'ยืนยันรหัส OTP' }).click();
-    await page.getByRole('button', { name: 'ยืนยันและดำเนินการต่อ' }).click();
-    await expect(page.getByText(/รหัส OTP ไม่ถูกต้อง/)).toBeVisible();
-
-    // 8. Submit correct OTP
-    await page.getByLabel('รหัส OTP 6 หลัก *').fill(code);
-    await page.getByRole('button', { name: 'ยืนยันรหัส OTP' }).click();
-    await page.getByRole('button', { name: 'ยืนยันและดำเนินการต่อ' }).click();
-
-    // 9. Arrive at Verified step (AC-57)
-    await expect(page.getByRole('heading', { name: 'ยืนยันอีเมลสำเร็จ (Guest Verified)' })).toBeVisible();
-    await expect(page.locator('#verified-buyer-name')).toHaveText(guestName);
-    await expect(page.locator('#verified-buyer-email')).toHaveText(guestEmail);
-    await expect(page.locator('#verified-buyer-phone')).toHaveText(guestPhone);
-    await expect(page.getByRole('button', { name: 'แก้ไขข้อมูล / เลือกบัตรใหม่' })).toHaveCount(0);
+    await submit.click();
+    // D-272: checkout no longer requests an OTP; order lookup still does.
+    await expect(page).toHaveURL(/\/orders\/ORD-[A-Z0-9-]+\/payment$/);
+    await expect(page.locator('#promptpay-qr-image')).toBeVisible();
+    await expect(page.getByRole('group', { name: 'ช่องกรอกรหัส OTP 6 หลัก' })).toHaveCount(0);
 
     // 10. Design constraints: Zero emojis (D-14), responsive layout
     expect(await page.locator('body').innerText()).not.toMatch(/\p{Extended_Pictographic}/u);

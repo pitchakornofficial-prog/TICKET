@@ -101,27 +101,14 @@ test.describe('Reschedule session & special refund window (TASK-025, AC-38, AC-1
     await buyerPage.getByLabel('ชื่อ-นามสกุล *').fill(guestName);
     await buyerPage.getByLabel('อีเมล *').fill(guestEmail);
     await buyerPage.getByLabel('เบอร์โทรศัพท์มือถือ *').fill(guestPhone);
-    await buyerPage.getByRole('button', { name: 'ขอรหัส OTP เพื่อซื้อบัตร' }).click();
-    await expect(buyerPage.getByText('ส่งรหัส OTP 6 หลักไปยังอีเมลของคุณเรียบร้อยแล้ว')).toBeVisible();
-
-    const otpRes = await request.get(
-      `/api/auth/test-inspect-reset-token?type=guest_otp&email=${encodeURIComponent(guestEmail)}`,
-    );
-    expect(otpRes.status()).toBe(200);
-    const { code } = await otpRes.json();
-
-    await buyerPage.getByLabel('รหัส OTP 6 หลัก *').fill(code);
-    await buyerPage.getByRole('button', { name: 'ยืนยันรหัส OTP' }).click();
-    await buyerPage.getByRole('button', { name: 'ยืนยันและดำเนินการต่อ' }).click();
-    await expect(buyerPage.getByRole('heading', { name: 'ยืนยันอีเมลสำเร็จ (Guest Verified)' })).toBeVisible();
-
-    await buyerPage.locator('#confirm-reservation-btn').click();
-    await expect(buyerPage.getByText('กันบัตรสำเร็จ (Reserved)')).toBeVisible();
+    await buyerPage.getByRole('checkbox', { name: /ฉันได้อ่านและยอมรับ/ }).check();
+    await buyerPage.getByRole('button', { name: /ยืนยันและไปหน้าชำระเงิน/ }).click();
+    await expect(buyerPage).toHaveURL(/\/orders\/ORD-[A-Z0-9-]+\/payment$/);
 
     await expect(buyerPage.locator('#promptpay-qr-image')).toBeVisible();
 
     await buyerPage.locator('#simulate-payment-button').click();
-    await expect(buyerPage.getByText('ชำระเงินสำเร็จ (Paid)')).toBeVisible();
+    await expect(buyerPage).toHaveURL(/\/orders\/ORD-[A-Z0-9-]+\/success$/);
     await expect(buyerPage.getByText('ออกบัตรสำเร็จแล้ว (1 ใบ)')).toBeVisible();
 
     // 4. Organizer submits a reschedule amendment on organizer page

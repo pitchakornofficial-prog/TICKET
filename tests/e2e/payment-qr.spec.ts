@@ -97,40 +97,16 @@ test.describe('PromptPay Payment QR generation flow (TASK-042, AC-118, AC-15, AC
     await addBtn.click();
     await expect(page.getByText('รวมราคาบัตร (2 ใบ)')).toBeVisible();
 
-    // 4. Guest completes OTP verification
+    // 4. Guest fills details and proceeds to payment (D-188, D-272)
     await page.getByLabel('ชื่อ-นามสกุล *').fill(guestName);
     await page.getByLabel('อีเมล *').fill(guestEmail);
     await page.getByLabel('เบอร์โทรศัพท์มือถือ *').fill(guestPhone);
-    await page.getByRole('button', { name: 'ขอรหัส OTP เพื่อซื้อบัตร' }).click();
+    await page.getByRole('checkbox', { name: /ฉันได้อ่านและยอมรับ/ }).check();
+    await page.getByRole('button', { name: /ยืนยันและไปหน้าชำระเงิน/ }).click();
 
-    await expect(page.getByText('ส่งรหัส OTP 6 หลักไปยังอีเมลของคุณเรียบร้อยแล้ว')).toBeVisible();
-
-    const otpRes = await request.get(
-      `/api/auth/test-inspect-reset-token?type=guest_otp&email=${encodeURIComponent(guestEmail)}`,
-    );
-    expect(otpRes.status()).toBe(200);
-    const { code } = await otpRes.json();
-
-    await page.getByLabel('รหัส OTP 6 หลัก *').fill(code);
-    await page.getByRole('button', { name: 'ยืนยันรหัส OTP' }).click();
-
-    // D-46 confirmation modal if present
-    const confirmModalBtn = page.getByRole('button', { name: 'ยืนยันและดำเนินการต่อ' });
-    if (await confirmModalBtn.isVisible()) {
-      await confirmModalBtn.click();
-    }
-
-    await expect(page.getByRole('heading', { name: 'ยืนยันอีเมลสำเร็จ (Guest Verified)' })).toBeVisible();
-
-    // 5. Confirm reservation -> redirects to /orders/[id]/payment
-    const confirmReserveBtn = page.locator('#confirm-reservation-btn');
-    await expect(confirmReserveBtn).toBeEnabled();
-    await confirmReserveBtn.scrollIntoViewIfNeeded();
-    await confirmReserveBtn.click({ force: true });
-
-    // 6. Payment Page (/orders/[id]/payment)
+    // 5. Payment Page (/orders/[id]/payment)
     await expect(page).toHaveURL(/\/orders\/ORD-[A-Z0-9-]+\/payment$/);
-    await expect(page.getByText('กันบัตรสำเร็จ (Reserved)')).toBeVisible();
+    await expect(page.locator('#promptpay-qr-image')).toBeVisible();
     const orderId = (await page.locator('#reservation-order-id').innerText()).trim();
     expect(orderId).toMatch(/^ORD-/);
 

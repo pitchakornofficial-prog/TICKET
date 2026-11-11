@@ -37,6 +37,9 @@ export function HomeConcertCatalog({
 }: HomeConcertCatalogProps) {
   const router = useRouter();
   const [query, setQuery] = useState(initialQuery);
+  useEffect(() => {
+    setQuery(initialQuery);
+  }, [initialQuery]);
   const [filterTab, setFilterTab] = useState<FilterTab>('all');
   const [currentSlide, setCurrentSlide] = useState(0);
   const [isPaused, setIsPaused] = useState(false);

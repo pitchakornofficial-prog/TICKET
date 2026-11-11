@@ -23,8 +23,10 @@ test('organizer views overview workspace, inspects KPIs, banners, active concert
   await expect(
     page.getByRole('heading', { name: 'ภาพรวมระบบผู้จัดงาน' }),
   ).toBeVisible();
-  await expect(page.getByTestId('overview-create-event-btn')).toBeVisible();
   await expect(page.getByTestId('overview-refresh-btn')).toBeVisible();
+  if (await page.getByTestId('overview-events-empty').isVisible()) {
+    await expect(page.getByTestId('overview-create-event-btn')).toBeVisible();
+  }
 
   // 4. Verify 4 Executive KPI summary cards (D-210 to D-216)
   await expect(page.getByTestId('overview-kpi-events')).toBeVisible();

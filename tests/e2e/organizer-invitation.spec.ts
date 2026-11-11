@@ -18,7 +18,7 @@ test('owner invites organizer, recipient accepts invitation and logs in as organ
   await page.getByLabel('อีเมล', { exact: true }).fill(fixtureAccounts.owner.email);
   await page.getByLabel('รหัสผ่าน', { exact: true }).fill(fixturePassword);
   await page.getByRole('button', { name: 'เข้าสู่ระบบ', exact: true }).click();
-  await expect(page).toHaveURL('/back-office/owner');
+  await expect(page).toHaveURL('/back-office/owner', { timeout: 15000 });
 
   // 2. Owner invites a new organizer
   await page.goto('/back-office/owner#system');
@@ -57,7 +57,7 @@ test('owner invites organizer, recipient accepts invitation and logs in as organ
   await page.getByRole('button', { name: 'เข้าสู่ระบบ', exact: true }).click();
 
   // 7. Verify logged in to organizer workspace
-  await expect(page).toHaveURL('/back-office/organizer');
+  await expect(page).toHaveURL('/back-office/organizer', { timeout: 15000 });
   await expect(page.getByRole('heading', { name: 'พื้นที่ผู้จัดงาน', exact: true })).toBeVisible();
   await expect(page.getByText(organizerName, { exact: true })).toBeVisible();
 

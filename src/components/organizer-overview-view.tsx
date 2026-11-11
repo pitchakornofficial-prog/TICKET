@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import Link from 'next/link';
 import {
   BanknotesIcon,
@@ -62,10 +62,18 @@ export function OrganizerOverviewView({
   const [currentPage, setCurrentPage] = useState(1);
   const ITEMS_PER_PAGE = 4;
 
+  const abortControllerRef = useRef<AbortController | null>(null);
+
   const loadData = useCallback(async () => {
+    abortControllerRef.current?.abort();
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
     setError(null);
     try {
-      const res = await fetch('/api/scanner/events', { cache: 'no-store' });
+      const res = await fetch('/api/scanner/events', {
+        cache: 'no-store',
+        signal: controller.signal,
+      });
       const data = await res.json();
       if (!res.ok) {
         setError(data.message || 'ไม่สามารถโหลดข้อมูลภาพรวมได้');
@@ -75,46 +83,61 @@ export function OrganizerOverviewView({
       setEvents(loadedEvents);
 
       const statsMap: Record<string, EventProgressStats> = {};
+      const BATCH_SIZE = 3;
 
-      await Promise.allSettled(
-        loadedEvents.map(async (ev) => {
-          try {
-            const reportRes = await fetch(`/api/organizer/events/${ev.id}/money-report`, {
-              cache: 'no-store',
-            });
-            if (reportRes.ok) {
-              const reportData = await reportRes.json();
-              if (reportData.report) {
-                const rep = reportData.report;
-                const validTickets = rep.validTicketsCount ?? 0;
-                const gross = rep.grossSales ?? 0;
-                const fee = rep.organizerFee ?? Math.round(gross * 0.03);
-                const net = rep.netEntitlement ?? (gross - fee);
-                statsMap[ev.id] = {
-                  soldTickets: validTickets,
-                  grossSales: gross,
-                  fee,
-                  netSales: net,
-                };
+      for (let i = 0; i < loadedEvents.length; i += BATCH_SIZE) {
+        if (controller.signal.aborted) return;
+        const batch = loadedEvents.slice(i, i + BATCH_SIZE);
+        await Promise.allSettled(
+          batch.map(async (ev) => {
+            try {
+              const reportRes = await fetch(`/api/organizer/events/${ev.id}/money-report`, {
+                cache: 'no-store',
+                signal: controller.signal,
+              });
+              if (reportRes.ok) {
+                const reportData = await reportRes.json();
+                if (reportData.report) {
+                  const rep = reportData.report;
+                  const validTickets = rep.validTicketsCount ?? 0;
+                  const gross = rep.grossSales ?? 0;
+                  const fee = rep.organizerFee ?? Math.round(gross * 0.03);
+                  const net = rep.netEntitlement ?? (gross - fee);
+                  statsMap[ev.id] = {
+                    soldTickets: validTickets,
+                    grossSales: gross,
+                    fee,
+                    netSales: net,
+                  };
+                }
               }
+            } catch {
+              // Silently skip failed or aborted reports
             }
-          } catch {
-            // Silently skip failed reports
-          }
-        }),
-      );
+          }),
+        );
+      }
 
-      setEventStats(statsMap);
+      if (!controller.signal.aborted) {
+        setEventStats(statsMap);
+      }
     } catch {
-      setError('เกิดข้อผิดพลาดในการเชื่อมต่อเพื่อดึงข้อมูลภาพรวม');
+      if (!controller.signal.aborted) {
+        setError('เกิดข้อผิดพลาดในการเชื่อมต่อเพื่อดึงข้อมูลภาพรวม');
+      }
     } finally {
-      setLoading(false);
-      setRefreshing(false);
+      if (!controller.signal.aborted) {
+        setLoading(false);
+        setRefreshing(false);
+      }
     }
   }, []);
 
   useEffect(() => {
     loadData();
+    return () => {
+      abortControllerRef.current?.abort();
+    };
   }, [loadData]);
 
   const handleRefresh = () => {

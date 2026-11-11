@@ -1238,7 +1238,21 @@ export function OrganizerScannerManager() {
                                     >
                                       {s.isBound ? 'ผูกเครื่องแล้ว' : 'ยังไม่ผูกเครื่อง'}
                                     </span>
-                                    {/* Hidden test-compat button for Playwright E2E AC-97 Handover */}
+
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* ZONE 2: Minimalist Grayscale Status Pill */}
+                              <div className="scanner-zone-status">
+                                <span className="scanner-badge badge-standard-online">
+                                  <span>สแกนออนไลน์</span>
+                                </span>
+                              </div>
+
+                              {/* ZONE 3: 3 Actions (QR/Link, Edit Name, Remove) */}
+                              <div className="scanner-zone-actions">
+                                    {/* Assign or hand over the primary scanner. */}
                                     {currentPrimaryScanner ? (
                                       <button
                                         type="button"
@@ -1275,19 +1289,6 @@ export function OrganizerScannerManager() {
                                         ตั้งเป็นเครื่องหลัก
                                       </button>
                                     )}
-                                  </div>
-                                </div>
-                              </div>
-
-                              {/* ZONE 2: Minimalist Grayscale Status Pill */}
-                              <div className="scanner-zone-status">
-                                <span className="scanner-badge badge-standard-online">
-                                  <span>สแกนออนไลน์</span>
-                                </span>
-                              </div>
-
-                              {/* ZONE 3: 3 Actions (QR/Link, Edit Name, Remove) */}
-                              <div className="scanner-zone-actions">
                                 {/* Action 1: QR / Direct Access Link */}
                                 <button
                                   type="button"

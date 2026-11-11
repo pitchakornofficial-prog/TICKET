@@ -262,7 +262,7 @@
               },
               {
                 "Name": "EMAIL_FROM",
-                "Value": "TICKET <noreply@ticket.phatysd.me>"
+                "Value": "TICKET <tickets@phatysd.me>"
               },
               {
                 "Name": "SES_REGION",

@@ -8146,7 +8146,7 @@ textarea.text-input {
 
 .organizer-workspace-grid {
   display: grid;
-  grid-template-columns: 280px 1fr;
+  grid-template-columns: 280px minmax(0, 1fr);
   gap: 1.75rem;
   align-items: flex-start;
 }
@@ -8534,7 +8534,7 @@ textarea.text-input {
 
 @media (max-width: 860px) {
   .organizer-workspace-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
   .organizer-mobile-nav-bar {
     display: block;
@@ -10030,19 +10030,25 @@ textarea.text-input {
   pointer-events: auto;
 }
 
-/* D-101: Handover Test Compatibility for Strict Organizer Primary Binding */
+/* Primary scanner handover must remain available to organizers. */
 .scanner-handover-test-compat {
-  display: inline-block;
-  width: 14px;
-  height: 14px;
-  opacity: 0.0001;
-  pointer-events: auto;
-  border: none;
-  background: transparent;
-  padding: 0;
+  position: relative;
+  z-index: 2;
+  display: inline-flex;
+  min-height: 36px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #0f172a;
+  font-size: 0.82rem;
+  font-weight: 600;
+  line-height: 1.2;
+  white-space: nowrap;
+  padding: 0.45rem 0.85rem;
   margin: 0;
   cursor: pointer;
-  vertical-align: middle;
 }
 
 .scanner-event-popover-backdrop {
@@ -10333,6 +10339,7 @@ textarea.text-input {
   .scanner-control-selector-group {
     max-width: 100%;
     width: 100%;
+    min-width: 0;
   }
 
   .scanner-control-actions-toolbar {
@@ -10342,6 +10349,11 @@ textarea.text-input {
 
   .scanner-control-btn {
     flex: 1 1 auto;
+    max-width: 100%;
+    white-space: normal;
+    height: auto;
+    min-height: 42px;
+    text-align: center;
   }
 }
 
@@ -10897,7 +10909,9 @@ textarea.text-input {
 }
 
 .scanner-editorial-cards-table {
+  display: block;
   width: 100%;
+  max-width: 100%;
   border-collapse: separate;
   border-spacing: 0;
   background: transparent;
@@ -10908,10 +10922,16 @@ textarea.text-input {
   display: flex;
   flex-direction: column;
   gap: 0.85rem;
+  width: 100%;
+  min-width: 0;
 }
 
 .scanner-editorial-card {
   display: block;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
   background: #ffffff;
   border: 1px solid #e2e8f0;
   border-radius: 14px;
@@ -10930,6 +10950,8 @@ textarea.text-input {
 .scanner-card-td {
   display: block;
   width: 100%;
+  max-width: 100%;
+  min-width: 0;
   padding: 0;
   border: none;
   background: transparent;
@@ -10941,6 +10963,8 @@ textarea.text-input {
   align-items: center;
   justify-content: space-between;
   width: 100%;
+  max-width: 100%;
+  min-width: 0;
   gap: 1.25rem;
 }
 
@@ -10973,7 +10997,9 @@ textarea.text-input {
   display: flex;
   flex-direction: column;
   gap: 0.25rem;
+  flex: 1;
   min-width: 0;
+  max-width: 100%;
 }
 
 .scanner-card-title-row {
@@ -11025,12 +11051,18 @@ textarea.text-input {
   align-items: center;
   gap: 0.45rem;
   flex-wrap: wrap;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .scanner-account-email {
   color: #475569;
   font-size: 0.8rem;
   font-weight: 500;
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .scanner-meta-divider {
@@ -11113,7 +11145,9 @@ textarea.text-input {
   display: flex;
   align-items: center;
   gap: 0.6rem;
-  flex-shrink: 0;
+  flex-wrap: wrap;
+  max-width: 100%;
+  min-width: 0;
   position: relative;
 }
 
@@ -11247,6 +11281,10 @@ button.scanner-action-btn[aria-disabled="true"] {
    ========================================================================== */
 
 .scanner-primary-dedicated-card {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
   background: #ffffff;
   border: 1px solid #0f172a;
   border-radius: 14px;
@@ -11268,6 +11306,7 @@ button.scanner-action-btn[aria-disabled="true"] {
   justify-content: space-between;
   gap: 1.25rem;
   margin-bottom: 1.15rem;
+  min-width: 0;
 }
 
 .primary-card-heading-group {
@@ -11275,6 +11314,7 @@ button.scanner-action-btn[aria-disabled="true"] {
   flex-direction: column;
   gap: 0.35rem;
   flex: 1;
+  min-width: 0;
 }
 
 .primary-card-title-row {
@@ -11307,6 +11347,8 @@ button.scanner-action-btn[aria-disabled="true"] {
   padding-top: 1.1rem;
   border-top: 1px solid #f1f5f9;
   flex-wrap: wrap;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .primary-device-meta {
@@ -11315,10 +11357,13 @@ button.scanner-action-btn[aria-disabled="true"] {
   gap: 0.65rem;
   font-size: 0.95rem;
   flex-wrap: wrap;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .scanner-primary-name-table {
   display: inline-table;
+  max-width: 100%;
   border-collapse: collapse;
   margin: 0;
   padding: 0;
@@ -11345,13 +11390,19 @@ button.scanner-action-btn[aria-disabled="true"] {
 .primary-device-email {
   color: #64748b;
   font-size: 0.88rem;
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .primary-card-actions {
   display: flex;
   align-items: center;
   gap: 0.6rem;
-  flex-shrink: 0;
+  flex-wrap: wrap;
+  max-width: 100%;
+  min-width: 0;
 }
 
 .scanner-action-btn.btn-open-terminal-primary {
@@ -20387,6 +20438,7 @@ button.reject-btn:hover:not(:disabled),
 .owner-content-stage {
   width: 100%;
   max-width: 1200px;
+  min-width: 0;
   margin: 0 auto;
   padding: 1.5rem 1rem 3.5rem;
   box-sizing: border-box;
@@ -20395,6 +20447,7 @@ button.reject-btn:hover:not(:disabled),
 .organizer-content-stage {
   width: 100%;
   max-width: 1200px;
+  min-width: 0;
   margin: 0 auto;
   box-sizing: border-box;
 }
@@ -21683,6 +21736,7 @@ button.reject-btn:hover:not(:disabled),
 }
 
 .header-info-tooltip-popover {
+  display: none;
   position: absolute;
   top: calc(100% + 8px);
   left: 50%;
@@ -21718,8 +21772,24 @@ button.reject-btn:hover:not(:disabled),
 
 .header-info-tooltip-wrap:hover .header-info-tooltip-popover,
 .header-info-tooltip-wrap.is-open .header-info-tooltip-popover {
+  display: block;
   opacity: 1;
   visibility: visible;
+}
+
+@media (max-width: 640px) {
+  .header-info-tooltip-popover {
+    left: auto;
+    right: -0.5rem;
+    transform: none;
+    max-width: min(260px, calc(100vw - 2rem));
+  }
+
+  .header-info-tooltip-popover::after {
+    left: auto;
+    right: 0.75rem;
+    transform: none;
+  }
 }
 
 /* ==========================================================================

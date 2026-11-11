@@ -108,6 +108,7 @@ test.describe('TASK-035: Primary Handover and Emergency Recovery (AC-97, AC-98)'
     // 4. Test Handover Rejection: Attempt to handover to Scanner 2 before it downloads dataset (AC-97)
     const handoverBtn = page.locator(`[data-testid="handover-primary-scanner-${sc2.scannerId}"]`);
     await expect(handoverBtn).toBeVisible({ timeout: 15000 });
+    await handoverBtn.evaluate((element) => element.scrollIntoView({ block: 'center' }));
     await handoverBtn.click();
 
     // Check readiness inside modal
@@ -140,6 +141,7 @@ test.describe('TASK-035: Primary Handover and Emergency Recovery (AC-97, AC-98)'
 
     // 6. Organizer performs handover to Scanner 2 (AC-97)
     await page.bringToFront();
+    await handoverBtn.evaluate((element) => element.scrollIntoView({ block: 'center' }));
     await handoverBtn.click();
     await page.locator('#declared-old-pending').fill('0');
     await checkReadinessBtn.click();
