@@ -696,37 +696,35 @@ export async function syncOfflineAdmissionScans(
   eventId: string,
   input: SyncOfflineAdmissionInput,
 ): Promise<SyncOfflineAdmissionResult> {
-  if (!['scanner', 'organizer', 'owner'].includes(actor.role)) {
-    throw new Error('ไม่อนุญาต: คุณไม่มีสิทธิ์ซิงก์ข้อมูลการสแกน');
+  if (actor.role !== 'scanner') {
+    throw new Error('ไม่อนุญาต: เฉพาะเครื่องหลักประจำงานเท่านั้นที่สามารถซิงก์ข้อมูลออฟไลน์ได้');
   }
 
   await ensureAdmissionSchema(pool);
 
-  // Authorize event scope
-  if (actor.role === 'scanner') {
-    const scRes = await pool.query(
-      `SELECT 1 FROM event_scanners WHERE "eventId" = $1 AND "scannerId" = $2`,
-      [eventId, actor.id],
-    );
-    if (scRes.rowCount === 0) {
-      throw new Error('ไม่อนุญาต: คุณไม่มีสิทธิ์จัดการข้อมูลของคอนเสิร์ตนี้');
-    }
+  // Authorize event scope: only assigned primary scanner for this event may sync
+  const scRes = await pool.query(
+    `SELECT 1 FROM event_scanners WHERE "eventId" = $1 AND "scannerId" = $2`,
+    [eventId, actor.id],
+  );
+  if (scRes.rowCount === 0) {
+    throw new Error('ไม่อนุญาต: คุณไม่มีสิทธิ์จัดการข้อมูลของคอนเสิร์ตนี้');
+  }
 
-    const priRes = await pool.query<{ scannerId: string }>(
-      `SELECT "scannerId" FROM event_primary_scanners WHERE "eventId" = $1`,
-      [eventId],
-    );
-    if ((priRes.rowCount ?? 0) === 0 || priRes.rows[0].scannerId !== actor.id) {
-      throw new Error('ไม่อนุญาต: เฉพาะเครื่องหลักประจำงานเท่านั้นที่สามารถซิงก์ข้อมูลออฟไลน์ได้');
-    }
-  } else if (actor.role === 'organizer') {
-    const evRes = await pool.query(
-      `SELECT 1 FROM events WHERE id = $1 AND "organizerId" = $2`,
-      [eventId, actor.id],
-    );
-    if (evRes.rowCount === 0) {
-      throw new Error('ไม่อนุญาต: คุณไม่มีสิทธิ์จัดการข้อมูลของคอนเสิร์ตนี้');
-    }
+  const priRes = await pool.query<{ scannerId: string }>(
+    `SELECT "scannerId" FROM event_primary_scanners WHERE "eventId" = $1`,
+    [eventId],
+  );
+  if ((priRes.rowCount ?? 0) === 0 || priRes.rows[0].scannerId !== actor.id) {
+    throw new Error('ไม่อนุญาต: เฉพาะเครื่องหลักประจำงานเท่านั้นที่สามารถซิงก์ข้อมูลออฟไลน์ได้');
+  }
+
+  const ctrlRes = await pool.query<{ offlineStatus: string }>(
+    `SELECT "offlineStatus" FROM event_offline_controls WHERE "eventId" = $1`,
+    [eventId],
+  );
+  if (ctrlRes.rows[0]?.offlineStatus === 'halted_reconciliation_required') {
+    throw new Error('ไม่อนุญาต: การใช้งานออฟไลน์ถูกระงับเพื่อกระทบยอด ไม่สามารถซิงก์อัตโนมัติได้');
   }
 
   const effectiveScannerId = actor.id;
@@ -736,7 +734,28 @@ export async function syncOfflineAdmissionScans(
   let conflictsCount = 0;
   let syncedCount = 0;
 
-  for (const scan of input.scans) {
+  // Process scans in chronological order so multi-step offline sequences (entry -> exit -> entry) validate properly
+  const orderedScans = (Array.isArray(input.scans) ? input.scans : [])
+    .map((scan, index) => ({
+      scan,
+      index,
+      ts: typeof scan?.scannedAt === 'string' ? Date.parse(scan.scannedAt) : Number.NaN,
+    }))
+    .sort((a, b) => {
+      const aValid = Number.isFinite(a.ts);
+      const bValid = Number.isFinite(b.ts);
+      if (aValid && bValid && a.ts !== b.ts) {
+        return a.ts - b.ts;
+      }
+      return a.index - b.index;
+    })
+    .map(item => item.scan);
+
+  for (const scan of orderedScans) {
+    if (!scan || typeof scan.id !== 'string' || !scan.id.trim()) {
+      continue;
+    }
+
     // 1. Idempotency check (AC-102): If this offline scan ID was already stored, acknowledge immediately
     const existRes = await pool.query(
       `SELECT id FROM ticket_admission_logs WHERE id = $1`,
@@ -747,7 +766,19 @@ export async function syncOfflineAdmissionScans(
       continue;
     }
 
-    // 2. Fetch ticket with SELECT ... FOR UPDATE strictly scoped to eventId
+    // Reject non-success scans, unknown actions, or invalid timestamps before mutating central state
+    if (scan.status !== 'success') {
+      continue;
+    }
+    if (scan.action !== 'entry' && scan.action !== 'exit') {
+      continue;
+    }
+    const scannedDate = new Date(scan.scannedAt);
+    if (Number.isNaN(scannedDate.getTime())) {
+      continue;
+    }
+
+    // 2. Fetch ticket & session window with SELECT ... FOR UPDATE strictly scoped to eventId
     const client = await pool.connect();
     try {
       await client.query('BEGIN');
@@ -759,11 +790,22 @@ export async function syncOfflineAdmissionScans(
         eventId: string;
         status: string;
         admissionStatus: string;
+        sessionStatus?: string;
+        sessionStartTime?: Date | string;
+        sessionEndTime?: Date | string;
+        admissionStartTime?: Date | string | null;
+        admissionEndTime?: Date | string | null;
       }>(
-        `SELECT id, "ticketCode", "sessionId", "eventId", status, "admissionStatus"
-         FROM tickets
-         WHERE (id = $1 OR "ticketCode" = $2) AND "eventId" = $3
-         FOR UPDATE`,
+        `SELECT t.id, t."ticketCode", t."sessionId", t."eventId", t.status, t."admissionStatus",
+                s.status AS "sessionStatus",
+                s."startTime" AS "sessionStartTime",
+                s."endTime" AS "sessionEndTime",
+                s."admissionStartTime",
+                s."admissionEndTime"
+         FROM tickets t
+         JOIN event_sessions s ON s.id = t."sessionId"
+         WHERE (t.id = $1 OR t."ticketCode" = $2) AND t."eventId" = $3
+         FOR UPDATE OF t`,
         [scan.ticketId, scan.ticketCode, eventId],
       );
 
@@ -803,7 +845,7 @@ export async function syncOfflineAdmissionScans(
             effectiveScannerName,
             scan.id,
             scan.action,
-            new Date(scan.scannedAt),
+            scannedDate,
             'CENTRAL_REVOKED_OFFLINE_ADMIT',
             `บัตรมีสถานะ ${ticket.status} ในระบบกลาง แต่ถูกสแกน ${scan.action === 'entry' ? 'เข้างาน' : 'ออกงาน'} ออฟไลน์`,
           ],
@@ -824,7 +866,7 @@ export async function syncOfflineAdmissionScans(
             effectiveScannerId,
             effectiveScannerName,
             scan.action,
-            new Date(scan.scannedAt),
+            scannedDate,
           ],
         );
 
@@ -834,7 +876,46 @@ export async function syncOfflineAdmissionScans(
         continue;
       }
 
-      // 4. Normal valid state transition sync
+      if (ticket.status !== 'valid') {
+        await client.query('ROLLBACK');
+        continue;
+      }
+
+      // 4. Validate session approval & admission window (AC-100)
+      if (ticket.sessionStatus !== 'approved') {
+        await client.query('ROLLBACK');
+        continue;
+      }
+
+      const rawWindowStart = ticket.admissionStartTime || ticket.sessionStartTime;
+      const rawWindowEnd = ticket.admissionEndTime || ticket.sessionEndTime;
+      if (!rawWindowStart || !rawWindowEnd) {
+        await client.query('ROLLBACK');
+        continue;
+      }
+      const windowStart = new Date(rawWindowStart);
+      const windowEnd = new Date(rawWindowEnd);
+      if (
+        Number.isNaN(windowStart.getTime()) ||
+        Number.isNaN(windowEnd.getTime()) ||
+        scannedDate < windowStart ||
+        scannedDate > windowEnd
+      ) {
+        await client.query('ROLLBACK');
+        continue;
+      }
+
+      // 5. Enforce strict admission state transition (outside <-> inside)
+      if (scan.action === 'entry' && ticket.admissionStatus !== 'outside') {
+        await client.query('ROLLBACK');
+        continue;
+      }
+      if (scan.action === 'exit' && ticket.admissionStatus !== 'inside') {
+        await client.query('ROLLBACK');
+        continue;
+      }
+
+      // 6. Normal valid state transition sync
       const targetAdmissionStatus = scan.action === 'entry' ? 'inside' : 'outside';
       await client.query(
         `UPDATE tickets SET "admissionStatus" = $1, "updatedAt" = now() WHERE id = $2 AND "eventId" = $3`,
@@ -855,7 +936,7 @@ export async function syncOfflineAdmissionScans(
           effectiveScannerId,
           effectiveScannerName,
           scan.action,
-          new Date(scan.scannedAt),
+          scannedDate,
         ],
       );
 

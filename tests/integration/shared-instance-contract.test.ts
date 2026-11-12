@@ -372,6 +372,7 @@ describe('Shared Instance Contract across Multiple Web Processes (TASK-037, AC-1
 
     // 5. Offline scan sync on instance A is idempotent and prevented on instance B (AC-102)
     const syncScanId = `sync-log-${Date.now()}`;
+    const validOfflineScanAt = '2026-11-28T19:30:00.000Z';
     const syncResA = await syncOfflineAdmissionScans(
       instanceA,
       { id: sc1.scannerId, role: 'scanner', name: 'เครื่องสแกน 1' },
@@ -390,7 +391,7 @@ describe('Shared Instance Contract across Multiple Web Processes (TASK-037, AC-1
             status: 'success',
             reason: null,
             deviceMode: 'offline',
-            scannedAt: now.toISOString(),
+            scannedAt: validOfflineScanAt,
           },
         ],
       },
@@ -418,7 +419,7 @@ describe('Shared Instance Contract across Multiple Web Processes (TASK-037, AC-1
             status: 'success',
             reason: null,
             deviceMode: 'offline',
-            scannedAt: now.toISOString(),
+            scannedAt: validOfflineScanAt,
           },
         ],
       },
