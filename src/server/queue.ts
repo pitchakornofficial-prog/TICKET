@@ -201,8 +201,11 @@ export async function getOrCreateQueueEntry(
       token: newToken,
       estimatedSeconds: peopleAhead * 2,
     };
-  } catch {
-    // Graceful in-memory fallback if database is not reachable
+  } catch (error) {
+    if (process.env.NODE_ENV === 'production') {
+      throw error;
+    }
+    // Graceful in-memory fallback only outside production when database is not reachable
     const fallbackNum = 1;
     return {
       allowed: true,
@@ -251,7 +254,7 @@ export async function verifyQueueAccess(
     const entry = entryRes.rows[0];
     return !!(entry && entry.status === 'active' && new Date(entry.expiresAt) > new Date());
   } catch {
-    return true;
+    return process.env.NODE_ENV !== 'production';
   }
 }
 

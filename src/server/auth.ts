@@ -1,5 +1,5 @@
 import { betterAuth } from 'better-auth';
-import { createDatabasePool } from './database.ts';
+import { type createDatabasePool, getDatabasePool } from './database.ts';
 import { authOptions } from './auth-options.ts';
 import { isRole, type Actor } from '../lib/back-office-access.ts';
 
@@ -15,7 +15,7 @@ export function getAuth(): TicketAuth {
     const baseURL = process.env.BETTER_AUTH_URL;
     const secret = process.env.BETTER_AUTH_SECRET;
     if (!baseURL || !secret) throw new Error('Configure BETTER_AUTH_URL and BETTER_AUTH_SECRET before starting authentication');
-    auth = createAuth(createDatabasePool(), { baseURL, secret });
+    auth = createAuth(getDatabasePool(), { baseURL, secret });
   }
   return auth;
 }

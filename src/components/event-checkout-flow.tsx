@@ -99,9 +99,14 @@ export function EventCheckoutFlow({
         const res = await fetch(`/api/events/${eventId}/queue/status?token=${savedToken || ''}`);
         if (res.ok) {
           const data = await res.json();
+          if (data.token) {
+            sessionStorage.setItem(`ticket_queue_token_${eventId}`, data.token);
+          }
           if (!data.allowed && data.peopleAhead > 0) {
             router.replace(`/events/${eventId}/queue`);
           }
+        } else if (res.status === 503) {
+          router.replace(`/events/${eventId}/queue`);
         }
       } catch {
         // ignore network error
@@ -341,6 +346,10 @@ export function EventCheckoutFlow({
     setIsPending(true);
     void (async () => {
       try {
+        const queueToken =
+          typeof window !== 'undefined'
+            ? sessionStorage.getItem(`ticket_queue_token_${eventId}`)
+            : null;
         const res = await fetch('/api/public/checkout/reserve', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -349,6 +358,7 @@ export function EventCheckoutFlow({
             eventId,
             sessionId: selectedSession.id,
             items,
+            queueToken,
           }),
         });
 

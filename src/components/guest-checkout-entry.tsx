@@ -105,6 +105,10 @@ export function GuestCheckoutEntry({
 
     startTransition(async () => {
       try {
+        const queueToken =
+          typeof window !== 'undefined' && eventId
+            ? sessionStorage.getItem(`ticket_queue_token_${eventId}`)
+            : null;
         const res = await fetch('/api/public/checkout/direct-session', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -114,6 +118,7 @@ export function GuestCheckoutEntry({
             phone: cleanPhone,
             eventId,
             totalTickets,
+            queueToken,
           }),
         });
 

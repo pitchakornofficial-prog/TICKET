@@ -105,6 +105,10 @@ export function QueueWaitingRoom({
           ? sessionStorage.getItem(`ticket_queue_token_${eventId}`)
           : null;
         const res = await fetch(`/api/events/${eventId}/queue/status?token=${savedToken || ''}`);
+        if (res.status === 503) {
+          // Keep polling when server queue is temporarily busy instead of bypassing queue
+          return;
+        }
         if (!res.ok) throw new Error('Queue status API error');
         const data = await res.json();
 

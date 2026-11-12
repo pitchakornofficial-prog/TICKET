@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { NextResponse } from 'next/server';
 import { getDatabasePool } from '@/server/database';
 import { ensureGuestOtpSchema } from '@/server/guest-otp';
+import { verifyQueueAccess } from '@/server/queue';
 import { getBuyerTicketCountForEvent } from '@/server/reservation';
 
 export const runtime = 'nodejs';
@@ -14,6 +15,11 @@ export async function POST(request: Request) {
     const phone = (body.phone || '').trim();
     const eventId = body.eventId;
     const totalTickets = Number(body.totalTickets) || 1;
+    const rawQueueToken =
+      typeof body.queueToken === 'string'
+        ? body.queueToken
+        : request.headers.get('x-queue-token') || '';
+    const queueToken = rawQueueToken.trim() || null;
 
     if (!name || name.length < 2) {
       return NextResponse.json({ message: 'กรุณากรอกชื่อ-นามสกุลให้ถูกต้อง' }, { status: 400 });
@@ -45,6 +51,19 @@ export async function POST(request: Request) {
     };
 
     if (pool) {
+      if (eventId) {
+        const queueAllowed = await verifyQueueAccess(pool, eventId, queueToken);
+        if (!queueAllowed) {
+          return NextResponse.json(
+            {
+              message: 'ขณะนี้มีผู้ใช้งานเต็มจำนวน 200 คิวแล้ว กรุณารอตามลำดับคิวในห้องรอคิว',
+              code: 'QUEUE_LOCKED',
+            },
+            { status: 429 },
+          );
+        }
+      }
+
       await ensureGuestOtpSchema(pool);
 
       // Check cumulative buyer quota if eventId provided
