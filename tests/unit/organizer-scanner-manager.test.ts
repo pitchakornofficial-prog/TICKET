@@ -52,7 +52,7 @@ describe('Organizer Scanner Manager (D-89)', () => {
     expect(scannerManagerContent).toContain('showAddModal');
   });
 
-  it('provides QR Code and direct login link modal without requiring manual password entry', () => {
+  it('provides QR Code and direct login link modal using revocable one-time access tokens without raw scannerId URLs', () => {
     const scannerManagerContent = readFileSync(
       join(rootDir, 'src/components/organizer-scanner-manager.tsx'),
       'utf8',
@@ -60,7 +60,8 @@ describe('Organizer Scanner Manager (D-89)', () => {
     expect(scannerManagerContent).toContain('activeQrScanner');
     expect(scannerManagerContent).toContain('คิวอาร์โค้ดและลิงก์เข้าใช้งาน');
     expect(scannerManagerContent).toContain('คัดลอกลิงก์');
-    expect(scannerManagerContent).toContain('/scanner/access?scannerId=');
+    expect(scannerManagerContent).toContain('access-token');
+    expect(scannerManagerContent).not.toContain('/scanner/access?scannerId=');
     expect(scannerManagerContent).toContain('scanner-qr-frame');
   });
 
@@ -456,7 +457,7 @@ describe('Organizer Scanner Manager (D-89)', () => {
       'utf8',
     );
     expect(accessRouteContent).toContain('scanner_device_id');
-    expect(accessRouteContent).toContain('boundDeviceId');
+    expect(accessRouteContent).toContain('consumeScannerAccessTokenAndBindDevice');
     expect(accessRouteContent).toContain('/scanner/access-rejected');
     expect(accessRouteContent).not.toMatch(/\p{Extended_Pictographic}/u);
 

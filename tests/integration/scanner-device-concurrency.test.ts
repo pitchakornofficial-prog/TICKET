@@ -3,6 +3,7 @@ import { randomUUID, createHmac } from 'node:crypto';
 import { authFixture } from '../support/auth-fixture';
 import { setDatabasePool } from '../../src/server/database';
 import { createEventDraft, addScannerToEvent } from '../../src/server/events';
+import { issueScannerAccessToken } from '../../src/server/scanner-access';
 import { GET as scannerAccessGet } from '../../src/app/scanner/access/route';
 import { POST as admissionScanPost } from '../../src/app/api/scanner/admissions/scan/route';
 import { createReservation } from '../../src/server/reservation';
@@ -50,17 +51,22 @@ describe('Issue #9: Scanner Atomic Device Binding Concurrency Tests (D-104)', ()
       password: 'Secure-Password-12345!',
     });
     const scannerId = scannerRes.scannerId;
+    const issued = await issueScannerAccessToken(fixture.pool, {
+      eventId: event.id,
+      scannerId,
+      createdBy: orgId,
+    });
 
-    // 3. Two different devices open the scanner access URL simultaneously
+    // 3. Two different devices open the one-time scanner access URL simultaneously
     const deviceA = `device-A-${randomUUID()}`;
     const deviceB = `device-B-${randomUUID()}`;
 
     const reqA = new Request(
-      `http://127.0.0.1:3000/scanner/access?scannerId=${scannerId}&eventId=${event.id}`,
+      `http://127.0.0.1:3000${issued.accessUrl}`,
       { headers: { cookie: `scanner_device_id=${deviceA}` } },
     );
     const reqB = new Request(
-      `http://127.0.0.1:3000/scanner/access?scannerId=${scannerId}&eventId=${event.id}`,
+      `http://127.0.0.1:3000${issued.accessUrl}`,
       { headers: { cookie: `scanner_device_id=${deviceB}` } },
     );
 

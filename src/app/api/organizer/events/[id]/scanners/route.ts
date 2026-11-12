@@ -3,6 +3,7 @@ import { assertSameOrigin } from '@/server/origin';
 import { getAuth } from '@/server/auth';
 import { listScannersForEvent, addScannerToEvent } from '@/server/events';
 import { setEventPrimaryScanner } from '@/server/primary-scanner';
+import { issueScannerAccessToken } from '@/server/scanner-access';
 import { randomUUID } from 'node:crypto';
 import type { Pool } from 'pg';
 
@@ -90,7 +91,11 @@ export async function POST(
       }
     }
 
-    const accessUrl = `/scanner/access?scannerId=${result.scannerId}&eventId=${eventId}`;
+    const issuedToken = await issueScannerAccessToken(pool, {
+      eventId,
+      scannerId: result.scannerId,
+      createdBy: session.user.id,
+    });
 
     return Response.json(
       {
@@ -98,7 +103,9 @@ export async function POST(
         scanner: {
           ...result,
           isPrimary,
-          accessUrl,
+          accessUrl: issuedToken.accessUrl,
+          tokenExpiresAt: issuedToken.expiresAt,
+          hasActiveToken: true,
         },
       },
       { status: 201 },

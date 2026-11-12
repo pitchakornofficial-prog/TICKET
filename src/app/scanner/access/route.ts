@@ -1,6 +1,11 @@
 import { NextResponse } from 'next/server';
 import { randomUUID, createHmac } from 'node:crypto';
 import { getAuth } from '@/server/auth';
+import { ensureEventSchema } from '@/server/events';
+import {
+  consumeScannerAccessTokenAndBindDevice,
+  inspectScannerAccessToken,
+} from '@/server/scanner-access';
 import {
   recordScannerSessionScope,
   signScannerEventScopeCookie,
@@ -9,71 +14,73 @@ import type { Pool } from 'pg';
 
 export const runtime = 'nodejs';
 
+function parseCookies(cookieHeader: string): Record<string, string> {
+  if (!cookieHeader) return {};
+  return Object.fromEntries(
+    cookieHeader
+      .split(';')
+      .map((c) => {
+        const [k, ...v] = c.trim().split('=');
+        return [k, v.join('=')];
+      })
+      .filter(([k]) => Boolean(k)),
+  );
+}
+
 export async function GET(request: Request) {
   const url = new URL(request.url);
-  const scannerId = url.searchParams.get('scannerId');
-  const eventId = url.searchParams.get('eventId');
-
-  if (!scannerId || !eventId) {
-    return NextResponse.json(
-      { message: 'ลิงก์ไม่ถูกต้อง: ขาดข้อมูลผู้ใช้งานหรือคอนเสิร์ต' },
-      { status: 400 },
-    );
-  }
+  const rawToken = url.searchParams.get('token')?.trim() || '';
+  const eventIdParam = url.searchParams.get('eventId')?.trim() || '';
 
   const auth = getAuth();
   const pool = auth.options.database as Pool;
 
   try {
+    await ensureEventSchema(pool);
+
     // D-105: If current actor is already logged in as organizer or owner of this event,
-    // preserve their session without overwriting session cookie with scanner token!
+    // preserve their session without overwriting session cookie or consuming the one-time token!
     const currentSession = await auth.api.getSession({ headers: request.headers });
     if (currentSession?.user) {
-      const evCheck = await pool.query<{ organizerId: string }>(
-        'SELECT "organizerId" FROM events WHERE id = $1',
-        [eventId],
-      );
-      if (
-        (evCheck.rowCount ?? 0) > 0 &&
-        (evCheck.rows[0].organizerId === currentSession.user.id ||
-          currentSession.user.role === 'owner')
-      ) {
-        const directUrl = new URL(`/back-office/scanner?eventId=${eventId}`, url.origin);
-        return NextResponse.redirect(directUrl);
+      if (rawToken) {
+        const inspected = await inspectScannerAccessToken(pool, rawToken);
+        if (
+          inspected &&
+          !inspected.revokedAt &&
+          (inspected.organizerId === currentSession.user.id ||
+            currentSession.user.role === 'owner')
+        ) {
+          const eventId = inspected.eventId;
+          const directUrl = new URL(`/back-office/scanner?eventId=${eventId}`, url.origin);
+          return NextResponse.redirect(directUrl);
+        }
+      } else if (eventIdParam) {
+        const evCheck = await pool.query<{ organizerId: string }>(
+          'SELECT "organizerId" FROM events WHERE id = $1',
+          [eventIdParam],
+        );
+        if (
+          (evCheck.rowCount ?? 0) > 0 &&
+          (evCheck.rows[0].organizerId === currentSession.user.id ||
+            currentSession.user.role === 'owner')
+        ) {
+          const eventId = eventIdParam;
+          const directUrl = new URL(`/back-office/scanner?eventId=${eventId}`, url.origin);
+          return NextResponse.redirect(directUrl);
+        }
       }
     }
 
-    // 1. Verify that scanner exists and is assigned to this event
-    const res = await pool.query<{
-      id: string;
-      role: string;
-      name: string;
-      boundDeviceId: string | null;
-    }>(
-      `SELECT u.id, u.role, u.name, es."boundDeviceId"
-       FROM auth_user u
-       JOIN event_scanners es ON es."scannerId" = u.id
-       WHERE u.id = $1 AND es."eventId" = $2 AND u.role = 'scanner'`,
-      [scannerId, eventId],
-    );
-
-    if (res.rowCount === 0) {
+    if (!rawToken) {
       return NextResponse.json(
-        { message: 'ไม่พบสิทธิ์เจ้าหน้าที่สแกนบัตรสำหรับคอนเสิร์ตนี้' },
-        { status: 403 },
+        { message: 'ลิงก์ไม่ถูกต้อง: ต้องใช้โทเคนเข้าใช้งานแบบใช้ครั้งเดียวจากผู้จัดงาน' },
+        { status: 400, headers: { 'Cache-Control': 'no-store' } },
       );
     }
 
-    const scannerRow = res.rows[0];
-
-    // 2. Read or generate device ID cookie (D-104: Single-Device Binding)
+    // Read or generate device ID cookie (D-104: Single-Device Binding)
     const cookieHeader = request.headers.get('cookie') || '';
-    const cookieMap = Object.fromEntries(
-      cookieHeader.split(';').map((c) => {
-        const [k, ...v] = c.trim().split('=');
-        return [k, v.join('=')];
-      }),
-    );
+    const cookieMap = parseCookies(cookieHeader);
 
     let deviceId = cookieMap.scanner_device_id;
     let shouldSetDeviceCookie = false;
@@ -83,41 +90,28 @@ export async function GET(request: Request) {
       shouldSetDeviceCookie = true;
     }
 
-    // Check device binding atomically (D-104)
-    let isAuthorizedDevice = false;
+    // Atomically verify & consume one-time token + bind device (D-104)
+    const outcome = await consumeScannerAccessTokenAndBindDevice(pool, {
+      rawToken,
+      deviceId,
+    });
 
-    if (!scannerRow.boundDeviceId) {
-      // First access: attempt atomic binding only if still unbound
-      const bindRes = await pool.query(
-        `UPDATE event_scanners
-         SET "boundDeviceId" = $1, "boundAt" = now()
-         WHERE "eventId" = $2 AND "scannerId" = $3 AND "boundDeviceId" IS NULL
-         RETURNING "boundDeviceId"`,
-        [deviceId, eventId, scannerId],
+    if (outcome.status === 'invalid') {
+      return NextResponse.json(
+        { message: 'ไม่พบสิทธิ์เจ้าหน้าที่สแกนบัตรหรือโทเคนไม่ถูกต้อง' },
+        { status: 403, headers: { 'Cache-Control': 'no-store' } },
       );
-
-      if ((bindRes.rowCount ?? 0) > 0) {
-        // Successfully bound this device
-        isAuthorizedDevice = true;
-      } else {
-        // Another concurrent request bound first: re-fetch current boundDeviceId
-        const recheckRes = await pool.query<{ boundDeviceId: string | null }>(
-          `SELECT "boundDeviceId" FROM event_scanners WHERE "eventId" = $1 AND "scannerId" = $2`,
-          [eventId, scannerId],
-        );
-        isAuthorizedDevice = recheckRes.rows[0]?.boundDeviceId === deviceId;
-      }
-    } else {
-      isAuthorizedDevice = scannerRow.boundDeviceId === deviceId;
     }
 
-    if (!isAuthorizedDevice) {
-      // Different device attempted: Reject!
+    if (outcome.status !== 'ok') {
+      const reasonParam =
+        outcome.status === 'bound_other_device' ? 'bound' : outcome.status;
       const rejectedUrl = new URL(
-        `/scanner/access-rejected?scannerName=${encodeURIComponent(scannerRow.name)}&eventId=${eventId}`,
+        `/scanner/access-rejected?reason=${encodeURIComponent(reasonParam)}&scannerName=${encodeURIComponent(outcome.scannerName)}&eventId=${encodeURIComponent(outcome.eventId)}`,
         url.origin,
       );
       const response = NextResponse.redirect(rejectedUrl);
+      response.headers.set('Cache-Control', 'no-store');
       if (shouldSetDeviceCookie) {
         response.cookies.set({
           name: 'scanner_device_id',
@@ -132,7 +126,7 @@ export async function GET(request: Request) {
       return response;
     }
 
-    // 3. Generate secure session
+    // Generate secure session bound to this scanner & event
     const sessionId = randomUUID();
     const sessionToken = `${randomUUID().replace(/-/g, '')}${randomUUID().replace(/-/g, '')}`;
     const expiresAt = new Date(Date.now() + 8 * 60 * 60 * 1000); // 8 hours
@@ -140,15 +134,15 @@ export async function GET(request: Request) {
     await pool.query(
       `INSERT INTO auth_session (id, token, "userId", "expiresAt", "createdAt", "updatedAt")
        VALUES ($1, $2, $3, $4, now(), now())`,
-      [sessionId, sessionToken, scannerId, expiresAt],
+      [sessionId, sessionToken, outcome.scannerId, expiresAt],
     );
 
-    // Issue #3: Persist server-side event scope bound to this session token
-    await recordScannerSessionScope(pool, sessionToken, scannerId, eventId);
+    const eventId = outcome.eventId;
+    await recordScannerSessionScope(pool, sessionToken, outcome.scannerId, eventId);
 
-    // 4. Set cookies and redirect to /back-office/scanner?eventId=${eventId}
     const redirectUrl = new URL(`/back-office/scanner?eventId=${eventId}`, url.origin);
     const response = NextResponse.redirect(redirectUrl);
+    response.headers.set('Cache-Control', 'no-store');
 
     const isSecure = url.protocol === 'https:';
     const cookieName = isSecure ? '__Secure-ticket.session_token' : 'ticket.session_token';
@@ -168,8 +162,7 @@ export async function GET(request: Request) {
       maxAge: 8 * 60 * 60,
     });
 
-    // Security Fix: Bind scanner access session strictly to this event and session
-    const signedScopeValue = signScannerEventScopeCookie(eventId, secret, {
+    const signedScopeValue = signScannerEventScopeCookie(outcome.eventId, secret, {
       sessionToken,
       expiresAt,
     });
@@ -201,7 +194,7 @@ export async function GET(request: Request) {
     console.error('Scanner access error:', error);
     return NextResponse.json(
       { message: 'เกิดข้อผิดพลาดในการยืนยันสิทธิ์เข้าใช้งาน' },
-      { status: 500 },
+      { status: 500, headers: { 'Cache-Control': 'no-store' } },
     );
   }
 }

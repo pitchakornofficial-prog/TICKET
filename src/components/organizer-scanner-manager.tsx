@@ -40,6 +40,8 @@ interface ScannerItem {
   isBound?: boolean;
   boundDeviceId?: string | null;
   boundAt?: string | null;
+  hasActiveToken?: boolean;
+  tokenExpiresAt?: string | null;
 }
 
 interface EventOfflineControl {
@@ -167,6 +169,10 @@ export function OrganizerScannerManager() {
   // Modals state
   const [showAddModal, setShowAddModal] = useState(false);
   const [activeQrScanner, setActiveQrScanner] = useState<ScannerItem | null>(null);
+  const [issuedLinks, setIssuedLinks] = useState<
+    Record<string, { accessUrl: string; expiresAt: string }>
+  >({});
+  const [issuingAccessLink, setIssuingAccessLink] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
   const [editingScanner, setEditingScanner] = useState<ScannerItem | null>(null);
   const [editScannerName, setEditScannerName] = useState('');
@@ -392,7 +398,19 @@ export function OrganizerScannerManager() {
           email: targetEmail,
           assignedAt: new Date().toISOString(),
           isPrimary: data.scanner?.isPrimary ?? scanners.length === 0,
+          hasActiveToken: Boolean(data.scanner?.accessUrl),
+          tokenExpiresAt: data.scanner?.tokenExpiresAt || null,
         };
+
+        if (data.scanner?.accessUrl && createdScanner.scannerId) {
+          setIssuedLinks((prev) => ({
+            ...prev,
+            [createdScanner.scannerId]: {
+              accessUrl: data.scanner.accessUrl,
+              expiresAt: data.scanner.tokenExpiresAt || '',
+            },
+          }));
+        }
 
         const wasQuickAdd = showAddModal;
         setName('');
@@ -430,6 +448,11 @@ export function OrganizerScannerManager() {
         setError(data.message || 'นำทีมสแกนออกไม่สำเร็จ');
       } else {
         setMessage('นำทีมสแกนออกจากงานเรียบร้อยแล้ว');
+        setIssuedLinks((prev) => {
+          const next = { ...prev };
+          delete next[scannerId];
+          return next;
+        });
         loadEventData(selectedEventId);
       }
     } catch {
@@ -497,10 +520,26 @@ export function OrganizerScannerManager() {
         setError(data.message || 'รีเซ็ตอุปกรณ์ไม่สำเร็จ');
       } else {
         setMessage(data.message || 'รีเซ็ตอุปกรณ์เรียบร้อยแล้ว');
+        if (data.accessUrl) {
+          setIssuedLinks((prev) => ({
+            ...prev,
+            [scannerId]: {
+              accessUrl: data.accessUrl,
+              expiresAt: data.expiresAt || '',
+            },
+          }));
+        }
         loadEventData(selectedEventId);
         setActiveQrScanner((prev) =>
           prev && prev.scannerId === scannerId
-            ? { ...prev, isBound: false, boundDeviceId: null, boundAt: null }
+            ? {
+                ...prev,
+                isBound: false,
+                boundDeviceId: null,
+                boundAt: null,
+                hasActiveToken: Boolean(data.accessUrl),
+                tokenExpiresAt: data.expiresAt || null,
+              }
             : prev,
         );
       }
@@ -693,11 +732,72 @@ export function OrganizerScannerManager() {
     };
   }, [events]);
 
-  // Direct scanner access link
-  const getScannerAccessUrl = (scanner: ScannerItem) => {
+  // One-time scanner access link helpers (uses random revocable token, never raw scannerId)
+  const toAbsoluteScannerUrl = (relativeOrFullUrl: string) => {
     const origin = typeof window !== 'undefined' ? window.location.origin : '';
-    return `${origin}/scanner/access?scannerId=${scanner.scannerId}&eventId=${selectedEventId}`;
+    if (relativeOrFullUrl.startsWith('http://') || relativeOrFullUrl.startsWith('https://')) {
+      return relativeOrFullUrl;
+    }
+    return `${origin}${relativeOrFullUrl}`;
   };
+
+  const getScannerAccessUrl = (scanner: ScannerItem): string | null => {
+    const entry = issuedLinks[scanner.scannerId];
+    if (!entry?.accessUrl) return null;
+    return toAbsoluteScannerUrl(entry.accessUrl);
+  };
+
+  async function handleIssueAccessLink(scannerId: string) {
+    if (!selectedEventId || scannerId.startsWith('organizer-primary-')) return;
+    setIssuingAccessLink(true);
+    setError('');
+    try {
+      const res = await fetch(
+        `/api/organizer/events/${selectedEventId}/scanners/${scannerId}/access-token`,
+        { method: 'POST' },
+      );
+      const data = await res.json();
+      if (!res.ok || !data.accessUrl) {
+        setError(data.message || 'ไม่สามารถออกลิงก์เข้าใช้งานได้');
+        return;
+      }
+      setIssuedLinks((prev) => ({
+        ...prev,
+        [scannerId]: {
+          accessUrl: data.accessUrl,
+          expiresAt: data.expiresAt || '',
+        },
+      }));
+      setCopiedLink(false);
+      setActiveQrScanner((prev) =>
+        prev && prev.scannerId === scannerId
+          ? {
+              ...prev,
+              hasActiveToken: true,
+              tokenExpiresAt: data.expiresAt || null,
+            }
+          : prev,
+      );
+      loadEventData(selectedEventId);
+    } catch {
+      setError('เกิดข้อผิดพลาดในการเชื่อมต่อเพื่อออกลิงก์เข้าใช้งาน');
+    } finally {
+      setIssuingAccessLink(false);
+    }
+  }
+
+  function handleOpenQrModal(scanner: ScannerItem) {
+    setActiveQrScanner(scanner);
+    setCopiedLink(false);
+    if (
+      !scanner.scannerId.startsWith('organizer-primary-') &&
+      !issuedLinks[scanner.scannerId]?.accessUrl &&
+      !scanner.isBound &&
+      !scanner.hasActiveToken
+    ) {
+      void handleIssueAccessLink(scanner.scannerId);
+    }
+  }
 
   return (
     <section className="form-card organizer-scanner-card" aria-labelledby="organizer-scanner-heading">
@@ -1125,10 +1225,7 @@ export function OrganizerScannerManager() {
                       <button
                         type="button"
                         className="scanner-action-btn btn-qr-link"
-                        onClick={() => {
-                          setActiveQrScanner(currentPrimaryScanner);
-                          setCopiedLink(false);
-                        }}
+                        onClick={() => handleOpenQrModal(currentPrimaryScanner)}
                         title="ดู QR Code และลิงก์เข้าใช้งาน"
                       >
                         <QrCodeIcon width={14} height={14} />
@@ -1293,10 +1390,7 @@ export function OrganizerScannerManager() {
                                 <button
                                   type="button"
                                   className="scanner-action-btn btn-qr-link"
-                                  onClick={() => {
-                                    setActiveQrScanner(s);
-                                    setCopiedLink(false);
-                                  }}
+                                  onClick={() => handleOpenQrModal(s)}
                                   title="ดู QR Code และลิงก์เข้าใช้งาน"
                                 >
                                   <QrCodeIcon width={14} height={14} />
@@ -1764,52 +1858,151 @@ export function OrganizerScannerManager() {
                   </span>
                 </div>
 
-                {/* SVG QR Code */}
-                <div className="scanner-qr-frame" style={{ background: '#ffffff', padding: '1rem', border: '1px solid #e2e8f0', borderRadius: '12px', display: 'inline-block', boxShadow: '0 4px 12px rgba(0,0,0,0.06)', marginBottom: '1.25rem' }}>
-                  {/* biome-ignore lint/performance/noImgElement: Data URL SVG QR representation */}
-                  <img
-                    src={generateQrSvgDataUrl(getScannerAccessUrl(activeQrScanner))}
-                    alt={`QR Code เข้าใช้งานสำหรับ ${activeQrScanner.name}`}
-                    width={200}
-                    height={200}
-                    style={{ display: 'block', margin: '0 auto' }}
-                  />
-                  <span style={{ display: 'block', fontSize: '0.78rem', color: '#64748b', marginTop: '0.5rem' }}>
-                    ใช้กล้องมือถือสแกนเพื่อเข้าใช้งาน Terminal ทันที
-                  </span>
-                </div>
+                {(() => {
+                  const isSyntheticPrimary = activeQrScanner.scannerId.startsWith('organizer-primary-');
+                  const activeAccessUrl = getScannerAccessUrl(activeQrScanner);
+                  const activeExpiresAt =
+                    issuedLinks[activeQrScanner.scannerId]?.expiresAt ||
+                    activeQrScanner.tokenExpiresAt ||
+                    null;
 
-                {/* Direct Link Input & Copy Button */}
-                <div style={{ marginBottom: '1.25rem', textAlign: 'left' }}>
-                  <label htmlFor="scanner-access-link-input" style={{ fontSize: '0.82rem', fontWeight: 600, color: '#475569', display: 'block', marginBottom: '0.35rem' }}>
-                    หรือคัดลอกลิงก์ส่งให้ทีมงานทาง LINE / แชต:
-                  </label>
-                  <div style={{ display: 'flex', gap: '0.5rem' }}>
-                    <input
-                      id="scanner-access-link-input"
-                      type="text"
-                      className="text-input"
-                      style={{ fontSize: '0.82rem', background: '#f8fafc', color: '#334155' }}
-                      readOnly
-                      value={getScannerAccessUrl(activeQrScanner)}
-                    />
-                    <button
-                      type="button"
-                      className="primary-button small"
-                      onClick={() => handleCopyLink(getScannerAccessUrl(activeQrScanner))}
-                      style={{ whiteSpace: 'nowrap' }}
+                  if (isSyntheticPrimary) {
+                    return (
+                      <div
+                        style={{
+                          background: '#f8fafc',
+                          padding: '1rem',
+                          borderRadius: '10px',
+                          border: '1px solid #cbd5e1',
+                          fontSize: '0.84rem',
+                          color: '#334155',
+                          textAlign: 'left',
+                          marginBottom: '1.25rem',
+                          lineHeight: 1.5,
+                        }}
+                      >
+                        <strong style={{ color: '#0f172a', display: 'block', marginBottom: '0.35rem' }}>
+                          เครื่องสแกนหลักของผู้จัดงาน
+                        </strong>
+                        <span>
+                          เครื่องหลักนี้ผูกกับบัญชีผู้จัดงานโดยตรง สามารถกดปุ่ม <strong>[เปิด Terminal สแกน]</strong> เพื่อเข้าใช้งานได้ทันทีโดยไม่ต้องใช้ลิงก์คำเชิญ (หากต้องการเพิ่มเจ้าหน้าที่พร้อม QR/ลิงก์ กรุณาเพิ่มเจ้าหน้าที่สแกนเสริม)
+                        </span>
+                      </div>
+                    );
+                  }
+
+                  if (activeAccessUrl) {
+                    return (
+                      <>
+                        {/* SVG QR Code */}
+                        <div className="scanner-qr-frame" style={{ background: '#ffffff', padding: '1rem', border: '1px solid #e2e8f0', borderRadius: '12px', display: 'inline-block', boxShadow: '0 4px 12px rgba(0,0,0,0.06)', marginBottom: '1.25rem' }}>
+                          {/* biome-ignore lint/performance/noImgElement: Data URL SVG QR representation */}
+                          <img
+                            src={generateQrSvgDataUrl(activeAccessUrl)}
+                            alt={`QR Code เข้าใช้งานสำหรับ ${activeQrScanner.name}`}
+                            width={200}
+                            height={200}
+                            style={{ display: 'block', margin: '0 auto' }}
+                          />
+                          <span style={{ display: 'block', fontSize: '0.78rem', color: '#64748b', marginTop: '0.5rem' }}>
+                            ใช้กล้องมือถือสแกนเพื่อเข้าใช้งาน Terminal ทันที (ลิงก์ใช้ครั้งเดียว)
+                          </span>
+                          {activeExpiresAt && (
+                            <span style={{ display: 'block', fontSize: '0.74rem', color: '#475569', marginTop: '0.25rem' }}>
+                              หมดอายุ:{' '}
+                              {new Date(activeExpiresAt).toLocaleString('th-TH', {
+                                dateStyle: 'medium',
+                                timeStyle: 'short',
+                              })}
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Direct Link Input & Copy Button */}
+                        <div style={{ marginBottom: '1.25rem', textAlign: 'left' }}>
+                          <label htmlFor="scanner-access-link-input" style={{ fontSize: '0.82rem', fontWeight: 600, color: '#475569', display: 'block', marginBottom: '0.35rem' }}>
+                            หรือคัดลอกลิงก์ส่งให้ทีมงานทาง LINE / แชต:
+                          </label>
+                          <div style={{ display: 'flex', gap: '0.5rem' }}>
+                            <input
+                              id="scanner-access-link-input"
+                              type="text"
+                              className="text-input"
+                              style={{ fontSize: '0.82rem', background: '#f8fafc', color: '#334155' }}
+                              readOnly
+                              value={activeAccessUrl}
+                            />
+                            <button
+                              type="button"
+                              className="primary-button small"
+                              onClick={() => handleCopyLink(activeAccessUrl)}
+                              style={{ whiteSpace: 'nowrap' }}
+                            >
+                              {copiedLink ? (
+                                <>
+                                  <CheckIcon width={16} height={16} />
+                                  <span>คัดลอกแล้ว</span>
+                                </>
+                              ) : (
+                                <span>คัดลอกลิงก์</span>
+                              )}
+                            </button>
+                          </div>
+                          <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '0.55rem' }}>
+                            <button
+                              type="button"
+                              data-testid="rotate-scanner-link-btn"
+                              className="secondary-button small"
+                              onClick={() => handleIssueAccessLink(activeQrScanner.scannerId)}
+                              disabled={issuingAccessLink}
+                            >
+                              {issuingAccessLink ? 'กำลังสร้างลิงก์ใหม่...' : 'สร้างลิงก์ใหม่ (ยกเลิกลิงก์เดิม)'}
+                            </button>
+                          </div>
+                        </div>
+                      </>
+                    );
+                  }
+
+                  return (
+                    <div
+                      className="scanner-qr-frame"
+                      style={{
+                        background: '#f8fafc',
+                        padding: '1rem',
+                        border: '1px solid #cbd5e1',
+                        borderRadius: '10px',
+                        fontSize: '0.82rem',
+                        color: '#334155',
+                        textAlign: 'left',
+                        marginBottom: '1.25rem',
+                        lineHeight: 1.5,
+                      }}
                     >
-                      {copiedLink ? (
-                        <>
-                          <CheckIcon width={16} height={16} />
-                          <span>คัดลอกแล้ว</span>
-                        </>
-                      ) : (
-                        <span>คัดลอกลิงก์</span>
+                      <strong style={{ color: '#0f172a', display: 'block', marginBottom: '0.35rem' }}>
+                        {activeQrScanner.isBound
+                          ? 'อุปกรณ์ถูกผูกสิทธิ์เรียบร้อยแล้ว'
+                          : 'ต้องการลิงก์เข้าใช้งานแบบใช้ครั้งเดียวใหม่หรือไม่'}
+                      </strong>
+                      <p style={{ margin: '0 0 0.75rem', color: '#475569' }}>
+                        {activeQrScanner.isBound
+                          ? 'ลิงก์เดิมถูกใช้งานไปแล้ว หากต้องการเปลี่ยนอุปกรณ์สแกน ให้กดปุ่ม [ปลดล็อก / รีเซ็ตอุปกรณ์] ด้านล่างเพื่อเพิกถอนสิทธิ์เดิมและรับลิงก์ใหม่'
+                          : 'เพื่อความปลอดภัย ระบบเก็บรหัสโทเคนแบบเข้ารหัสทางเดียว (Hash) จึงไม่แสดงลิงก์เดิมซ้ำหลังรีเฟรชหน้า กดปุ่มด้านล่างเพื่อออกลิงก์ใหม่และเพิกถอนลิงก์เก่าทันที'}
+                      </p>
+                      {!activeQrScanner.isBound && (
+                        <button
+                          type="button"
+                          data-testid="issue-scanner-link-btn"
+                          className="primary-button small"
+                          onClick={() => handleIssueAccessLink(activeQrScanner.scannerId)}
+                          disabled={issuingAccessLink}
+                        >
+                          {issuingAccessLink ? 'กำลังออกลิงก์ใหม่...' : 'ออกลิงก์ / QR Code ใหม่'}
+                        </button>
                       )}
-                    </button>
-                  </div>
-                </div>
+                    </div>
+                  );
+                })()}
 
                 {/* D-104: Device Binding Status & Reset Option */}
                 <div

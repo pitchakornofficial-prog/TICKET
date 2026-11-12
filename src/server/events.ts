@@ -7,6 +7,11 @@ import { ensureReservationSchema } from './reservation.ts';
 import { ensureRefundSchema, processSessionCancellationRefunds } from './refunds.ts';
 import { ensureNewsSchema } from './news.ts';
 import { ensureTicketSchema } from './tickets.ts';
+import {
+  ensureScannerAccessTokenSchema,
+  issueScannerAccessTokenWithClient,
+  revokeScannerAccessTokens,
+} from './scanner-access.ts';
 
 export type EventStatus = 'draft' | 'pending_approval' | 'approved' | 'rejected' | 'cancelled';
 export type SessionStatus = 'draft' | 'pending_approval' | 'approved' | 'rejected' | 'cancelled';
@@ -207,6 +212,7 @@ export async function ensureEventSchema(pool: Pool): Promise<void> {
         ALTER TABLE event_scanners ADD COLUMN IF NOT EXISTS "boundAt" TIMESTAMPTZ;
       `);
       await ensureFeeSchema(pool);
+      await ensureScannerAccessTokenSchema(pool);
     } catch (err) {
       eventSchemaPromises.delete(pool);
       throw err;
@@ -725,6 +731,8 @@ export interface EventScannerItem {
   isBound?: boolean;
   boundDeviceId?: string | null;
   boundAt?: string | null;
+  hasActiveToken?: boolean;
+  tokenExpiresAt?: string | null;
 }
 
 export interface ScannerAssignedEvent {
@@ -859,10 +867,22 @@ export async function listScannersForEvent(
     isPrimary: boolean | null;
     boundDeviceId: string | null;
     boundAt: Date | null;
+    activeTokenExpiresAt: Date | null;
   }>(
     `SELECT es.id, es."scannerId", u.name, u.email, es."assignedAt",
             (ps."scannerId" IS NOT NULL) as "isPrimary",
-            es."boundDeviceId", es."boundAt"
+            es."boundDeviceId", es."boundAt",
+            (
+              SELECT sat."expiresAt"
+              FROM scanner_access_tokens sat
+              WHERE sat."eventId" = es."eventId"
+                AND sat."scannerId" = es."scannerId"
+                AND sat."usedAt" IS NULL
+                AND sat."revokedAt" IS NULL
+                AND sat."expiresAt" > now()
+              ORDER BY sat."createdAt" DESC
+              LIMIT 1
+            ) as "activeTokenExpiresAt"
      FROM event_scanners es
      JOIN auth_user u ON u.id = es."scannerId"
      LEFT JOIN event_primary_scanners ps ON ps."eventId" = es."eventId" AND ps."scannerId" = es."scannerId"
@@ -881,6 +901,12 @@ export async function listScannersForEvent(
     isBound: Boolean(r.boundDeviceId),
     boundDeviceId: r.boundDeviceId,
     boundAt: r.boundAt ? (r.boundAt instanceof Date ? r.boundAt.toISOString() : String(r.boundAt)) : null,
+    hasActiveToken: Boolean(r.activeTokenExpiresAt),
+    tokenExpiresAt: r.activeTokenExpiresAt
+      ? (r.activeTokenExpiresAt instanceof Date
+          ? r.activeTokenExpiresAt.toISOString()
+          : String(r.activeTokenExpiresAt))
+      : null,
   }));
 }
 
@@ -898,12 +924,31 @@ export async function removeScannerFromEvent(
     throw new Error('คุณไม่มีสิทธิ์จัดการทีมสแกนของงานนี้');
   }
 
-  const result = await pool.query(
-    'DELETE FROM event_scanners WHERE "eventId" = $1 AND "scannerId" = $2',
-    [eventId, scannerId],
-  );
+  return inTransaction(pool, async (client) => {
+    await revokeScannerAccessTokens(client, eventId, scannerId);
 
-  return (result.rowCount ?? 0) > 0;
+    // Revoke any scoped sessions for this scanner on this event
+    await client.query(
+      `DELETE FROM auth_session
+       WHERE token IN (
+         SELECT "sessionToken"
+         FROM scanner_session_scopes
+         WHERE "scannerId" = $1 AND "eventId" = $2
+       )`,
+      [scannerId, eventId],
+    );
+    await client.query(
+      'DELETE FROM scanner_session_scopes WHERE "scannerId" = $1 AND "eventId" = $2',
+      [scannerId, eventId],
+    );
+
+    const result = await client.query(
+      'DELETE FROM event_scanners WHERE "eventId" = $1 AND "scannerId" = $2',
+      [eventId, scannerId],
+    );
+
+    return (result.rowCount ?? 0) > 0;
+  });
 }
 
 export async function updateScannerName(
@@ -944,7 +989,7 @@ export async function resetScannerDeviceBinding(
   organizerId: string,
   eventId: string,
   scannerId: string,
-): Promise<{ success: boolean; message: string }> {
+): Promise<{ success: boolean; message: string; accessUrl: string; expiresAt: string }> {
   await ensureEventSchema(pool);
   const evRes = await pool.query<{ organizerId: string }>(
     'SELECT "organizerId" FROM events WHERE id = $1',
@@ -963,7 +1008,7 @@ export async function resetScannerDeviceBinding(
     throw new Error('ไม่พบทีมสแกนในงานนี้');
   }
 
-  await inTransaction(pool, async (client) => {
+  const issued = await inTransaction(pool, async (client) => {
     // 1. Clear bound device on event_scanners
     await client.query(
       `UPDATE event_scanners
@@ -972,16 +1017,29 @@ export async function resetScannerDeviceBinding(
       [eventId, scannerId],
     );
 
-    // 2. Invalidate all active sessions for this scanner
+    // 2. Invalidate all active sessions and event scopes for this scanner
     await client.query(
       `DELETE FROM auth_session WHERE "userId" = $1`,
       [scannerId],
     );
+    await client.query(
+      `DELETE FROM scanner_session_scopes WHERE "scannerId" = $1 AND "eventId" = $2`,
+      [scannerId, eventId],
+    );
+
+    // 3. Revoke prior tokens and issue a fresh single-use access token
+    return issueScannerAccessTokenWithClient(client, {
+      eventId,
+      scannerId,
+      createdBy: organizerId,
+    });
   });
 
   return {
     success: true,
-    message: 'รีเซ็ตอุปกรณ์เรียบร้อยแล้ว สามารถนำลิงก์ไปเปิดบนอุปกรณ์ใหม่ได้ทันที',
+    message: 'รีเซ็ตอุปกรณ์เรียบร้อยแล้ว พร้อมออกลิงก์ใหม่สำหรับอุปกรณ์ใหม่ (ลิงก์เดิมถูกเพิกถอนแล้ว)',
+    accessUrl: issued.accessUrl,
+    expiresAt: issued.expiresAt,
   };
 }
 
