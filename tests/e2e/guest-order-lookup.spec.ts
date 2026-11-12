@@ -176,5 +176,20 @@ test.describe('Guest Order Lookup flow (TASK-018, AC-21, AC-22, AC-62, AC-63, AC
     expect(await freshPage.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 
     await freshContext.close();
+
+    // 6. Test AC-63 / G-17: /orders/[id]/success?token=ordtok_... in fresh context gates behind OTP without email/phone inputs
+    const emailLinkContext = await createIsolatedBrowserContext(browser, testInfo);
+    const emailLinkPage = await emailLinkContext.newPage();
+    await emailLinkPage.goto(`/orders/${orderId}/success?tab=tickets&token=ordtok_unverified_sample`);
+
+    // Must NOT reveal tickets or ask for email/phone; enters OTP gate immediately
+    await expect(emailLinkPage.getByRole('heading', { name: 'ยืนยันรหัส OTP เพื่อเปิดดูบัตร' })).toBeVisible({ timeout: 15000 });
+    await expect(emailLinkPage.locator('#lookup-email')).toHaveCount(0);
+    await expect(emailLinkPage.locator('#lookup-phone')).toHaveCount(0);
+    await expect(emailLinkPage.locator('.ticket-card')).toHaveCount(0);
+    await expect(emailLinkPage.locator('.lookup-notice-error')).toContainText('ลิงก์เปิดดูบัตรไม่ถูกต้อง');
+    await expect(emailLinkPage.locator('body').innerText()).resolves.not.toMatch(/\p{Extended_Pictographic}/u);
+
+    await emailLinkContext.close();
   });
 });
