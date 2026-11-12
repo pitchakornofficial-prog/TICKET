@@ -485,4 +485,81 @@ describe('Reservation, concurrency, quota isolation and fee lock integration (TA
     expect(retrieved?.id).toBe(res.id);
     expect(retrieved?.status).toBe('reserved');
   });
+
+  it('enforces event approval status, salesStartTime, salesEndTime, and session endTime on reservation', async () => {
+    const ownerId = fixture.ids.owner;
+    const orgId = fixture.ids.organizer;
+    const salesStart = new Date('2026-11-22T10:00:00.000Z');
+    const salesEnd = new Date('2026-11-24T10:00:00.000Z');
+    const sessionStart = new Date('2026-11-25T18:00:00.000Z');
+    const sessionEnd = new Date('2026-11-25T22:00:00.000Z');
+
+    const event = await createEventDraft(
+      fixture.pool,
+      orgId,
+      {
+        title: 'คอนเสิร์ตตรวจช่วงเวลาขาย',
+        location: 'อิมแพ็ค อารีน่า',
+        salesStartTime: salesStart.toISOString(),
+        salesEndTime: salesEnd.toISOString(),
+      },
+      [
+        {
+          startTime: sessionStart.toISOString(),
+          endTime: sessionEnd.toISOString(),
+          ticketTypes: [{ name: 'GA', price: 1000, quota: 20 }],
+        },
+      ],
+    );
+    const sessionId = event.sessions[0].id;
+    const ttId = event.sessions[0].ticketTypes[0].id;
+    await approveSession(fixture.pool, sessionId, ownerId);
+
+    // 1. Before salesStartTime -> rejected
+    const beforeStart = new Date('2026-11-22T09:00:00.000Z');
+    const tokenBefore = await getVerifiedToken(`sales-before-${Date.now()}@ticket.invalid`, 'ผู้ซื้อก่อนเวลา', beforeStart);
+    await expect(
+      createReservation(fixture.pool, {
+        verifiedToken: tokenBefore,
+        eventId: event.id,
+        sessionId,
+        items: [{ ticketTypeId: ttId, quantity: 1 }],
+      }, beforeStart),
+    ).rejects.toThrow('ยังไม่ถึงเวลาเปิดจำหน่ายบัตร');
+
+    // 2. After salesEndTime -> rejected
+    const afterEnd = new Date('2026-11-24T11:00:00.000Z');
+    const tokenAfter = await getVerifiedToken(`sales-after-${Date.now()}@ticket.invalid`, 'ผู้ซื้อหลังปิดขาย', afterEnd);
+    await expect(
+      createReservation(fixture.pool, {
+        verifiedToken: tokenAfter,
+        eventId: event.id,
+        sessionId,
+        items: [{ ticketTypeId: ttId, quantity: 1 }],
+      }, afterEnd),
+    ).rejects.toThrow('หมดเวลาการจำหน่ายบัตรแล้ว');
+
+    // 3. Inside sales window -> succeeds
+    const duringSales = new Date('2026-11-23T12:00:00.000Z');
+    const tokenDuring = await getVerifiedToken(`sales-during-${Date.now()}@ticket.invalid`, 'ผู้ซื้อในเวลา', duringSales);
+    const okRes = await createReservation(fixture.pool, {
+      verifiedToken: tokenDuring,
+      eventId: event.id,
+      sessionId,
+      items: [{ ticketTypeId: ttId, quantity: 1 }],
+    }, duringSales);
+    expect(okRes.status).toBe('reserved');
+
+    // 4. Event reverted to draft while session remains approved -> rejected
+    await fixture.pool.query(`UPDATE events SET status = 'draft' WHERE id = $1`, [event.id]);
+    const tokenDraft = await getVerifiedToken(`sales-draft-${Date.now()}@ticket.invalid`, 'ผู้ซื้อหลังดึงกลับ', duringSales);
+    await expect(
+      createReservation(fixture.pool, {
+        verifiedToken: tokenDraft,
+        eventId: event.id,
+        sessionId,
+        items: [{ ticketTypeId: ttId, quantity: 1 }],
+      }, duringSales),
+    ).rejects.toThrow('คอนเสิร์ตนี้ยังไม่เปิดจำหน่าย');
+  });
 });

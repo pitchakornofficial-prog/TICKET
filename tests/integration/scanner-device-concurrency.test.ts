@@ -128,8 +128,12 @@ describe('Issue #9: Scanner Atomic Device Binding Concurrency Tests (D-104)', ()
     const sessionId = event.sessions[0].id;
     const ttId = event.sessions[0].ticketTypes[0].id;
 
-    // Approve session and set admission window to include current time
+    // Approve event & session and set admission window to include current time
     const now = new Date();
+    await fixture.pool.query(
+      `UPDATE events SET status = 'approved', "updatedAt" = now() WHERE id = $1`,
+      [event.id],
+    );
     await fixture.pool.query(
       `UPDATE event_sessions
        SET status = 'approved',
