@@ -1,5 +1,98 @@
 # Deployment — AWS Singapore
 
+## Production Release 2026-11-13 (ticket-production-web:17)
+
+User explicitly requested pre-deployment migration/backfill verification and production rollout of the latest optimized code.
+
+### 1. Pre-Deployment Schema Migration & Backfill Validation
+- Executed one-off operations task `arn:aws:ecs:ap-southeast-1:901708383730:task/ticket-production/1b6d0b5a2f144728950e0977639b0460` running `node scripts/migrate-production-schemas.ts` against production `DATABASE_URL_DIRECT`.
+- Validated:
+  1. Auth schema (`migrateAuth`): OK.
+  2. Fee schema (`ensureFeeSchema`): OK.
+  3. Queue schema (`ensureQueueSchema`): OK.
+  4. Guest OTP schema & atomic stored functions (`request_guest_otp_atomic_v1`, `verify_guest_otp_atomic_v1`): OK.
+  5. Reservation schema, triggers, and atomic function (`reserve_tickets_atomic_v2`): OK.
+  6. Paid buckets backfill (`ticket_type_paid_buckets`): 100% matched expected orders (2 ticket types with paid orders verified, 0 mismatches).
+- Task completed with exit code 0.
+
+### 2. CloudFormation Rollout & Verification
+- Deployed via CloudFormation change set `opt-release-20261113`, updating parameters:
+  - `WebImage`: `901708383730.dkr.ecr.ap-southeast-1.amazonaws.com/ticket-workload-test@sha256:3a0526b18db70a0e8bb2a0b4705ecfef1d234f86a99ffcf70d1c5fbc152fc9a0`
+  - `OperationsImage`: `901708383730.dkr.ecr.ap-southeast-1.amazonaws.com/ticket-workload-test@sha256:d57f8a121a952370303023896fdb12275a220c967bebbcd0acc1ba956a6adfdb`
+- CloudFormation stack transitioned to `UPDATE_COMPLETE`.
+- ECS service updated to primary revision `ticket-production-web:17` (`5beae10ef8d141939ec6a7df3268406c`, 1/1 running).
+- ALB target `172.31.28.135` is `healthy`; old target `172.31.21.134` drained and deregistered.
+- Smoke verification: `https://ticket.phatysd.me/api/health`, `/`, and `/news` all returned HTTP 200.
+
+---
+
+## Isolated 1 vCPU / 2 GiB Capacity Benchmark 2026-11-13
+
+User requested benchmark evaluation of `1 vCPU / 2 GiB` tasks on an isolated environment with doubles without affecting real production data or sales.
+
+### 1. Test Architecture & Environment
+- Cluster: `ticket-workload-test` (isolated private SG `sg-0ad89d142ed418441`, no public ingress).
+- Dedicated test database: `capacity_20261112_3796a288` on staging Neon endpoint.
+- App Fleet: 4 tasks × **1 vCPU (1024) / 2 GiB (2048) / DATABASE_POOL_MAX=25** running `ticket-capacity-web-1vcpu:1`.
+- Driver: `ticket-capacity-driver-1vcpu:1` (1 vCPU / 2 GiB) with buyer affinity for doubles.
+
+### 2. Benchmark Results
+
+#### Phase 1: Sweep Benchmark (3 orders / worker)
+| Concurrency | Peak Active | Orders | Duration | Orders/s | Journey p50 | Journey p95 | Criterion |
+|---|---|---|---|---|---|---|---|
+| 80 | 80 | 240 | 4.07 s | 59.01 | 1,168 ms | 2,209 ms | pass |
+| 120 | 120 | 360 | 3.37 s | 106.71 | 936 ms | 2,063 ms | pass |
+| 160 | 160 | 480 | 4.17 s | 114.98 | 1,294 ms | 2,293 ms | pass |
+| 200 | 200 | 600 | 4.54 s | **132.23** | 1,280 ms | 2,493 ms | pass |
+| 240 | 240 | 720 | 5.83 s | 123.49 | 1,560 ms | 2,348 ms | pass |
+| 280 | 280 | 840 | 6.83 s | 123.00 | 1,848 ms | 2,875 ms | pass |
+| 320 | 320 | 960 | 7.81 s | 122.99 | 1,985 ms | 3,388 ms | pass |
+| 360 | 360 | 1,080 | 9.01 s | 119.85 | 2,458 ms | 4,147 ms | pass |
+| **400** | **400** | 1,200 | 11.59 s | 103.55 | 2,752 ms | **4,896 ms** | **pass** |
+
+- **Sweep Ceiling**: Passed up to **400 concurrent buyers** within p95 ≤ 5 s (vs 330 on 0.5 vCPU).
+
+#### Phase 2: Sustained Benchmark (30 orders / worker across 4 tasks)
+| Concurrency | Orders | Duration | Orders/s | Journey p50 | Journey p95 | Criterion |
+|---|---|---|---|---|---|---|
+| 120 | 3,600 | 28.19 s | **127.72** | 880 ms | **1,501 ms** | pass |
+| 160 | 4,800 | 55.73 s | 86.13 | 1,750 ms | **3,697 ms** | pass |
+| 200 | 6,000 | 69.37 s | 86.50 | 1,935 ms | **4,489 ms** | pass |
+| **240** | **7,200** | 64.39 s | **111.82** | 1,867 ms | **4,117 ms** | **pass** |
+
+- **Confirmed Sustained Passing Concurrency**: **240 sustained concurrent buyers** across 4 tasks (7,200 orders at 111.82 orders/s, p95 4.117 s) — **2× the sustained capacity of the baseline 0.5 vCPU fleet (120 buyers)**.
+- At 160 sustained, p95 dropped from 5.7–6.3 s (on 0.5 vCPU with CFS quota saturation) down to **3.697 s** on 1 vCPU with zero throttling issues.
+
+### 3. Data Integrity Audit & Shutdown
+- Read-only transaction (`BEGIN READ ONLY`) verified database `capacity_20261112_3796a288`:
+  - **Events**: 15
+  - **Orders**: 28,082 (100% paid)
+  - **Tickets**: 28,082 (100% issued)
+  - **Distinct Ticket Codes**: 28,082 (100% unique)
+  - **Distinct QR Payloads**: 28,082 (100% unique)
+  - **Orphan tickets / Unpaid issued tickets / Live charges / Oversold ticket types**: **0**.
+- **Shutdown**: All 4 web test tasks and driver tasks were stopped. Verified 0 running tasks on `ticket-workload-test`.
+
+---
+
+## Staging shutdown 2026-11-13 (Asia/Bangkok)
+
+At the user's explicit request, `ticket-workload-test/ticket-workload-test`
+was scaled to **desired/running/pending 0/0/0**. Its Application Auto Scaling
+minimum is now 0 (maximum remains 4), with dynamic scale-in, dynamic scale-out
+and scheduled scaling all suspended so scaling policies cannot restart it.
+No service, stack, load balancer, listener, certificate, network, ECR repository,
+database or shared production resource was deleted.
+
+Production remains `ticket-production-web:16`, desired/running 1/1;
+`https://ticket.phatysd.me/api/health` returned HTTP 200 after shutdown.
+Earlier notes saying staging remains running are historical and superseded here.
+This is an intentional operational override via ECS/Application Auto Scaling;
+the staging CloudFormation template was not changed. Before a future staging
+stack update, preserve this shutdown state rather than reapplying older
+desired/minimum capacity 1. Resume staging only when explicitly requested.
+
 ## 4-Task Bottleneck Analysis and Capacity Optimization 2026-11-12
 
 User requested root-cause diagnosis of why the 4-task fleet was capped at 120 concurrent

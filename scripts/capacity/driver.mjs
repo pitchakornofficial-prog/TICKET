@@ -23,12 +23,15 @@ async function call(path, { data, cookie, ip = '10.254.0.1', token, allowError =
   });
   const body = await response.json();
   const key = path.split('?')[0].replace(/ORD-[^/?]+/g, ':order').replace(/\/events\/[^/?]+/g, '/events/:event');
-  if (stats) (stats[key] ||= []).push(time() - start);
+  if (stats) {
+    if (!stats[key]) stats[key] = [];
+    stats[key].push(time() - start);
+  }
   if (!response.ok && !allowError) throw new Error(`HTTP ${response.status} at ${key}: ${body.code || body.message || ''}`);
   return { body, status: response.status, cookie: response.headers.getSetCookie().map(v => v.split(';')[0]).join('; ') };
 }
 for (let i = 0; i < 120; i++) {
-  try { if ((await fetch(base + '/api/health', { signal: AbortSignal.timeout(2000) })).ok) break; } catch {}
+  try { if ((await fetch(`${base}/api/health`, { signal: AbortSignal.timeout(2000) })).ok) break; } catch {}
   if (i === 119) throw new Error('Capacity app did not become healthy');
   await wait(1000);
 }
@@ -78,7 +81,7 @@ async function buyer(event, { stats, expectSoldOut = false } = {}) {
   return { orderId, code: issued.tickets[0].ticketCode, qr: issued.tickets[0].qrPayload, ms: time() - start };
 }
 const warmup = await makeEvent(1, 'warmup'); await buyer(warmup); await buyer(warmup, { expectSoldOut: true });
-console.log('CAPACITY_SMOKE ' + JSON.stringify({ paid: 1, soldOutRejected: true, providers: 'doubles' }));
+console.log(`CAPACITY_SMOKE ${JSON.stringify({ paid: 1, soldOutRejected: true, providers: 'doubles' })}`);
 async function stage(concurrency) {
   const count = Math.max(100, concurrency * 3), event = await makeEvent(count, `c${concurrency}-${summaries.length}`);
   const stats = {}, successes = [], failures = [];
@@ -101,7 +104,7 @@ async function stage(concurrency) {
   const result = { concurrency, peak_active_journeys: peak, planned_orders: count, successful_orders: successes.length, failures,
     elapsed_s: Number(elapsed.toFixed(2)), orders_per_s: Number((successes.length / elapsed).toFixed(2)), journey,
     uniqueCodes, uniqueQrs, soldOutRejected, passed, endpoints: Object.fromEntries(Object.entries(stats).map(([k, v]) => [k.split('?')[0], quantiles(v)])) };
-  summaries.push(result); console.log('CAPACITY_STAGE ' + JSON.stringify(result)); return passed;
+  summaries.push(result); console.log(`CAPACITY_STAGE ${JSON.stringify(result)}`); return passed;
 }
 let lastPass = 0, firstFail = null;
 for (const concurrency of [10, 20, 40, 80, 120, 160, 200, 300, 400]) {
@@ -117,7 +120,7 @@ if (firstFail !== null && lastPass > 0) {
   }
   lastPass = low; firstFail = high;
 }
-console.log('CAPACITY_RESULT ' + JSON.stringify({ providers: 'doubles', environment: 'isolated AWS Fargate + staging Neon, fresh database',
+console.log(`CAPACITY_RESULT ${JSON.stringify({ providers: 'doubles', environment: 'isolated AWS Fargate + staging Neon, fresh database',
   slo: 'p95 complete server journey <=5000 ms and zero unexpected errors; no human OTP/banking delay',
   lastPassingConcurrency: lastPass, firstFailingConcurrency: firstFail, reachedConfiguredCeiling: firstFail === null,
-  stages: summaries.map(({ endpoints, ...r }) => r) }));
+  stages: summaries.map(({ endpoints, ...r }) => r) })}`);

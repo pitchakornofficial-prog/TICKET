@@ -14,6 +14,7 @@ for (const [path, expected] of [
 // Do not put synthetic OTPs in task logs.
 const otpPath = 'src/server/guest-otp.ts';
 writeFileSync(otpPath, readFileSync(otpPath, 'utf8').replace(
+  // biome-ignore lint/suspicious/noTemplateCurlyInString: literal pattern match
   "console.log(`[LOCAL DEV OTP] Email: ${email} | Code: ${otpCode} | Purpose: ${purpose}`);",
   '// Synthetic OTP returned only to the isolated driver, never logged.',
 ));
