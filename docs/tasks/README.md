@@ -1,10 +1,14 @@
 # SPEC-001 — Task plan
 
-- Source: [SPEC-001 ready](../specs/SPEC-001-concert-ticket-lifecycle.md), G-01–G-53, 124 active ACs; 125 unique IDs โดย AC-122 historical superseded
+- Source: [SPEC-001 ready](../specs/SPEC-001-concert-ticket-lifecycle.md), G-01–G-53, 127 active ACs; 128 unique IDs โดย AC-122 historical superseded
 - Planned at: 2026-10-20 (Asia/Bangkok); updated 2026-10-22 (change-scope เพิ่ม TASK-038 และ TASK-039); updated 2026-10-23 (change-scope เพิ่ม TASK-040)
 - Result: สร้าง TASK-001–TASK-037 เดิม 37 งาน และเพิ่ม TASK-038–TASK-040 รวม 40 งาน; เพิ่ม TASK-041–044 สำหรับ Stripe วันที่ 2026-10-30 รวม 44 งาน
 - Initial state: ทุก task เริ่ม `todo` และ Todo ทุกข้อยังไม่ตรวจสำเร็จ; สถานะ/evidence ปัจจุบันดูในไฟล์ task โดยตรง
 - Ownership: ดัชนีนี้เป็นแผนและ acceptance mapping ไม่ใช่ implementation หรือ test/code-coverage report
+
+## SES follow-up 2026-11-11
+
+[ADR-0003](../adr/0003-external-integrations.md#email-provider-change--2026-11-11) เปลี่ยน Resend เป็น SES; [TASK-045](TASK-045-ses-email-delivery.md) ครอบคลุม AC-126–128 และตรวจ AC-20/52/55/57/58/75 ที่เกี่ยวข้องซ้ำ. TASK-003/004/011/017/018 และผลเดิมคงเป็นประวัติ ไม่ใช่หลักฐาน SES; source ปัจจุบันยังใช้ Resend และไม่มี evidence production SES. ไม่มีหลักฐาน migration ข้อมูลหรือ provider history ที่ต้องย้าย; ตรวจผลค้างจริงก่อน rollout.
 
 ## Stripe follow-up (2026-10-30)
 
@@ -83,6 +87,8 @@ TASK-037 เป็น late cross-instance functional contract ตาม AC-105; 
 | [TASK-042](TASK-042-stripe-promptpay-qr.md) | ผู้ซื้อแสดง Stripe QR ในหน้าเดิมโดยไม่สร้างรายการซ้ำ | [TASK-041](TASK-041-stripe-promptpay-contract.md) | เต็ม: AC-118; ร่วม: AC-120, AC-123; re-verify AC-15/26/70 และ guards AC-12/13 |
 | [TASK-043](TASK-043-stripe-verified-ticket-issuance.md) | ผล Stripe ที่ตรวจแล้วออกบัตรครั้งเดียวและแยก test/live | [TASK-042](TASK-042-stripe-promptpay-qr.md) | เต็ม: AC-119; ร่วม: AC-120, AC-123, AC-124, AC-125; re-verify AC-16/17/18 |
 | [TASK-044](TASK-044-stripe-expiry-cancellation-recovery.md) | หมดเวลา/ยกเลิกและ late-payment recovery ตาม D/C/T | [TASK-043](TASK-043-stripe-verified-ticket-issuance.md) | เต็ม: AC-121; ร่วม: AC-120, AC-124, AC-125; re-verify AC-71–74/112–114; regression AC-37/84/93 |
+
+| [TASK-045](TASK-045-ses-email-delivery.md) | ส่งอีเมลธุรกรรมผ่าน SES และคง local capture | None | AC-126–128; re-verify AC-20/52/55/57/58/75 |
 
 ## Acceptance coverage
 
@@ -220,6 +226,10 @@ TASK-037 เป็น late cross-instance functional contract ตาม AC-105; 
 | AC-124 | [TASK-043](TASK-043-stripe-verified-ticket-issuance.md), [TASK-044](TASK-044-stripe-expiry-cancellation-recovery.md) | ร่วมทั้งหมด: TASK-043 ตรวจ matching success Event/time และ timely issue; TASK-044 ใช้เวลาเดียวกันกับ release/cancel/late recovery/refund; G-53/P5 T=D/T=C/fractional cutoffs ไม่มี rounding/grace |
 | AC-125 | [TASK-043](TASK-043-stripe-verified-ticket-issuance.md), [TASK-044](TASK-044-stripe-expiry-cancellation-recovery.md) | ร่วมทั้งหมด: TASK-043 missing/invalid/conflicting Event guard ใน active path; TASK-044 unknown→verified Event recovery หลัง release/cancel; intent-only success ไม่ fallback เป็นเวลาอื่น |
 
+| AC-126 | [TASK-045](TASK-045-ses-email-delivery.md) | SES ทุกประเภทอีเมล; ผลเก่าไม่รับรอง SES |
+| AC-127 | [TASK-045](TASK-045-ses-email-delivery.md) | failure/recovery และ local/production isolation |
+| AC-128 | [TASK-045](TASK-045-ses-email-delivery.md) | readiness checklist; หลักฐาน production จริงเป็น gate ก่อนเปิดใช้ |
+
 ## Dependency order and parallel work
 
 ตาราง wave เดิมเป็นประวัติ TASK-001–040 ที่ done แล้ว ไม่ใช่ลำดับงานใหม่; แผน Stripe อยู่ถัดจากตาราง
@@ -263,6 +273,10 @@ TASK-037 เป็น late cross-instance functional contract ตาม AC-105; 
 
 ## First runnable task
 
+[TASK-045](TASK-045-ses-email-delivery.md) ไม่มี upstream และเริ่ม local implementation ได้; SES production readiness เป็น gate ก่อนเปิดใช้จริง ไม่บล็อก local double.
+
+### Historical Stripe planning note
+
 [TASK-041](TASK-041-stripe-promptpay-contract.md) ไม่มี upstream; มี research/probe evidence และสถานะ blocked ตามไฟล์ task. G-53/P5 ปลด actual-bank-time decision blocker แล้ว แต่ยังต้องทำ probe/review ที่เหลือตาม exit condition ใหม่. ขั้นถัดไปคือ `$implement-task` TASK-041 ต่อจากหลักฐานเดิม ไม่เปิด TASK-042 ก่อน TASK-041 done
 หากจำเป็นต้องใช้ test account/access แล้วไม่พร้อม ให้ระบุ external blocker จริงและวิธีปลดใน task นั้น;
 Live/PromptPay approval ไม่บล็อกการเริ่ม research/local แต่ยังเป็น production gate ตาม NQ-05
@@ -284,7 +298,7 @@ Merchant/PromptPay approval, verified email domain, production R2 และ veri
 | NQ-02 tokens/icon set/browser baseline | ใช้ constraints เดิมทุก UI task; TASK-001 วาง shell และ TASK-036 ทวนทุกหน้าจริง ไม่เปิด design discovery ซ้ำ |
 | NQ-03 runtime/PM/ORM/auth/runners/commands | TASK-001 สร้าง toolchain/runners/คำสั่งจริง TASK-002 เลือก auth/bootstrap ภายใน ADR; ทุก task ตรวจ command ใหม่ก่อนรัน |
 | NQ-04 AWS production readiness | Baseline ยืนยันใน ADR-0002 ฉบับ 2026-10-30 แล้ว; ส่วนงบ/estimate/โหลด/rollout/recovery ที่ยังเปิดอยู่นอกงาน local ต้องปิดก่อนสร้างงาน production/deployment/scaling จริง |
-| NQ-05 provider integration/readiness | Stripe follow-up: TASK-041 เป็นเจ้าของ success-Event-time/QR/cancel contract proof ตาม G-53/P5 (actual-bank-time proof superseded); TASK-042/043/044 ส่งมอบ boundary ที่ตรวจแล้ว ถ้า matching Event/contract ยังตรวจไม่ได้ต้องบล็อกพร้อมเหตุ ไม่ reopen TASK-014 done; Live approval ยังไม่ยืนยันและไม่ใช้ test pass แทน ส่วน email/R2 อ้างงานเดิม |
+| NQ-05 provider integration/readiness | Stripe follow-up: TASK-041 เป็นเจ้าของ success-Event-time/QR/cancel contract proof ตาม G-53/P5 (actual-bank-time proof superseded); TASK-042/043/044 ส่งมอบ boundary ที่ตรวจแล้ว ถ้า matching Event/contract ยังตรวจไม่ได้ต้องบล็อกพร้อมเหตุ ไม่ reopen TASK-014 done; Live approval ยังไม่ยืนยันและไม่ใช้ test pass แทน ส่วน email ใช้ TASK-045 และ production SES readiness; R2 อ้างงานเดิม |
 | NQ-06 internal session/retry/local retention/operational steps | TASK-011/018/019/032–035 เลือก/บันทึกภายในขอบเขตสเปก หากต้องเปลี่ยน product/สิทธิ์/ยอดเงินให้กลับ workflow ที่เป็นเจ้าของ |
 
 ไม่มี user-action blocker ที่ยืนยันว่าขวางการเริ่ม research ใน TASK-041 ขณะวางแผน; dependencies ของ task อื่นอยู่ใน Blocked by ของแต่ละไฟล์

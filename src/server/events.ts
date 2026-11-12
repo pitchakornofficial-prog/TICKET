@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
 import type { Pool } from 'pg';
 import { hashPassword, verifyPassword } from 'better-auth/crypto';
 import { inTransaction } from './database.ts';
@@ -641,6 +641,7 @@ export async function getPublicEventWithApprovedSessions(pool: Pool, eventId: st
     await ensureEventSchema(pool);
     const evRes = await pool.query(
       `SELECT e.id, e.title, e.description, e.location, e."posterUrl", e."ticketTemplateUrl", e."limitPerOrder", e.status,
+              e."salesStartTime", e."salesEndTime",
               u.name as "organizerName", u.email as "organizerEmail"
        FROM events e
        LEFT JOIN auth_user u ON e."organizerId" = u.id
@@ -803,7 +804,7 @@ export async function addScannerToEvent(
         targetName = existing.name;
       } else {
         targetScannerId = randomUUID();
-        const pwd = data.password || 'Scanner-Default-Password!2026';
+        const pwd = data.password || `Scanner!${randomBytes(16).toString('hex')}`;
         if (pwd.length < 15) throw new Error('รหัสผ่านต้องมีความยาวอย่างน้อย 15 ตัวอักษร');
         const hashedPassword = await hashPassword(pwd);
 
@@ -1205,7 +1206,7 @@ export async function submitSessionAmendment(
         const currentHeld = heldRes.rows[0]?.heldQuota ? Number(heldRes.rows[0].heldQuota) : 0;
         if (item.quota < currentHeld) {
           throw new Error(
-            `โควตาใหม่ (${item.quota}) สำหรับประเภทบัตร "${item.name}" น้อยกว่าจำนวนสิทธิ์ที่จำหน่ายหรือกันไว้แล้ว (${currentHeld} ใบ) ไม่สามารถลดโควตาต่ำกว่านี้ได้ (AC-109)`,
+            `โควตาใหม่ (${item.quota}) สำหรับประเภทบัตร "${item.name}" น้อยกว่าจำนวนสิทธิ์ที่จำหน่ายหรือกันไว้แล้ว (${currentHeld} ใบ) ไม่สามารถลดโควตาต่ำกว่านี้ได้`,
           );
         }
       }
@@ -1515,7 +1516,7 @@ export async function approveSessionAmendment(
         const currentHeld = heldRes.rows[0]?.heldQuota ? Number(heldRes.rows[0].heldQuota) : 0;
         if (item.quota < currentHeld) {
           throw new Error(
-            `โควตาใหม่ (${item.quota}) สำหรับประเภทบัตร "${item.name}" น้อยกว่าจำนวนสิทธิ์ที่จำหน่ายหรือกันไว้แล้ว (${currentHeld} ใบ) ไม่สามารถลดโควตาได้ (AC-109)`,
+            `โควตาใหม่ (${item.quota}) สำหรับประเภทบัตร "${item.name}" น้อยกว่าจำนวนสิทธิ์ที่จำหน่ายหรือกันไว้แล้ว (${currentHeld} ใบ) ไม่สามารถลดโควตาได้`,
           );
         }
       }
@@ -1621,7 +1622,7 @@ export async function approveSessionAmendment(
 
     return {
       success: true,
-      message: 'อนุมัติการแก้ไขรอบการแสดงและราคาสำเร็จ ฉบับใหม่มีผลกับการซื้อรอบใหม่ทันที (AC-67, AC-68)',
+      message: 'อนุมัติการแก้ไขรอบการแสดงและราคาสำเร็จ ฉบับใหม่มีผลกับการซื้อรอบใหม่ทันที',
     };
   });
 }
@@ -1649,7 +1650,7 @@ export async function configureSpecialRefundWindow(
     // 1. Role check: Owner only
     const userRes = await client.query('SELECT role FROM auth_user WHERE id = $1', [input.ownerId]);
     if (userRes.rowCount === 0 || userRes.rows[0].role !== 'owner') {
-      throw new Error('ไม่อนุญาต: เฉพาะเจ้าของเว็บ (Owner) เท่านั้นที่สามารถกำหนดช่วงเวลาขอคืนเงินพิเศษได้ (AC-38)');
+      throw new Error('ไม่อนุญาต: เฉพาะเจ้าของเว็บ (Owner) เท่านั้นที่สามารถกำหนดช่วงเวลาขอคืนเงินพิเศษได้');
     }
 
     // 2. Validate window dates
@@ -1684,7 +1685,7 @@ export async function configureSpecialRefundWindow(
 
     return {
       success: true,
-      message: 'กำหนดช่วงเวลาขอคืนเงินพิเศษเรียบร้อยแล้ว (Special Refund Window — AC-38)',
+      message: 'กำหนดช่วงเวลาขอคืนเงินพิเศษเรียบร้อยแล้ว (Special Refund Window)',
       specialRefundWindowStart: wStart ? wStart.toISOString() : null,
       specialRefundWindowEnd: wEnd ? wEnd.toISOString() : null,
     };
@@ -1828,7 +1829,7 @@ export async function submitSessionCancellation(
       [session.id],
     );
     if (pendingRes.rowCount && pendingRes.rowCount > 0) {
-      throw new Error('มีคำขอยกเลิกรอบการแสดงนี้รอการพิจารณาอยู่แล้ว (AC-108)');
+      throw new Error('มีคำขอยกเลิกรอบการแสดงนี้รอการพิจารณาอยู่แล้ว');
     }
 
     // 3. Create cancellation request
@@ -1843,7 +1844,7 @@ export async function submitSessionCancellation(
     return {
       success: true,
       cancellationId,
-      message: 'ยื่นคำขอยกเลิกรอบการแสดงเรียบร้อยแล้ว รอการอนุมัติจากผู้ดูแลระบบ (AC-108)',
+      message: 'ยื่นคำขอยกเลิกรอบการแสดงเรียบร้อยแล้ว รอการอนุมัติจากผู้ดูแลระบบ',
     };
   });
 }
@@ -2085,7 +2086,19 @@ export async function approveSessionCancellation(
  * Idempotently seeds the UBU Freshy Music Fest 2026 event, organizer user,
  * session, ticket type, and custom fee model (D-181).
  */
-export async function seedUbuFreshyFest(pool: Pool): Promise<void> {
+export async function seedUbuFreshyFest(
+  pool: Pool,
+  options?: { organizerPassword?: string },
+): Promise<void> {
+  const configuredPassword =
+    options?.organizerPassword?.trim() || process.env.SEED_UBU_ORGANIZER_PASSWORD?.trim();
+  if (configuredPassword && (configuredPassword.length < 15 || configuredPassword.length > 128)) {
+    throw new Error('SEED_UBU_ORGANIZER_PASSWORD ต้องมีความยาว 15-128 ตัวอักษร');
+  }
+  if (!configuredPassword && process.env.NODE_ENV === 'production') {
+    throw new Error('ต้องระบุ SEED_UBU_ORGANIZER_PASSWORD เมื่อ seed บัญชีผู้จัดงานใน production');
+  }
+
   try {
     const organizerId = 'org-freshy-fest-ubu';
     const eventId = 'event-ubu-freshy-2026';
@@ -2101,7 +2114,8 @@ export async function seedUbuFreshyFest(pool: Pool): Promise<void> {
     );
     const accCheck = await pool.query('SELECT id FROM auth_account WHERE "userId" = $1', [organizerId]);
     if (accCheck.rowCount === 0) {
-      const hashedPassword = await hashPassword('Password123!');
+      const initialPassword = configuredPassword || `UbuOrg!${randomBytes(18).toString('base64url')}`;
+      const hashedPassword = await hashPassword(initialPassword);
       await pool.query(
         'INSERT INTO auth_account (id, "accountId", "providerId", "userId", password, "createdAt", "updatedAt") VALUES ($1, $2, $3, $4, $5, now(), now())',
         ['acc-freshy-fest-ubu', organizerId, 'credential', organizerId, hashedPassword],

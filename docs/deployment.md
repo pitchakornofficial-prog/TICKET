@@ -8,7 +8,7 @@ The production owner was bootstrapped from SSM; the bootstrap password parameter
 
 Event fee settings currently allow one organizer rate per event and default to zero. Do not open sales for an event requiring different organizer rates per ticket category until the feature and financial reports are updated and verified. Production currently contains no concert configuration from staging.
 
-เป้าหมายตาม [ADR-0002](adr/0002-local-first-and-aws-production.md): ECS Fargate ARM64 + ALB, private RDS PostgreSQL, Cloudflare, SSM SecureString, Resend และ R2; Stripe ตาม [ADR-0003](adr/0003-external-integrations.md).
+เป้าหมายตาม [ADR-0002](adr/0002-local-first-and-aws-production.md): ECS Fargate ARM64 + ALB, private RDS PostgreSQL, Cloudflare, SSM SecureString, Amazon SES และ R2; Stripe ตาม [ADR-0003](adr/0003-external-integrations.md).
 ชุดนี้เตรียม source/container และคำสั่งปฏิบัติการ ไม่ได้สร้าง AWS resources หรือรับรอง capacity.
 
 ## Build artifact
@@ -25,7 +25,7 @@ Operations image มี source/dependencies สำหรับ explicit migratio
 
 ## Configuration
 
-ชื่อค่าทั้งหมดอยู่ใน `deployment.env.example`. ใส่ค่าจริงผ่าน ECS secrets จาก SSM SecureString โดยไม่ commit หรือส่งใน chat. ตั้ง HTTPS origin จริงใน `BETTER_AUTH_URL`, random `BETTER_AUTH_SECRET` อย่างน้อย 32 ตัวอักษร, Stripe Live keys พร้อม signing secret ของ `/api/webhooks/stripe`, Resend key และ `EMAIL_FROM` ที่ verified แล้ว, R2 bucket/credentials/endpoint. คง auth secret เดิมเมื่อ rollout เพื่อรักษา sessions.
+ชื่อค่าทั้งหมดอยู่ใน `deployment.env.example`. ใส่ค่าจริงผ่าน ECS secrets จาก SSM SecureString โดยไม่ commit หรือส่งใน chat. ตั้ง HTTPS origin จริงใน `BETTER_AUTH_URL`, random `BETTER_AUTH_SECRET` อย่างน้อย 32 ตัวอักษร, Stripe Live keys พร้อม signing secret ของ `/api/webhooks/stripe`, SES credentials (`SES_ACCESS_KEY_ID`, `SES_SECRET_ACCESS_KEY`, `SES_REGION`) และ `EMAIL_FROM` ที่ verified แล้ว, R2 bucket/credentials/endpoint. คง auth secret เดิมเมื่อ rollout เพื่อรักษา sessions.
 
 ตรวจค่าจาก environment ของ operations task:
 
@@ -34,7 +34,7 @@ node scripts/check-production-env.mjs
 ```
 
 Web image ตรวจค่าชุดเดียวกันก่อน start และปฏิเสธ configuration ที่ขาด. ตัวตรวจยืนยันรูปแบบเท่านั้น ไม่พิสูจน์ key/account/domain หรือการเข้าถึง provider. สำหรับ local runtime smoke เท่านั้น สามารถเปิด standalone โดยตรง; ห้ามใช้วิธีข้าม gate นี้บน production.
-`EMAIL_FROM` แทน sender ของทุก Resend message; production จะไม่ใช้ local capture เมื่อ key หาย.
+`EMAIL_FROM` แทน sender ของทุก SES message; production จะไม่ใช้ local capture เมื่อ credentials หาย.
 
 ## Rollout และข้อมูล
 
@@ -87,5 +87,15 @@ Candidate คือ working tree ปัจจุบันหลังปรั�
 Release verdict: **blocked** สำหรับ production deployment. การทดสอบระดับ local-first verification ทั้งหมด (`typecheck`, `lint`, `test:unit`, `test:integration`, `build`, `test:e2e` 120/120) ผ่านครบถ้วน 100% แล้ว แต่ยังติด prerequisites ก่อน rollout ขึ้น production ตาม ADR-0002:
 1. การ build และ smoke test ด้วย Docker ARM64 บนเครื่อง build/CI ที่มี Docker CLI
 2. การปิดค่า budget/SLO targets ตาม ADR-0002/NQ-04
-3. การ provision AWS infrastructure (ECS, private RDS, ALB, SSM SecureString) และ credentials จริง (Cloudflare / Stripe Live / Resend / R2)
+3. การ provision AWS infrastructure (ECS, private RDS, ALB, SSM SecureString) และ credentials จริง (Cloudflare / Stripe Live / SES / R2)
 4. การทดสอบ multi-instance capacity/load, failover, และ backup/restore policy ก่อนรับ production traffic จริง
+
+## Amazon SES production readiness (AC-128)
+
+ก่อนเปิดใช้งานระบบในสภาพแวดล้อม Production จะต้องเตรียมความพร้อมและตรวจสอบหลักฐานจริงของ Amazon SES ดังนี้:
+
+1. **Verified Sending Identity**: ตรวจสอบการ verify โดเมนส่งอีเมล (DKIM / SPF / DMARC) ใน Amazon SES Console ใน Region ที่ใช้งานจริง (เช่น `ap-southeast-1` Singapore) โดยตั้งค่า DNS CNAME ของ Easy DKIM บน DNS Provider (เช่น Cloudflare) ให้ขึ้นสถานะ `Verified`.
+2. **Production Access (Move Out of Sandbox)**: บัญชี AWS เริ่มต้นจะอยู่ใน SES Sandbox ซึ่งส่งได้เฉพาะอีเมลผู้รับที่ verify แล้วเท่านั้น ต้องยื่นคำร้อง Request Production Access ผ่าน SES Console พร้อมระบุประเภทการใช้งาน (Transactional emails สำหรับ OTP, ซื้อบัตรคอนเสิร์ต, คำเชิญผู้จัดงาน และรีเซ็ตรหัสผ่าน) และกรณีจัดการ Bounce/Complaint.
+3. **Sending Quotas & Rate Limits**: ยืนยันว่า 24-hour sending quota และ Maximum Send Rate (emails/second) ใน Region ที่ใช้งานเพียงพอต่อ Traffic ช่วงเปิดขายบัตรคอนเสิร์ต (Peak Volume) ซึ่งต้องนับรวมทั้ง OTP verification, ticket issuance emails, และ delivery retries.
+4. **Bounce & Complaint Handling**: กำหนดค่า Amazon SNS หรือ SES Event Destination เพื่อรับการแจ้งเตือน Bounce และ Complaint พร้อมทั้งตรวจสอบว่าอัตรา Bounce < 5% และ Complaint < 0.1% ตามมาตรฐาน AWS SES เพื่อป้องกันการถูกระงับบัญชี (Account Suspension).
+5. **Local/Double isolation**: ผลการทดสอบผ่าน local transport / capture double เป็นการทดสอบ contract ระดับ local เท่านั้น ไม่ถือเป็นหลักฐานว่า SES Production พร้อมใช้งานหรืออีเมลถูกส่งถึง inbox ผู้รับจริง.

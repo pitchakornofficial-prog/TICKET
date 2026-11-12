@@ -155,7 +155,7 @@ test.describe('Reschedule session & special refund window (TASK-025, AC-38, AC-1
     await dtInputs.nth(0).fill('2026-10-01T00:00');
     await dtInputs.nth(1).fill('2026-12-31T23:59');
 
-    const approveBtn = amendmentCard.getByRole('button', { name: 'อนุมัติการแก้ไข (AC-67)' });
+    const approveBtn = amendmentCard.getByRole('button', { name: 'อนุมัติการแก้ไขราคา' });
     await approveBtn.scrollIntoViewIfNeeded();
     await approveBtn.dispatchEvent('click');
     await expect(ownerPage.getByText(/อนุมัติการแก้ไขรอบของ/)).toBeVisible({ timeout: 10000 });
@@ -196,7 +196,6 @@ test.describe('Reschedule session & special refund window (TASK-025, AC-38, AC-1
     // Verify Special Refund Window notice is shown (AC-38)
     await expect(buyerPage.getByText(/ช่วงเวลาขอคืนเงินพิเศษ/)).toBeVisible();
     await expect(buyerPage.getByText(/Special Refund Window/)).toBeVisible();
-    await expect(buyerPage.getByText(/AC-38/)).toBeVisible();
 
     // Check ticket checkbox
     const checkboxes = buyerPage.locator('input[name="refund-ticket-checkbox"]');

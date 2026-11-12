@@ -52,7 +52,7 @@ test.describe('News feature (TASK-008, AC-04)', () => {
     await page.getByRole('link', { name: newsTitle, exact: true }).click();
     await expect(page).toHaveURL(/\/news\/news_/);
     await expect(page.getByRole('heading', { level: 1 })).toContainText(newsTitle);
-    await expect(page.getByText(newsContent)).toBeVisible();
+    await expect(page.locator('.news-article-body').getByText(newsContent)).toBeVisible();
     await expect(page.getByText(/เผยแพร่เมื่อ/)).toBeVisible();
 
     // No emojis on public news detail page

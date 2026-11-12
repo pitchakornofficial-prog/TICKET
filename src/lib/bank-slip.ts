@@ -15,11 +15,22 @@ export interface BankSlipData {
   note?: string | null;
 }
 
+function escapeXml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 export function generateBankSlipSvg(data: BankSlipData): string {
-  const amountStr = Number(data.amount || 0).toLocaleString('th-TH', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
+  const amountStr = escapeXml(
+    Number(data.amount || 0).toLocaleString('th-TH', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }),
+  );
 
   let dateStr = '03 พ.ย. 2569, 14:35 น.';
   if (data.paidAt) {
@@ -39,14 +50,15 @@ export function generateBankSlipSvg(data: BankSlipData): string {
       // Keep default
     }
   }
+  const safeDateStr = escapeXml(dateStr);
 
-  const sender = data.senderName || 'บจก. ทิกเก็ต เทคโนโลยี (TICKET Platform)';
-  const senderAcc = data.senderAccount || 'ธ.กสิกรไทย • xxx-x-xx892-1';
-  const receiver = data.receiverName || 'สโมสรนักศึกษา มหาวิทยาลัยอุบลราชธานี';
-  const receiverAcc = data.receiverAccount || 'ธ.กรุงไทย • xxx-x-xx456-7';
-  const refCode = data.transferRef || 'TXN-UBU2026-PAYOUT01';
-  const concert = data.eventTitle || 'UBU Freshy Music Fest 2026';
-  const note = data.note || 'รอบโอนเงินค่าบัตรจำหน่ายล่วงหน้าสัปดาห์ที่ 1';
+  const sender = escapeXml(data.senderName || 'บจก. ทิกเก็ต เทคโนโลยี (TICKET Platform)');
+  const senderAcc = escapeXml(data.senderAccount || 'ธ.กสิกรไทย • xxx-x-xx892-1');
+  const receiver = escapeXml(data.receiverName || 'สโมสรนักศึกษา มหาวิทยาลัยอุบลราชธานี');
+  const receiverAcc = escapeXml(data.receiverAccount || 'ธ.กรุงไทย • xxx-x-xx456-7');
+  const refCode = escapeXml(data.transferRef || 'TXN-UBU2026-PAYOUT01');
+  const concert = escapeXml(data.eventTitle || 'UBU Freshy Music Fest 2026');
+  const note = escapeXml(data.note || 'รอบโอนเงินค่าบัตรจำหน่ายล่วงหน้าสัปดาห์ที่ 1');
 
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 720" width="480" height="720" style="background:#ffffff;border-radius:0;box-shadow:0 8px 24px rgba(0,0,0,0.12);font-family:sans-serif;">
   <defs>
@@ -74,7 +86,7 @@ export function generateBankSlipSvg(data: BankSlipData): string {
   <path d="M228 116l8 8 16-16" fill="none" stroke="#ffffff" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"/>
   
   <text x="240" y="170" text-anchor="middle" fill="#0f172a" font-size="22" font-weight="800">โอนเงินสำเร็จ</text>
-  <text x="240" y="192" text-anchor="middle" fill="#64748b" font-size="13">${dateStr}</text>
+  <text x="240" y="192" text-anchor="middle" fill="#64748b" font-size="13">${safeDateStr}</text>
 
   <!-- From / To Route Box -->
   <rect x="28" y="210" width="424" height="136" rx="12" fill="#f8fafc" stroke="#e2e8f0"/>

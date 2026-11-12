@@ -1,5 +1,9 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { authFixture } from '../support/auth-fixture';
+import { GET as getOrderHandler } from '../../src/app/api/public/checkout/orders/[id]/route';
+import { GET as getTicketsHandler } from '../../src/app/api/public/checkout/orders/[id]/tickets/route';
+import { requestOrderLinkOtp, verifyOrderLinkOtp } from '../../src/server/guest-order-lookup';
+import { setDatabasePool } from '../../src/server/database';
 import { createEventDraft, approveSession } from '../../src/server/events';
 import { requestGuestOtp, verifyGuestOtp } from '../../src/server/guest-otp';
 import { createReservation } from '../../src/server/reservation';
@@ -27,6 +31,7 @@ describe('Ticket Email Delivery & Failure Recovery (TASK-017, AC-20, AC-75)', ()
 
   afterAll(async () => {
     setCustomEmailTransport(null);
+    setDatabasePool(undefined);
     vi.unstubAllEnvs();
     if (fixture) await fixture.cleanup();
   });
@@ -120,8 +125,75 @@ describe('Ticket Email Delivery & Failure Recovery (TASK-017, AC-20, AC-75)', ()
     expect(ticketEmail?.html).toContain('คอนเสิร์ต ส่งอีเมลบัตร AC-20');
     expect(ticketEmail?.html).toContain(processRes.tickets?.[0].ticketCode);
     expect(ticketEmail?.html).toContain(processRes.tickets?.[1].ticketCode);
-    expect(ticketEmail?.html).toContain(`https://tickets.example.com/orders/${reservation.id}/success?tab=tickets`);
+    expect(ticketEmail?.html).toContain(`https://tickets.example.com/orders/${reservation.id}/success?tab=tickets&token=ordtok_`);
     expect(ticketEmail?.text).not.toContain('127.0.0.1');
+
+    // Verify the direct link from the email enforces OTP before reading order or tickets (AC-63, G-17)
+    const linkMatch = ticketEmail?.html?.match(/href="(https:\/\/tickets\.example\.com\/orders\/[^"]+)"/);
+    expect(linkMatch).not.toBeNull();
+    const emailUrl = new URL(linkMatch?.[1].replace(/&amp;/g, '&') ?? '');
+    const emailToken = emailUrl.searchParams.get('token') ?? '';
+    expect(emailToken.startsWith('ordtok_')).toBe(true);
+
+    setDatabasePool(fixture.pool);
+    const directOrderRes = await getOrderHandler(
+      new Request(`https://tickets.example.com/api/public/checkout/orders/${reservation.id}?token=${encodeURIComponent(emailToken)}`),
+      { params: Promise.resolve({ id: reservation.id }) },
+    );
+    expect(directOrderRes.status).toBe(401);
+
+    const directTicketsRes = await getTicketsHandler(
+      new Request(`https://tickets.example.com/api/public/checkout/orders/${reservation.id}/tickets?token=${encodeURIComponent(emailToken)}`),
+      { params: Promise.resolve({ id: reservation.id }) },
+    );
+    expect(directTicketsRes.status).toBe(401);
+
+    // One-step OTP flow from email link (no email/phone re-entry required)
+    const linkOtpReq = await requestOrderLinkOtp(fixture.pool, {
+      orderId: reservation.id,
+      linkToken: emailToken,
+      now: new Date(t0.getTime() + 120 * 1000),
+    });
+    expect(linkOtpReq.success).toBe(true);
+    expect(linkOtpReq.requestId).toBeTruthy();
+    expect(linkOtpReq.maskedEmail).toContain('***@');
+
+    const otpEmail = getCapturedEmails()
+      .slice()
+      .reverse()
+      .find(m => m.to === buyerEmail && m.subject.includes('OTP'));
+    expect(otpEmail).toBeDefined();
+    const otpCodeMatch = otpEmail?.text?.match(/\b(\d{6})\b/);
+    expect(otpCodeMatch).not.toBeNull();
+
+    const linkOtpVerify = await verifyOrderLinkOtp(fixture.pool, {
+      orderId: reservation.id,
+      linkToken: emailToken,
+      code: otpCodeMatch?.[1] ?? '',
+      requestId: linkOtpReq.requestId ?? '',
+      now: new Date(t0.getTime() + 125 * 1000),
+    });
+    expect(linkOtpVerify.success).toBe(true);
+    expect(linkOtpVerify.verifiedToken).toBeTruthy();
+
+    const verifiedOrderRes = await getOrderHandler(
+      new Request(`https://tickets.example.com/api/public/checkout/orders/${reservation.id}`, {
+        headers: { 'x-guest-token': linkOtpVerify.verifiedToken ?? '' },
+      }),
+      { params: Promise.resolve({ id: reservation.id }) },
+    );
+    expect(verifiedOrderRes.status).toBe(200);
+
+    const verifiedTicketsRes = await getTicketsHandler(
+      new Request(`https://tickets.example.com/api/public/checkout/orders/${reservation.id}/tickets`, {
+        headers: { 'x-guest-token': linkOtpVerify.verifiedToken ?? '' },
+      }),
+      { params: Promise.resolve({ id: reservation.id }) },
+    );
+    expect(verifiedTicketsRes.status).toBe(200);
+    const verifiedTicketsJson = await verifiedTicketsRes.json();
+    expect(verifiedTicketsJson.tickets).toHaveLength(2);
+    setDatabasePool(undefined);
 
     // Check delivery record in database
     const delivery = await getOrderEmailDelivery(fixture.pool, reservation.id);
@@ -231,6 +303,6 @@ describe('Ticket Email Delivery & Failure Recovery (TASK-017, AC-20, AC-75)', ()
     expect(captured).toHaveLength(1);
     expect(captured[0].to).toBe(buyerEmail);
     expect(captured[0].subject).toContain(reservation.id);
-    expect(captured[0].html).toContain(`https://tickets.example.com/my-tickets?orderId=${reservation.id}`);
+    expect(captured[0].html).toContain(`https://tickets.example.com/orders/${reservation.id}/success?tab=tickets&token=ordtok_`);
   });
 });

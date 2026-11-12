@@ -28,6 +28,11 @@ export function hashOtpCode(code: string, salt: string): string {
 }
 
 export function extractClientIp(request: Request): string {
+  const cfIp = request.headers.get('cf-connecting-ip');
+  if (cfIp) {
+    const trimmed = cfIp.trim();
+    if (trimmed) return trimmed;
+  }
   const forwardedFor = request.headers.get('x-forwarded-for');
   if (forwardedFor) {
     const first = forwardedFor.split(',')[0].trim();

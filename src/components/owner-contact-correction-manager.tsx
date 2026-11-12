@@ -79,7 +79,7 @@ export function OwnerContactCorrectionManager() {
       return;
     }
     if (!reason.trim()) {
-      setError('กรุณาระบุบันทึกเหตุผลการตรวจสอบตัวตนผู้ซื้อ (G-24)');
+      setError('กรุณาระบุบันทึกเหตุผลการตรวจสอบตัวตนผู้ซื้อ');
       return;
     }
 
@@ -145,7 +145,7 @@ export function OwnerContactCorrectionManager() {
     >
       <div style={{ marginBottom: '20px' }}>
         <h2 style={{ fontSize: '18px', fontWeight: 'bold', color: '#0f172a', margin: '0 0 6px 0' }}>
-          แก้ไขข้อมูลติดต่อคำสั่งซื้อที่ชำระแล้ว (AC-76, G-24)
+          แก้ไขข้อมูลติดต่อคำสั่งซื้อที่ชำระแล้ว
         </h2>
         <p style={{ color: '#64748b', fontSize: '14px', margin: 0 }}>
           เฉพาะผู้ดูแลระบบ (Owner) ที่ตรวจสอบหลักฐานตัวตนแล้วเท่านั้นที่สามารถแก้ไขอีเมลและเบอร์โทรศัพท์ของคำสั่งซื้อที่ชำระแล้ว
@@ -341,7 +341,7 @@ export function OwnerContactCorrectionManager() {
                 htmlFor="correction-reason"
                 style={{ display: 'block', fontSize: '13px', fontWeight: 'bold', color: '#334155', marginBottom: '6px' }}
               >
-                บันทึกเหตุผลและการตรวจสอบตัวตน (G-24) *
+                บันทึกเหตุผลและการตรวจสอบตัวตน *
               </label>
               <textarea
                 id="correction-reason"

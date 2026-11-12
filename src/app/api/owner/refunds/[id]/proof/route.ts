@@ -15,7 +15,7 @@ export async function GET(
 
     // AC-92: Only owner can download or access refund proof files
     if (actor?.role !== 'owner') {
-      return new Response('Forbidden: เฉพาะเจ้าของเว็บ (Owner) เท่านั้นที่มีสิทธิ์ดูไฟล์หลักฐานการโอนเงิน (AC-92)', {
+      return new Response('Forbidden: เฉพาะเจ้าของเว็บ (Owner) เท่านั้นที่มีสิทธิ์ดูไฟล์หลักฐานการโอนเงิน', {
         status: 403,
       });
     }

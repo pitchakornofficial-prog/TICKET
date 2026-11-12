@@ -3,6 +3,7 @@ import {
   performOfflineAdmissionScan,
   getOfflineDatasetKey,
 } from '../../src/lib/offline-admission';
+import { hashOfflineQrPayload } from '../../src/lib/offline-qr-hash';
 import type { OfflineDataset, OfflineTicketItem } from '../../src/server/primary-scanner';
 
 function createMockStorage(initialData: Record<string, string> = {}) {
@@ -28,7 +29,7 @@ describe('TASK-035: Primary Handover & Emergency Recovery Unit Tests (AC-97, AC-
   const validTicket: OfflineTicketItem = {
     id: 'TICK-HND-001',
     ticketCode: 'TK-11111111',
-    qrPayload: 'SECURE-QR-111',
+    qrHash: hashOfflineQrPayload(eventId, 'SECURE-QR-111'),
     ticketTypeId: 'TT-REG',
     ticketTypeName: 'Regular Zone',
     sessionId,
@@ -124,7 +125,7 @@ describe('TASK-035: Primary Handover & Emergency Recovery Unit Tests (AC-97, AC-
     expect(result.success).toBe(false);
     expect(result.status).toBe('rejected');
     expect(result.reason).toBe('OFFLINE_HALTED_RECONCILIATION');
-    expect(result.message).toContain('การสแกนออฟไลน์ถูกระงับเพื่อกระทบยอด (AC-98)');
+    expect(result.message).toContain('การสแกนออฟไลน์ถูกระงับเพื่อกระทบยอด');
   });
 
   it('3. Secondary scanner cannot scan offline even when dataset is cached (AC-40, O1)', () => {

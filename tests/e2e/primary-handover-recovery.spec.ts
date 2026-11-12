@@ -102,12 +102,13 @@ test.describe('TASK-035: Primary Handover and Emergency Recovery (AC-97, AC-98)'
     const setPrimaryBtn1 = page.locator(`[data-testid="set-primary-scanner-${sc1.scannerId}"]`);
     if (await setPrimaryBtn1.isVisible({ timeout: 3000 }).catch(() => false)) {
       await setPrimaryBtn1.click();
-      await expect(page.getByText('กำหนดเครื่องหลักสำหรับงานเรียบร้อยแล้ว (AC-94)')).toBeVisible({ timeout: 20000 });
+      await expect(page.getByText('กำหนดเครื่องหลักสำหรับงานเรียบร้อยแล้ว')).toBeVisible({ timeout: 20000 });
     }
 
     // 4. Test Handover Rejection: Attempt to handover to Scanner 2 before it downloads dataset (AC-97)
     const handoverBtn = page.locator(`[data-testid="handover-primary-scanner-${sc2.scannerId}"]`);
     await expect(handoverBtn).toBeVisible({ timeout: 15000 });
+    await handoverBtn.evaluate((element) => element.scrollIntoView({ block: 'center' }));
     await handoverBtn.click();
 
     // Check readiness inside modal
@@ -140,16 +141,17 @@ test.describe('TASK-035: Primary Handover and Emergency Recovery (AC-97, AC-98)'
 
     // 6. Organizer performs handover to Scanner 2 (AC-97)
     await page.bringToFront();
+    await handoverBtn.evaluate((element) => element.scrollIntoView({ block: 'center' }));
     await handoverBtn.click();
     await page.locator('#declared-old-pending').fill('0');
     await checkReadinessBtn.click();
-    await expect(page.getByText('ผ่านเกณฑ์การตรวจสอบความพร้อม พร้อมสลับเครื่องหลัก (AC-97)')).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText('ผ่านเกณฑ์การตรวจสอบความพร้อม พร้อมสลับเครื่องหลัก')).toBeVisible({ timeout: 10000 });
 
     const confirmHandoverBtn = page.locator('#confirm-handover-btn');
     await expect(confirmHandoverBtn).toBeVisible();
     await confirmHandoverBtn.click();
 
-    await expect(page.getByText('สลับเครื่องหลักประจำงานสำเร็จ (AC-97)')).toBeVisible({ timeout: 15000 });
+    await expect(page.getByText('สลับเครื่องหลักประจำงานสำเร็จ')).toBeVisible({ timeout: 15000 });
     // Verify Scanner 2 now has the primary badge
     await expect(page.locator(`[data-testid="primary-scanner-badge-${sc2.scannerId}"]`)).toBeVisible();
 
@@ -164,7 +166,7 @@ test.describe('TASK-035: Primary Handover and Emergency Recovery (AC-97, AC-98)'
 
     // Halted banner displayed with reconciliation notice
     await expect(page.locator('[data-testid="offline-halted-banner"]')).toBeVisible({ timeout: 15000 });
-    await expect(page.getByText('การใช้งานโหมดออฟไลน์ถูกระงับเพื่อกระทบยอด (AC-98, NQ-06)')).toBeVisible();
+    await expect(page.getByText('การใช้งานโหมดออฟไลน์ถูกระงับเพื่อกระทบยอด')).toBeVisible();
 
     // Resume after reconciliation
     const resumeBtn = page.locator('#resume-offline-btn');
@@ -172,7 +174,7 @@ test.describe('TASK-035: Primary Handover and Emergency Recovery (AC-97, AC-98)'
     page.once('dialog', dialog => dialog.accept());
     await resumeBtn.click();
 
-    await expect(page.getByText('กระทบยอดเสร็จสิ้น ปลดระงับและเปิดให้ตั้งเครื่องหลักใหม่เรียบร้อยแล้ว (AC-98)')).toBeVisible({ timeout: 15000 });
+    await expect(page.getByText('กระทบยอดเสร็จสิ้น ปลดระงับและเปิดให้ตั้งเครื่องหลักใหม่เรียบร้อยแล้ว')).toBeVisible({ timeout: 15000 });
     await expect(page.locator('[data-testid="offline-halted-banner"]')).not.toBeVisible();
   });
 });

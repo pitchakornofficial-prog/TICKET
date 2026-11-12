@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { Pool } from 'pg';
 import { emailTransport, type EmailTransport } from './email.ts';
+import { createOrderTicketAccessToken } from './order-access-token.ts';
 import { ensureTicketSchema, getOrderTickets, type TicketDetail } from './tickets.ts';
 import { ensureReservationSchema } from './reservation.ts';
 import { formatBaht } from '../lib/locale.ts';
@@ -20,17 +21,22 @@ export interface TicketEmailDeliveryRecord {
   eventTitle?: string;
 }
 
-function ticketOrderUrl(orderId: string, override?: string): string {
-  const baseUrl = override || process.env.BETTER_AUTH_URL ||
+function ticketOrderUrl(order: { id: string; buyerEmail: string }, override?: string): string {
+  const rawBaseUrl =
+    override ||
+    process.env.BETTER_AUTH_URL ||
     (process.env.NODE_ENV === 'production' ? '' : 'http://127.0.0.1:3000');
-  if (!baseUrl) throw new Error('BETTER_AUTH_URL is required for ticket email links');
-  const url = new URL('/my-tickets', baseUrl);
-  if (process.env.NODE_ENV === 'production' &&
-      (url.protocol !== 'https:' || ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname))) {
+  if (!rawBaseUrl) throw new Error('BETTER_AUTH_URL is required for ticket email links');
+  const url = new URL(rawBaseUrl);
+  if (
+    process.env.NODE_ENV === 'production' &&
+    (url.protocol !== 'https:' || ['localhost', '127.0.0.1', '[::1]'].includes(url.hostname))
+  ) {
     throw new Error('Ticket email links require a public HTTPS origin');
   }
-  url.searchParams.set('orderId', orderId);
-  return url.toString();
+  const baseUrl = url.origin;
+  const accessToken = createOrderTicketAccessToken(order.id, order.buyerEmail);
+  return `${baseUrl}/orders/${order.id}/success?tab=tickets&token=${encodeURIComponent(accessToken)}`;
 }
 
 const ticketDeliverySchemaPromises = new WeakMap<Pool, Promise<void>>();
@@ -210,10 +216,12 @@ export async function sendOrderTicketsEmail(
     return existingDelivery;
   }
 
-  const baseUrl = options?.baseUrl || process.env.BETTER_AUTH_URL || (process.env.NODE_ENV === 'production' ? '' : 'http://127.0.0.1:3000');
   const deliveryId = `EML-${randomUUID().slice(0, 8).toUpperCase()}`;
-  // Direct ticket view link without requiring redundant OTP verification (D-188)
-  const orderUrl = `${baseUrl}/orders/${order.id}/success?tab=tickets`;
+  // Direct ticket view link with signed token so buyer can open ticket straight from email without OTP
+  const orderUrl = ticketOrderUrl(
+    { id: order.id, buyerEmail: order.buyerEmail },
+    options?.baseUrl,
+  );
 
   const { subject, html, text } = buildTicketEmailContent(
     orderId,
@@ -317,7 +325,10 @@ export async function retryTicketEmailDelivery(
   const delivery = res.rows[0];
   const tickets = await getOrderTickets(pool, delivery.orderId);
 
-  const orderUrl = ticketOrderUrl(delivery.orderId, options?.baseUrl);
+  const orderUrl = ticketOrderUrl(
+    { id: delivery.orderId, buyerEmail: delivery.recipientEmail },
+    options?.baseUrl,
+  );
   const { subject, html, text } = buildTicketEmailContent(
     delivery.orderId,
     delivery.buyerName,

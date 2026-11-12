@@ -17,7 +17,7 @@ export async function GET(
 
   if (!token) {
     return Response.json(
-      { message: 'กรุณายืนยันตัวตนผ่าน OTP ก่อนตรวจสอบสิทธิ์การคืนเงิน (AC-21)' },
+      { message: 'กรุณายืนยันตัวตนผ่าน OTP ก่อนตรวจสอบสิทธิ์การคืนเงิน' },
       { status: 401 },
     );
   }

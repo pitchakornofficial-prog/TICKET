@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test';
 
 test.describe('Public customer pages and navigation (TASK-007, D-02, D-05, D-08, D-13, D-14)', () => {
-  test('homepage displays header navigation, search form, and multi-column footer without emojis', async ({ page }) => {
+  test('homepage displays header navigation, search form, and multi-column footer without emojis', async ({ page }, testInfo) => {
     await page.goto('/');
 
     // Title and locale
@@ -9,13 +9,20 @@ test.describe('Public customer pages and navigation (TASK-007, D-02, D-05, D-08,
     await expect(page.locator('html')).toHaveAttribute('lang', 'th');
 
     // Header nav links (D-33: no back-office login link on public UI)
+    if (testInfo.project.name === 'mobile-chromium') {
+      await page.getByRole('button', { name: 'เปิดเมนูนำทาง' }).click();
+    }
     await expect(page.getByRole('link', { name: 'หน้าแรก', exact: true })).toBeVisible();
     await expect(page.getByRole('link', { name: 'เกี่ยวกับเรา' }).first()).toBeVisible();
     await expect(page.getByRole('link', { name: 'ติดต่อเรา' }).first()).toBeVisible();
     await expect(page.getByRole('link', { name: 'เข้าสู่ระบบหลังบ้าน' })).toHaveCount(0);
 
+    if (testInfo.project.name === 'mobile-chromium') {
+      await page.getByRole('button', { name: 'เปิดช่องค้นหา' }).click();
+    }
+
     // Search input
-    const searchInput = page.locator('#navbar-search-input');
+    const searchInput = page.locator('#navbar-search-input:visible');
     await expect(searchInput).toBeVisible();
 
     // Footer links to policy pages
@@ -62,9 +69,12 @@ test.describe('Public customer pages and navigation (TASK-007, D-02, D-05, D-08,
     expect(await page.locator('body').innerText()).not.toMatch(/\p{Extended_Pictographic}/u);
   });
 
-  test('search form submits query and displays results or empty state (AC-03)', async ({ page }) => {
+  test('search form submits query and displays results or empty state (AC-03)', async ({ page }, testInfo) => {
     await page.goto('/');
-    const searchInput = page.locator('#navbar-search-input');
+    if (testInfo.project.name === 'mobile-chromium') {
+      await page.getByRole('button', { name: 'เปิดช่องค้นหา' }).click();
+    }
+    const searchInput = page.locator('#navbar-search-input:visible');
     await searchInput.fill('NonExistentRockConcert2026');
 
     await expect(page).toHaveURL(/\/\?q=NonExistentRockConcert2026/);
@@ -72,6 +82,11 @@ test.describe('Public customer pages and navigation (TASK-007, D-02, D-05, D-08,
     await expect(page.getByText('ไม่พบคอนเสิร์ตที่ตรงกับเงื่อนไขการค้นหา')).toBeVisible();
 
     // Clear search button returns to home
+    if (testInfo.project.name === 'mobile-chromium') {
+      await page.getByRole('button', { name: 'ปิดช่องค้นหา' }).click();
+    } else {
+      await searchInput.blur();
+    }
     await page.locator('.clear-search-button').click();
     await expect(page).toHaveURL('/');
   });

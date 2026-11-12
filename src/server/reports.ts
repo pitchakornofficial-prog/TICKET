@@ -330,7 +330,7 @@ export async function getEventMoneyReport(
 
   // 1. Role enforcement (AC-82): Scanners are strictly rejected
   if (actor.role === 'scanner') {
-    throw new Error('ไม่อนุญาต: ทีมสแกนไม่มีสิทธิ์เข้าถึงรายงานการเงิน (AC-82)');
+    throw new Error('ไม่อนุญาต: ทีมสแกนไม่มีสิทธิ์เข้าถึงรายงานการเงิน');
   }
 
   // 2. Fetch event and verify organizer ownership (AC-07, AC-82)
@@ -354,7 +354,7 @@ export async function getEventMoneyReport(
   const event = eventRes.rows[0];
 
   if (actor.role === 'organizer' && event.organizerId !== actor.id) {
-    throw new Error('ไม่อนุญาต: ผู้จัดงานสามารถเข้าถึงรายงานได้เฉพาะงานของตนเองเท่านั้น (AC-07, AC-82)');
+    throw new Error('ไม่อนุญาต: ผู้จัดงานสามารถเข้าถึงรายงานได้เฉพาะงานของตนเองเท่านั้น');
   }
 
   const isOrganizerActor = actor.role === 'organizer';
@@ -763,7 +763,7 @@ export async function recordEventPayout(
     return {
       success: false,
       code: 'FORBIDDEN',
-      error: 'เฉพาะผู้ดูแลระบบ (Owner) เท่านั้นที่มีสิทธิ์บันทึกการโอนเงินให้ผู้จัดงาน (AC-27)',
+      error: 'เฉพาะผู้ดูแลระบบ (Owner) เท่านั้นที่มีสิทธิ์บันทึกการโอนเงินให้ผู้จัดงาน',
     };
   }
 
@@ -807,7 +807,7 @@ export async function recordEventPayout(
       return {
         success: false,
         code: 'CANNOT_PAY_ZERO_PAYABLE',
-        error: 'ไม่มียอดพร้อมจ่าย (Payable = 0) สำหรับคอนเสิร์ตนี้ ไม่สามารถโอนจ่ายได้ (AC-79)',
+        error: 'ไม่มียอดพร้อมจ่าย (Payable = 0) สำหรับคอนเสิร์ตนี้ ไม่สามารถโอนจ่ายได้',
       };
     }
 
@@ -880,7 +880,7 @@ export async function getPayoutProof(
     return {
       success: false,
       code: 'FORBIDDEN',
-      error: 'เฉพาะผู้ดูแลระบบ (Owner) เท่านั้นที่มีสิทธิ์เข้าถึงไฟล์หลักฐานการโอนเงิน (AC-92)',
+      error: 'เฉพาะผู้ดูแลระบบ (Owner) เท่านั้นที่มีสิทธิ์เข้าถึงไฟล์หลักฐานการโอนเงิน',
     };
   }
 
@@ -1075,7 +1075,7 @@ export async function recordEventReserveRelease(
     return {
       success: false,
       code: 'FORBIDDEN',
-      error: 'เฉพาะผู้ดูแลระบบ (Owner) เท่านั้นที่มีสิทธิ์สั่งปล่อยเงินสำรอง (AC-83)',
+      error: 'เฉพาะผู้ดูแลระบบ (Owner) เท่านั้นที่มีสิทธิ์สั่งปล่อยเงินสำรอง',
     };
   }
 
@@ -1150,7 +1150,7 @@ export async function recordEventReserveRelease(
     return {
       success: false,
       code: 'CANNOT_RELEASE_BEFORE_FINAL_SESSION_END',
-      error: 'ไม่สามารถปล่อยเงินสำรองได้ก่อนรอบสุดท้ายของคอนเสิร์ตจะสิ้นสุดลง (AC-83)',
+      error: 'ไม่สามารถปล่อยเงินสำรองได้ก่อนรอบสุดท้ายของคอนเสิร์ตจะสิ้นสุดลง',
     };
   }
 

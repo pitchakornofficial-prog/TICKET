@@ -1,11 +1,21 @@
-import { randomUUID } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
 import { hashPassword } from 'better-auth/crypto';
 import { createDatabasePool, inTransaction } from '../src/server/database.ts';
+
+if (process.env.NODE_ENV === 'production') {
+  console.error('ห้ามรันสคริปต์สร้างบัญชีทดสอบใน production');
+  process.exit(1);
+}
 
 const pool = createDatabasePool();
 
 const email = process.env.TEST_ORGANIZER_EMAIL || 'organizer@ticket.local';
-const password = process.env.TEST_ORGANIZER_PASSWORD || 'Password123!';
+const envPassword = process.env.TEST_ORGANIZER_PASSWORD?.trim();
+if (envPassword && (envPassword.length < 15 || envPassword.length > 128)) {
+  console.error('TEST_ORGANIZER_PASSWORD ต้องมีความยาว 15-128 ตัวอักษร');
+  process.exit(1);
+}
+const password = envPassword || `TestOrg!${randomBytes(18).toString('base64url')}`;
 const name = process.env.TEST_ORGANIZER_NAME || 'ผู้จัดงานทดสอบ';
 
 try {

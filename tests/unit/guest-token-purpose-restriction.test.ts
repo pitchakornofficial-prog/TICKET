@@ -170,7 +170,7 @@ describe('Issue #15: Guest Token Purpose Restriction & Cross-Workflow Protection
           orderId: 'ORD-BUYER-1',
           verifiedToken: 'token-lookup-valid',
         }),
-      ).rejects.toThrow('กรุณายืนยันตัวตนผ่าน OTP ก่อนขอรับ QR ชำระเงิน (AC-12)');
+      ).rejects.toThrow('กรุณายืนยันตัวตนผ่าน OTP ก่อนขอรับ QR ชำระเงิน');
     });
   });
 

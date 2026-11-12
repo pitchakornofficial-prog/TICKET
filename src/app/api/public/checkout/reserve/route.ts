@@ -1,11 +1,12 @@
 import { createSafeErrorResponse } from '@/server/api-error';
 import { getDatabasePool } from '@/server/database';
+import { completeQueueEntry, verifyQueueAccess } from '@/server/queue';
 import { createReservation, type CreateReservationInput } from '@/server/reservation';
 
 export const runtime = 'nodejs';
 
 export async function POST(request: Request) {
-  let body: Partial<CreateReservationInput> = {};
+  let body: Partial<CreateReservationInput> & { queueToken?: string | null } = {};
   try {
     body = await request.json();
   } catch {
@@ -16,14 +17,35 @@ export async function POST(request: Request) {
     return Response.json({ message: 'กรุณาระบุข้อมูลการกันบัตรให้ครบถ้วน' }, { status: 400 });
   }
 
+  const rawQueueToken =
+    typeof body.queueToken === 'string'
+      ? body.queueToken
+      : request.headers.get('x-queue-token') || '';
+  const queueToken = rawQueueToken.trim() || null;
+
   const pool = getDatabasePool();
   try {
+    const queueAllowed = await verifyQueueAccess(pool, body.eventId, queueToken);
+    if (!queueAllowed) {
+      return Response.json(
+        {
+          message: 'ขณะนี้มีผู้ใช้งานเต็มจำนวน 200 คิวแล้ว กรุณารอตามลำดับคิวในห้องรอคิว',
+          code: 'QUEUE_LOCKED',
+        },
+        { status: 429 },
+      );
+    }
+
     const reservation = await createReservation(pool, {
       verifiedToken: body.verifiedToken,
       eventId: body.eventId,
       sessionId: body.sessionId,
       items: body.items,
     });
+
+    if (queueToken) {
+      await completeQueueEntry(pool, body.eventId, queueToken);
+    }
 
     return Response.json(
       {

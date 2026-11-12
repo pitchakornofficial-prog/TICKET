@@ -11,5 +11,5 @@ export async function saveEventDraft(page: Page) {
   await page.getByLabel('ราคาบัตร (บาท)', { exact: true }).fill('1000');
   await page.getByLabel('จำนวนโควตาบัตร (ใบ)', { exact: true }).fill('50');
   await page.getByRole('button', { name: 'บันทึกแบบร่าง', exact: true }).click();
-  await expect(page.locator('#create-concert-title')).toBeHidden();
+  await expect(page.locator('#create-concert-title')).toBeHidden({ timeout: 15000 });
 }

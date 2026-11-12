@@ -292,7 +292,7 @@ describe('TASK-032: Offline Primary Dataset Integration Tests (AC-94, AC-65, G-4
     expect(foundTicket?.status).toBe('valid');
     expect(foundTicket?.admissionWindow.startTime).toBe('2026-11-28T18:00:00.000Z');
 
-    // CRITICAL (AC-65): Inspect that buyer PII is 100% absent!
+    // CRITICAL (AC-65 & QR secret protection): Inspect that buyer PII and raw qrPayload are 100% absent!
     for (const ticket of dataset.tickets) {
       const raw = ticket as unknown as Record<string, unknown>;
       expect(raw.buyerName).toBeUndefined();
@@ -302,6 +302,26 @@ describe('TASK-032: Offline Primary Dataset Integration Tests (AC-94, AC-65, G-4
       expect(raw.paymentId).toBeUndefined();
       expect(raw.chargeId).toBeUndefined();
       expect(raw.transferSlipUrl).toBeUndefined();
+      expect(raw.qrPayload).toBeUndefined();
+      expect(ticket.qrHash).toMatch(/^[a-f0-9]{64}$/);
+      expect(ticket.qrHash).not.toBe(purchase.tickets[0].qrPayload);
+    }
+
+    // Secondary scanner also cannot extract raw qrPayload from offline dataset
+    const secSc = await addScannerToEvent(fixture.pool, org, event.id, {
+      name: 'ทีมสแกนรอง',
+      email: `scanner-secondary-dataset-${Date.now()}@ticket.invalid`,
+    });
+    const secondaryDataset = await getOfflineDataset(
+      fixture.pool,
+      { id: secSc.scannerId, role: 'scanner' },
+      event.id,
+    );
+    expect(secondaryDataset.isCurrentScannerPrimary).toBe(false);
+    for (const ticket of secondaryDataset.tickets) {
+      const raw = ticket as unknown as Record<string, unknown>;
+      expect(raw.qrPayload).toBeUndefined();
+      expect(ticket.qrHash).toMatch(/^[a-f0-9]{64}$/);
     }
 
     // Verify admission logs in dataset (zero PII)

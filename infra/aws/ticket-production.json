@@ -1,6 +1,20 @@
 {
   "AWSTemplateFormatVersion": "2010-09-09",
   "Description": "TICKET production operations preparation",
+  "Parameters": {
+    "WebImage": {
+      "Type": "String",
+      "Description": "Web runner image pinned by digest (ECR repo@sha256:...), built from Dockerfile target runner for linux/arm64",
+      "AllowedPattern": "^[0-9]+\\.dkr\\.ecr\\.[a-z0-9-]+\\.amazonaws\\.com/[a-z0-9._/-]+@sha256:[a-f0-9]{64}$",
+      "ConstraintDescription": "Must be an ECR image pinned by sha256 digest"
+    },
+    "OperationsImage": {
+      "Type": "String",
+      "Description": "Operations image pinned by digest (ECR repo@sha256:...), built from Dockerfile target operations for linux/arm64",
+      "AllowedPattern": "^[0-9]+\\.dkr\\.ecr\\.[a-z0-9-]+\\.amazonaws\\.com/[a-z0-9._/-]+@sha256:[a-f0-9]{64}$",
+      "ConstraintDescription": "Must be an ECR image pinned by sha256 digest"
+    }
+  },
   "Resources": {
     "Cluster": {
       "Type": "AWS::ECS::Cluster",
@@ -89,7 +103,9 @@
         "ContainerDefinitions": [
           {
             "Name": "operations",
-            "Image": "901708383730.dkr.ecr.ap-southeast-1.amazonaws.com/ticket-workload-test:production-ops-20261104",
+            "Image": {
+              "Ref": "OperationsImage"
+            },
             "Essential": true,
             "Command": [
               "node",
@@ -184,32 +200,6 @@
         }
       }
     },
-    "PreviewRule": {
-      "Type": "AWS::ElasticLoadBalancingV2::ListenerRule",
-      "Properties": {
-        "ListenerArn": "arn:aws:elasticloadbalancing:ap-southeast-1:901708383730:listener/app/ticket-workload-alb/b5befd83bb1b6303/0faa60d4e1a2b3dd",
-        "Priority": 30,
-        "Conditions": [
-          {
-            "Field": "http-header",
-            "HttpHeaderConfig": {
-              "HttpHeaderName": "x-ticket-preview",
-              "Values": [
-                "production-check-20261104"
-              ]
-            }
-          }
-        ],
-        "Actions": [
-          {
-            "Type": "forward",
-            "TargetGroupArn": {
-              "Ref": "TargetGroup"
-            }
-          }
-        ]
-      }
-    },
     "WebTask": {
       "Type": "AWS::ECS::TaskDefinition",
       "Properties": {
@@ -233,7 +223,9 @@
         "ContainerDefinitions": [
           {
             "Name": "web",
-            "Image": "901708383730.dkr.ecr.ap-southeast-1.amazonaws.com/ticket-workload-test@sha256:16b404bff33b7cd29d3d9fa9c79440f6fe76137efdf167c5976245ae1f14a1bd",
+            "Image": {
+              "Ref": "WebImage"
+            },
             "Essential": true,
             "PortMappings": [
               {
@@ -252,7 +244,15 @@
               },
               {
                 "Name": "EMAIL_FROM",
-                "Value": "TICKET <noreply@ticket.phatysd.me>"
+                "Value": "TICKET <tickets@phatysd.me>"
+              },
+              {
+                "Name": "SES_REGION",
+                "Value": "ap-southeast-1"
+              },
+              {
+                "Name": "DATABASE_POOL_MAX",
+                "Value": "15"
               }
             ],
             "Secrets": [
@@ -269,9 +269,15 @@
                 }
               },
               {
-                "Name": "RESEND_API_KEY",
+                "Name": "SES_ACCESS_KEY_ID",
                 "ValueFrom": {
-                  "Fn::Sub": "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/ticket/production/RESEND_API_KEY"
+                  "Fn::Sub": "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/ticket/production/SES_ACCESS_KEY_ID"
+                }
+              },
+              {
+                "Name": "SES_SECRET_ACCESS_KEY",
+                "ValueFrom": {
+                  "Fn::Sub": "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/ticket/production/SES_SECRET_ACCESS_KEY"
                 }
               },
               {
@@ -336,7 +342,7 @@
     "WebService": {
       "Type": "AWS::ECS::Service",
       "DependsOn": [
-        "PreviewRule"
+        "ProductionRule"
       ],
       "Properties": {
         "ServiceName": "ticket-production-web",
@@ -405,7 +411,9 @@
         "ContainerDefinitions": [
           {
             "Name": "operations",
-            "Image": "901708383730.dkr.ecr.ap-southeast-1.amazonaws.com/ticket-workload-test:production-ops-20261104",
+            "Image": {
+              "Ref": "OperationsImage"
+            },
             "Essential": true,
             "Command": [
               "node",
@@ -466,6 +474,144 @@
           }
         ]
       }
+    },
+    "AlertTopic": {
+      "Type": "AWS::SNS::Topic",
+      "Properties": {
+        "TopicName": "ticket-production-alerts"
+      }
+    },
+    "WebScalableTarget": {
+      "Type": "AWS::ApplicationAutoScaling::ScalableTarget",
+      "DependsOn": [
+        "WebService"
+      ],
+      "Properties": {
+        "ServiceNamespace": "ecs",
+        "ScalableDimension": "ecs:service:DesiredCount",
+        "MinCapacity": 1,
+        "MaxCapacity": 4,
+        "ResourceId": {
+          "Fn::Sub": "service/${Cluster}/${WebService.Name}"
+        },
+        "RoleARN": {
+          "Fn::Sub": "arn:${AWS::Partition}:iam::${AWS::AccountId}:role/aws-service-role/ecs.application-autoscaling.amazonaws.com/AWSServiceRoleForApplicationAutoScaling_ECSService"
+        }
+      }
+    },
+    "WebCpuScalingPolicy": {
+      "Type": "AWS::ApplicationAutoScaling::ScalingPolicy",
+      "Properties": {
+        "PolicyName": "ticket-production-cpu-scaling",
+        "PolicyType": "TargetTrackingScaling",
+        "ScalingTargetId": {
+          "Ref": "WebScalableTarget"
+        },
+        "TargetTrackingScalingPolicyConfiguration": {
+          "TargetValue": 60.0,
+          "ScaleOutCooldown": 60,
+          "ScaleInCooldown": 300,
+          "PredefinedMetricSpecification": {
+            "PredefinedMetricType": "ECSServiceAverageCPUUtilization"
+          }
+        }
+      }
+    },
+    "WebAlbRequestScalingPolicy": {
+      "Type": "AWS::ApplicationAutoScaling::ScalingPolicy",
+      "Properties": {
+        "PolicyName": "ticket-production-alb-request-scaling",
+        "PolicyType": "TargetTrackingScaling",
+        "ScalingTargetId": {
+          "Ref": "WebScalableTarget"
+        },
+        "TargetTrackingScalingPolicyConfiguration": {
+          "TargetValue": 100.0,
+          "ScaleOutCooldown": 60,
+          "ScaleInCooldown": 300,
+          "PredefinedMetricSpecification": {
+            "PredefinedMetricType": "ALBRequestCountPerTarget",
+            "ResourceLabel": {
+              "Fn::Sub": "app/ticket-workload-alb/b5befd83bb1b6303/${TargetGroup.TargetGroupFullName}"
+            }
+          }
+        }
+      }
+    },
+    "AlbTarget5xxAlarm": {
+      "Type": "AWS::CloudWatch::Alarm",
+      "Properties": {
+        "AlarmName": "ticket-production-alb-5xx",
+        "AlarmDescription": "Triggers when production web target returns 5xx errors",
+        "Namespace": "AWS/ApplicationELB",
+        "MetricName": "HTTPCode_Target_5XX_Count",
+        "Dimensions": [
+          {
+            "Name": "LoadBalancer",
+            "Value": "app/ticket-workload-alb/b5befd83bb1b6303"
+          },
+          {
+            "Name": "TargetGroup",
+            "Value": {
+              "Fn::GetAtt": [
+                "TargetGroup",
+                "TargetGroupFullName"
+              ]
+            }
+          }
+        ],
+        "Statistic": "Sum",
+        "Period": 300,
+        "EvaluationPeriods": 1,
+        "Threshold": 5,
+        "ComparisonOperator": "GreaterThanOrEqualToThreshold",
+        "TreatMissingData": "notBreaching",
+        "AlarmActions": [
+          {
+            "Ref": "AlertTopic"
+          }
+        ]
+      }
+    },
+    "SesBounceRateAlarm": {
+      "Type": "AWS::CloudWatch::Alarm",
+      "Properties": {
+        "AlarmName": "ticket-production-ses-bounce-rate",
+        "AlarmDescription": "Triggers when Amazon SES reputation bounce rate reaches 5%",
+        "Namespace": "AWS/SES",
+        "MetricName": "Reputation.BounceRate",
+        "Statistic": "Maximum",
+        "Period": 900,
+        "EvaluationPeriods": 1,
+        "Threshold": 0.05,
+        "ComparisonOperator": "GreaterThanOrEqualToThreshold",
+        "TreatMissingData": "notBreaching",
+        "AlarmActions": [
+          {
+            "Ref": "AlertTopic"
+          }
+        ]
+      }
+    },
+    "SesComplaintRateAlarm": {
+      "Type": "AWS::CloudWatch::Alarm",
+      "Properties": {
+        "AlarmName": "ticket-production-ses-complaint-rate",
+        "AlarmDescription": "Triggers when Amazon SES reputation complaint rate reaches 0.1%",
+        "Namespace": "AWS/SES",
+        "MetricName": "Reputation.ComplaintRate",
+        "Statistic": "Maximum",
+        "Period": 900,
+        "EvaluationPeriods": 1,
+        "Threshold": 0.001,
+        "ComparisonOperator": "GreaterThanOrEqualToThreshold",
+        "TreatMissingData": "notBreaching",
+        "AlarmActions": [
+          {
+            "Ref": "AlertTopic"
+          }
+        ]
+      }
     }
   },
   "Outputs": {
@@ -482,6 +628,11 @@
     "Cluster": {
       "Value": {
         "Ref": "Cluster"
+      }
+    },
+    "AlertTopicArn": {
+      "Value": {
+        "Ref": "AlertTopic"
       }
     }
   }

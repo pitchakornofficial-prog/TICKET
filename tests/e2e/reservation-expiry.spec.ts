@@ -142,7 +142,7 @@ test.describe('Reservation expiry, refresh idempotency and quota release (TASK-0
     // Verify UI does NOT show as reserved ("UI ไม่แสดงว่ายังกันต่อ" - AC-71)
     await expect(page.getByText('กันบัตรสำเร็จ (Reserved)')).not.toBeVisible();
     await expect(page.getByText('หมดเวลาการกันบัตร (Expired)')).toBeVisible();
-    await expect(page.getByText('คำสั่งซื้อนี้หมดเวลาชำระเงิน 15 นาทีแล้ว (AC-71)')).toBeVisible();
+    await expect(page.getByText('คำสั่งซื้อนี้หมดเวลาชำระเงิน 15 นาทีแล้ว')).toBeVisible();
     await expect(page.locator('#reservation-countdown')).toContainText('0:00 นาที (หมดเวลา)');
 
     // 9. Reset and start fresh order with released quota

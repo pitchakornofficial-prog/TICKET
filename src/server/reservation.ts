@@ -220,15 +220,37 @@ export async function createReservation(
       [input.eventId, emailNorm],
     );
 
-    // 1. Verify Event existence and status
-    const eventRes = await client.query(
-      'SELECT id, title, "limitPerOrder", status FROM events WHERE id = $1',
+    // 1. Verify Event existence, approval status, and sales window
+    const eventRes = await client.query<{
+      id: string;
+      title: string;
+      limitPerOrder: number | string | null;
+      status: string;
+      salesStartTime: Date | string | null;
+      salesEndTime: Date | string | null;
+    }>(
+      'SELECT id, title, "limitPerOrder", status, "salesStartTime", "salesEndTime" FROM events WHERE id = $1',
       [input.eventId],
     );
     if (eventRes.rowCount === 0) {
       throw new Error('ไม่พบคอนเสิร์ตที่ระบุ');
     }
     const event = eventRes.rows[0];
+    if (event.status !== 'approved') {
+      throw new Error('คอนเสิร์ตนี้ยังไม่เปิดจำหน่าย');
+    }
+    if (event.salesStartTime) {
+      const salesStart = new Date(event.salesStartTime);
+      if (!Number.isNaN(salesStart.getTime()) && now.getTime() < salesStart.getTime()) {
+        throw new Error('ยังไม่ถึงเวลาเปิดจำหน่ายบัตร');
+      }
+    }
+    if (event.salesEndTime) {
+      const salesEnd = new Date(event.salesEndTime);
+      if (!Number.isNaN(salesEnd.getTime()) && now.getTime() > salesEnd.getTime()) {
+        throw new Error('หมดเวลาการจำหน่ายบัตรแล้ว');
+      }
+    }
 
     // AC-10, AC-106: Limit check against total tickets in order
     const limitPerOrder = Number(event.limitPerOrder) || 4;
@@ -258,19 +280,29 @@ export async function createReservation(
       );
     }
 
-    // 2. Verify Session belongs to this event and is approved
-    const sessionRes = await client.query(
-      'SELECT id, status FROM event_sessions WHERE id = $1 AND "eventId" = $2',
+    // 2. Verify Session belongs to this event, is approved, and has not ended
+    const sessionRes = await client.query<{
+      id: string;
+      status: string;
+      endTime: Date | string | null;
+    }>(
+      'SELECT id, status, "endTime" FROM event_sessions WHERE id = $1 AND "eventId" = $2',
       [input.sessionId, input.eventId],
     );
     if (sessionRes.rowCount === 0) {
       throw new Error('ไม่พบรอบการแสดงที่ระบุในคอนเสิร์ตนี้');
     }
     if (sessionRes.rows[0].status === 'cancelled') {
-      throw new Error('รอบการแสดงนี้ถูกยกเลิกแล้ว ไม่สามารถทำการจองบัตรได้ (AC-35)');
+      throw new Error('รอบการแสดงนี้ถูกยกเลิกแล้ว ไม่สามารถทำการจองบัตรได้');
     }
     if (sessionRes.rows[0].status !== 'approved') {
       throw new Error('รอบการแสดงนี้ยังไม่เปิดจำหน่าย');
+    }
+    if (sessionRes.rows[0].endTime) {
+      const sessionEnd = new Date(sessionRes.rows[0].endTime);
+      if (!Number.isNaN(sessionEnd.getTime()) && now.getTime() > sessionEnd.getTime()) {
+        throw new Error('รอบการแสดงนี้สิ้นสุดลงแล้ว ไม่สามารถทำการจองบัตรได้');
+      }
     }
 
     // 3. Lock ticket types for update to guarantee atomicity under concurrent requests (AC-14, AC-61)

@@ -79,7 +79,7 @@ test.describe('Owner Workspace 4-Section Navigation & Responsive Layout (TASK-03
       await expect(navCustomer).toHaveClass(/active/);
       await expect(page.locator('[data-testid="owner-section-content-customer"]')).toBeVisible();
       await expect(page.locator('[data-testid="owner-weekly-payout-manager"]')).not.toBeVisible();
-      await expect(page.getByRole('heading', { name: 'แก้ไขข้อมูลติดต่อคำสั่งซื้อที่ชำระแล้ว (AC-76, G-24)' })).toBeVisible();
+      await expect(page.getByRole('heading', { name: 'แก้ไขข้อมูลติดต่อคำสั่งซื้อที่ชำระแล้ว' })).toBeVisible();
 
       // Section 4: Switch to System
       await navSystem.click();

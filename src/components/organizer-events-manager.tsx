@@ -620,11 +620,14 @@ export function OrganizerEventsManager({
         quota: Number(t.quota),
         description: t.description?.trim() || undefined,
         isStudentPrivilege: Boolean(t.isStudentPrivilege),
+        studentPrice: t.studentPrice != null && t.studentPrice !== ('' as unknown as number) ? Number(t.studentPrice) : null,
       })),
     }));
 
     try {
       const selectedAcc = payoutAccounts.find(a => a.id === selectedPayoutAccountId);
+      const hasStudentPrivilegeTicket = sessions.some(s => s.ticketTypes.some(t => Boolean(t.isStudentPrivilege)));
+      const effectiveUbuPrivilegeMode = Boolean(ubuPrivilegeMode || hasStudentPrivilegeTicket);
       const payload = {
         title,
         description,
@@ -640,7 +643,7 @@ export function OrganizerEventsManager({
         payoutBankName: selectedAcc?.bankName || undefined,
         payoutAccountNumber: selectedAcc?.accountNumber || undefined,
         payoutAccountName: selectedAcc?.accountName || undefined,
-        ubuPrivilegeMode,
+        ubuPrivilegeMode: effectiveUbuPrivilegeMode,
         posterUrl,
         coverBannerUrl,
         ticketTemplateUrl,
@@ -856,7 +859,7 @@ export function OrganizerEventsManager({
       } else {
         setAmendmentFeedback({
           type: 'success',
-          message: data.message || 'ส่งคำขอแก้ไขรอบการแสดงเรียบร้อยแล้ว รอการอนุมัติจากผู้ดูแลระบบ (AC-34, G-13)',
+          message: data.message || 'ส่งคำขอแก้ไขรอบการแสดงเรียบร้อยแล้ว รอการอนุมัติจากผู้ดูแลระบบ',
         });
         setAmendmentStartTime('');
         setAmendmentEndTime('');
@@ -1353,7 +1356,7 @@ export function OrganizerEventsManager({
                       }}
                       data-testid="test-map-pin-btn"
                     >
-                      <span>ทดสอบเปิดดูพิกัดจริง &rarr;</span>
+                      <span>เปิดดูพิกัดบนแผนที่ &rarr;</span>
                     </a>
                   </div>
 
@@ -2076,6 +2079,9 @@ export function OrganizerEventsManager({
                                                   isStudentPrivilege: e.target.checked,
                                                   studentPrice: e.target.checked ? (tt.studentPrice ?? 99) : null,
                                                 });
+                                                if (e.target.checked) {
+                                                  setUbuPrivilegeMode(true);
+                                                }
                                                 setDraftSaved(false);
                                               }}
                                               data-testid={`ticket-student-checkbox-${tt.id}`}
@@ -2089,27 +2095,35 @@ export function OrganizerEventsManager({
                                           )}
                                         </div>
                                         {tt.isStudentPrivilege && (
-                                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.2rem', paddingLeft: '1.25rem' }}>
-                                            <label htmlFor={`tt-student-price-${tt.id}`} style={{ fontSize: '0.78rem', color: '#1848ed', fontWeight: 500, whiteSpace: 'nowrap' }}>
-                                              ราคานักศึกษา (บาท):
-                                            </label>
-                                            <input
-                                              id={`tt-student-price-${tt.id}`}
-                                              data-testid={`ticket-student-price-${tt.id}`}
-                                              type="number"
-                                              min={0}
-                                              value={tt.studentPrice ?? ''}
-                                              onChange={e => {
-                                                const raw = e.target.value;
-                                                handleUpdateTicketType(sess.id, tt.id, {
-                                                  studentPrice: raw === '' ? null : Math.max(0, Number(raw)),
-                                                });
-                                                setDraftSaved(false);
-                                              }}
-                                              placeholder="99"
-                                              className="form-input-text"
-                                              style={{ width: '120px', padding: '0.35rem 0.55rem', fontSize: '0.8rem', borderColor: '#93c5fd' }}
-                                            />
+                                          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', marginTop: '0.2rem', paddingLeft: '1.25rem' }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                                              <label htmlFor={`tt-student-price-${tt.id}`} style={{ fontSize: '0.78rem', color: '#1848ed', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                                                ราคานักศึกษา (บาท):
+                                              </label>
+                                              <input
+                                                id={`tt-student-price-${tt.id}`}
+                                                data-testid={`ticket-student-price-${tt.id}`}
+                                                type="number"
+                                                min={0}
+                                                value={tt.studentPrice ?? ''}
+                                                onChange={e => {
+                                                  const raw = e.target.value;
+                                                  handleUpdateTicketType(sess.id, tt.id, {
+                                                    studentPrice: raw === '' ? null : Math.max(0, Number(raw)),
+                                                  });
+                                                  setDraftSaved(false);
+                                                }}
+                                                placeholder="99"
+                                                className="form-input-text"
+                                                style={{ width: '120px', padding: '0.35rem 0.55rem', fontSize: '0.8rem', borderColor: '#93c5fd' }}
+                                              />
+                                              <span style={{ fontSize: '0.74rem', color: '#64748b' }}>
+                                                (ผู้จัดกำหนดราคาเองได้ ไม่ใช่ราคาตายตัว เช่น 99 บาท)
+                                              </span>
+                                            </div>
+                                            <div style={{ fontSize: '0.74rem', color: '#1e40af', background: '#eff6ff', padding: '4px 8px', borderRadius: '4px' }}>
+                                              โควตารวม {tt.quota || 0} ใบ ใช้ร่วมกันทั้งราคาคนทั่วไป ({tt.price || 0} บาท) และราคานักศึกษา ({tt.studentPrice ?? 99} บาท) รวมโควต้าในบัตรประเภทเดียวกัน ไม่แยกโซน
+                                            </div>
                                           </div>
                                         )}
                                       </div>
@@ -2421,7 +2435,7 @@ export function OrganizerEventsManager({
                   <span>โหมดดูตัวอย่างเสมือนจริง (Customer View Preview)</span>
                 </span>
                 <span style={{ fontSize: '0.8rem', color: '#64748b' }}>
-                  จำลองหน้าเว็บจริงที่ลูกค้าจะมองเห็นในขั้นตอนเลือกซื้อบัตร
+                  ตัวอย่างหน้าเว็บจริงที่ลูกค้าจะมองเห็นในขั้นตอนเลือกซื้อบัตร
                 </span>
               </div>
               <button
@@ -3141,7 +3155,7 @@ export function OrganizerEventsManager({
                     ))}
                   </div>
                   <p style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '0.5rem', marginBottom: 0 }}>
-                    * โควตาใหม่ต้องไม่ต่ำกว่าจำนวนสิทธิ์ที่จำหน่ายหรือกันไว้แล้วในรอบนี้ (AC-109)
+                    * โควตาใหม่ต้องไม่ต่ำกว่าจำนวนสิทธิ์ที่จำหน่ายหรือกันไว้แล้วในรอบนี้
                   </p>
                 </div>
 

@@ -250,7 +250,7 @@ export function OwnerCustomerHub() {
     if (!reason.trim()) {
       triggerToast({
         type: 'error',
-        message: 'กรุณาระบุบันทึกเหตุผลการตรวจสอบตัวตนผู้ซื้อตามระเบียบ G-24',
+        message: 'กรุณาระบุบันทึกเหตุผลการตรวจสอบตัวตนผู้ซื้อ',
       });
       return;
     }
@@ -376,13 +376,13 @@ export function OwnerCustomerHub() {
       {/* Hub Title Header */}
       <div className="customer-hub-title-block">
         <h2 className="customer-hub-title">ลูกค้าและคำสั่งซื้อ (Customer & Order Management)</h2>
-        <h2 className="sr-only">แก้ไขข้อมูลติดต่อคำสั่งซื้อที่ชำระแล้ว (AC-76, G-24)</h2>
-        <h2 className="sr-only">การจัดส่งอีเมลบัตรที่ล้มเหลว (AC-20, AC-75)</h2>
+        <h2 className="sr-only">แก้ไขข้อมูลติดต่อคำสั่งซื้อที่ชำระแล้ว</h2>
+        <h2 className="sr-only">การจัดส่งอีเมลบัตรที่ล้มเหลว</h2>
         {deliveries.length === 0 && (
           <p className="sr-only">ไม่มีรายการจัดส่งอีเมลที่ล้มเหลว ทุกคำสั่งซื้อจัดส่งสำเร็จเรียบร้อย</p>
         )}
         <p className="customer-hub-subtitle">
-          ตรวจสอบประวัติคำสั่งซื้อที่ชำระแล้ว แก้ไขข้อมูลติดต่อผู้ซื้อพร้อมบันทึกประวัติ (AC-76, G-24) และดูแลการจัดส่งอีเมลบัตร
+          ตรวจสอบประวัติคำสั่งซื้อที่ชำระแล้ว แก้ไขข้อมูลติดต่อผู้ซื้อพร้อมบันทึกประวัติ และดูแลการจัดส่งอีเมลบัตร
         </p>
       </div>
 
@@ -712,7 +712,7 @@ export function OwnerCustomerHub() {
 
                     {/* Reason */}
                     <div className="audit-reason-line">
-                      <strong>เหตุผลการตรวจสอบ (G-24):</strong> {audit.reason}
+                      <strong>เหตุผลการตรวจสอบ:</strong> {audit.reason}
                     </div>
                   </div>
 
@@ -898,7 +898,7 @@ export function OwnerCustomerHub() {
 
                 <div className="form-group-field" style={{ marginTop: '1rem' }}>
                   <label htmlFor="correction-reason" className="modal-field-label">
-                    บันทึกเหตุผลการตรวจสอบตัวตนผู้ซื้อ (G-24) *
+                    บันทึกเหตุผลการตรวจสอบตัวตนผู้ซื้อ *
                   </label>
                   <textarea
                     id="correction-reason"
@@ -998,7 +998,7 @@ export function OwnerCustomerHub() {
                       </div>
 
                       <div className="audit-reason-line">
-                        <strong>บันทึกเหตุผล (G-24):</strong> {log.reason}
+                        <strong>บันทึกเหตุผล:</strong> {log.reason}
                       </div>
                     </div>
                   ))}

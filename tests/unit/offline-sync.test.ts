@@ -5,6 +5,7 @@ import {
   getOfflineDatasetKey,
   performOfflineAdmissionScan,
 } from '../../src/lib/offline-admission';
+import { hashOfflineQrPayload } from '../../src/lib/offline-qr-hash';
 import type { OfflineDataset, OfflineTicketItem } from '../../src/server/primary-scanner';
 
 function createMockStorage(initialData: Record<string, string> = {}) {
@@ -30,7 +31,7 @@ describe('TASK-034: Offline Sync Unit Tests (AC-99, AC-102)', () => {
   const validTicket1: OfflineTicketItem = {
     id: 'TICK-SYNC-001',
     ticketCode: 'TK-11111111',
-    qrPayload: 'SECURE-QR-111',
+    qrHash: hashOfflineQrPayload(eventId, 'SECURE-QR-111'),
     ticketTypeId: 'TT-REG',
     ticketTypeName: 'Regular Zone',
     sessionId,
@@ -46,7 +47,7 @@ describe('TASK-034: Offline Sync Unit Tests (AC-99, AC-102)', () => {
   const validTicket2: OfflineTicketItem = {
     id: 'TICK-SYNC-002',
     ticketCode: 'TK-22222222',
-    qrPayload: 'SECURE-QR-222',
+    qrHash: hashOfflineQrPayload(eventId, 'SECURE-QR-222'),
     ticketTypeId: 'TT-REG',
     ticketTypeName: 'Regular Zone',
     sessionId,

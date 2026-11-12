@@ -289,10 +289,10 @@ export async function getOrderRefundEligibility(
       reason = 'บัตรนี้มีคำขอคืนเงินอยู่แล้ว (รอตรวจสอบ)';
     } else if (hasAdmitted) {
       eligible = false;
-      reason = 'บัตรเคยสแกนเข้างานแล้ว ไม่สามารถขอคืนได้ (AC-32)';
+      reason = 'บัตรเคยสแกนเข้างานแล้ว ไม่สามารถขอคืนได้';
     } else if (!isEligibleWindow) {
       eligible = false;
-      reason = 'พ้นกำหนดเวลายื่นคำขอคืนเงิน (พ้นกำหนดปกติ 168 ชั่วโมง และไม่อยู่ในช่วงเวลาขอคืนพิเศษ) (AC-32, AC-38)';
+      reason = 'พ้นกำหนดเวลายื่นคำขอคืนเงิน (พ้นกำหนดปกติ 168 ชั่วโมง และไม่อยู่ในช่วงเวลาขอคืนพิเศษ)';
     }
 
     return {
@@ -344,7 +344,7 @@ export async function submitRefundRequest(
   if (!session) {
     return {
       success: false,
-      error: 'กรุณายืนยันตัวตนผ่าน OTP หรือเซสชันหมดอายุแล้ว (AC-21)',
+      error: 'กรุณายืนยันตัวตนผ่าน OTP หรือเซสชันหมดอายุแล้ว',
       code: 'UNAUTHORIZED',
     };
   }
@@ -352,7 +352,7 @@ export async function submitRefundRequest(
   if (!input.ticketIds || input.ticketIds.length === 0) {
     return {
       success: false,
-      error: 'กรุณาเลือกบัตรที่ต้องการขอคืนเงินอย่างน้อย 1 ใบ (AC-34)',
+      error: 'กรุณาเลือกบัตรที่ต้องการขอคืนเงินอย่างน้อย 1 ใบ',
       code: 'INVALID_INPUT',
     };
   }
@@ -408,7 +408,7 @@ export async function submitRefundRequest(
       await client.query('ROLLBACK');
       return {
         success: false,
-        error: 'คุณไม่มีสิทธิ์ยื่นคำขอคืนเงินสำหรับคำสั่งซื้อนี้ (AC-22)',
+        error: 'คุณไม่มีสิทธิ์ยื่นคำขอคืนเงินสำหรับคำสั่งซื้อนี้',
         code: 'FORBIDDEN',
       };
     }
@@ -438,7 +438,7 @@ export async function submitRefundRequest(
       return {
         success: false,
         error:
-          'พ้นกำหนดเวลายื่นคำขอคืนเงิน (พ้นกำหนดปกติ 168 ชั่วโมง และไม่อยู่ในช่วงเวลาขอคืนพิเศษ) (AC-32, AC-38)',
+          'พ้นกำหนดเวลายื่นคำขอคืนเงิน (พ้นกำหนดปกติ 168 ชั่วโมง และไม่อยู่ในช่วงเวลาขอคืนพิเศษ)',
         code: 'PAST_REFUND_CUTOFF',
       };
     }
@@ -504,7 +504,7 @@ export async function submitRefundRequest(
       await client.query('ROLLBACK');
       return {
         success: false,
-        error: 'ไม่สามารถขอคืนเงินบัตรที่เคยสแกนเข้างานแล้วได้ (AC-32)',
+        error: 'ไม่สามารถขอคืนเงินบัตรที่เคยสแกนเข้างานแล้วได้',
         code: 'TICKET_ALREADY_ADMITTED',
       };
     }
@@ -882,7 +882,7 @@ export async function approveRefundRequest(
         revokedTicketCount: 0,
         liabilityAmount: 0,
         quotaReturned: false,
-        error: `บัตร ${admittedCode} มีประวัติการสแกนเข้างานแล้ว ไม่สามารถอนุมัติคืนเงินได้ (AC-88)`,
+        error: `บัตร ${admittedCode} มีประวัติการสแกนเข้างานแล้ว ไม่สามารถอนุมัติคืนเงินได้`,
         code: 'TICKET_ALREADY_ADMITTED',
       };
     }
@@ -1432,7 +1432,7 @@ export async function recordManualRefundTransfer(
       success: false,
       status: 'error',
       code: 'FORBIDDEN',
-      error: 'เฉพาะผู้ดูแลระบบ (Owner) เท่านั้นที่สามารถบันทึกการโอนเงินคืนได้ (AC-37, AC-92)',
+      error: 'เฉพาะผู้ดูแลระบบ (Owner) เท่านั้นที่สามารถบันทึกการโอนเงินคืนได้',
     };
   }
 
@@ -1696,7 +1696,7 @@ export async function getRefundTransferProof(
     return {
       success: false,
       code: 'FORBIDDEN',
-      error: 'เฉพาะผู้ดูแลระบบ (Owner) เท่านั้นที่มีสิทธิ์เปิดดูไฟล์หลักฐานการโอนเงิน (AC-92)',
+      error: 'เฉพาะผู้ดูแลระบบ (Owner) เท่านั้นที่มีสิทธิ์เปิดดูไฟล์หลักฐานการโอนเงิน',
     };
   }
 

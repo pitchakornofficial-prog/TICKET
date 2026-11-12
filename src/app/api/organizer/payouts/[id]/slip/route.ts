@@ -19,7 +19,7 @@ export async function GET(
   }
 
   if (session.user.role !== 'organizer' && session.user.role !== 'owner') {
-    return new Response('Forbidden: เฉพาะผู้จัดงานหรือผู้ดูแลระบบเท่านั้นที่สามารถดูสลิปการโอนเงินได้ (AC-92)', {
+    return new Response('Forbidden: เฉพาะผู้จัดงานหรือผู้ดูแลระบบเท่านั้นที่สามารถดูสลิปการโอนเงินได้', {
       status: 403,
     });
   }
@@ -58,7 +58,7 @@ export async function GET(
 
     // Multi-tenant check: organizer can only view payouts for their own event
     if (session.user.role === 'organizer' && payout.organizerId !== session.user.id) {
-      return new Response('Forbidden: คุณไม่มีสิทธิ์ดูสลิปของคอนเสิร์ตอื่น (AC-92)', {
+      return new Response('Forbidden: คุณไม่มีสิทธิ์ดูสลิปของคอนเสิร์ตอื่น', {
         status: 403,
       });
     }
@@ -95,6 +95,9 @@ export async function GET(
       status: 200,
       headers: {
         'Content-Type': 'image/svg+xml; charset=utf-8',
+        'Content-Security-Policy': "default-src 'none'; sandbox",
+        'X-Content-Type-Options': 'nosniff',
+        'X-Frame-Options': 'DENY',
         'Cache-Control': 'private, no-cache, no-store, must-revalidate',
       },
     });

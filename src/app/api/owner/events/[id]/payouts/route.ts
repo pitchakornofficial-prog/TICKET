@@ -25,7 +25,7 @@ export async function POST(
 
   if (session.user.role !== 'owner') {
     return Response.json(
-      { message: 'ไม่อนุญาต: เฉพาะผู้ดูแลระบบ (Owner) เท่านั้นที่มีสิทธิ์บันทึกการโอนเงิน (AC-27)' },
+      { message: 'ไม่อนุญาต: เฉพาะผู้ดูแลระบบ (Owner) เท่านั้นที่มีสิทธิ์บันทึกการโอนเงิน' },
       { status: 403 },
     );
   }

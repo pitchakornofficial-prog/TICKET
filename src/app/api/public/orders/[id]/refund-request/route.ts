@@ -16,7 +16,7 @@ export async function POST(
 
   if (!token) {
     return Response.json(
-      { message: 'กรุณายืนยันตัวตนผ่าน OTP ก่อนยื่นคำขอคืนเงิน (AC-21)' },
+      { message: 'กรุณายืนยันตัวตนผ่าน OTP ก่อนยื่นคำขอคืนเงิน' },
       { status: 401 },
     );
   }

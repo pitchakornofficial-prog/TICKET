@@ -148,7 +148,7 @@ test.describe('Buyer Refund Requests flow (TASK-021, AC-32, AC-33, AC-34, AC-21)
     await toggleRefundBtn.click();
 
     await expect(page.getByText('แบบฟอร์มยื่นคำขอคืนเงิน (Partial / Whole Refund)')).toBeVisible();
-    await expect(page.getByText('เงื่อนไขการคืนเงินปกติ (AC-32):')).toBeVisible();
+    await expect(page.getByText('เงื่อนไขการคืนเงินปกติ:')).toBeVisible();
 
     // Check that 2 ticket checkboxes are available
     const checkboxes = page.locator('input[name="refund-ticket-checkbox"]');
@@ -175,7 +175,7 @@ test.describe('Buyer Refund Requests flow (TASK-021, AC-32, AC-33, AC-34, AC-21)
     // Expect success message and pending status
     await expect(page.getByText('สถานะ: รอเจ้าหน้าที่ตรวจสอบ')).toBeVisible();
     await expect(page.getByText('รอการตรวจสอบ (pending)')).toBeVisible();
-    await expect(page.getByText('คำขออยู่ในสถานะรอตรวจสอบ บัตรยังสามารถใช้สแกนเข้างานได้จนกว่าจะได้รับการอนุมัติ (AC-34)')).toBeVisible();
+    await expect(page.getByText('คำขออยู่ในสถานะรอตรวจสอบ บัตรยังสามารถใช้สแกนเข้างานได้จนกว่าจะได้รับการอนุมัติ')).toBeVisible();
 
     // Verify that both tickets and QR codes remain visible and not revoked (AC-34)
     await expect(page.getByText('รายการบัตรเข้างาน (2 ใบ)')).toBeVisible();

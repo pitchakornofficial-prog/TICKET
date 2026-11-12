@@ -82,7 +82,7 @@ export async function POST(
 
     return Response.json(
       {
-        message: 'ยื่นคำขอแก้ไขรอบการแสดงสำเร็จ รอเจ้าของระบบ (Owner) ตรวจสอบและอนุมัติ (AC-67)',
+        message: 'ยื่นคำขอแก้ไขรอบการแสดงสำเร็จ รอเจ้าของระบบ (Owner) ตรวจสอบและอนุมัติ',
         amendmentId: result.amendmentId,
       },
       { status: 201 },

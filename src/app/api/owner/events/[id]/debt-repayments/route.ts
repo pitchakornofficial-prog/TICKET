@@ -25,7 +25,7 @@ export async function POST(
 
   if (session.user.role !== 'owner') {
     return Response.json(
-      { message: 'ไม่อนุญาต: เฉพาะผู้ดูแลระบบ (Owner) เท่านั้นที่มีสิทธิ์บันทึกรับเงินคืนจากผู้จัดงาน (AC-86)' },
+      { message: 'ไม่อนุญาต: เฉพาะผู้ดูแลระบบ (Owner) เท่านั้นที่มีสิทธิ์บันทึกรับเงินคืนจากผู้จัดงาน' },
       { status: 403 },
     );
   }

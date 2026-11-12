@@ -613,10 +613,10 @@ export function GuestOrderLookupView({ initialOrderId }: GuestOrderLookupViewPro
             <div className="dev-otp-helper-banner" role="status">
               <div className="dev-otp-helper-label">
                 <SparklesIcon style={{ width: '16px', height: '16px' }} />
-                <span>โหมดทดสอบ Local</span>
+                <span>ตัวช่วยกรอกรหัส OTP</span>
               </div>
               <div className="dev-otp-code-display">
-                รหัส OTP สำหรับทดสอบ: <strong id="dev-otp-value">{devOtpCode}</strong>
+                รหัส OTP ของคุณ: <strong id="dev-otp-value">{devOtpCode}</strong>
               </div>
               <button
                 type="button"

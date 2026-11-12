@@ -105,7 +105,7 @@ export async function POST(
 
     return Response.json(
       {
-        message: 'สลับเครื่องหลักประจำงานสำเร็จ (AC-97)',
+        message: 'สลับเครื่องหลักประจำงานสำเร็จ',
         ...result,
       },
       { status: 200 },

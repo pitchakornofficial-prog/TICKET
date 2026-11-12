@@ -164,7 +164,7 @@ export async function correctOrderContact(
   if (input.actor.role !== 'owner') {
     return {
       success: false,
-      error: 'เฉพาะผู้ดูแลระบบ (Owner) เท่านั้นที่มีสิทธิ์แก้ไขข้อมูลติดต่อของคำสั่งซื้อที่ชำระแล้ว (AC-76)',
+      error: 'เฉพาะผู้ดูแลระบบ (Owner) เท่านั้นที่มีสิทธิ์แก้ไขข้อมูลติดต่อของคำสั่งซื้อที่ชำระแล้ว',
       code: 'FORBIDDEN',
     };
   }
@@ -195,7 +195,7 @@ export async function correctOrderContact(
   if (!reason) {
     return {
       success: false,
-      error: 'กรุณาระบุเหตุผลหรือบันทึกผลการตรวจสอบตัวตนผู้ซื้อ (G-24)',
+      error: 'กรุณาระบุเหตุผลหรือบันทึกผลการตรวจสอบตัวตนผู้ซื้อ',
       code: 'INVALID_INPUT',
     };
   }
@@ -227,7 +227,7 @@ export async function correctOrderContact(
     if (order.status !== 'paid') {
       return {
         success: false,
-        error: 'สามารถแก้ไขข้อมูลติดต่อได้เฉพาะคำสั่งซื้อที่ชำระเงินเรียบร้อยแล้วเท่านั้น (AC-76)',
+        error: 'สามารถแก้ไขข้อมูลติดต่อได้เฉพาะคำสั่งซื้อที่ชำระเงินเรียบร้อยแล้วเท่านั้น',
         code: 'INVALID_STATUS',
       };
     }
@@ -287,7 +287,7 @@ export async function getOrderContactAuditLogs(
   actor: { id: string; role: string },
 ): Promise<OrderContactAuditRecord[]> {
   if (actor.role !== 'owner') {
-    throw new Error('เฉพาะผู้ดูแลระบบ (Owner) เท่านั้นที่มีสิทธิ์ดูประวัติการแก้ไขข้อมูลติดต่อ (AC-76)');
+    throw new Error('เฉพาะผู้ดูแลระบบ (Owner) เท่านั้นที่มีสิทธิ์ดูประวัติการแก้ไขข้อมูลติดต่อ');
   }
 
   await ensureContactAuditSchema(pool);
@@ -330,7 +330,7 @@ export async function getAllOrderContactAuditLogs(
   limit = 50,
 ): Promise<OrderContactAuditWithDetails[]> {
   if (actor.role !== 'owner') {
-    throw new Error('เฉพาะผู้ดูแลระบบ (Owner) เท่านั้นที่มีสิทธิ์ดูประวัติการแก้ไขข้อมูลติดต่อ (AC-76)');
+    throw new Error('เฉพาะผู้ดูแลระบบ (Owner) เท่านั้นที่มีสิทธิ์ดูประวัติการแก้ไขข้อมูลติดต่อ');
   }
 
   await ensureContactAuditSchema(pool);

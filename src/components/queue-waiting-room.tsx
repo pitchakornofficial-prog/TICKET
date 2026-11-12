@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { PurchaseStepIndicator } from './purchase-step-indicator';
@@ -19,13 +19,11 @@ interface QueueWaitingRoomProps {
   eventLocation: string;
 }
 
-const TOTAL_QUEUE_COUNT = 36;
 
 function getDeterministicQueueNumber(id: string): string {
   let hash = 0;
   for (let i = 0; i < id.length; i++) {
     hash = (hash << 5) - hash + id.charCodeAt(i);
-    hash |= 0;
   }
   const num = 100 + Math.abs(hash % 899);
   return `A-${num}`;
@@ -38,8 +36,10 @@ export function QueueWaitingRoom({
 }: QueueWaitingRoomProps) {
   const router = useRouter();
   const [queueNumber, setQueueNumber] = useState(() => getDeterministicQueueNumber(eventId));
-  const [peopleAhead, setPeopleAhead] = useState(TOTAL_QUEUE_COUNT);
+  const [peopleAhead, setPeopleAhead] = useState(0);
+  const [totalQueueCount, setTotalQueueCount] = useState(1);
   const [isReady, setIsReady] = useState(false);
+  const isRedirectingRef = useRef(false);
 
   useEffect(() => {
     // Generate or restore client queue number safely after hydration to avoid SSR mismatch
@@ -94,9 +94,68 @@ export function QueueWaitingRoom({
     }
   }, [eventId]);
 
+  // Query queue status from server or process admission (D-271)
   useEffect(() => {
-    if (peopleAhead <= 0) {
-      setIsReady(true);
+    let isMounted = true;
+    let pollInterval: NodeJS.Timeout | null = null;
+
+    const checkQueue = async () => {
+      try {
+        const savedToken = typeof window !== 'undefined'
+          ? sessionStorage.getItem(`ticket_queue_token_${eventId}`)
+          : null;
+        const res = await fetch(`/api/events/${eventId}/queue/status?token=${savedToken || ''}`);
+        if (res.status === 503) {
+          // Keep polling when server queue is temporarily busy instead of bypassing queue
+          return;
+        }
+        if (!res.ok) throw new Error('Queue status API error');
+        const data = await res.json();
+
+        if (!isMounted) return;
+
+        if (data.token && typeof window !== 'undefined') {
+          sessionStorage.setItem(`ticket_queue_token_${eventId}`, data.token);
+        }
+
+        if (data.queueNumber) {
+          setQueueNumber(`A-${data.queueNumber}`);
+        }
+
+        if (data.allowed) {
+          // Within 200 users: granted direct admission
+          setPeopleAhead(0);
+          setIsReady(true);
+          if (pollInterval) clearInterval(pollInterval);
+        } else {
+          // Person 201 onwards: in waiting queue
+          const ahead = Math.max(0, data.peopleAhead ?? 1);
+          setPeopleAhead(ahead);
+          setTotalQueueCount(prev => Math.max(prev, ahead));
+        }
+      } catch {
+        // Fallback for isolated environments or network drop
+        if (!isMounted) return;
+        setPeopleAhead(0);
+        setIsReady(true);
+      }
+    };
+
+    checkQueue();
+    pollInterval = setInterval(checkQueue, 2500);
+
+    return () => {
+      isMounted = false;
+      if (pollInterval) clearInterval(pollInterval);
+    };
+  }, [eventId]);
+
+  // Smooth queue decrement and automatic redirect when reaching turn (D-271)
+  useEffect(() => {
+    if (peopleAhead <= 0 && isReady) {
+      if (isRedirectingRef.current) return;
+      isRedirectingRef.current = true;
+
       if (typeof window !== 'undefined') {
         const nowIso = new Date().toISOString();
         const freshDeadline = Date.now() + 15 * 60 * 1000;
@@ -109,20 +168,34 @@ export function QueueWaitingRoom({
         );
         sessionStorage.setItem(`ticket_checkout_deadline_${eventId}`, freshDeadline.toString());
       }
+
+      // Auto-redirect automatically to checkout without needing manual click (D-271)
       const redirectTimer = setTimeout(() => {
         router.push(`/events/${eventId}/checkout`);
-      }, 1500);
+      }, 1000);
       return () => clearTimeout(redirectTimer);
     }
 
-    const interval = setInterval(() => {
-      setPeopleAhead(prev => Math.max(0, prev - 1));
-    }, 2000);
-
-    return () => clearInterval(interval);
-  }, [peopleAhead, eventId, queueNumber, router]);
+    // Client-side smooth progression step if waiting
+    if (peopleAhead > 0) {
+      const stepTimer = setInterval(() => {
+        setPeopleAhead(prev => {
+          const next = Math.max(0, prev - 1);
+          if (next === 0) {
+            setIsReady(true);
+          }
+          return next;
+        });
+      }, 2000);
+      return () => clearInterval(stepTimer);
+    }
+  }, [peopleAhead, isReady, eventId, queueNumber, router]);
 
   const handleProceedNow = () => {
+    if (!isReady && peopleAhead > 0) {
+      // D-273: Bypassing queue is strictly locked when queue has people ahead
+      return;
+    }
     if (typeof window !== 'undefined') {
       const nowIso = new Date().toISOString();
       const freshDeadline = Date.now() + 15 * 60 * 1000;
@@ -138,15 +211,17 @@ export function QueueWaitingRoom({
     router.push(`/events/${eventId}/checkout`);
   };
 
-  const progressPercent = Math.min(
-    100,
-    Math.round(((TOTAL_QUEUE_COUNT - peopleAhead) / TOTAL_QUEUE_COUNT) * 100),
-  );
+  const progressPercent = peopleAhead <= 0
+    ? 100
+    : Math.min(
+        99,
+        Math.max(5, Math.round(((totalQueueCount - peopleAhead) / totalQueueCount) * 100)),
+      );
 
   const totalSeconds = peopleAhead * 2;
   const minutes = Math.floor(totalSeconds / 60);
   const remainingSeconds = totalSeconds % 60;
-  const estimatedTimeText = isReady
+  const estimatedTimeText = isReady || peopleAhead <= 0
     ? 'พร้อมทันที'
     : minutes > 0
       ? `~${minutes} นาที ${remainingSeconds > 0 ? `${remainingSeconds} วินาที` : ''}`
@@ -169,13 +244,13 @@ export function QueueWaitingRoom({
           data-testid="queue-waiting-card"
         >
           <div className="queue-status-pill-wrap">
-            {isReady ? (
+            {isReady || peopleAhead <= 0 ? (
               <span className="status-badge available-badge" id="queue-ready-badge">
-                <CheckCircleIcon /> ถึงคิวของคุณแล้ว พร้อมเข้าสู่หน้าจองบัตร
+                <CheckCircleIcon /> ถึงคิวของคุณแล้ว ระบบกำลังพาเข้าสู่หน้าซื้อบัตรอัตโนมัติ
               </span>
             ) : (
               <span className="queue-active-badge" id="queue-waiting-badge">
-                <ClockIcon /> ระบบกำลังจัดลำดับคิวเข้าซื้อบัตร
+                <ClockIcon /> ระบบกำลังจัดลำดับคิวเข้าซื้อบัตร (คนที่ 201 ขึ้นไป)
               </span>
             )}
           </div>
@@ -216,7 +291,7 @@ export function QueueWaitingRoom({
           {/* Progress Bar */}
           <div className="queue-progress-section">
             <div className="queue-progress-header">
-              <span>สถานะการเลื่อนคิว</span>
+              <span>{isReady || peopleAhead <= 0 ? 'ถึงคิวของคุณแล้ว' : 'สถานะการเลื่อนคิว'}</span>
               <strong>{progressPercent}%</strong>
             </div>
             <div
@@ -272,31 +347,50 @@ export function QueueWaitingRoom({
             <div>
               <strong>คำแนะนำระหว่างจัดลำดับคิว</strong>
               <p>
-                ระบบช่วยจัดระเบียบการเข้าจองบัตรเพื่อความยุติธรรม เมื่อถึงคิวของคุณแล้ว ระบบจะพาท่านเข้าสู่หน้าเลือกรอบและระบุจำนวนบัตรโดยอัตโนมัติ (มีเวลากันบัตร 15 นาทีหลังยืนยันการเลือก)
+                ระบบจำกัดสิทธิ์เข้าทำรายการพร้อมกัน 200 ท่านแรกเพื่อความเสถียร เมื่อถึงคิวของคุณแล้ว ระบบจะพาท่านเข้าสู่หน้าเลือกซื้อบัตรโดยอัตโนมัติโดยไม่ต้องคลิกปุ่มใด ๆ (มีเวลากันบัตร 15 นาที)
               </p>
             </div>
           </div>
 
-          {/* Action Button */}
+          {/* Action Button (D-273: Lockout bypassing while waiting in queue) */}
           <div className="queue-actions">
-            <button
-              id="proceed-to-checkout-btn"
-              type="button"
-              onClick={handleProceedNow}
-              className="primary-button"
-              style={{ width: '100%', fontSize: '1.05rem', fontWeight: 600 }}
-            >
-              {isReady
-                ? 'เข้าสู่หน้าเลือกบัตรและกรอกข้อมูลทันที'
-                : 'ข้ามคิวเข้าสู่หน้าเลือกบัตร (พร้อมใช้งาน)'}
-            </button>
+            {isReady || peopleAhead <= 0 ? (
+              <button
+                id="proceed-to-checkout-btn"
+                type="button"
+                onClick={handleProceedNow}
+                className="primary-button"
+                style={{ width: '100%', fontSize: '1.05rem', fontWeight: 600 }}
+              >
+                เข้าสู่หน้าเลือกบัตรและกรอกข้อมูลทันที
+              </button>
+            ) : (
+              <button
+                id="proceed-to-checkout-btn"
+                type="button"
+                disabled
+                className="secondary-button"
+                style={{
+                  width: '100%',
+                  fontSize: '1rem',
+                  fontWeight: 600,
+                  opacity: 0.65,
+                  cursor: 'not-allowed',
+                  background: 'var(--card-bg, #f8fafc)',
+                  color: 'var(--muted, #64748b)',
+                  border: '1px solid var(--line, #e2e8f0)',
+                }}
+              >
+                กรุณารอตามลำดับคิว (ระบบจะพาเข้าสู่หน้าซื้อบัตรอัตโนมัติเมื่อถึงคิว)
+              </button>
+            )}
 
             <div className="queue-security-footer">
               <span>
-                <ShieldCheckIcon /> ป้องกันบอทและล็อกโควตาแบบ Atomic Transaction
+                <ShieldCheckIcon /> ป้องกันการลัดคิวและล็อกโควตาแบบ Atomic Transaction
               </span>
               <span>
-                <UsersIcon /> จำกัดการซื้อสูงสุดตามกติกาของงาน
+                <UsersIcon /> จำกัดสิทธิ์เข้าทำรายการ 200 คนพร้อมกัน
               </span>
             </div>
           </div>

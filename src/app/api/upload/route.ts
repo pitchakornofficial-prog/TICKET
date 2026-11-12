@@ -42,7 +42,7 @@ export async function handlePresignedRequest(
   const visibility: 'public' | 'private' = reqVisibility === 'private' ? 'private' : 'public';
   if (visibility === 'private' && user.role !== 'owner') {
     return Response.json(
-      { message: 'เฉพาะผู้ดูแลระบบ (Owner) เท่านั้นที่สามารถอัปโหลดไฟล์หลักฐานส่วนตัวได้ (AC-92)' },
+      { message: 'เฉพาะผู้ดูแลระบบ (Owner) เท่านั้นที่สามารถอัปโหลดไฟล์หลักฐานส่วนตัวได้' },
       { status: 403 },
     );
   }
@@ -197,7 +197,7 @@ export async function POST(request: Request) {
   if (visibility === 'private' && session.user.role !== 'owner') {
     await releaseUploadQuota(pool, quota.reservationId);
     return Response.json(
-      { message: 'เฉพาะผู้ดูแลระบบ (Owner) เท่านั้นที่สามารถอัปโหลดไฟล์หลักฐานส่วนตัวได้ (AC-92)' },
+      { message: 'เฉพาะผู้ดูแลระบบ (Owner) เท่านั้นที่สามารถอัปโหลดไฟล์หลักฐานส่วนตัวได้' },
       { status: 403 },
     );
   }

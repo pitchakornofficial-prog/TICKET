@@ -120,7 +120,7 @@ export function OrganizerMoneyReportView({
       >
         <div>
           <h2 style={{ fontSize: '20px', fontWeight: 'bold', color: '#0f172a', margin: '0 0 4px 0' }}>
-            รายงานการเงินและยอดพร้อมจ่าย (Organizer Financial Report — AC-28)
+            รายงานการเงินและยอดพร้อมจ่าย (Organizer Financial Report)
           </h2>
           <p style={{ fontSize: '13px', color: '#64748b', margin: 0 }}>
             {report?.eventTitle || 'กำลังโหลด...'}
@@ -266,13 +266,13 @@ export function OrganizerMoneyReportView({
               }}
             >
               <div style={{ fontWeight: 'bold', marginBottom: '4px' }}>
-                แจ้งเตือนยอดหนี้ค้างชำระ (Debt Outstanding — AC-85, AC-86)
+                แจ้งเตือนยอดหนี้ค้างชำระ (Debt Outstanding)
               </div>
               <div>
                 ยอดหนี้ค้างชำระจำนวน <strong>฿{report.debtAmount.toLocaleString('th-TH', { minimumFractionDigits: 2 })}</strong>{' '}
                 (ยอดเกินจ่ายจาก refund: ฿{report.excessPayoutRefundDebt.toLocaleString('th-TH', { minimumFractionDigits: 2 })}
                 {report.flatFeeDebt > 0 ? `, ค่าบริการเหมาจ่ายรอหัก: ฿${report.flatFeeDebt.toLocaleString('th-TH', { minimumFractionDigits: 2 })}` : ''}){' '}
-                จะถูกหักจากรายรับถัดไปของงานนี้เท่านั้น และไม่ถูกนำไปหักข้ามไปยังงานคอนเสิร์ตอื่นของผู้จัดงาน (AC-85)
+                จะถูกหักจากรายรับถัดไปของงานนี้เท่านั้น และไม่ถูกนำไปหักข้ามไปยังงานคอนเสิร์ตอื่นของผู้จัดงาน
               </div>
             </div>
           )}
@@ -517,7 +517,7 @@ export function OrganizerMoneyReportView({
                   รายการคำสั่งซื้อและค่าบริการรายคำสั่ง ({report.orders.length} รายการ)
                 </span>
                 <span style={{ fontSize: '12px', color: '#64748b', fontWeight: 'normal' }}>
-                  * ข้อมูลติดต่อผู้ซื้อถูกปิดบังบางส่วนเพื่อความปลอดภัย (AC-64)
+                  * ข้อมูลติดต่อผู้ซื้อถูกปิดบังบางส่วนเพื่อความปลอดภัย
                 </span>
               </div>
             </summary>
@@ -586,7 +586,7 @@ export function OrganizerMoneyReportView({
                   ประวัติการโอนเงินให้ผู้จัดงาน ({report.payouts.length} รายการ)
                 </span>
                 <span style={{ fontSize: '12px', color: '#64748b', fontWeight: 'normal' }}>
-                  * ไฟล์หลักฐานการโอนเงินจำกัดสิทธิ์เฉพาะผู้ดูแลระบบ (AC-92)
+                  * ไฟล์หลักฐานการโอนเงินจำกัดสิทธิ์เฉพาะผู้ดูแลระบบ
                 </span>
               </div>
             </summary>

@@ -85,7 +85,7 @@ describe('D-250 & D-251: Customer & Orders Hub Modernization & Top-Center Floati
     expect(hubContent).toContain('new-buyer-email');
     expect(hubContent).toContain('new-buyer-phone');
     expect(hubContent).toContain('correction-reason');
-    expect(hubContent).toContain('บันทึกเหตุผลการตรวจสอบตัวตนผู้ซื้อ (G-24)');
+    expect(hubContent).toContain('บันทึกเหตุผลการตรวจสอบตัวตนผู้ซื้อ *');
 
     // 2. Audit History Modal
     expect(hubContent).toContain('audit-history-dialog');

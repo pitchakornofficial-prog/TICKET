@@ -4,6 +4,7 @@
 - Created: 2026-10-19 (Asia/Bangkok)
 - Updated: 2026-10-20 (Asia/Bangkok), write-spec reconciliation ครบ G-01–G-52; change-scope 2026-10-22 เพิ่ม AC-115–AC-116; change-scope 2026-10-23 เพิ่ม AC-117 (multi-step purchase journey: events -> queue -> checkout -> payment ตาม D-27)
 - Payment provider reconciliation: 2026-10-30 — Stripe PromptPay ตาม ADR-0003/P1–P4; เพิ่ม AC-118–AC-123; หลักฐาน tasks เดิมไม่รับรอง Stripe และมี follow-up TASK-041–044 ตามแผนวันที่ 2026-10-30
+- Email reconciliation: 2026-11-11 — SES แทน Resend; เพิ่ม AC-126–128 และ TASK-045; หลักฐาน provider เดิมไม่รับรอง SES.
 - Payment-time reconciliation: 2026-10-30 — ผู้ใช้ยืนยัน G-53/ADR-0003/P5 ใช้ success Event time; AC-122 superseded เก็บเป็นประวัติ และเพิ่ม AC-124/125; ยังไม่ใช่ผล implementation
 - Production planning reconciliation: 2026-10-30 — อ้าง baseline ลดต้นทุนใน ADR-0002/0003; คง AC และผลส่งมอบ local เดิม ไม่เพิ่ม AWS deployment เข้า feature scope
 - Clarification follow-up: G-48–G-52 นำมาปรับสูตร พฤติกรรม และ AC/verification แล้ว; รักษาแหล่งหลักใน CONTEXT
@@ -32,7 +33,7 @@ Change-scope 2026-10-22 เพิ่ม AC-115–AC-116; change-scope 2026-10-23
 - ลูกค้า: หน้าแรก ค้นหางาน ข่าว รายละเอียดงาน/รอบ/ประเภทบัตร ข้อมูลผู้ซื้อ OTP ชำระเงิน เปิด order/ticket และขอคืนเงิน
 - Owner: ข่าว คำเชิญ organizer อนุมัติรอบ/แก้ไข/เลื่อน/ยกเลิก fee/reserve ตรวจ refund และบันทึก manual refund/payout; หน้าภาพรวมงานค้างและเมนูกลุ่มของหลังบ้าน owner (D-15–D-20)
 - Organizer: งาน/รอบ/ประเภทบัตรของตน limit ต่อ order รายงานยอด และเพิ่ม scanner เฉพาะงาน รวมถึงกำหนดเครื่องหลัก/ช่วงรับเข้า
-- Guest checkout, reservation 15 นาที, Stripe PromptPay ราย order, Resend และ QR เฉพาะ ticket
+- Guest checkout, reservation 15 นาที, Stripe PromptPay ราย order, Amazon SES และ QR เฉพาะ ticket
 - Refund บางใบ การยกเลิก/เลื่อนรอบ จ่ายผู้จัดงานรายสัปดาห์ระหว่างขาย เงินสำรอง และยอดค้างงานเดิม
 - Scanner online/offline เข้า/ออกและกลับเข้า โดยมีเครื่องหลักออฟไลน์เพียงเครื่องเดียวทั้งงาน
 - Functional contract ที่ยังถูกต้องเมื่อเว็บหลาย instance ใช้ข้อมูลกลาง ตาม ADR-0001
@@ -403,7 +404,7 @@ Offline dataset จำกัดตาม scanner scope ไม่ใส่ buyer 
 ## Non-functional requirements
 
 - ADR-0001: Next.js+TypeScript แอปเดียว PostgreSQL กลางสำหรับสิทธิ์/ยอด/สถานะและตัวนับร่วมที่สำคัญ ไม่ตัดสิน inventory จาก memory เฉพาะเว็บ
-- ADR-0003: Stripe PromptPay/Resend/R2 ตามข้อตกลงล่าสุด; ไม่เพิ่ม Redis, microservice, message broker หรือ provider ใหม่โดยไม่มีเหตุจากข้อกำหนด
+- ADR-0003: Stripe PromptPay/SES/R2 ตามข้อตกลงล่าสุด; ไม่เพิ่ม Redis, microservice, message broker หรือ provider ใหม่โดยไม่มีเหตุจากข้อกำหนด
 - D-05: ลูกค้า mobile หลังบ้าน desktop พร้อม mobile และ scanner มือถือ/แท็บเล็ตมีกล้อง; critical action/ผล/ยอดเข้าถึงได้บนขนาดที่ตรวจ
 - Security/privacy: ผูกสิทธิ์กับ actor/object จริง เก็บรหัส/ลิงก์ลับในรูปที่ไม่เปิดเผย ตรวจ expiry/one-use ฝั่ง server ตาม ADR-0004 ไม่ให้ cache/file/API รั่วข้ามสิทธิ์
 - Local functional verification มาก่อน deployment; หลาย instance/autoscaling/load verification อยู่ช่วงท้ายตาม ADR-0002 ไม่เลื่อนการตรวจ functional concurrency บน local ที่ทำได้
@@ -413,7 +414,7 @@ Offline dataset จำกัดตาม scanner scope ไม่ใส่ buyer 
 ## Acceptance criteria
 
 AC-01–AC-109 รักษา ID เดิมและปรับตามคำตอบที่ยืนยันแล้ว; AC-110–AC-114 เพิ่มเพื่อแยกตรวจ G-48–G-52
-AC-122 เป็น historical superseded; อีก 124 ข้อเป็น active observable target สถานะ **planned** ไม่ใช่ผลผ่านของ implementation
+AC-122 เป็น historical superseded; อีก 127 ข้อเป็น active observable target สถานะ **planned** ไม่ใช่ผลผ่านของ implementation
 ทุก AC ใช้สูตรและ timeline boundaries ที่ยืนยันแล้ว รวม G-48–G-52; ไม่มี expected result ที่รอคำตอบ product ในชุดนี้
 
 - AC-01: Given งานที่ owner อนุมัติให้เปิดเผยแล้ว เมื่อเข้าหน้าแรกและเปิดรายการนั้น Then เข้าถึงรายละเอียดคอนเสิร์ตและข้อมูลรอบ/ประเภทบัตรได้
@@ -544,6 +545,10 @@ AC-122 เป็น historical superseded; อีก 124 ข้อเป็น a
 
 - AC-124: Given authenticated matching `payment_intent.succeeded` Event และ PaymentIntent/order/ยอด/THB/mode ที่ตรวจครบ เมื่อใช้ตัดสินเวลาออกบัตร/คืนเงิน Then ใช้ Event.created เป็น T ตาม G-53 เทียบ D/C เดิมโดยตรง ไม่ปัด D/C หรือใช้เวลารับ webhook; T=D ถือ timely, T=C ถือจ่ายตั้งแต่ยกเลิก และ T>D ถือ late แม้ธนาคารอาจรับชำระก่อน D; ผลตาม AC-17/72/73/74/113/114 เกิดครั้งเดียว.
 - AC-125: Given ยังไม่มี matching verified success Event หรือ timestamp ใช้ไม่ได้/หลักฐานขัดแย้ง แม้ intent lookup เป็น succeeded เมื่อประมวลผล Then คงรอตรวจ ไม่ใช้เวลาบน browser/arrival/now/Intent.created/Charge.created/Event ชนิดอื่นแทน T และไม่ออกบัตรหรือตัดสินยอดคืนอัตโนมัติ; เมื่อได้หลักฐาน Event ถูกต้อง recovery ตาม AC-124 โดยไม่ต่อ deadline หรือทำผลซ้ำ.
+
+- AC-126: Given การส่ง OTP, บัตร/ลิงก์ order, คำเชิญ หรือ reset เมื่อระบบส่งอีเมลจริง Then ใช้ Amazon SES ภายใต้ identity ที่กำหนด โดยคงผู้รับ เนื้อหา สิทธิ์ และกฎเดิม; การรับคำขอส่งไม่ใช่หลักฐานถึง inbox.
+- AC-127: Given SES ปฏิเสธ ไม่พร้อม หรือผลส่งไม่แน่นอน เมื่อเกิดการส่ง Then ไม่รายงานว่าถึง inbox และคงพฤติกรรม failure/recovery เดิม รวม paid/issued ไม่ถูกยกเลิก; local capture/test transport ใช้ได้โดยไม่ส่งจริง และ production ไม่ fallback เป็น capture เมื่อ configuration ขาด.
+- AC-128: Given เตรียมเปิด production เมื่อประเมินความพร้อมอีเมล Then ต้องมี SES verified sending identity, production access และ quota ต่อวัน/วินาทีใน Region ที่ใช้เพียงพอต่อ peak รวม OTP/retry พร้อมวิธีติดตาม bounce/complaint; ผล local double ไม่รับรอง readiness.
 
 ## Verification plan
 
@@ -699,6 +704,10 @@ Code review ต้องตรวจขอบเขต สิทธิ์ concur
 - ยังไม่มี application manifest/runtime/package manager/runner/CI ที่ยืนยัน จึงไม่ใส่คำสั่ง test ที่คาดเดา; งาน implementation ต้องเตรียม runner ให้ผ่าน policy ก่อนอ้างว่าจบ
 - ทดสอบ per-order rounding/partial refund/locked fee และ cancellation timeline ตาม G-48–G-52 รวม T=C/T=D และ callback ซ้ำ; ทุก expected result ระบุแล้ว ไม่มีกรณีรอคำตอบในชุดนี้
 
+| AC-126 | ADR-0003 email change; requirement 2026-11-11 | Integration กับ SES contract double ตรวจ payload/identity และทุกประเภทอีเมล พร้อม E2E critical flows; provider acceptance ไม่เท่ากับ delivery |
+| AC-127 | AC-20/55/57/75; ADR-0003 | Unit/integration failure/timeout/config และ local capture/production guard; E2E recovery ของบัตรและ OTP |
+| AC-128 | ADR-0003; NQ-05 | ตรวจหลักฐาน identity, production access, quota และการติดตาม bounce/complaint ของ Region จริงก่อน production; local tests ไม่แทน evidence |
+
 ## Traceability and BQ reconciliation
 
 แหล่งหลักของ product/design อยู่ใน requirement, domain อยู่ใน CONTEXT, architecture/security delegation อยู่ใน ADRs
@@ -745,7 +754,7 @@ ADR-0003 → AC-15–AC-20/37/75 และ integration boundaries; ADR-0004 → 
 | NQ-02 | โลโก้จริง blue/token values/icon set/type scale/spacing/radius/shadow/motion และ browser versions สำหรับ visual checks | เลือกภายใน constraints/preferences ตอนออกแบบ/implementation ไม่เริ่ม design interview ใหม่โดยอัตโนมัติ |
 | NQ-03 | Package manager/runtime/framework versions, ORM, auth library, schema/API names, local runner และวิธี bootstrap | เลือกใน task planning/implementation ภายใน ADRs; runner ที่เกี่ยวข้องต้องพร้อม/ผ่านตาม policy ก่อนจบงาน |
 | NQ-04 | Baseline sizes/topology/scaling/backup/retention ยืนยันใน ADR-0002 ฉบับ 2026-10-30 แล้ว; ยังเปิดงบ cloud/estimate รวม IPv4, workload/duration/latency/error targets สำหรับ 200 simultaneous users, cooldown, connection budget ระหว่าง rollout และ RTO/RPO/retention | ต้องพร้อมก่อน production/deployment/scaling work; คงเป็นงานแยก ไม่ใช้ผล local รับรอง capacity หรือบันทึก estimate เป็นราคายืนยัน |
-| NQ-05 | Stripe Live/PromptPay approval (มี test account แล้ว แต่ live ยังไม่ยืนยันตาม P4), verified matching success Event/time contract ตาม G-53/P5 และ QR expiry/cancellation contract (actual-bank-time proof เดิม superseded), production email domain/peak sending quota และ R2 readiness/pricing ตาม ADR-0003 ฉบับ 2026-10-30 | ตรวจ contract ใน integration work และต้องพร้อมก่อนใช้ production; test double ไม่ใช่หลักฐาน provider readiness; ไม่ย้ายสมมติฐานราคา/ระยะอนุมัติ Omise มาเป็นของ Stripe |
+| NQ-05 | Stripe Live/PromptPay approval (มี test account แล้ว แต่ live ยังไม่ยืนยันตาม P4), verified matching success Event/time contract ตาม G-53/P5 และ QR expiry/cancellation contract (actual-bank-time proof เดิม superseded), SES production access, verified identity และ peak sending quota และ R2 readiness/pricing ตาม ADR-0003 ฉบับ 2026-10-30 | ตรวจ contract ใน integration work และต้องพร้อมก่อนใช้ production; test double ไม่ใช่หลักฐาน provider readiness; ไม่ย้ายสมมติฐานราคา/ระยะอนุมัติ Omise มาเป็นของ Stripe |
 | NQ-06 | Verified-session TTL, data/local retention, retry schedule, local storage mechanism และขั้นตอน owner ตรวจ contact correction/กระทบยอดเมื่อข้อมูลสูญหาย | กำหนดภายในสิทธิ์ วิธี login/OTP กติกาเงิน และ offline constraints ที่ยืนยัน หากต้องเปลี่ยน product contract ให้ถามก่อน; ไม่เดาว่าเป็นค่าที่ผู้ใช้เลือกแล้ว |
 
 ## Specification quality gate

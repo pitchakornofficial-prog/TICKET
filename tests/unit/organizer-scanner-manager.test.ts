@@ -160,7 +160,7 @@ describe('Organizer Scanner Manager (D-89)', () => {
       'utf8',
     );
     expect(scannerManagerContent).toContain('scanner-session-tip-box');
-    expect(scannerManagerContent).toContain('คำแนะนำการใช้งานและวิธีทดสอบระบบ');
+    expect(scannerManagerContent).toContain('คำแนะนำการใช้งาน:');
     expect(scannerManagerContent).toContain('หน้าต่างไม่ระบุตัวตน (Incognito / InPrivate Window)');
     expect(scannerManagerContent).not.toMatch(/\p{Extended_Pictographic}/u);
   });

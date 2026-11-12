@@ -18,8 +18,11 @@ export async function POST(
   }
 
   const { role, id, name } = session.user;
-  if (!['scanner', 'organizer', 'owner'].includes(role)) {
-    return Response.json({ message: 'ไม่อนุญาต: เฉพาะทีมงานที่ได้รับสิทธิ์เท่านั้น' }, { status: 403 });
+  if (role !== 'scanner') {
+    return Response.json(
+      { message: 'ไม่อนุญาต: เฉพาะเครื่องหลักประจำงานเท่านั้นที่สามารถซิงก์ข้อมูลออฟไลน์ได้' },
+      { status: 403 },
+    );
   }
 
   const { id: eventId } = await params;

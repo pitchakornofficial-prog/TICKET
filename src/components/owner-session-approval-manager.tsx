@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import type { SessionAmendmentRecord, SessionCancellationRecord } from '@/server/events';
+import type { OrganizerFeeMode, CustomerFeeMode } from '@/server/fees';
 import { formatBaht, formatDateTime } from '@/lib/locale';
 import {
   CheckCircleIcon,
@@ -29,6 +30,7 @@ interface ReviewingTicketType {
   price: number;
   quota: number;
   isStudentPrivilege?: boolean;
+  studentPrice?: number | null;
 }
 
 interface ReviewingSession {
@@ -58,7 +60,9 @@ interface ReviewingEventDetails {
 interface FeeEventSummary {
   id: string;
   feeSettings?: {
+    organizerFeeMode?: OrganizerFeeMode;
     organizerFeeRate?: number;
+    customerFeeMode?: CustomerFeeMode;
     customerFeeRate?: number;
     reservePercentage?: number;
     organizerFeePrivilegeRate?: number;
@@ -114,7 +118,9 @@ export interface PlatformConcertItem {
   payoutAccountNumber?: string;
   payoutAccountName?: string;
   ubuPrivilegeMode?: boolean;
+  organizerFeeMode?: OrganizerFeeMode;
   organizerFeeRate?: number;
+  customerFeeMode?: CustomerFeeMode;
   customerFeeRate?: number;
   reservePercentage?: number;
   createdAt?: string;
@@ -170,7 +176,9 @@ export function OwnerSessionApprovalManager() {
   const [reviewingSession, setReviewingSession] = useState<PendingSession | null>(null);
   const [reviewingEventDetails, setReviewingEventDetails] = useState<ReviewingEventDetails | null>(null);
   const [loadingReviewDetails, setLoadingReviewDetails] = useState(false);
+  const [customOrganizerFeeMode, setCustomOrganizerFeeMode] = useState<OrganizerFeeMode>('percentage');
   const [customFeeRate, setCustomFeeRate] = useState<number>(3.0);
+  const [customCustomerFeeMode, setCustomCustomerFeeMode] = useState<CustomerFeeMode>('percentage');
   const [customCustomerFeeRate, setCustomCustomerFeeRate] = useState<number>(0.0);
   const [customReserveRate, setCustomReserveRate] = useState<number>(0.0);
   const [customUbuPrivilegeFeeRate, setCustomUbuPrivilegeFeeRate] = useState<number>(3.0);
@@ -332,10 +340,6 @@ export function OwnerSessionApprovalManager() {
   async function handleApproveCancellation(cancellationId: string, eventTitle: string) {
     setError('');
     setActionMessage('');
-    if (cancellationId.startsWith('mock-')) {
-      setActionMessage(`อนุมัติการยกเลิกรอบการแสดงของ "${eventTitle}" สำเร็จ (ยกเลิกบัตร 200 ใบ, สร้างรายการคืนเงิน 14 รายการ ยอด ${formatBaht(130000)})`);
-      return;
-    }
     try {
       const res = await fetch(`/api/owner/sessions/cancellations/${cancellationId}/approve`, {
         method: 'POST',
@@ -362,12 +366,6 @@ export function OwnerSessionApprovalManager() {
     }
     setError('');
     setActionMessage('');
-    if (cancellationId.startsWith('mock-')) {
-      setActionMessage('ปฏิเสธคำขอยกเลิกรอบการแสดงเรียบร้อยแล้ว');
-      setRejectingCancellationId(null);
-      setCancellationRejectionReason('');
-      return;
-    }
     try {
       const res = await fetch(`/api/owner/sessions/cancellations/${cancellationId}/reject`, {
         method: 'POST',
@@ -398,37 +396,6 @@ export function OwnerSessionApprovalManager() {
     setLoadingReviewDetails(true);
     setReviewingEventDetails(null);
 
-    if (sess.sessionId.startsWith('mock-')) {
-      setReviewingEventDetails({
-        id: sess.eventId,
-        title: sess.eventTitle,
-        description: sess.eventDescription || '',
-        location: sess.location,
-        ageRestriction: sess.ageRestriction || 'all_ages',
-        refundPolicy: sess.refundPolicy || 'standard',
-        entryGuidelines: sess.entryGuidelines || '',
-        payoutBankName: sess.payoutBankName || '',
-        payoutAccountNumber: sess.payoutAccountNumber || '',
-        payoutAccountName: sess.payoutAccountName || '',
-        ubuPrivilegeMode: sess.ubuPrivilegeMode,
-        sessions: [
-          {
-            id: sess.sessionId,
-            startTime: sess.startTime,
-            endTime: sess.endTime,
-            ticketTypes: [
-              { id: 'tt-mock-1', name: 'บัตรทั่วไป (General Admission)', price: 650, quota: 800 },
-              { id: 'tt-mock-2', name: 'บัตรสิทธิ์ นศ. ม.อุบลฯ (@ubu.ac.th)', price: 350, quota: 500, isStudentPrivilege: true },
-              { id: 'tt-mock-3', name: 'บัตร VIP Front Row', price: 1200, quota: 200 },
-            ],
-          },
-        ],
-      });
-      setReviewUbuMode(Boolean(sess.ubuPrivilegeMode));
-      setLoadingReviewDetails(false);
-      return;
-    }
-
     try {
       const [evRes, feeRes] = await Promise.all([
         fetch(`/api/events/${sess.eventId}`),
@@ -445,6 +412,8 @@ export function OwnerSessionApprovalManager() {
         const feeData = await feeRes.json();
         const evFee = feeData.events?.find((e: FeeEventSummary) => e.id === sess.eventId);
         if (evFee?.feeSettings) {
+          setCustomOrganizerFeeMode(evFee.feeSettings.organizerFeeMode || 'percentage');
+          setCustomCustomerFeeMode(evFee.feeSettings.customerFeeMode || 'percentage');
           setCustomFeeRate(evFee.feeSettings.organizerFeeRate ?? 3.0);
           setCustomCustomerFeeRate(evFee.feeSettings.customerFeeRate ?? 0.0);
           setCustomReserveRate(evFee.feeSettings.reservePercentage ?? 0.0);
@@ -487,13 +456,6 @@ export function OwnerSessionApprovalManager() {
     setError('');
     setActionMessage('');
 
-    if (sessionId.startsWith('mock-')) {
-      setActionMessage(`อนุมัติคอนเสิร์ต "${reviewingSession?.eventTitle}" พร้อมบันทึกข้อตกลงค่าบริการ ${customFeeRate}% สำเร็จ (AC-32)`);
-      setReviewingSession(null);
-      setSubmittingApproval(false);
-      return;
-    }
-
     try {
       const res = await fetch('/api/owner/sessions', {
         method: 'POST',
@@ -501,7 +463,9 @@ export function OwnerSessionApprovalManager() {
         body: JSON.stringify({
           sessionId,
           action: 'approve',
+          organizerFeeMode: customOrganizerFeeMode,
           organizerFeeRate: customFeeRate,
+          customerFeeMode: customCustomerFeeMode,
           customerFeeRate: customCustomerFeeRate,
           reservePercentage: customReserveRate,
           ubuPrivilegeMode: reviewUbuMode,
@@ -513,7 +477,7 @@ export function OwnerSessionApprovalManager() {
         setError(data.message || 'อนุมัติรอบการแสดงไม่สำเร็จ');
         return;
       }
-      setActionMessage(`อนุมัติคอนเสิร์ต "${reviewingSession?.eventTitle}" พร้อมบันทึกข้อตกลงค่าบริการ ${customFeeRate}% สำเร็จ (AC-32)`);
+      setActionMessage(`อนุมัติคอนเสิร์ต "${reviewingSession?.eventTitle}" พร้อมบันทึกข้อตกลงค่าบริการ ${customFeeRate}% สำเร็จ`);
       setReviewingSession(null);
       await loadData();
     } catch {
@@ -531,14 +495,6 @@ export function OwnerSessionApprovalManager() {
     setSubmittingApproval(true);
     setError('');
     setActionMessage('');
-    if (sessionId.startsWith('mock-')) {
-      setActionMessage('ปฏิเสธคำขอเปิดรอบคอนเสิร์ตและส่งกลับเป็นฉบับร่างเรียบร้อยแล้ว');
-      setReviewingSession(null);
-      setRejectingSessionId(null);
-      setPendingRejectionReason('');
-      setSubmittingApproval(false);
-      return;
-    }
     try {
       const res = await fetch('/api/owner/sessions', {
         method: 'POST',
@@ -569,10 +525,6 @@ export function OwnerSessionApprovalManager() {
   async function handleApproveAmendment(amendmentId: string, eventTitle: string) {
     setError('');
     setActionMessage('');
-    if (amendmentId.startsWith('mock-')) {
-      setActionMessage(`อนุมัติคำขอปรับเปลี่ยนของ "${eventTitle}" สำเร็จ`);
-      return;
-    }
     const win = specialWindows[amendmentId];
     try {
       const payload: { specialRefundWindowStart?: string; specialRefundWindowEnd?: string } = {};
@@ -604,12 +556,6 @@ export function OwnerSessionApprovalManager() {
     }
     setError('');
     setActionMessage('');
-    if (amendmentId.startsWith('mock-')) {
-      setActionMessage('ปฏิเสธคำขอแก้ไขรอบการแสดงเรียบร้อยแล้ว');
-      setRejectingAmendmentId(null);
-      setRejectionReason('');
-      return;
-    }
     try {
       const res = await fetch(`/api/owner/sessions/amendments/${amendmentId}/reject`, {
         method: 'POST',
@@ -748,12 +694,6 @@ export function OwnerSessionApprovalManager() {
         ...prev,
         [editingEvent.id]: [newLogEntry, ...(prev[editingEvent.id] || [])],
       }));
-
-      if (editingEvent.id.startsWith('mock-')) {
-        setActionMessage(`บันทึกการแก้ไขคอนเสิร์ต "${editFormData.title || editingEvent.title}" สำเร็จ พร้อมดาวน์โหลดไฟล์สำรอง CSV ก่อนแก้ไขอัตโนมัติ`);
-        setEditingEvent(null);
-        return;
-      }
 
       // 4. Save to API
       const res = await fetch(`/api/events/${editingEvent.id}`, {
@@ -1247,7 +1187,7 @@ export function OwnerSessionApprovalManager() {
                 <div className="section-title-strip">
                   <h3
                     className="section-heading-text"
-                    aria-label="คำขอแก้ไขรอบที่เปิดขายอยู่ (Live Session Amendments — AC-67, AC-68, AC-109) คำขอปรับเปลี่ยนราคาและโซนที่รออนุมัติ (Live Session Amendments)"
+                    aria-label="คำขอแก้ไขรอบที่เปิดขายอยู่ คำขอปรับเปลี่ยนราคาและโซนที่รออนุมัติ (Live Session Amendments)"
                   >
                     คำขอปรับเปลี่ยนราคาและโซนที่รออนุมัติ (Live Session Amendments)
                   </h3>
@@ -1383,7 +1323,7 @@ export function OwnerSessionApprovalManager() {
                             type="button"
                             className="primary-button row-action-btn"
                             data-testid={`approve-amendment-btn-${amd.id}`}
-                            aria-label="อนุมัติการแก้ไขราคา อนุมัติการแก้ไข (AC-67)"
+                            aria-label="อนุมัติการแก้ไขราคา"
                             onClick={() => handleApproveAmendment(amd.id, amd.eventTitle)}
                           >
                             <span>อนุมัติการแก้ไขราคา</span>
@@ -1496,7 +1436,7 @@ export function OwnerSessionApprovalManager() {
                             type="button"
                             className="primary-button row-action-btn"
                             data-testid={`approve-cancellation-btn-${can.id}`}
-                            aria-label="อนุมัติยกเลิกรอบการแสดง อนุมัติยกเลิกรอบ (AC-35)"
+                            aria-label="อนุมัติยกเลิกรอบการแสดง"
                             onClick={() => handleApproveCancellation(can.id, can.eventTitle)}
                           >
                             <span>อนุมัติยกเลิกรอบการแสดง</span>
@@ -1847,10 +1787,31 @@ export function OwnerSessionApprovalManager() {
                       {reviewingEventDetails?.sessions && reviewingEventDetails.sessions.length > 0 ? (
                         <div className="ticket-types-pill-grid">
                           {reviewingEventDetails.sessions[0]?.ticketTypes?.map((tt) => (
-                            <div key={tt.id} className="ticket-type-pill">
-                              <strong>{tt.name}</strong>
-                              <span>{formatBaht(tt.price)}</span>
-                              <span className="quota-tag">โควตา: {tt.quota} ใบ</span>
+                            <div key={tt.id} className="ticket-type-pill" style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', padding: '0.65rem 0.85rem' }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%' }}>
+                                <strong>{tt.name}</strong>
+                                <span className="quota-tag">โควตารวม: {tt.quota} ใบ</span>
+                              </div>
+                              {tt.isStudentPrivilege ? (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.2rem', background: '#f8fafc', padding: '0.4rem 0.6rem', borderRadius: '4px', border: '1px dashed #cbd5e1', width: '100%' }}>
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.82rem' }}>
+                                    <span style={{ color: '#475569' }}>ราคาคนทั่วไป:</span>
+                                    <strong style={{ color: '#0f172a' }}>{formatBaht(tt.price)}</strong>
+                                  </div>
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.82rem' }}>
+                                    <span style={{ color: '#1848ed' }}>ราคาสิทธิ์ ม.อุบลฯ (@ubu.ac.th):</span>
+                                    <strong style={{ color: '#1848ed' }}>{formatBaht(tt.studentPrice ?? 99)}</strong>
+                                  </div>
+                                  <span style={{ fontSize: '0.72rem', color: '#64748b', marginTop: '0.1rem' }}>
+                                    ใช้โควตาเดียวกัน {tt.quota} ใบ (ไม่แยกโซน)
+                                  </span>
+                                </div>
+                              ) : (
+                                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', width: '100%' }}>
+                                  <span style={{ color: '#475569' }}>ราคาปกติ:</span>
+                                  <strong>{formatBaht(tt.price)}</strong>
+                                </div>
+                              )}
                             </div>
                           ))}
                         </div>
@@ -1885,15 +1846,33 @@ export function OwnerSessionApprovalManager() {
 
                     <div className="adjustment-inputs-grid">
                       <div className="adj-field">
+                        <label htmlFor="custom-organizer-fee-mode-select">
+                          รูปแบบค่าบริการผู้จัดงาน
+                        </label>
+                        <select
+                          id="custom-organizer-fee-mode-select"
+                          value={customOrganizerFeeMode}
+                          onChange={(e) => setCustomOrganizerFeeMode(e.target.value as OrganizerFeeMode)}
+                          className="adj-input"
+                        >
+                          <option value="percentage">เปอร์เซ็นต์ยอดขาย (%)</option>
+                          <option value="per_ticket">บาทต่อใบ (฿/ใบ)</option>
+                          <option value="flat_fee">เหมาจ่ายต่องาน (฿)</option>
+                        </select>
+                      </div>
+
+                      <div className="adj-field">
                         <label htmlFor="custom-organizer-fee-input">
-                          ค่าบริการผู้จัดงาน (Organizer Platform Fee %)
+                          {customOrganizerFeeMode === 'percentage'
+                            ? 'ค่าบริการผู้จัดงาน (Organizer Platform Fee %)'
+                            : 'ค่าบริการผู้จัดงาน (Organizer Platform Fee ฿)'}
                         </label>
                         <input
                           id="custom-organizer-fee-input"
                           type="number"
-                          step="0.1"
+                          step={customOrganizerFeeMode === 'percentage' ? '0.1' : '1'}
                           min="0"
-                          max="30"
+                          max={customOrganizerFeeMode === 'percentage' ? 30 : 100000}
                           value={customFeeRate}
                           onChange={(e) => setCustomFeeRate(Number(e.target.value))}
                           className="adj-input"
@@ -1901,15 +1880,33 @@ export function OwnerSessionApprovalManager() {
                       </div>
 
                       <div className="adj-field">
+                        <label htmlFor="custom-customer-fee-mode-select">
+                          รูปแบบค่าบริการลูกค้า
+                        </label>
+                        <select
+                          id="custom-customer-fee-mode-select"
+                          value={customCustomerFeeMode}
+                          onChange={(e) => setCustomCustomerFeeMode(e.target.value as CustomerFeeMode)}
+                          className="adj-input"
+                        >
+                          <option value="percentage">เปอร์เซ็นต์ค่าบัตร (%)</option>
+                          <option value="per_ticket">บาทต่อใบ (฿/ใบ)</option>
+                          <option value="per_order">บาทต่อคำสั่งซื้อ (฿/คำสั่งซื้อ)</option>
+                        </select>
+                      </div>
+
+                      <div className="adj-field">
                         <label htmlFor="custom-customer-fee-input">
-                          ค่าบริการลูกค้า (Customer Service Fee %)
+                          {customCustomerFeeMode === 'percentage'
+                            ? 'ค่าบริการลูกค้า (Customer Service Fee %)'
+                            : 'ค่าบริการลูกค้า (Customer Service Fee ฿)'}
                         </label>
                         <input
                           id="custom-customer-fee-input"
                           type="number"
-                          step="0.1"
+                          step={customCustomerFeeMode === 'percentage' ? '0.1' : '1'}
                           min="0"
-                          max="20"
+                          max={customCustomerFeeMode === 'percentage' ? 20 : 1000}
                           value={customCustomerFeeRate}
                           onChange={(e) => setCustomCustomerFeeRate(Number(e.target.value))}
                           className="adj-input"

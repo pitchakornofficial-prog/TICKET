@@ -102,7 +102,7 @@ test.describe('Cancel session while payment is pending and refund timely amounts
     const canRequestCard = ownerPage.getByTestId(/cancellation-request-/).filter({ hasText: eventTitle });
     await expect(canRequestCard).toBeVisible();
 
-    const approveCanBtn = canRequestCard.getByRole('button', { name: 'อนุมัติยกเลิกรอบ (AC-35)' });
+    const approveCanBtn = canRequestCard.getByRole('button', { name: 'อนุมัติยกเลิกรอบการแสดง' });
     await expect(approveCanBtn).toBeVisible();
     await approveCanBtn.click({ force: true });
     await expect(ownerPage.getByText(/อนุมัติการยกเลิกรอบการแสดงของ.*สำเร็จ/)).toBeVisible();
@@ -113,7 +113,6 @@ test.describe('Cancel session while payment is pending and refund timely amounts
     await buyerPage.reload();
     await expect(buyerPage.locator('#reservation-cancelled-alert')).toBeVisible();
     await expect(buyerPage.locator('#reservation-cancelled-alert')).toContainText('รอบการแสดงนี้ถูกยกเลิกแล้ว');
-    await expect(buyerPage.locator('#reservation-cancelled-alert')).toContainText('AC-112');
     await expect(buyerPage.locator('#promptpay-qr-image')).not.toBeVisible();
     await expect(buyerPage.locator('#simulate-payment-button')).not.toBeVisible();
 

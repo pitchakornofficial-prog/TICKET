@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { Pool } from 'pg';
+import { hashOfflineQrPayload } from '../lib/offline-qr-hash.ts';
 import { ensureEventSchema } from './events.ts';
 import { ensureTicketSchema } from './tickets.ts';
 import { ensureAdmissionSchema } from './admission.ts';
@@ -56,7 +57,7 @@ export interface HandoverReadiness {
 export interface OfflineTicketItem {
   id: string;
   ticketCode: string;
-  qrPayload: string;
+  qrHash: string;
   ticketTypeId: string;
   ticketTypeName: string;
   sessionId: string;
@@ -250,7 +251,7 @@ export async function setEventPrimaryScanner(
 
   const eventOrganizerId = evRes.rows[0].organizerId;
   if (actor.role !== 'owner' && actor.id !== eventOrganizerId) {
-    throw new Error('ไม่อนุญาต: คุณไม่มีสิทธิ์จัดการเครื่องหลักของคอนเสิร์ตนี้ (AC-94)');
+    throw new Error('ไม่อนุญาต: คุณไม่มีสิทธิ์จัดการเครื่องหลักของคอนเสิร์ตนี้');
   }
 
   // 2. Verify that target scanner belongs to event_scanners for this event
@@ -328,7 +329,7 @@ export async function removeEventPrimaryScanner(
 
   const eventOrganizerId = evRes.rows[0].organizerId;
   if (actor.role !== 'owner' && actor.id !== eventOrganizerId) {
-    throw new Error('ไม่อนุญาต: คุณไม่มีสิทธิ์จัดการเครื่องหลักของคอนเสิร์ตนี้ (AC-94)');
+    throw new Error('ไม่อนุญาต: คุณไม่มีสิทธิ์จัดการเครื่องหลักของคอนเสิร์ตนี้');
   }
 
   const del = await pool.query('DELETE FROM event_primary_scanners WHERE "eventId" = $1', [eventId]);
@@ -368,11 +369,11 @@ export async function getOfflineDataset(
       [eventId, actor.id],
     );
     if (scanCheck.rowCount === 0) {
-      throw new Error('ไม่อนุญาต: คุณไม่ได้เป็นทีมสแกนของคอนเสิร์ตนี้ (AC-08)');
+      throw new Error('ไม่อนุญาต: คุณไม่ได้เป็นทีมสแกนของคอนเสิร์ตนี้');
     }
   } else if (actor.role === 'organizer') {
     if (event.organizerId !== actor.id) {
-      throw new Error('ไม่อนุญาต: คุณไม่ใช่ผู้จัดงานของคอนเสิร์ตนี้ (AC-07)');
+      throw new Error('ไม่อนุญาต: คุณไม่ใช่ผู้จัดงานของคอนเสิร์ตนี้');
     }
   } else if (actor.role !== 'owner') {
     throw new Error('ไม่มีสิทธิ์เข้าถึงชุดข้อมูลออฟไลน์');
@@ -453,7 +454,7 @@ export async function getOfflineDataset(
     return {
       id: t.id,
       ticketCode: t.ticketCode,
-      qrPayload: t.qrPayload,
+      qrHash: hashOfflineQrPayload(eventId, t.qrPayload),
       ticketTypeId: t.ticketTypeId,
       ticketTypeName: t.ticketTypeName,
       sessionId: t.sessionId,
@@ -598,7 +599,7 @@ export async function checkHandoverReadiness(
   const reasons: string[] = [];
 
   if (isOfflineHalted) {
-    reasons.push('การใช้งานออฟไลน์ถูกระงับเพื่อกระทบยอด (AC-98) กรุณาดำเนินการกระทบยอดร่วมกับเจ้าของเว็บและปลดระงับก่อน');
+    reasons.push('การใช้งานออฟไลน์ถูกระงับเพื่อกระทบยอด กรุณาดำเนินการกระทบยอดร่วมกับเจ้าของเว็บและปลดระงับก่อน');
   }
 
   if (!candidate) {
@@ -610,11 +611,11 @@ export async function checkHandoverReadiness(
   }
 
   if (currentPrimary && oldPendingCount > 0) {
-    reasons.push(`เครื่องเดิมยังมีรายการสแกนค้างที่ยังไม่ซิงก์กลับส่วนกลาง (${oldPendingCount} รายการ) กรุณาซิงก์ข้อมูลให้เสร็จสิ้นก่อนสลับเครื่อง (AC-97)`);
+    reasons.push(`เครื่องเดิมยังมีรายการสแกนค้างที่ยังไม่ซิงก์กลับส่วนกลาง (${oldPendingCount} รายการ) กรุณาซิงก์ข้อมูลให้เสร็จสิ้นก่อนสลับเครื่อง`);
   }
 
   if (!lastSyncedAt) {
-    reasons.push('เครื่องใหม่ยังไม่ได้ดาวน์โหลดชุดข้อมูลล่าสุด กรุณาดาวน์โหลดชุดข้อมูลออฟไลน์บนเครื่องใหม่ก่อนทำการสลับเครื่อง (AC-97)');
+    reasons.push('เครื่องใหม่ยังไม่ได้ดาวน์โหลดชุดข้อมูลล่าสุด กรุณาดาวน์โหลดชุดข้อมูลออฟไลน์บนเครื่องใหม่ก่อนทำการสลับเครื่อง');
   }
 
   const ready = reasons.length === 0;
@@ -661,7 +662,7 @@ export async function handoverEventPrimaryScanner(
   }
   const eventOrganizerId = evRes.rows[0].organizerId;
   if (actor.role !== 'owner' && actor.id !== eventOrganizerId) {
-    throw new Error('ไม่อนุญาต: คุณไม่มีสิทธิ์จัดการเครื่องหลักของคอนเสิร์ตนี้ (AC-97)');
+    throw new Error('ไม่อนุญาต: คุณไม่มีสิทธิ์จัดการเครื่องหลักของคอนเสิร์ตนี้');
   }
 
   // 2. Check handover readiness
@@ -741,7 +742,7 @@ export async function handoverEventPrimaryScanner(
         candidate.name,
         options?.oldScannerPendingCount || 0,
         candidate.lastSyncedAt ? new Date(candidate.lastSyncedAt) : null,
-        options?.reason || 'สลับเครื่องหลักตามระเบียบ AC-97',
+        options?.reason || 'สลับเครื่องหลักประจำงาน',
         actor.id,
         actor.name || actor.id,
       ],
@@ -813,7 +814,7 @@ export async function emergencyStopOffline(
   }
   const eventOrganizerId = evRes.rows[0].organizerId;
   if (actor.role !== 'owner' && actor.id !== eventOrganizerId) {
-    throw new Error('ไม่อนุญาต: คุณไม่มีสิทธิ์จัดการเครื่องหลักของคอนเสิร์ตนี้ (AC-98)');
+    throw new Error('ไม่อนุญาต: คุณไม่มีสิทธิ์จัดการเครื่องหลักของคอนเสิร์ตนี้');
   }
 
   const oldPrimary = await getEventPrimaryScanner(pool, eventId);
@@ -824,7 +825,7 @@ export async function emergencyStopOffline(
 
     // 2. Upsert event_offline_controls to halted
     const haltReason = options?.reason || 'DEVICE_DAMAGED_RECONCILIATION_REQUIRED';
-    const haltDetails = options?.details || 'เครื่องหลักชำรุด สูญหาย หรือข้อมูลสูญหาย ต้องหยุดใช้งานออฟไลน์เพื่อกระทบยอดตาม NQ-06';
+    const haltDetails = options?.details || 'เครื่องหลักชำรุด สูญหาย หรือข้อมูลสูญหาย ต้องหยุดใช้งานออฟไลน์เพื่อกระทบยอด';
 
     const ctrlRes = await client.query<{
       eventId: string;
@@ -918,7 +919,7 @@ export async function resumeOfflineAdmissionAfterReconciliation(
   }
   const eventOrganizerId = evRes.rows[0].organizerId;
   if (actor.role !== 'owner' && actor.id !== eventOrganizerId) {
-    throw new Error('ไม่อนุญาต: คุณไม่มีสิทธิ์จัดการเครื่องหลักของคอนเสิร์ตนี้ (AC-98)');
+    throw new Error('ไม่อนุญาต: คุณไม่มีสิทธิ์จัดการเครื่องหลักของคอนเสิร์ตนี้');
   }
 
   const client = await pool.connect();

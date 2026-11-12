@@ -75,6 +75,11 @@ export function GuestCheckoutEntry({
   const [verifiedBuyer, setVerifiedBuyer] = useState<VerifiedBuyerInfo | null>(null);
   const [isPending, startTransition] = useTransition();
 
+  function getQueueToken(): string | null {
+    if (typeof window === 'undefined' || !eventId) return null;
+    return sessionStorage.getItem(`ticket_queue_token_${eventId}`);
+  }
+
   // Cooldown countdown timer
   useEffect(() => {
     if (cooldownSeconds <= 0) return;
@@ -93,7 +98,66 @@ export function GuestCheckoutEntry({
     return () => clearInterval(timer);
   }, [expiresInSeconds]);
 
-  // Step 1: Request OTP
+  function submitOtpRequest(isResend: boolean) {
+    startTransition(async () => {
+      try {
+        const res = await fetch('/api/public/checkout/request-otp', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            buyer: {
+              name: name.trim(),
+              email: email.trim().toLowerCase(),
+              phone: phone.trim().replace(/[\s-]/g, ''),
+            },
+            purpose: 'checkout',
+            eventId,
+            requestedQuantity: totalTickets,
+            queueToken: getQueueToken(),
+          }),
+        });
+
+        const data = await res.json();
+        if (!res.ok) {
+          if (data.code === 'CUMULATIVE_LIMIT_EXCEEDED' && onQuotaExceeded) {
+            onQuotaExceeded({
+              alreadyPurchased: data.alreadyPurchased,
+              limitPerOrder: data.limitPerOrder,
+              remainingQuota: data.remainingQuota ?? 0,
+              email: data.email || email,
+            });
+          }
+          throw new Error(
+            data.message || (isResend ? 'ส่งรหัส OTP ใหม่ไม่สำเร็จ' : 'ขอรหัส OTP ไม่สำเร็จ'),
+          );
+        }
+
+        setRequestId(data.requestId);
+        setCooldownSeconds(data.cooldownSeconds || 60);
+        setExpiresInSeconds(data.expiresInSeconds || 300);
+        setDevOtpCode(data.devOtpCode ?? null);
+        setOtpCode('');
+        setOtpDigits(['', '', '', '', '', '']);
+        if (!isResend) {
+          setStep('otp');
+          if (onStepChange) onStepChange('otp');
+          setSuccessMsg('ส่งรหัส OTP 6 หลักไปยังอีเมลของคุณเรียบร้อยแล้ว');
+        } else {
+          setSuccessMsg('ส่งรหัส OTP ใหม่ไปยังอีเมลเรียบร้อยแล้ว (รหัสเดิมถูกยกเลิกแล้ว)');
+        }
+        setTimeout(() => {
+          inputRefs.current[0]?.focus();
+        }, 50);
+      } catch (err: unknown) {
+        const defaultErr = isResend
+          ? 'เกิดข้อผิดพลาดในการขอรหัสใหม่'
+          : 'เกิดข้อผิดพลาดในการขอรหัส OTP';
+        setError(err instanceof Error ? err.message : defaultErr);
+      }
+    });
+  }
+
+  // Step 1: Validate buyer details and request 6-digit OTP via email
   async function handleRequestOtp(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
@@ -133,109 +197,21 @@ export function GuestCheckoutEntry({
       return;
     }
 
-    startTransition(async () => {
-      try {
-        const res = await fetch('/api/public/checkout/request-otp', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            buyer: { name, email, phone },
-            purpose: 'checkout',
-            eventId,
-            requestedQuantity: totalTickets,
-          }),
-        });
-
-        const data = await res.json();
-        if (!res.ok) {
-          if (data.code === 'CUMULATIVE_LIMIT_EXCEEDED' && onQuotaExceeded) {
-            onQuotaExceeded({
-              alreadyPurchased: data.alreadyPurchased,
-              limitPerOrder: data.limitPerOrder,
-              remainingQuota: data.remainingQuota ?? 0,
-              email: data.email || email,
-            });
-          }
-          throw new Error(data.message || 'ขอรหัส OTP ไม่สำเร็จ');
-        }
-
-        setRequestId(data.requestId);
-        setCooldownSeconds(data.cooldownSeconds || 60);
-        setExpiresInSeconds(data.expiresInSeconds || 300);
-        if (data.devOtpCode) {
-          setDevOtpCode(data.devOtpCode);
-        }
-        setOtpCode('');
-        setOtpDigits(['', '', '', '', '', '']);
-        setStep('otp');
-        if (onStepChange) onStepChange('otp');
-        setSuccessMsg('ส่งรหัส OTP 6 หลักไปยังอีเมลของคุณเรียบร้อยแล้ว');
-        setTimeout(() => {
-          inputRefs.current[0]?.focus();
-        }, 50);
-      } catch (err: unknown) {
-        const msg = err instanceof Error ? err.message : 'เกิดข้อผิดพลาดในการขอรหัส OTP';
-        setError(msg);
-      }
-    });
+    submitOtpRequest(false);
   }
 
-  // Resend OTP
   async function handleResendOtp() {
     if (cooldownSeconds > 0) return;
     setError(null);
     setSuccessMsg(null);
-
-    startTransition(async () => {
-      try {
-        const res = await fetch('/api/public/checkout/request-otp', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            buyer: { name, email, phone },
-            purpose: 'checkout',
-            eventId,
-            requestedQuantity: totalTickets,
-          }),
-        });
-
-        const data = await res.json();
-        if (!res.ok) {
-          if (data.code === 'CUMULATIVE_LIMIT_EXCEEDED' && onQuotaExceeded) {
-            onQuotaExceeded({
-              alreadyPurchased: data.alreadyPurchased,
-              limitPerOrder: data.limitPerOrder,
-              remainingQuota: data.remainingQuota ?? 0,
-              email: data.email || email,
-            });
-          }
-          throw new Error(data.message || 'ส่งรหัส OTP ใหม่ไม่สำเร็จ');
-        }
-
-        setRequestId(data.requestId);
-        setCooldownSeconds(data.cooldownSeconds || 60);
-        setExpiresInSeconds(data.expiresInSeconds || 300);
-        if (data.devOtpCode) {
-          setDevOtpCode(data.devOtpCode);
-        }
-        setOtpCode('');
-        setOtpDigits(['', '', '', '', '', '']);
-        setSuccessMsg('ส่งรหัส OTP ใหม่ไปยังอีเมลเรียบร้อยแล้ว (รหัสเดิมถูกยกเลิกแล้ว)');
-        setTimeout(() => {
-          inputRefs.current[0]?.focus();
-        }, 50);
-      } catch (err: unknown) {
-        const msg = err instanceof Error ? err.message : 'เกิดข้อผิดพลาดในการขอรหัสใหม่';
-        setError(msg);
-      }
-    });
+    submitOtpRequest(true);
   }
 
   function handleDigitChange(idx: number, rawVal: string) {
     const digitsOnly = rawVal.replace(/\D/g, '');
 
-    if (digitsOnly.length > 2) {
-      // Paste or Playwright fill with multiple characters
+    if (digitsOnly.length > 1) {
+      // Paste or automated fill with multiple characters
       const pasted = digitsOnly.slice(0, 6);
       const nextDigits = ['', '', '', '', '', ''];
       for (let i = 0; i < pasted.length; i++) {
@@ -248,11 +224,13 @@ export function GuestCheckoutEntry({
       return;
     }
 
-    const nextDigits = [...otpDigits];
     const char = digitsOnly.slice(-1);
-    nextDigits[idx] = char;
-    setOtpDigits(nextDigits);
-    setOtpCode(nextDigits.join(''));
+    setOtpDigits(prev => {
+      const nextDigits = [...prev];
+      nextDigits[idx] = char;
+      setOtpCode(nextDigits.join(''));
+      return nextDigits;
+    });
 
     if (char && idx < 5) {
       inputRefs.current[idx + 1]?.focus();
@@ -263,10 +241,12 @@ export function GuestCheckoutEntry({
     if (e.key === 'Backspace') {
       if (!otpDigits[idx] && idx > 0) {
         e.preventDefault();
-        const nextDigits = [...otpDigits];
-        nextDigits[idx - 1] = '';
-        setOtpDigits(nextDigits);
-        setOtpCode(nextDigits.join(''));
+        setOtpDigits(prev => {
+          const nextDigits = [...prev];
+          nextDigits[idx - 1] = '';
+          setOtpCode(nextDigits.join(''));
+          return nextDigits;
+        });
         inputRefs.current[idx - 1]?.focus();
       }
     } else if (e.key === 'ArrowLeft' && idx > 0) {
@@ -292,23 +272,29 @@ export function GuestCheckoutEntry({
     inputRefs.current[focusTarget]?.focus();
   }
 
-  // Step 2: Execute verified OTP in modal (D-188)
+  // Step 2: Verify 6-digit OTP in modal (D-188, AC-57)
   async function handleExecuteVerifyOtp(autoProceed = true) {
     setError(null);
     setSuccessMsg(null);
 
     startTransition(async () => {
       try {
+        const cleanBuyer = {
+          name: name.trim(),
+          email: email.trim().toLowerCase(),
+          phone: phone.trim().replace(/[\s-]/g, ''),
+        };
         const res = await fetch('/api/public/checkout/verify-otp', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            email,
+            email: cleanBuyer.email,
             code: otpCode.trim(),
             requestId,
             purpose: 'checkout',
             eventId,
-            buyer: { name, email, phone },
+            buyer: cleanBuyer,
+            queueToken: getQueueToken(),
           }),
         });
 
@@ -356,24 +342,69 @@ export function GuestCheckoutEntry({
     });
   }
 
+  function renderStatusAlerts() {
+    return (
+      <>
+        {error && (
+          <div
+            role="alert"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.5rem',
+              padding: '0.8rem 1rem',
+              borderRadius: '6px',
+              marginBottom: '1.2rem',
+              fontSize: '0.95rem',
+              background: '#fef2f2',
+              color: '#991b1b',
+              border: '1px solid #fecaca',
+            }}
+          >
+            <AlertIcon />
+            <span>{error}</span>
+          </div>
+        )}
+
+        {successMsg && (
+          <div
+            role="status"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.5rem',
+              padding: '0.8rem 1rem',
+              borderRadius: '6px',
+              marginBottom: '1.2rem',
+              fontSize: '0.95rem',
+              background: '#f0fdf4',
+              color: '#166534',
+              border: '1px solid #bbf7d0',
+            }}
+          >
+            <CheckCircleIcon style={{ width: '18px', height: '18px', flexShrink: 0 }} />
+            <span>{successMsg}</span>
+          </div>
+        )}
+      </>
+    );
+  }
+
   return (
     <section className="checkout-verification-card" style={{ marginTop: '2rem' }} aria-labelledby="checkout-step-title">
-      <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.8rem' }}>
-        {stepNumber ? (
-          <span className="step-badge-number">{stepNumber}</span>
-        ) : (
-          <ShieldCheckIcon style={{ width: '24px', height: '24px', color: 'var(--blue)' }} />
-        )}
-        <h2 id="checkout-step-title" style={{ margin: 0, fontSize: '1.25rem' }}>
-          ข้อมูลผู้ซื้อและยืนยันอีเมล (Guest Checkout)
-        </h2>
+      <div className="checkout-step-card-header">
+        <span className="step-card-number">{stepNumber ?? 2}</span>
+        <div>
+          <h2 className="step-card-title" id="checkout-step-title" aria-label="ข้อมูลผู้ซื้อและยืนยันอีเมล (Guest Checkout)">
+            ข้อมูลผู้ซื้อและยืนยันอีเมล (Guest Checkout)
+          </h2>
+          <p className="step-card-subtitle">
+            ซื้อบัตรได้สะดวกรวดเร็วโดยไม่ต้องสมัครสมาชิก ระบบจะส่งรหัส OTP 6 หลักไปยังอีเมลของคุณเพื่อยืนยันก่อนชำระเงิน
+          </p>
+        </div>
       </div>
 
-      <p style={{ color: 'var(--muted)', fontSize: '0.95rem', margin: '0 0 1.25rem', lineHeight: 1.6 }}>
-        ซื้อบัตรได้สะดวกรวดเร็วโดยไม่ต้องสมัครสมาชิก ข้อมูลนี้ใช้สำหรับส่งบัตรดิจิทัลและติดต่อเมื่อมีกรณีจำเป็น (AC-57, AC-60)
-      </p>
-
-      {/* UBU Privilege Banner (D-37) */}
+      {/* UBU Privilege Banner */}
       <div className="ubu-privilege-card">
         <div className="ubu-privilege-card-header">
           <div className="ubu-privilege-badge">
@@ -383,54 +414,13 @@ export function GuestCheckoutEntry({
           <strong className="ubu-privilege-title">สิทธิพิเศษสำหรับชาวมหาวิทยาลัยอุบลราชธานี</strong>
         </div>
         <p className="ubu-privilege-desc">
-          ใช้อีเมลสถาบัน (@ubu.ac.th หรือ @*.ubu.ac.th) เพื่อรับส่วนลดค่าบัตรพิเศษ 15% ทันทีสำหรับบัตรทุกใบในคำสั่งซื้อนี้ (จำกัดสิทธิ์สูงสุด 2 ใบ)
+          ใช้อีเมลสถาบัน (@ubu.ac.th หรือ @*.ubu.ac.th) เพื่อรับสิทธิ์ราคาพิเศษนักศึกษาเมื่อยืนยันตัวตนผ่านรหัส OTP
         </p>
       </div>
 
-      {/* Status Messages */}
-      {error && (
-        <div
-          role="alert"
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '0.5rem',
-            padding: '0.8rem 1rem',
-            borderRadius: '6px',
-            marginBottom: '1.2rem',
-            fontSize: '0.95rem',
-            background: '#fef2f2',
-            color: '#991b1b',
-            border: '1px solid #fecaca',
-          }}
-        >
-          <AlertIcon />
-          <span>{error}</span>
-        </div>
-      )}
+      {step !== 'otp' && renderStatusAlerts()}
 
-      {successMsg && (
-        <div
-          role="status"
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '0.5rem',
-            padding: '0.8rem 1rem',
-            borderRadius: '6px',
-            marginBottom: '1.2rem',
-            fontSize: '0.95rem',
-            background: '#f0fdf4',
-            color: '#166534',
-            border: '1px solid #bbf7d0',
-          }}
-        >
-          <CheckCircleIcon style={{ width: '18px', height: '18px', flexShrink: 0 }} />
-          <span>{successMsg}</span>
-        </div>
-      )}
-
-      {/* Step 1: Streamlined Full-Width Buyer Details Form (D-188) */}
+      {/* Step 1: Buyer Details Form */}
       {step === 'details' && (
         <form onSubmit={handleRequestOtp} noValidate className="guest-step-form">
           <div className="guest-fields-stack">
@@ -495,7 +485,7 @@ export function GuestCheckoutEntry({
               {isUbuEmail(email) && (
                 <div className="ubu-detect-notice" role="status">
                   <SparklesIcon style={{ width: '15px', height: '15px', color: 'var(--blue)', flexShrink: 0 }} />
-                  <span>ตรวจพบอีเมลสถาบัน ม.อุบลฯ (@ubu.ac.th) — รับสิทธิ์ราคาพิเศษ 99 บาท/ใบ เมื่อยืนยัน OTP</span>
+                  <span>ตรวจพบอีเมลสถาบัน ม.อุบลฯ (@ubu.ac.th) — รับสิทธิ์ราคาพิเศษนักศึกษาเมื่อยืนยัน OTP</span>
                 </div>
               )}
             </div>
@@ -537,7 +527,7 @@ export function GuestCheckoutEntry({
         </form>
       )}
 
-      {/* Step 2: Full Modal Dialog for OTP Verification (D-188) */}
+      {/* Step 2: Modal Dialog for OTP Verification (D-188) */}
       {step === 'otp' && (
         <div className="otp-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="otp-modal-title">
           <div className="otp-modal-card">
@@ -562,15 +552,17 @@ export function GuestCheckoutEntry({
               </div>
             </div>
 
-            {/* Dev Test OTP Banner (D-47) */}
+            {renderStatusAlerts()}
+
+            {/* Dev Test OTP Banner (shown only outside production) */}
             {devOtpCode && (
               <div className="dev-otp-helper-banner" role="status">
                 <div className="dev-otp-helper-label">
                   <SparklesIcon style={{ width: '16px', height: '16px' }} />
-                  <span>โหมดทดสอบ Local</span>
+                  <span>ตัวช่วยกรอกรหัส OTP</span>
                 </div>
                 <div className="dev-otp-code-display">
-                  รหัส OTP สำหรับทดสอบ: <strong id="dev-otp-value">{devOtpCode}</strong>
+                  รหัส OTP ของคุณ: <strong id="dev-otp-value">{devOtpCode}</strong>
                 </div>
                 <button
                   type="button"
@@ -653,6 +645,7 @@ export function GuestCheckoutEntry({
                   setOtpCode('');
                   setOtpDigits(['', '', '', '', '', '']);
                   setError(null);
+                  setSuccessMsg(null);
                   if (onStepChange) onStepChange('details');
                   if (onResetVerification) onResetVerification();
                 }}
@@ -748,6 +741,8 @@ export function GuestCheckoutEntry({
                 setVerifiedBuyer(null);
                 setOtpCode('');
                 setOtpDigits(['', '', '', '', '', '']);
+                setError(null);
+                setSuccessMsg(null);
                 if (onStepChange) onStepChange('details');
                 if (onResetVerification) onResetVerification();
               }}

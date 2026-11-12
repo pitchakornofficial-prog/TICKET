@@ -90,6 +90,31 @@ export function EventCheckoutFlow({
   const [isTimeoutModalOpen, setIsTimeoutModalOpen] = useState(false);
   const [isPending, setIsPending] = useState(false);
 
+  // D-273: Enforce queue gating at checkout to prevent bypassing via direct URL
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const verifyAccess = async () => {
+      try {
+        const savedToken = sessionStorage.getItem(`ticket_queue_token_${eventId}`);
+        const res = await fetch(`/api/events/${eventId}/queue/status?token=${savedToken || ''}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.token) {
+            sessionStorage.setItem(`ticket_queue_token_${eventId}`, data.token);
+          }
+          if (!data.allowed && data.peopleAhead > 0) {
+            router.replace(`/events/${eventId}/queue`);
+          }
+        } else if (res.status === 503) {
+          router.replace(`/events/${eventId}/queue`);
+        }
+      } catch {
+        // ignore network error
+      }
+    };
+    verifyAccess();
+  }, [eventId, router]);
+
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const storageKey = `ticket_checkout_deadline_${eventId}`;
@@ -321,6 +346,10 @@ export function EventCheckoutFlow({
     setIsPending(true);
     void (async () => {
       try {
+        const queueToken =
+          typeof window !== 'undefined'
+            ? sessionStorage.getItem(`ticket_queue_token_${eventId}`)
+            : null;
         const res = await fetch('/api/public/checkout/reserve', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -329,6 +358,7 @@ export function EventCheckoutFlow({
             eventId,
             sessionId: selectedSession.id,
             items,
+            queueToken,
           }),
         });
 

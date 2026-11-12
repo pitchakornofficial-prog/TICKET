@@ -83,7 +83,7 @@ export function OwnerEmailDeliveriesManager() {
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.2rem' }}>
             <AlertIcon />
             <h2 id="email-deliveries-title" style={{ margin: 0, fontSize: '1.25rem' }}>
-              การจัดส่งอีเมลบัตรที่ล้มเหลว (AC-20, AC-75)
+              การจัดส่งอีเมลบัตรที่ล้มเหลว
             </h2>
           </div>
           <p style={{ margin: 0, fontSize: '0.9rem', color: 'var(--muted)' }}>

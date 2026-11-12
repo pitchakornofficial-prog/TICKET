@@ -369,7 +369,7 @@ export function OrderPaymentView({ orderId }: OrderPaymentViewProps) {
             <section role="alert" id="reservation-cancelled-alert" className="payment-alert-card payment-alert-exception">
               <div className="payment-alert-header">
                 <AlertIcon />
-                <strong className="payment-alert-title">รอบการแสดงนี้ถูกยกเลิกแล้ว (AC-112)</strong>
+                <strong className="payment-alert-title">รอบการแสดงนี้ถูกยกเลิกแล้ว</strong>
               </div>
               <p className="payment-alert-desc">คำสั่งซื้อนี้ไม่สามารถชำระเงินได้ กรุณาเริ่มทำรายการใหม่</p>
               <button type="button" onClick={handleStartNewOrder} className="primary-button">กลับไปเลือกบัตรใหม่</button>
@@ -384,7 +384,7 @@ export function OrderPaymentView({ orderId }: OrderPaymentViewProps) {
               <div className="payment-alert-header">
                 <AlertIcon />
                 <strong className="payment-alert-title">
-                  คำสั่งซื้อนี้อยู่ระหว่างรอตรวจสอบเพื่อคืนเงิน (Under Review) เต็มจำนวน (G-23, G-35)
+                  คำสั่งซื้อนี้อยู่ระหว่างรอตรวจสอบเพื่อคืนเงิน (Under Review) เต็มจำนวน
                 </strong>
               </div>
               <p className="payment-alert-desc">
@@ -409,10 +409,10 @@ export function OrderPaymentView({ orderId }: OrderPaymentViewProps) {
               <div className="payment-alert-header">
                 <AlertIcon />
                 <strong className="payment-alert-title">
-                  คำสั่งซื้อนี้หมดเวลาการชำระเงิน 15 นาทีแล้ว (AC-13, AC-70)
+                  คำสั่งซื้อนี้หมดเวลาการชำระเงิน 15 นาทีแล้ว
                 </strong>
                 <span className="sr-only">หมดเวลาการกันบัตร (Expired)</span>
-                <span className="sr-only">คำสั่งซื้อนี้หมดเวลาชำระเงิน 15 นาทีแล้ว (AC-71)</span>
+                <span className="sr-only">คำสั่งซื้อนี้หมดเวลาชำระเงิน 15 นาทีแล้ว</span>
               </div>
               <p className="payment-alert-desc">
                 ระบบได้ทำการยกเลิกการล็อกโควตาบัตรและคืนสิทธิ์ให้แก่ผู้ซื้อท่านอื่นเรียบร้อยแล้ว หากท่านต้องการซื้อบัตร กรุณาเริ่มต้นทำรายการจองบัตรใหม่อีกครั้ง
@@ -536,7 +536,7 @@ export function OrderPaymentView({ orderId }: OrderPaymentViewProps) {
                       >
                         {isVerifyingPayment
                           ? 'กำลังตรวจสอบการชำระเงิน...'
-                          : 'ยืนยันการชำระเงินสำเร็จ (ทดสอบ / Test Payment)'}
+                          : 'ยืนยันการชำระเงินสำเร็จ'}
                       </button>
                     )}
 

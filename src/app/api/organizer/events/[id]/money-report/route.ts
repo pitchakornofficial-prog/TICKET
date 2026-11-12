@@ -21,7 +21,7 @@ export async function GET(
 
   if (session.user.role !== 'organizer' && session.user.role !== 'owner') {
     return Response.json(
-      { message: 'ไม่อนุญาต: เฉพาะผู้จัดงานหรือผู้ดูแลระบบเท่านั้นที่เข้าถึงรายงานการเงินได้ (AC-82)' },
+      { message: 'ไม่อนุญาต: เฉพาะผู้จัดงานหรือผู้ดูแลระบบเท่านั้นที่เข้าถึงรายงานการเงินได้' },
       { status: 403 },
     );
   }

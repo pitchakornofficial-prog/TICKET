@@ -11,4 +11,5 @@ test-results
 playwright-report
 *.tsbuildinfo
 docs
-tests
+tests/*
+!tests/support

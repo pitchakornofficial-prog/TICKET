@@ -6,6 +6,11 @@ import {
   verifyGuestOtp,
   type GuestBuyerDetails,
 } from './guest-otp.ts';
+import {
+  isOrderTicketAccessToken,
+  verifyOrderTicketAccessToken,
+} from './order-access-token.ts';
+import { maskEmail } from './reports.ts';
 import { ensureReservationSchema, type OrderItemDetail } from './reservation.ts';
 import { ensureTicketSchema, getOrderTickets, type TicketDetail } from './tickets.ts';
 import {
@@ -455,5 +460,197 @@ export async function getGuestOrderDetail(
       tickets,
       emailDelivery,
     },
+  };
+}
+
+interface OrderLinkRow {
+  id: string;
+  buyerName: string;
+  buyerEmail: string;
+  buyerPhone: string;
+  status: string;
+}
+
+async function resolveOrderForLinkToken(
+  pool: Pool,
+  orderId: string,
+  linkToken: string,
+): Promise<
+  | { ok: true; order: OrderLinkRow }
+  | { ok: false; code: 'INVALID_LINK' | 'NOT_PAID'; error: string }
+> {
+  const cleanOrderId = orderId?.trim();
+  const cleanToken = linkToken?.trim();
+
+  if (!cleanOrderId || !cleanToken || !isOrderTicketAccessToken(cleanToken)) {
+    return {
+      ok: false,
+      code: 'INVALID_LINK',
+      error: 'ลิงก์เปิดดูบัตรไม่ถูกต้อง กรุณายืนยันตัวตนด้วยอีเมลและเบอร์โทรศัพท์',
+    };
+  }
+
+  await ensureReservationSchema(pool);
+  const res = await pool.query<OrderLinkRow>(
+    `SELECT id, "buyerName", "buyerEmail", "buyerPhone", status
+     FROM orders
+     WHERE id = $1
+     LIMIT 1`,
+    [cleanOrderId],
+  );
+
+  if (res.rowCount === 0) {
+    return {
+      ok: false,
+      code: 'INVALID_LINK',
+      error: 'ลิงก์เปิดดูบัตรไม่ถูกต้องหรือหมดสิทธิ์แล้ว กรุณายืนยันตัวตนด้วยอีเมลและเบอร์โทรศัพท์',
+    };
+  }
+
+  const order = res.rows[0];
+  if (!verifyOrderTicketAccessToken(cleanToken, order.id, order.buyerEmail)) {
+    return {
+      ok: false,
+      code: 'INVALID_LINK',
+      error: 'ลิงก์เปิดดูบัตรไม่ถูกต้องหรือหมดสิทธิ์แล้ว กรุณายืนยันตัวตนด้วยอีเมลและเบอร์โทรศัพท์',
+    };
+  }
+
+  if (order.status !== 'paid') {
+    return {
+      ok: false,
+      code: 'NOT_PAID',
+      error: 'คำสั่งซื้อนี้ยังไม่ได้รับการยืนยันการชำระเงิน จึงยังไม่สามารถเปิดดูบัตรผ่านลิงก์ได้',
+    };
+  }
+
+  return { ok: true, order };
+}
+
+/**
+ * Initiates an email OTP challenge directly from a signed order email link
+ * without requiring the buyer to re-enter email and phone (AC-63, G-17).
+ * Never exposes full buyer PII or tickets before OTP verification.
+ */
+export async function requestOrderLinkOtp(
+  pool: Pool,
+  input: {
+    orderId: string;
+    linkToken: string;
+    clientIp?: string;
+    now?: Date;
+  },
+): Promise<{
+  success: boolean;
+  requestId?: string;
+  maskedEmail?: string;
+  cooldownSeconds?: number;
+  expiresInSeconds?: number;
+  error?: string;
+  code?: 'INVALID_LINK' | 'NOT_PAID' | 'COOLDOWN' | 'RATE_LIMITED' | 'BLOCKED' | 'MISSING_FIELDS';
+}> {
+  const resolved = await resolveOrderForLinkToken(pool, input.orderId, input.linkToken);
+  if (!resolved.ok) {
+    return {
+      success: false,
+      error: resolved.error,
+      code: resolved.code,
+    };
+  }
+
+  const { order } = resolved;
+  const maskedEmail = maskEmail(order.buyerEmail);
+  const otpResult = await requestGuestOtp(pool, {
+    buyer: {
+      name: order.buyerName,
+      email: order.buyerEmail,
+      phone: cleanPhoneNumber(order.buyerPhone),
+    },
+    purpose: 'order_lookup',
+    clientIp: input.clientIp,
+    now: input.now,
+  });
+
+  if (!otpResult.success) {
+    return {
+      success: false,
+      maskedEmail,
+      error: otpResult.error,
+      code: otpResult.code,
+      cooldownSeconds: otpResult.cooldownSeconds,
+    };
+  }
+
+  return {
+    success: true,
+    requestId: otpResult.requestId,
+    maskedEmail,
+    cooldownSeconds: otpResult.cooldownSeconds,
+    expiresInSeconds: otpResult.expiresInSeconds,
+  };
+}
+
+/**
+ * Verifies the 6-digit email OTP initiated from an order email link
+ * and issues a standard time-limited verified guest session token (AC-63, G-17).
+ */
+export async function verifyOrderLinkOtp(
+  pool: Pool,
+  input: {
+    orderId: string;
+    linkToken: string;
+    code: string;
+    requestId: string;
+    now?: Date;
+  },
+): Promise<{
+  success: boolean;
+  verifiedToken?: string;
+  error?: string;
+  code?: 'INVALID_LINK' | 'NOT_PAID' | 'INVALID_CODE' | 'EXPIRED' | 'REPLAY' | 'BLOCKED' | 'NOT_FOUND';
+}> {
+  if (!input.code?.trim() || !input.requestId?.trim()) {
+    return {
+      success: false,
+      error: 'กรุณากรอกรหัส OTP ให้ครบถ้วน',
+      code: 'INVALID_CODE',
+    };
+  }
+
+  const resolved = await resolveOrderForLinkToken(pool, input.orderId, input.linkToken);
+  if (!resolved.ok) {
+    return {
+      success: false,
+      error: resolved.error,
+      code: resolved.code,
+    };
+  }
+
+  const { order } = resolved;
+  const cleanEmail = order.buyerEmail.trim().toLowerCase();
+  const verifyResult = await verifyGuestOtp(pool, {
+    email: cleanEmail,
+    code: input.code,
+    requestId: input.requestId,
+    purpose: 'order_lookup',
+    buyer: {
+      name: order.buyerName,
+      email: cleanEmail,
+      phone: cleanPhoneNumber(order.buyerPhone),
+    },
+    now: input.now,
+  });
+
+  if (!verifyResult.success) {
+    return {
+      success: false,
+      error: verifyResult.error,
+      code: verifyResult.code,
+    };
+  }
+
+  return {
+    success: true,
+    verifiedToken: verifyResult.verifiedToken,
   };
 }

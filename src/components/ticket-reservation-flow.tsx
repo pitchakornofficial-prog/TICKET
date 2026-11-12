@@ -130,7 +130,7 @@ export function TicketReservationFlow({
     if (!reservation) return;
     const token = buyer?.token || (typeof window !== 'undefined' ? sessionStorage.getItem('ticket_guest_otp_token') : '');
     if (!token) {
-      setPaymentError('กรุณายืนยันตัวตนผ่าน OTP ก่อนขอรับ QR ชำระเงิน (AC-12)');
+      setPaymentError('กรุณายืนยันตัวตนผ่าน OTP ก่อนขอรับ QR ชำระเงิน');
       return;
     }
 
@@ -227,7 +227,7 @@ export function TicketReservationFlow({
 
     const nextTotal = totalTickets - current + nextVal;
     if (delta > 0 && nextTotal > limitPerOrder) {
-      setError(`จำกัดการซื้อไม่เกิน ${limitPerOrder} ใบ ต่อหนึ่งคำสั่งซื้อ (AC-10)`);
+      setError(`จำกัดการซื้อไม่เกิน ${limitPerOrder} ใบ ต่อหนึ่งคำสั่งซื้อ`);
       return;
     }
 
@@ -236,7 +236,7 @@ export function TicketReservationFlow({
 
   async function handleConfirmReservation() {
     if (!buyer?.token) {
-      setError('กรุณายืนยันตัวตนผ่าน OTP ด้านบนก่อนดำเนินการ (AC-12)');
+      setError('กรุณายืนยันตัวตนผ่าน OTP ด้านบนก่อนดำเนินการ');
       return;
     }
     if (totalTickets <= 0) {
@@ -322,7 +322,7 @@ export function TicketReservationFlow({
           {!buyer && (
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '6px', padding: '0.8rem 1rem', marginBottom: '1.5rem', fontSize: '0.9rem', color: '#1e40af' }}>
               <InfoIcon style={{ width: '18px', height: '18px', flexShrink: 0 }} />
-              <span>กรุณากรอกข้อมูลและยืนยัน OTP ด้านบนให้สำเร็จก่อนยืนยันการกันบัตร (AC-12)</span>
+              <span>กรุณากรอกข้อมูลและยืนยัน OTP ด้านบนให้สำเร็จก่อนยืนยันการกันบัตร</span>
             </div>
           )}
 
@@ -466,7 +466,7 @@ export function TicketReservationFlow({
 
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '1rem' }}>
             <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--muted)' }}>
-              * ระบบจะทำการกันบัตรไว้ 15 นาทีหลังจากกดปุ่มยืนยัน (AC-13, G-05)
+              * ระบบจะทำการกันบัตรไว้ 15 นาทีหลังจากกดปุ่มยืนยัน
             </p>
             <button
               type="button"
@@ -631,7 +631,7 @@ export function TicketReservationFlow({
               }}
             >
               <strong style={{ display: 'block', fontSize: '1.05rem', marginBottom: '0.3rem' }}>
-                คำสั่งซื้อนี้อยู่ระหว่างรอเจ้าหน้าที่ตรวจสอบเพื่อคืนเงินเต็มจำนวน (G-23, G-35)
+                คำสั่งซื้อนี้อยู่ระหว่างรอเจ้าหน้าที่ตรวจสอบเพื่อคืนเงินเต็มจำนวน
               </strong>
               <p style={{ margin: '0 0 1rem', fontSize: '0.9rem', lineHeight: 1.5 }}>
                 {paymentExceptionMessage ||
@@ -672,7 +672,7 @@ export function TicketReservationFlow({
               }}
             >
               <strong style={{ display: 'block', fontSize: '1.05rem', marginBottom: '0.3rem' }}>
-                รอบการแสดงนี้ถูกยกเลิกแล้ว (AC-35, AC-112)
+                รอบการแสดงนี้ถูกยกเลิกแล้ว
               </strong>
               <p style={{ margin: '0 0 1rem', fontSize: '0.9rem', lineHeight: 1.5 }}>
                 ระบบได้ยุติรายการกันบัตรและปิดการรับชำระเงินเรียบร้อยแล้ว หากชำระเงินไปแล้ว ระบบจะประมวลผลการคืนเงินตามเงื่อนไข
@@ -711,10 +711,10 @@ export function TicketReservationFlow({
               }}
             >
               <strong style={{ display: 'block', fontSize: '1.05rem', marginBottom: '0.3rem' }}>
-                คำสั่งซื้อนี้หมดเวลาชำระเงิน 15 นาทีแล้ว (AC-71)
+                คำสั่งซื้อนี้หมดเวลาชำระเงิน 15 นาทีแล้ว
               </strong>
               <p style={{ margin: '0 0 1rem', fontSize: '0.9rem', lineHeight: 1.5 }}>
-                ระบบได้ทำการคืนโควตาบัตรกลับสู่ระบบเรียบร้อยแล้ว รายการกันบัตรเดิมไม่สามารถต่ออายุได้ (G-05, G-34)
+                ระบบได้ทำการคืนโควตาบัตรกลับสู่ระบบเรียบร้อยแล้ว รายการกันบัตรเดิมไม่สามารถต่ออายุได้
                 หากต้องการซื้อบัตร กรุณากดปุ่มด้านล่างเพื่อเริ่มทำรายการใหม่
               </p>
               <button
@@ -781,7 +781,7 @@ export function TicketReservationFlow({
           <div style={{ background: '#f8fafc', border: '1px solid var(--line)', borderRadius: '6px', padding: '1rem', fontSize: '0.9rem', color: 'var(--muted)', marginBottom: '1.5rem' }}>
             <div>ข้อมูลผู้สั่งซื้อ: <strong id="buyer-summary-name">{reservation.buyerName}</strong> (<span id="buyer-summary-email">{reservation.buyerEmail}</span>) | โทร: <strong id="buyer-summary-phone">{reservation.buyerPhone}</strong></div>
             <div style={{ marginTop: '0.3rem', fontSize: '0.8rem', color: '#64748b' }}>
-              * บัตรทุกใบในคำสั่งซื้อนี้ใช้ข้อมูลผู้ซื้อชุดเดียวกัน ไม่ต้องลงทะเบียนชื่อผู้เข้าชมแยกใบ (AC-11)
+              * บัตรทุกใบในคำสั่งซื้อนี้ใช้ข้อมูลผู้ซื้อชุดเดียวกัน ไม่ต้องลงทะเบียนชื่อผู้เข้าชมแยกใบ
             </div>
           </div>
 
@@ -793,7 +793,7 @@ export function TicketReservationFlow({
                   บัตรคอนเสิร์ตที่ออกแล้ว (<span id="issued-tickets-count">{tickets.length}</span> ใบ)
                 </h3>
                 <span style={{ fontSize: '0.85rem', color: '#166534', fontWeight: 500 }}>
-                  QR Code แยกสำหรับเข้างานเฉพาะแต่ละใบ (AC-19)
+                  QR Code แยกสำหรับเข้างานเฉพาะแต่ละใบ
                 </span>
               </div>
 
@@ -921,7 +921,7 @@ export function TicketReservationFlow({
               }}
             >
               <h3 style={{ fontSize: '1.15rem', margin: '0 0 0.5rem', fontWeight: 600 }}>
-                ชำระเงินผ่าน PromptPay QR (AC-15, AC-26)
+                ชำระเงินผ่าน PromptPay QR
               </h3>
               <p style={{ margin: '0 0 1.2rem', fontSize: '0.9rem', color: 'var(--muted)' }}>
                 สแกนชำระผ่านแอปพลิเคชันธนาคาร ยอดเงินตรงตามคำสั่งซื้อ
@@ -1016,12 +1016,12 @@ export function TicketReservationFlow({
                       >
                         {isVerifyingPayment
                           ? 'กำลังตรวจสอบการชำระเงิน...'
-                          : 'ยืนยันการชำระเงินสำเร็จ (ทดสอบ / Test Payment)'}
+                          : 'ยืนยันการชำระเงินสำเร็จ'}
                       </button>
                     )}
 
                   <p style={{ margin: '0.8rem 0 0', fontSize: '0.85rem', color: '#166534', fontWeight: 500 }}>
-                    * กรุณาชำระเงินให้เสร็จสิ้นก่อนเวลานับถอยหลังสิ้นสุด (AC-13, AC-70)
+                    * กรุณาชำระเงินให้เสร็จสิ้นก่อนเวลานับถอยหลังสิ้นสุด
                   </p>
                 </div>
               )}

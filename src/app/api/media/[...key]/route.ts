@@ -25,7 +25,7 @@ export async function GET(
     }
     const actor = await readActor(getAuth(), reqHeaders);
     if (actor?.role !== 'owner') {
-      return new Response('Forbidden: Access restricted to owner only (AC-92)', { status: 403 });
+      return new Response('Forbidden: Access restricted to owner only', { status: 403 });
     }
   }
 

@@ -117,3 +117,7 @@ RTO/RPO/restore procedure, snapshot retention และวิธี rollout/roll
 - [App Runner VPC outbound access](https://docs.aws.amazon.com/apprunner/latest/dg/network-vpc.html)
 - [Cloudflare cache defaults](https://developers.cloudflare.com/cache/concepts/default-cache-behavior/)
 - [Cloudflare rate limiting rules](https://developers.cloudflare.com/waf/rate-limiting-rules/)
+
+## Email provider supersession — 2026-11-11
+
+การอ้าง Resend ใน baseline network/cost ข้างต้นเป็นประวัติ: ใช้ Amazon SES ตาม [ADR-0003](0003-external-integrations.md#email-provider-change--2026-11-11); ยังคง egress ที่จำเป็นสำหรับ Stripe และ R2 และตรวจ network path ไป SES ตาม Region/topology จริง ไม่ถือว่าการเปลี่ยนนี้สร้าง infrastructure หรือยืนยันค่าใช้จ่ายแล้ว.

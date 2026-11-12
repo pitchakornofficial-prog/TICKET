@@ -79,18 +79,6 @@ export function OwnerRefundApprovalManager() {
     setProcessingId(requestId);
     setFeedback(null);
 
-    if (requestId.startsWith('REF-20261106-')) {
-      setRequests((prev) =>
-        prev.map((r) => (r.id === requestId ? { ...r, status: 'approved' as const, reviewedAt: new Date().toISOString() } : r)),
-      );
-      setFeedback({
-        type: 'success',
-        message: 'อนุมัติการคืนเงินสำเร็จ เพิกถอนสิทธิ์บัตรและบันทึกภาระหนี้แล้ว (จำลองการทำงาน)',
-      });
-      setProcessingId(null);
-      return;
-    }
-
     try {
       const res = await fetch(`/api/owner/refunds/${requestId}/approve`, {
         method: 'POST',
@@ -123,19 +111,6 @@ export function OwnerRefundApprovalManager() {
     setProcessingId(requestId);
     setFeedback(null);
 
-    if (requestId.startsWith('REF-20261106-')) {
-      setRequests((prev) =>
-        prev.map((r) =>
-          r.id === requestId ? { ...r, status: 'rejected' as const, rejectionReason: rejectionReason.trim() } : r,
-        ),
-      );
-      setFeedback({ type: 'success', message: 'ปฏิเสธคำขอคืนเงินเรียบร้อยแล้ว (จำลองการทำงาน)' });
-      setRejectingId(null);
-      setRejectionReason('');
-      setProcessingId(null);
-      return;
-    }
-
     try {
       const res = await fetch(`/api/owner/refunds/${requestId}/reject`, {
         method: 'POST',
@@ -163,31 +138,6 @@ export function OwnerRefundApprovalManager() {
   const handleCompleteTransfer = async (req: OwnerRefundRequestItem) => {
     setProcessingId(req.id);
     setFeedback(null);
-
-    if (req.id.startsWith('REF-20261106-')) {
-      setRequests((prev) =>
-        prev.map((r) =>
-          r.id === req.id
-            ? {
-                ...r,
-                status: 'completed' as const,
-                transferredAt: new Date().toISOString(),
-                transferredAmount: req.requestedAmount,
-                transferNote: transferNote.trim() || 'บันทึกการโอนเงินคืนสำเร็จ',
-              }
-            : r,
-        ),
-      );
-      setFeedback({
-        type: 'success',
-        message: 'บันทึกการโอนเงินคืนสำเร็จ ปรับสถานะเป็นโอนสำเร็จแล้ว (AC-37) (จำลองการทำงาน)',
-      });
-      setTransferringId(null);
-      setTransferFile(null);
-      setTransferNote('');
-      setProcessingId(null);
-      return;
-    }
 
     try {
       let transferProofKey: string | undefined;
@@ -237,7 +187,7 @@ export function OwnerRefundApprovalManager() {
 
       setFeedback({
         type: 'success',
-        message: data.message || 'บันทึกการโอนเงินคืนสำเร็จ ปรับสถานะเป็นโอนสำเร็จแล้ว (AC-37)',
+        message: data.message || 'บันทึกการโอนเงินคืนสำเร็จ ปรับสถานะเป็นโอนสำเร็จแล้ว',
       });
       setTransferringId(null);
       setTransferFile(null);
@@ -259,24 +209,6 @@ export function OwnerRefundApprovalManager() {
     setProcessingId(requestId);
     setFeedback(null);
 
-    if (requestId.startsWith('REF-20261106-')) {
-      setRequests((prev) =>
-        prev.map((r) =>
-          r.id === requestId
-            ? { ...r, transferFailureReason: transferFailureReason.trim() }
-            : r,
-        ),
-      );
-      setFeedback({
-        type: 'success',
-        message: 'บันทึกเหตุผลการโอนเงินล้มเหลวเรียบร้อยแล้ว ยอดหนี้ยังคงค้างชำระตาม AC-93 (จำลองการทำงาน)',
-      });
-      setFailureRecordingId(null);
-      setTransferFailureReason('');
-      setProcessingId(null);
-      return;
-    }
-
     try {
       const res = await fetch(`/api/owner/refunds/${requestId}/record-transfer-failure`, {
         method: 'POST',
@@ -293,7 +225,7 @@ export function OwnerRefundApprovalManager() {
 
       setFeedback({
         type: 'success',
-        message: 'บันทึกเหตุผลการโอนเงินล้มเหลวเรียบร้อยแล้ว ยอดหนี้ยังคงค้างชำระตาม AC-93',
+        message: 'บันทึกเหตุผลการโอนเงินล้มเหลวเรียบร้อยแล้ว ยอดหนี้ยังคงค้างชำระ',
       });
       setFailureRecordingId(null);
       setTransferFailureReason('');
@@ -624,7 +556,7 @@ export function OwnerRefundApprovalManager() {
                         className="row-detail-pill"
                         style={{ color: '#b91c1c', backgroundColor: '#fef2f2', borderColor: '#fecaca' }}
                       >
-                        การโอนเงินครั้งก่อนล้มเหลว (AC-93): {req.transferFailureReason}
+                        การโอนเงินครั้งก่อนล้มเหลว: {req.transferFailureReason}
                       </span>
                     )}
                     {req.rejectionReason && (
@@ -678,7 +610,7 @@ export function OwnerRefundApprovalManager() {
                         }}
                       >
                         <CheckCircleIcon className="btn-icon" />
-                        <span>บันทึกการโอนเงิน (AC-37)</span>
+                        <span>บันทึกการโอนเงิน</span>
                       </button>
 
                       <button
@@ -690,7 +622,7 @@ export function OwnerRefundApprovalManager() {
                         }}
                       >
                         <AlertIcon className="btn-icon" />
-                        <span>บันทึกโอนล้มเหลว (AC-93)</span>
+                        <span>บันทึกโอนล้มเหลว</span>
                       </button>
                     </>
                   )}
@@ -938,7 +870,7 @@ export function OwnerRefundApprovalManager() {
 
                       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
                         <p style={{ margin: 0, fontSize: '0.85rem', color: '#64748b' }}>
-                          บันทึกเหตุผลที่ธนาคารปฏิเสธการโอนเงิน (เช่น เลขที่บัญชีไม่ถูกต้อง หรือบัญชีปิด) โดยยอดหนี้ยังคงค้างชำระเพื่อรอการติดต่อแก้ไขตาม AC-93
+                          บันทึกเหตุผลที่ธนาคารปฏิเสธการโอนเงิน (เช่น เลขที่บัญชีไม่ถูกต้อง หรือบัญชีปิด) โดยยอดหนี้ยังคงค้างชำระเพื่อรอการติดต่อแก้ไข
                         </p>
                         <div>
                           <label htmlFor={`failure-reason-${req.id}`} style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: '#0f172a', marginBottom: '0.35rem' }}>

@@ -20,7 +20,7 @@ export async function POST(
 
     if (actor?.role !== 'owner') {
       return Response.json(
-        { message: 'เฉพาะเจ้าของเว็บ (Owner) เท่านั้นที่มีสิทธิ์บันทึกสถานะการโอนเงินล้มเหลว (AC-93)' },
+        { message: 'เฉพาะเจ้าของเว็บ (Owner) เท่านั้นที่มีสิทธิ์บันทึกสถานะการโอนเงินล้มเหลว' },
         { status: 403 },
       );
     }
@@ -45,7 +45,7 @@ export async function POST(
 
     return Response.json(
       {
-        message: 'บันทึกเหตุผลการโอนเงินล้มเหลวเรียบร้อยแล้ว ยอดหนี้ยังคงค้างชำระตาม AC-93',
+        message: 'บันทึกเหตุผลการโอนเงินล้มเหลวเรียบร้อยแล้ว ยอดหนี้ยังคงค้างชำระ',
         result,
       },
       { status: 200 },

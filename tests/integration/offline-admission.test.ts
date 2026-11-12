@@ -324,7 +324,7 @@ describe('TASK-033: Offline Admission Integration Tests (AC-40, AC-41, AC-50, AC
     expect(unknownScan.success).toBe(false);
     expect(unknownScan.status).toBe('rejected');
     expect(unknownScan.reason).toBe('OFFLINE_TICKET_NOT_FOUND');
-    expect(unknownScan.message).toBe('ไม่พบข้อมูลบัตรในชุดข้อมูลออฟไลน์ กรุณารอเชื่อมต่อออนไลน์ (AC-41, O2)');
+    expect(unknownScan.message).toBe('ไม่พบข้อมูลบัตรในชุดข้อมูลออฟไลน์ กรุณารอเชื่อมต่อออนไลน์');
   });
 
   it('3. Secondary scanner is rejected from offline scan (AC-40, O1)', async () => {

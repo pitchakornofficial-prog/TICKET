@@ -1,12 +1,15 @@
+import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
+import { hashOfflineQrPayload, sha256Hex } from '@/lib/offline-qr-hash';
 import type { OfflineTicketItem, OfflineDataset } from '@/server/primary-scanner';
 
 describe('TASK-032: Offline Primary Dataset Unit Tests (AC-94, AC-65, G-41)', () => {
-  it('1. Offline dataset payload strictly forbids buyer PII (AC-65)', () => {
+  it('1. Offline dataset payload strictly forbids buyer PII and raw qrPayload (AC-65)', () => {
+    const rawQrPayload = 'TKT-QR-SECURE-PAYLOAD-123';
     const mockTicket: OfflineTicketItem = {
       id: 'TICK-001',
       ticketCode: 'TK-12345678',
-      qrPayload: 'SECURE-QR-PAYLOAD-123',
+      qrHash: hashOfflineQrPayload('EVT-001', rawQrPayload),
       ticketTypeId: 'TT-VIP',
       ticketTypeName: 'VIP Zone A',
       sessionId: 'SESS-001',
@@ -19,7 +22,7 @@ describe('TASK-032: Offline Primary Dataset Unit Tests (AC-94, AC-65, G-41)', ()
       },
     };
 
-    // Assert strictly that buyer PII fields DO NOT exist
+    // Assert strictly that buyer PII and plaintext qrPayload fields DO NOT exist
     const rawRecord: Record<string, unknown> = mockTicket as unknown as Record<string, unknown>;
     expect(rawRecord.buyerName).toBeUndefined();
     expect(rawRecord.buyerEmail).toBeUndefined();
@@ -28,12 +31,31 @@ describe('TASK-032: Offline Primary Dataset Unit Tests (AC-94, AC-65, G-41)', ()
     expect(rawRecord.paymentId).toBeUndefined();
     expect(rawRecord.chargeId).toBeUndefined();
     expect(rawRecord.transferSlipUrl).toBeUndefined();
+    expect(rawRecord.qrPayload).toBeUndefined();
 
     // Required scanner fields are present
     expect(mockTicket.ticketCode).toBe('TK-12345678');
+    expect(mockTicket.qrHash).toMatch(/^[a-f0-9]{64}$/);
+    expect(mockTicket.qrHash).not.toContain(rawQrPayload);
     expect(mockTicket.status).toBe('valid');
     expect(mockTicket.admissionStatus).toBe('outside');
     expect(mockTicket.isRefunded).toBe(false);
+  });
+
+  it('1b. Pure-TS SHA-256 helper matches Node crypto and is event-scoped', () => {
+    const samples = [
+      '',
+      'TKT-QR-550e8400-e29b-41d4-a716-446655440000',
+      'ทดสอบภาษาไทย-ticket-qr-123',
+    ];
+    for (const sample of samples) {
+      const expected = createHash('sha256').update(sample, 'utf8').digest('hex');
+      expect(sha256Hex(sample)).toBe(expected);
+    }
+
+    const h1 = hashOfflineQrPayload('EVT-A', 'TKT-QR-550e8400-e29b-41d4-a716-446655440000');
+    const h2 = hashOfflineQrPayload('EVT-B', 'TKT-QR-550e8400-e29b-41d4-a716-446655440000');
+    expect(h1).not.toBe(h2);
   });
 
   it('2. Offline dataset contains event, primary status, sync timestamp, and session metadata (AC-94, G-41)', () => {
