@@ -31,7 +31,7 @@ export async function POST(
 
     if (!verifiedToken) {
       return Response.json(
-        { message: 'กรุณายืนยันตัวตนผ่าน OTP ก่อนขอรับ QR ชำระเงิน (AC-12)' },
+        { message: 'กรุณายืนยันตัวตนผ่าน OTP ก่อนขอรับ QR ชำระเงิน' },
         { status: 401 },
       );
     }
@@ -56,7 +56,7 @@ export async function GET(
 
   if (!verifiedToken) {
     return Response.json(
-      { message: 'กรุณายืนยันตัวตนผ่าน OTP ก่อนเข้าถึงข้อมูลการชำระเงิน (AC-12)' },
+      { message: 'กรุณายืนยันตัวตนผ่าน OTP ก่อนเข้าถึงข้อมูลการชำระเงิน' },
       { status: 401 },
     );
   }

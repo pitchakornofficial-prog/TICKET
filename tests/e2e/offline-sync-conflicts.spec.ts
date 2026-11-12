@@ -93,7 +93,7 @@ test.describe('TASK-034: Offline Sync and Central Revocation Conflicts (AC-99, A
     const setPrimaryBtn = page.locator(`[data-testid="set-primary-scanner-${sc.scannerId}"]`);
     if (await setPrimaryBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
       await setPrimaryBtn.click();
-      await expect(page.getByText('กำหนดเครื่องหลักสำหรับงานเรียบร้อยแล้ว (AC-94)')).toBeVisible({ timeout: 20000 });
+      await expect(page.getByText('กำหนดเครื่องหลักสำหรับงานเรียบร้อยแล้ว')).toBeVisible({ timeout: 20000 });
     }
     await expect(page.locator(`[data-testid="primary-scanner-badge-${sc.scannerId}"]`)).toBeVisible({ timeout: 20000 });
 

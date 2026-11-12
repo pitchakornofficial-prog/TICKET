@@ -107,7 +107,7 @@ test.describe('Offline Primary Dataset & Privacy Protection (TASK-032, AC-94, AC
     const setPrimaryBtn = page.locator(`[data-testid="set-primary-scanner-${sc1.scannerId}"]`);
     if (await setPrimaryBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
       await setPrimaryBtn.click();
-      await expect(page.getByText('กำหนดเครื่องหลักสำหรับงานเรียบร้อยแล้ว (AC-94)')).toBeVisible({ timeout: 20000 });
+      await expect(page.getByText('กำหนดเครื่องหลักสำหรับงานเรียบร้อยแล้ว')).toBeVisible({ timeout: 20000 });
     }
 
     // Verify Scanner 1 has primary badge
@@ -166,7 +166,7 @@ test.describe('Offline Primary Dataset & Privacy Protection (TASK-032, AC-94, AC
     // Scanner 1 sees primary badge on event card
     const eventPrimaryBadge = scanner1Page.locator(`[data-testid="event-primary-badge-${event.id}"]`);
     await expect(eventPrimaryBadge).toBeVisible({ timeout: 20000 });
-    await expect(eventPrimaryBadge).toContainText('เครื่องหลักประจำงาน (Primary — AC-94)');
+    await expect(eventPrimaryBadge).toContainText('เครื่องหลักประจำงาน (Primary)');
 
     // 7. Scanner 1 opens admission terminal
     const openTerminalBtn = scanner1Page.locator(`#open-terminal-btn-${sessionId}`);
@@ -176,7 +176,7 @@ test.describe('Offline Primary Dataset & Privacy Protection (TASK-032, AC-94, AC
     // Terminal header displays primary device badge
     const terminalPrimaryBadge = scanner1Page.locator('[data-testid="terminal-primary-badge"]');
     await expect(terminalPrimaryBadge).toBeVisible({ timeout: 20000 });
-    await expect(terminalPrimaryBadge).toContainText('เครื่องหลักประจำงาน (Primary Device — AC-94)');
+    await expect(terminalPrimaryBadge).toContainText('เครื่องหลักประจำงาน (Primary Device)');
 
     // Offline dataset panel is visible
     const datasetPanel = scanner1Page.locator('[data-testid="offline-dataset-panel"]');
@@ -266,7 +266,7 @@ test.describe('Offline Primary Dataset & Privacy Protection (TASK-032, AC-94, AC
     const setPrimaryBtn2Again = page.locator(`[data-testid="set-primary-scanner-${sc2.scannerId}"]`);
     if (await setPrimaryBtn2Again.isVisible({ timeout: 3000 }).catch(() => false)) {
       await setPrimaryBtn2Again.click();
-      await expect(page.getByText('กำหนดเครื่องหลักสำหรับงานเรียบร้อยแล้ว (AC-94)')).toBeVisible({ timeout: 20000 });
+      await expect(page.getByText('กำหนดเครื่องหลักสำหรับงานเรียบร้อยแล้ว')).toBeVisible({ timeout: 20000 });
     } else {
       const assignRes = await page.request.post(`/api/organizer/events/${event.id}/primary-scanner`, {
         data: { scannerId: sc2.scannerId },
@@ -286,7 +286,7 @@ test.describe('Offline Primary Dataset & Privacy Protection (TASK-032, AC-94, AC
     await scanner2Page.goto('/back-office/scanner');
     const eventPrimaryBadge2 = scanner2Page.locator(`[data-testid="event-primary-badge-${event.id}"]`);
     await expect(eventPrimaryBadge2).toBeVisible({ timeout: 20000 });
-    await expect(eventPrimaryBadge2).toContainText('เครื่องหลักประจำงาน (Primary — AC-94)');
+    await expect(eventPrimaryBadge2).toContainText('เครื่องหลักประจำงาน (Primary)');
 
     // Scanner 1 reloads -> now secondary!
     await scanner1Page.goto('/back-office/scanner');

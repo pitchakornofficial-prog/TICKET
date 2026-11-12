@@ -187,7 +187,7 @@ test.describe('Owner Manual Refund Transfer & Private Proof Flow (TASK-023, AC-3
     const approvedItem = refundManager.locator('.refund-request-card', { hasText: guestName });
     await expect(approvedItem).toBeVisible();
 
-    const recordFailureBtn = approvedItem.getByRole('button', { name: 'บันทึกโอนล้มเหลว (AC-93)' });
+    const recordFailureBtn = approvedItem.getByRole('button', { name: 'บันทึกโอนล้มเหลว' });
     await recordFailureBtn.scrollIntoViewIfNeeded();
     await recordFailureBtn.click({ force: true });
 
@@ -201,10 +201,10 @@ test.describe('Owner Manual Refund Transfer & Private Proof Flow (TASK-023, AC-3
 
     await expect(feedbackBanner).toBeVisible();
     await expect(feedbackBanner).toContainText('บันทึกเหตุผลการโอนเงินล้มเหลว');
-    await expect(approvedItem.getByText('การโอนเงินครั้งก่อนล้มเหลว (AC-93):')).toBeVisible();
+    await expect(approvedItem.getByText('การโอนเงินครั้งก่อนล้มเหลว:')).toBeVisible();
 
     // 7. Test recording successful manual transfer (AC-37, AC-92)
-    const openTransferBtn = approvedItem.getByRole('button', { name: 'บันทึกการโอนเงิน (AC-37)' });
+    const openTransferBtn = approvedItem.getByRole('button', { name: 'บันทึกการโอนเงิน' });
     await openTransferBtn.scrollIntoViewIfNeeded();
     await openTransferBtn.click({ force: true });
 

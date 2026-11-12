@@ -124,7 +124,7 @@ export function performOfflineAdmissionScan(
       status: 'rejected',
       action: input.action,
       reason: 'NOT_PRIMARY_DEVICE',
-      message: 'เครื่องนี้ไม่ใช่เครื่องหลักประจำงาน ไม่อนุญาตให้สแกนในโหมดออฟไลน์ (AC-40, O1)',
+      message: 'เครื่องนี้ไม่ใช่เครื่องหลักประจำงาน ไม่อนุญาตให้สแกนในโหมดออฟไลน์',
     };
   }
 
@@ -162,7 +162,7 @@ export function performOfflineAdmissionScan(
         status: 'rejected',
         action: input.action,
         reason: 'OFFLINE_HALTED_RECONCILIATION',
-        message: 'การสแกนออฟไลน์ถูกระงับเพื่อกระทบยอด (AC-98) กรุณาเชื่อมต่อออนไลน์เพื่อตรวจสอบร่วมกับผู้จัดงาน',
+        message: 'การสแกนออฟไลน์ถูกระงับเพื่อกระทบยอด กรุณาเชื่อมต่อออนไลน์เพื่อตรวจสอบร่วมกับผู้จัดงาน',
       };
     }
   } catch {
@@ -188,7 +188,7 @@ export function performOfflineAdmissionScan(
       status: 'rejected',
       action: input.action,
       reason: 'OFFLINE_TICKET_NOT_FOUND',
-      message: 'ไม่พบข้อมูลบัตรในชุดข้อมูลออฟไลน์ กรุณารอเชื่อมต่อออนไลน์ (AC-41, O2)',
+      message: 'ไม่พบข้อมูลบัตรในชุดข้อมูลออฟไลน์ กรุณารอเชื่อมต่อออนไลน์',
     };
   }
 
@@ -201,7 +201,7 @@ export function performOfflineAdmissionScan(
       status: 'rejected',
       action: input.action,
       reason: 'WRONG_SESSION',
-      message: 'บัตรใบนี้เป็นของรอบการแสดงอื่น ไม่ตรงกับรอบที่กำลังสแกน (AC-100)',
+      message: 'บัตรใบนี้เป็นของรอบการแสดงอื่น ไม่ตรงกับรอบที่กำลังสแกน',
     };
   }
 
@@ -212,7 +212,7 @@ export function performOfflineAdmissionScan(
       status: 'rejected',
       action: input.action,
       reason: 'TICKET_CANCELLED',
-      message: 'บัตรถูกยกเลิกแล้ว ไม่อนุญาตให้เข้างาน (AC-101)',
+      message: 'บัตรถูกยกเลิกแล้ว ไม่อนุญาตให้เข้างาน',
     };
   }
 
@@ -222,7 +222,7 @@ export function performOfflineAdmissionScan(
       status: 'rejected',
       action: input.action,
       reason: 'TICKET_REFUNDED',
-      message: 'บัตรถูกคืนเงินแล้ว ไม่อนุญาตให้เข้างาน (AC-101)',
+      message: 'บัตรถูกคืนเงินแล้ว ไม่อนุญาตให้เข้างาน',
     };
   }
 
@@ -232,7 +232,7 @@ export function performOfflineAdmissionScan(
       status: 'rejected',
       action: input.action,
       reason: 'INVALID_TICKET',
-      message: 'สถานะบัตรไม่ถูกต้อง ไม่อนุญาตให้เข้างาน (AC-101)',
+      message: 'สถานะบัตรไม่ถูกต้อง ไม่อนุญาตให้เข้างาน',
     };
   }
 
@@ -256,7 +256,7 @@ export function performOfflineAdmissionScan(
         status: 'rejected',
         action: input.action,
         reason: 'OUTSIDE_ADMISSION_WINDOW',
-        message: 'ยังไม่ถึงช่วงเวลาเปิดรับเข้างาน (AC-100)',
+        message: 'ยังไม่ถึงช่วงเวลาเปิดรับเข้างาน',
       };
     }
 
@@ -266,7 +266,7 @@ export function performOfflineAdmissionScan(
         status: 'rejected',
         action: input.action,
         reason: 'OUTSIDE_ADMISSION_WINDOW',
-        message: 'พ้นช่วงเวลาเปิดรับเข้างานแล้ว (AC-100)',
+        message: 'พ้นช่วงเวลาเปิดรับเข้างานแล้ว',
       };
     }
   }
@@ -294,7 +294,7 @@ export function performOfflineAdmissionScan(
         status: 'rejected',
         action: 'entry',
         reason: 'ALREADY_INSIDE',
-        message: 'บัตรอยู่ในพื้นที่จัดงานแล้ว ไม่อนุญาตให้เข้าซ้ำ (AC-49, AC-96)',
+        message: 'บัตรอยู่ในพื้นที่จัดงานแล้ว ไม่อนุญาตให้เข้าซ้ำ',
         ticket: ticketSummary,
       };
     }
@@ -354,7 +354,7 @@ export function performOfflineAdmissionScan(
       status: 'rejected',
       action: input.action,
       reason: 'STORAGE_WRITE_FAILURE',
-      message: 'เกิดข้อผิดพลาดในการบันทึกข้อมูลลงอุปกรณ์ (Storage Error) ไม่อนุญาตให้ผ่าน (AC-103)',
+      message: 'เกิดข้อผิดพลาดในการบันทึกข้อมูลลงอุปกรณ์ (Storage Error) ไม่อนุญาตให้ผ่าน',
     };
   }
 
@@ -462,7 +462,7 @@ export async function syncPendingOfflineScans(
       remainingCount: remaining.length,
       conflictsCount: data.conflictsCount || 0,
       lastSuccessfulSync: data.lastSuccessfulSync,
-      message: `ซิงก์สำเร็จ ${acknowledgedIds.length} รายการ${data.conflictsCount > 0 ? ` (พบข้อขัดแย้ง ${data.conflictsCount} รายการ — AC-99)` : ''}`,
+      message: `ซิงก์สำเร็จ ${acknowledgedIds.length} รายการ${data.conflictsCount > 0 ? ` (พบข้อขัดแย้ง ${data.conflictsCount} รายการ)` : ''}`,
     };
   } catch (err: unknown) {
     return {

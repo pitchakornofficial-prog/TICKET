@@ -530,7 +530,7 @@ export function OwnerSystemHub() {
       <div className="hub-header-block" style={{ marginBottom: '1.25rem' }}>
         <h2 className="hub-page-title">ระบบและข่าวสาร (System & News Hub)</h2>
         <p className="hub-page-subtitle">
-          จัดการข่าวสารและประกาศ ตรวจสอบคำขออนุมัติข่าวจากผู้จัดงาน และกำหนดช่องทางติดต่อทางการ (AC-04, AC-99, D-185, D-204, D-255)
+          จัดการข่าวสารและประกาศ ตรวจสอบคำขออนุมัติข่าวจากผู้จัดงาน และกำหนดช่องทางติดต่อทางการ
         </p>
       </div>
 
@@ -623,7 +623,6 @@ export function OwnerSystemHub() {
             title="ข้อขัดแย้งออฟไลน์"
           >
             <span>ข้อขัดแย้งออฟไลน์</span>
-            <span className="hub-tab-count-badge">AC-99</span>
           </button>
         </div>
 

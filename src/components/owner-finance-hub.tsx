@@ -316,7 +316,7 @@ export function OwnerFinanceHub() {
             การเงินและรอบโอนเงิน (Finance & Weekly Payout Hub)
           </h2>
           <p className="hub-sub-desc">
-            ตรวจสอบยอดขายสุทธิ เงินสำรองฉุกเฉิน และบันทึกการโอนเงินตามรอบสัปดาห์ พร้อมแนบหลักฐานสลิปธนาคาร (AC-27, AC-30, AC-92)
+            ตรวจสอบยอดขายสุทธิ เงินสำรองฉุกเฉิน และบันทึกการโอนเงินตามรอบสัปดาห์ พร้อมแนบหลักฐานสลิปธนาคาร
           </p>
         </div>
       </div>
@@ -865,7 +865,7 @@ export function OwnerFinanceHub() {
 
                 <div className="form-group-field" style={{ marginTop: '1rem' }}>
                   <label htmlFor="payout-proof-file" className="modal-field-label">
-                    แนบไฟล์สลิปหลักฐานการโอนเงิน (AC-92 Private Slip)
+                    แนบไฟล์สลิปหลักฐานการโอนเงิน (เฉพาะผู้ดูแลระบบ)
                   </label>
                   <input
                     id="payout-proof-file"

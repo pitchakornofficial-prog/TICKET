@@ -133,10 +133,82 @@ describe('Security Audit Item 12: Organizer Payout Slip Access Security', () => 
 
     expect(res.status).toBe(200);
     expect(res.headers.get('Content-Type')).toContain('image/svg+xml');
+    expect(res.headers.get('Content-Security-Policy')).toBe("default-src 'none'; sandbox");
+    expect(res.headers.get('X-Content-Type-Options')).toBe('nosniff');
+    expect(res.headers.get('X-Frame-Options')).toBe('DENY');
     const svg = await res.text();
     expect(svg).toContain('<svg');
     expect(svg).toContain('โอนเงินสำเร็จ');
     expect(svg).toContain('Concert A');
+  });
+
+  it('escapes XML markup in eventTitle, organizerName, and transferNote in SVG and dataUrl responses', async () => {
+    const untrustedTitle = 'Music </text><script>void(0)</script><text>';
+    const untrustedName = 'Org & "Co" <img onerror="void(0)">';
+    const untrustedNote = "Note '1' <tag>";
+
+    mockGetSession.mockResolvedValueOnce({
+      user: { id: 'owner-1', role: 'owner' },
+    });
+    mockQuery.mockResolvedValueOnce({
+      rowCount: 1,
+      rows: [
+        {
+          id: 'payout-xss',
+          eventId: 'evt-xss',
+          amount: '1000.00',
+          paidAt: new Date('2026-05-15T10:00:00Z'),
+          createdAt: new Date('2026-05-15T10:00:00Z'),
+          transferNote: untrustedNote,
+          organizerId: 'organizer-1',
+          eventTitle: untrustedTitle,
+          organizerName: untrustedName,
+        },
+      ],
+    });
+
+    const svgReq = new Request('http://localhost:3000/api/organizer/payouts/payout-xss/slip');
+    const svgRes = await GET(svgReq, { params: Promise.resolve({ id: 'payout-xss' }) });
+    expect(svgRes.status).toBe(200);
+    expect(svgRes.headers.get('Content-Security-Policy')).toBe("default-src 'none'; sandbox");
+
+    const svg = await svgRes.text();
+    expect(svg).not.toContain('<script>');
+    expect(svg).not.toContain('<img ');
+    expect(svg).not.toContain('<tag>');
+    expect(svg).toContain('&lt;/text&gt;&lt;script&gt;void(0)&lt;/script&gt;&lt;text&gt;');
+    expect(svg).toContain('Org &amp; &quot;Co&quot; &lt;img onerror=&quot;void(0)&quot;&gt;');
+    expect(svg).toContain('Note &#39;1&#39; &lt;tag&gt;');
+
+    mockGetSession.mockResolvedValueOnce({
+      user: { id: 'organizer-1', role: 'organizer' },
+    });
+    mockQuery.mockResolvedValueOnce({
+      rowCount: 1,
+      rows: [
+        {
+          id: 'payout-xss',
+          eventId: 'evt-xss',
+          amount: '1000.00',
+          paidAt: new Date('2026-05-15T10:00:00Z'),
+          createdAt: new Date('2026-05-15T10:00:00Z'),
+          transferNote: untrustedNote,
+          organizerId: 'organizer-1',
+          eventTitle: untrustedTitle,
+          organizerName: untrustedName,
+        },
+      ],
+    });
+
+    const jsonReq = new Request('http://localhost:3000/api/organizer/payouts/payout-xss/slip', {
+      headers: { Accept: 'application/json' },
+    });
+    const jsonRes = await GET(jsonReq, { params: Promise.resolve({ id: 'payout-xss' }) });
+    expect(jsonRes.status).toBe(200);
+    const json = await jsonRes.json();
+    const decodedSvg = decodeURIComponent(String(json.slipUrl).replace('data:image/svg+xml;utf8,', ''));
+    expect(decodedSvg).not.toContain('<script>');
+    expect(decodedSvg).toContain('&lt;/text&gt;&lt;script&gt;void(0)&lt;/script&gt;&lt;text&gt;');
   });
 
   it('returns JSON with generated slip dataUrl when Accept includes application/json', async () => {

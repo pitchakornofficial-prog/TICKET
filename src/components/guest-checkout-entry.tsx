@@ -399,7 +399,7 @@ export function GuestCheckoutEntry({
             ข้อมูลผู้ซื้อและยืนยันอีเมล (Guest Checkout)
           </h2>
           <p className="step-card-subtitle">
-            ซื้อบัตรได้สะดวกรวดเร็วโดยไม่ต้องสมัครสมาชิก ระบบจะส่งรหัส OTP 6 หลักไปยังอีเมลของคุณเพื่อยืนยันก่อนชำระเงิน (AC-57, AC-60)
+            ซื้อบัตรได้สะดวกรวดเร็วโดยไม่ต้องสมัครสมาชิก ระบบจะส่งรหัส OTP 6 หลักไปยังอีเมลของคุณเพื่อยืนยันก่อนชำระเงิน
           </p>
         </div>
       </div>
@@ -559,10 +559,10 @@ export function GuestCheckoutEntry({
               <div className="dev-otp-helper-banner" role="status">
                 <div className="dev-otp-helper-label">
                   <SparklesIcon style={{ width: '16px', height: '16px' }} />
-                  <span>โหมดทดสอบ Local</span>
+                  <span>ตัวช่วยกรอกรหัส OTP</span>
                 </div>
                 <div className="dev-otp-code-display">
-                  รหัส OTP สำหรับทดสอบ: <strong id="dev-otp-value">{devOtpCode}</strong>
+                  รหัส OTP ของคุณ: <strong id="dev-otp-value">{devOtpCode}</strong>
                 </div>
                 <button
                   type="button"

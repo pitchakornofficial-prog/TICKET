@@ -56,7 +56,7 @@ test.describe('Owner Overview Counts Dashboard (TASK-039, AC-115, D-17)', () => 
     // 5. Clicking "failed-emails" jumps to Customer section
     await cardEmails.click();
     await expect(page.locator('[data-testid="owner-section-content-customer"]')).toBeVisible();
-    await expect(page.getByRole('heading', { name: 'การจัดส่งอีเมลบัตรที่ล้มเหลว (AC-20, AC-75)' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'การจัดส่งอีเมลบัตรที่ล้มเหลว' })).toBeVisible();
 
     // 6. Clicking "sync-conflicts" jumps to System section
     await cardConflicts.click();

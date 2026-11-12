@@ -92,7 +92,7 @@ export async function POST(
     );
     return Response.json(
       {
-        message: 'กำหนดเครื่องหลักสำหรับงานเรียบร้อยแล้ว (AC-94)',
+        message: 'กำหนดเครื่องหลักสำหรับงานเรียบร้อยแล้ว',
         primaryScanner: primary,
       },
       { status: 200 },

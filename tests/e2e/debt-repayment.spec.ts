@@ -215,7 +215,7 @@ test.describe('Event debt repayment and cross-event isolation (TASK-031, AC-85, 
     // Verify debt status badge & amount
     const debtStatusBadge = debtManager.locator('[data-testid="event-debt-status-badge"]');
     await expect(debtStatusBadge).toBeVisible({ timeout: 20000 });
-    await expect(debtStatusBadge).toContainText('มียอดค้างชำระ (Debt Outstanding — AC-85)', { timeout: 20000 });
+    await expect(debtStatusBadge).toContainText('มียอดค้างชำระ (Debt Outstanding)', { timeout: 20000 });
     await expect(debtManager.locator('[data-testid="owner-debt-amount"]')).toContainText('810.00', { timeout: 20000 });
     await expect(debtManager.locator('[data-testid="debt-refund-excess"]')).toContainText('810.00', { timeout: 20000 });
 
@@ -226,7 +226,7 @@ test.describe('Event debt repayment and cross-event isolation (TASK-031, AC-85, 
     await submitRepaymentBtn.click({ force: true });
 
     // Success notification
-    await expect(ownerPage.getByText('บันทึกรับชำระเงินคืนจากผู้จัดงานสำเร็จเรียบร้อยจำนวน ฿810.00 (AC-86)')).toBeVisible({ timeout: 20000 });
+    await expect(ownerPage.getByText('บันทึกรับชำระเงินคืนจากผู้จัดงานสำเร็จเรียบร้อยจำนวน ฿810.00')).toBeVisible({ timeout: 20000 });
 
     // Status updates: No debt, debt amount = 0.00, button disabled
     await expect(debtStatusBadge).toContainText('ไม่มีหนี้ค้างชำระ (No Debt)', { timeout: 20000 });

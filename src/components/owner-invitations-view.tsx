@@ -124,7 +124,7 @@ export function OwnerInvitationsView() {
         data.inviteUrl ||
         (data.token
           ? `${typeof window !== 'undefined' ? window.location.origin : ''}/accept-invitation?token=${data.token}`
-          : `${typeof window !== 'undefined' ? window.location.origin : ''}/accept-invitation?token=mock-${Date.now()}`);
+          : '');
 
       setStatus('success');
       setMessage(`ส่งคำเชิญบทบาท${roleText}ไปยัง ${email} สำเร็จ ลิงก์มีอายุ 48 ชั่วโมง`);
@@ -258,7 +258,7 @@ export function OwnerInvitationsView() {
           ผู้ใช้งานและคำเชิญ (Users &amp; Invitations Hub)
         </h2>
         <p className="hub-page-subtitle">
-          จัดการคำเชิญผู้จัดงานและทีมงาน ดูแลบัญชีผู้ใช้งานระบบ และกำหนดสิทธิ์การเข้าถึง (AC-14, D-188, D-190, D-254)
+          จัดการคำเชิญผู้จัดงานและทีมงาน ดูแลบัญชีผู้ใช้งานระบบ และกำหนดสิทธิ์การเข้าถึง
         </p>
       </div>
 

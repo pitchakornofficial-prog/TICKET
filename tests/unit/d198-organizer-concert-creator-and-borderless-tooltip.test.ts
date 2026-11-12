@@ -70,7 +70,7 @@ describe('D-198: Organizer Concert Creator Modernization, Borderless Tooltip, an
 
     // Map preview card and test pin button
     expect(eventsManagerContent).toContain('map-preview-card');
-    expect(eventsManagerContent).toContain('ทดสอบเปิดดูพิกัดจริง &rarr;');
+    expect(eventsManagerContent).toContain('เปิดดูพิกัดบนแผนที่ &rarr;');
     expect(eventsManagerContent).toContain('data-testid="test-map-pin-btn"');
   });
 

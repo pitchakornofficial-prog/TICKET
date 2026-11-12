@@ -83,7 +83,7 @@ export function GuestOrderRefundManager({
     setSuccessMessage(null);
 
     if (selectedTicketIds.length === 0) {
-      setError('กรุณาเลือกบัตรที่ต้องการขอคืนเงินอย่างน้อย 1 ใบ (AC-34)');
+      setError('กรุณาเลือกบัตรที่ต้องการขอคืนเงินอย่างน้อย 1 ใบ');
       return;
     }
 
@@ -275,7 +275,7 @@ export function GuestOrderRefundManager({
 
                   {isPending && (
                     <div style={{ fontSize: '12px', color: '#0369a1', marginTop: '6px' }}>
-                      * คำขออยู่ในสถานะรอตรวจสอบ บัตรยังสามารถใช้สแกนเข้างานได้จนกว่าจะได้รับการอนุมัติ (AC-34)
+                      * คำขออยู่ในสถานะรอตรวจสอบ บัตรยังสามารถใช้สแกนเข้างานได้จนกว่าจะได้รับการอนุมัติ
                     </div>
                   )}
 
@@ -367,7 +367,7 @@ export function GuestOrderRefundManager({
               <CheckCircleIcon />
               <div>
                 <div>
-                  <strong>ช่วงเวลาขอคืนเงินพิเศษ (Special Refund Window — AC-38):</strong> ท่านสามารถยื่นขอคืนเงินตามราคาหน้าบัตรได้แม้พ้นกำหนดเวลาปกติ เนื่องจากการเลื่อนรอบการแสดง
+                  <strong>ช่วงเวลาขอคืนเงินพิเศษ (Special Refund Window):</strong> ท่านสามารถยื่นขอคืนเงินตามราคาหน้าบัตรได้แม้พ้นกำหนดเวลาปกติ เนื่องจากการเลื่อนรอบการแสดง
                 </div>
                 {eligibility.specialRefundWindowEnd && (
                   <div style={{ marginTop: '4px', fontSize: '12px' }}>
@@ -397,14 +397,14 @@ export function GuestOrderRefundManager({
               {eligibility.isWithinNormalCutoff ? <InfoIcon /> : <AlertIcon />}
               <div>
                 <div>
-                  <strong>เงื่อนไขการคืนเงินปกติ (AC-32):</strong> ต้องยื่นคำขอล่วงหน้าไม่น้อยกว่า 168 ชั่วโมง (7 วัน) ก่อนเริ่มการแสดง
+                  <strong>เงื่อนไขการคืนเงินปกติ:</strong> ต้องยื่นคำขอล่วงหน้าไม่น้อยกว่า 168 ชั่วโมง (7 วัน) ก่อนเริ่มการแสดง
                 </div>
                 <div style={{ marginTop: '4px', fontSize: '12px' }}>
                   กำหนดเวลาสิ้นสุด: {formatDate(new Date(eligibility.cutoffTime))} เวลา {formatTime(new Date(eligibility.cutoffTime))}
                 </div>
                 {!eligibility.isWithinNormalCutoff && (
                   <div style={{ marginTop: '4px', fontWeight: 'bold' }}>
-                    ขณะนี้พ้นกำหนดเวลายื่นคำขอคืนเงินตามเงื่อนไขปกติแล้ว (PAST_REFUND_CUTOFF)
+                    ขณะนี้พ้นกำหนดเวลายื่นคำขอคืนเงินตามเงื่อนไขปกติแล้ว
                   </div>
                 )}
               </div>
@@ -544,7 +544,7 @@ export function GuestOrderRefundManager({
                     lineHeight: 1.5,
                   }}
                 >
-                  <strong>ข้อกำหนดสำคัญ (AC-33, AC-34):</strong>
+                  <strong>ข้อกำหนดสำคัญ:</strong>
                   <div>• ยอดเงินคืนคำนวณจากราคาหน้าบัตร (Face Value) เท่านั้น ไม่รวมค่าธรรมเนียมการบริการลูกค้า</div>
                   <div>• การยื่นคำขอยังไม่ยกเลิกสิทธิ์ทันที (สถานะ pending) บัตรยังสามารถสแกนเข้างานได้จนกว่าจะได้รับการอนุมัติ</div>
                 </div>

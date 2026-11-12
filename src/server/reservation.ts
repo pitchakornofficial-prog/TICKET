@@ -267,7 +267,7 @@ export async function createReservation(
       throw new Error('ไม่พบรอบการแสดงที่ระบุในคอนเสิร์ตนี้');
     }
     if (sessionRes.rows[0].status === 'cancelled') {
-      throw new Error('รอบการแสดงนี้ถูกยกเลิกแล้ว ไม่สามารถทำการจองบัตรได้ (AC-35)');
+      throw new Error('รอบการแสดงนี้ถูกยกเลิกแล้ว ไม่สามารถทำการจองบัตรได้');
     }
     if (sessionRes.rows[0].status !== 'approved') {
       throw new Error('รอบการแสดงนี้ยังไม่เปิดจำหน่าย');

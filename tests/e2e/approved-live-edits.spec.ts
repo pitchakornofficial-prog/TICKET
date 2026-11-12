@@ -156,13 +156,13 @@ test.describe('Approved live session edits & quota protection (TASK-024, AC-67, 
 
     // Check amendment card
     await expect(
-      page.getByRole('heading', { name: 'คำขอแก้ไขรอบที่เปิดขายอยู่ (Live Session Amendments — AC-67, AC-68, AC-109)' }),
+      page.getByRole('heading', { name: 'คำขอแก้ไขรอบที่เปิดขายอยู่ คำขอปรับเปลี่ยนราคาและโซนที่รออนุมัติ (Live Session Amendments)' }),
     ).toBeVisible();
     await expect(page.getByText('฿1,000.00 →')).toBeVisible();
     await expect(page.getByText('฿1,800.00')).toBeVisible();
 
     // Click approve amendment
-    const approveBtn = page.getByRole('button', { name: 'อนุมัติการแก้ไข (AC-67)' });
+    const approveBtn = page.getByRole('button', { name: 'อนุมัติการแก้ไขราคา' });
     await approveBtn.scrollIntoViewIfNeeded();
     await approveBtn.dispatchEvent('click');
     await expect(page.getByText(/อนุมัติการแก้ไขรอบของ/)).toBeVisible({ timeout: 10000 });

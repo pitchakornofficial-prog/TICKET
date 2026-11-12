@@ -139,7 +139,7 @@ test.describe('Cancel issued session & create refund cases (TASK-026, AC-35, AC-
     await expect(canRequestCard).toBeVisible();
     await expect(canRequestCard).toContainText('ศิลปินติดภารกิจด่วน ไม่สามารถจัดแสดงได้');
 
-    const approveCanBtn = canRequestCard.getByRole('button', { name: 'อนุมัติยกเลิกรอบ (AC-35)' });
+    const approveCanBtn = canRequestCard.getByRole('button', { name: 'อนุมัติยกเลิกรอบการแสดง' });
     await expect(approveCanBtn).toBeVisible();
     await approveCanBtn.click({ force: true });
 

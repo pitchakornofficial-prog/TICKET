@@ -689,7 +689,7 @@ export function OrganizerFinanceView({
                 <div className="finance-debt-alert-banner" data-testid="debt-isolation-alert">
                   <div className="finance-debt-alert-head">
                     <AlertTriangleIcon width={18} height={18} />
-                    <strong>แจ้งเตือนยอดหนี้ค้างชำระ (Debt Outstanding — AC-85, AC-86)</strong>
+                    <strong>แจ้งเตือนยอดหนี้ค้างชำระ (Debt Outstanding)</strong>
                   </div>
                   <p className="finance-debt-alert-body">
                     ยอดหนี้ค้างชำระจำนวน <strong>{formatBaht(currentReport.debtAmount)}</strong>{' '}
@@ -697,7 +697,7 @@ export function OrganizerFinanceView({
                     {currentReport.flatFeeDebt > 0
                       ? `, ค่าบริการเหมาจ่ายรอหัก: ${formatBaht(currentReport.flatFeeDebt)}`
                       : ''}){' '}
-                    จะถูกหักจากรายรับถัดไปของคอนเสิร์ตนี้เท่านั้น และจะไม่ถูกนำไปหักข้ามไปยังงานคอนเสิร์ตอื่นของผู้จัดงาน (AC-85)
+                    จะถูกหักจากรายรับถัดไปของคอนเสิร์ตนี้เท่านั้น และจะไม่ถูกนำไปหักข้ามไปยังงานคอนเสิร์ตอื่นของผู้จัดงาน
                   </p>
                 </div>
               )}

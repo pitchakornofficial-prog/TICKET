@@ -20,7 +20,7 @@ export async function POST(
 
     if (actor?.role !== 'owner') {
       return Response.json(
-        { message: 'เฉพาะเจ้าของเว็บ (Owner) เท่านั้นที่มีสิทธิ์บันทึกการโอนเงินคืน (AC-37, AC-92)' },
+        { message: 'เฉพาะเจ้าของเว็บ (Owner) เท่านั้นที่มีสิทธิ์บันทึกการโอนเงินคืน' },
         { status: 403 },
       );
     }

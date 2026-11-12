@@ -103,7 +103,7 @@ test.describe('Ticket Email Delivery flow (TASK-017, AC-20, AC-75)', () => {
     await expect(page).toHaveURL('/back-office/owner');
     await page.goto('/back-office/owner#customer');
 
-    await expect(page.getByRole('heading', { name: 'การจัดส่งอีเมลบัตรที่ล้มเหลว (AC-20, AC-75)' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'การจัดส่งอีเมลบัตรที่ล้มเหลว' })).toBeVisible();
     await expect(page.getByText('ไม่มีรายการจัดส่งอีเมลที่ล้มเหลว ทุกคำสั่งซื้อจัดส่งสำเร็จเรียบร้อย')).toBeVisible();
 
     // 10. Design rules: zero emojis (D-14), responsive layout

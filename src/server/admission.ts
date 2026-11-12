@@ -241,7 +241,7 @@ export async function recordAdmissionScan(
         status: 'rejected',
         action: input.action,
         reason: 'UNAUTHORIZED_EVENT',
-        message: 'คุณไม่มีสิทธิ์สแกนบัตรในคอนเสิร์ตนี้ (AC-08)',
+        message: 'คุณไม่มีสิทธิ์สแกนบัตรในคอนเสิร์ตนี้',
       };
     }
   } else if (input.scannerRole === 'organizer') {
@@ -251,7 +251,7 @@ export async function recordAdmissionScan(
         status: 'rejected',
         action: input.action,
         reason: 'UNAUTHORIZED_EVENT',
-        message: 'ผู้จัดงานสามารถสแกนได้เฉพาะคอนเสิร์ตของตนเองเท่านั้น (AC-08)',
+        message: 'ผู้จัดงานสามารถสแกนได้เฉพาะคอนเสิร์ตของตนเองเท่านั้น',
       };
     }
   }
@@ -271,7 +271,7 @@ export async function recordAdmissionScan(
       status: 'rejected',
       action: input.action,
       reason: 'OUTSIDE_ADMISSION_WINDOW',
-      message: 'ยังไม่ถึงช่วงเวลาเปิดรับเข้างาน (AC-100)',
+      message: 'ยังไม่ถึงช่วงเวลาเปิดรับเข้างาน',
     };
   }
 
@@ -281,7 +281,7 @@ export async function recordAdmissionScan(
       status: 'rejected',
       action: input.action,
       reason: 'OUTSIDE_ADMISSION_WINDOW',
-      message: 'พ้นช่วงเวลาเปิดรับเข้างานแล้ว (AC-100)',
+      message: 'พ้นช่วงเวลาเปิดรับเข้างานแล้ว',
     };
   }
 
@@ -327,7 +327,7 @@ export async function recordAdmissionScan(
         status: 'rejected',
         action: input.action,
         reason: 'TICKET_NOT_FOUND',
-        message: 'ไม่พบบัตรในระบบ กรุณาตรวจสอบ QR Code บัตร (AC-101)',
+        message: 'ไม่พบบัตรในระบบ กรุณาตรวจสอบ QR Code บัตร',
       };
     }
 
@@ -374,7 +374,7 @@ export async function recordAdmissionScan(
         status: 'rejected',
         action: input.action,
         reason: 'WRONG_EVENT',
-        message: 'บัตรใบนี้เป็นของคอนเสิร์ตอื่น ไม่ตรงกับงานที่กำลังสแกน (AC-101)',
+        message: 'บัตรใบนี้เป็นของคอนเสิร์ตอื่น ไม่ตรงกับงานที่กำลังสแกน',
       };
     }
 
@@ -400,7 +400,7 @@ export async function recordAdmissionScan(
         status: 'rejected',
         action: input.action,
         reason: 'WRONG_SESSION',
-        message: 'บัตรใบนี้เป็นของรอบการแสดงอื่น ไม่ตรงกับรอบที่กำลังสแกน (AC-100)',
+        message: 'บัตรใบนี้เป็นของรอบการแสดงอื่น ไม่ตรงกับรอบที่กำลังสแกน',
       };
     }
 
@@ -426,7 +426,7 @@ export async function recordAdmissionScan(
         status: 'rejected',
         action: input.action,
         reason: 'TICKET_CANCELLED',
-        message: 'บัตรถูกยกเลิกแล้ว ไม่อนุญาตให้เข้างาน (AC-101)',
+        message: 'บัตรถูกยกเลิกแล้ว ไม่อนุญาตให้เข้างาน',
       };
     }
 
@@ -451,7 +451,7 @@ export async function recordAdmissionScan(
         status: 'rejected',
         action: input.action,
         reason: 'TICKET_REFUNDED',
-        message: 'บัตรถูกคืนเงินแล้ว ไม่อนุญาตให้เข้างาน (AC-101)',
+        message: 'บัตรถูกคืนเงินแล้ว ไม่อนุญาตให้เข้างาน',
       };
     }
 
@@ -476,7 +476,7 @@ export async function recordAdmissionScan(
         status: 'rejected',
         action: input.action,
         reason: 'INVALID_TICKET',
-        message: 'สถานะบัตรไม่ถูกต้อง ไม่อนุญาตให้เข้างาน (AC-101)',
+        message: 'สถานะบัตรไม่ถูกต้อง ไม่อนุญาตให้เข้างาน',
       };
     }
 
@@ -503,7 +503,7 @@ export async function recordAdmissionScan(
           status: 'rejected',
           action: 'entry',
           reason: 'ALREADY_INSIDE',
-          message: 'บัตรอยู่ในพื้นที่จัดงานแล้ว ไม่อนุญาตให้เข้าซ้ำ (AC-49, AC-08)',
+          message: 'บัตรอยู่ในพื้นที่จัดงานแล้ว ไม่อนุญาตให้เข้าซ้ำ',
           ticket: ticketSummary,
         };
       }
@@ -584,7 +584,7 @@ export async function recordAdmissionScan(
         success: true,
         status: 'success',
         action: 'exit',
-        message: 'บันทึกออกนอกงานสำเร็จ (สามารถกลับเข้างานใหม่ได้ตาม AC-39, AC-95)',
+        message: 'บันทึกออกนอกงานสำเร็จ (สามารถกลับเข้างานใหม่ได้)',
         ticket: { ...ticketSummary, admissionStatus: 'outside' },
       };
     }
@@ -709,7 +709,7 @@ export async function syncOfflineAdmissionScans(
       [eventId, actor.id],
     );
     if (scRes.rowCount === 0) {
-      throw new Error('ไม่อนุญาต: คุณไม่มีสิทธิ์จัดการข้อมูลของคอนเสิร์ตนี้ (AC-08)');
+      throw new Error('ไม่อนุญาต: คุณไม่มีสิทธิ์จัดการข้อมูลของคอนเสิร์ตนี้');
     }
 
     const priRes = await pool.query<{ scannerId: string }>(
@@ -717,7 +717,7 @@ export async function syncOfflineAdmissionScans(
       [eventId],
     );
     if ((priRes.rowCount ?? 0) === 0 || priRes.rows[0].scannerId !== actor.id) {
-      throw new Error('ไม่อนุญาต: เฉพาะเครื่องหลักประจำงานเท่านั้นที่สามารถซิงก์ข้อมูลออฟไลน์ได้ (AC-40, AC-94)');
+      throw new Error('ไม่อนุญาต: เฉพาะเครื่องหลักประจำงานเท่านั้นที่สามารถซิงก์ข้อมูลออฟไลน์ได้');
     }
   } else if (actor.role === 'organizer') {
     const evRes = await pool.query(
@@ -725,7 +725,7 @@ export async function syncOfflineAdmissionScans(
       [eventId, actor.id],
     );
     if (evRes.rowCount === 0) {
-      throw new Error('ไม่อนุญาต: คุณไม่มีสิทธิ์จัดการข้อมูลของคอนเสิร์ตนี้ (AC-08)');
+      throw new Error('ไม่อนุญาต: คุณไม่มีสิทธิ์จัดการข้อมูลของคอนเสิร์ตนี้');
     }
   }
 

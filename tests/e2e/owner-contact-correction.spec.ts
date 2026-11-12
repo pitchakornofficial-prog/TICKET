@@ -136,7 +136,7 @@ test.describe('Owner Contact Correction Flow (TASK-019, AC-76, G-24)', () => {
     await page.goto('/back-office/owner#customer');
 
     await expect(
-      page.getByRole('heading', { name: 'แก้ไขข้อมูลติดต่อคำสั่งซื้อที่ชำระแล้ว (AC-76, G-24)' }),
+      page.getByRole('heading', { name: 'แก้ไขข้อมูลติดต่อคำสั่งซื้อที่ชำระแล้ว' }),
     ).toBeVisible();
 
     // Search for order

@@ -182,7 +182,7 @@ describe('TASK-033: Offline Admission Engine Unit Tests (AC-40, AC-41, AC-50, AC
     expect(result.success).toBe(false);
     expect(result.status).toBe('rejected');
     expect(result.reason).toBe('OFFLINE_TICKET_NOT_FOUND');
-    expect(result.message).toBe('ไม่พบข้อมูลบัตรในชุดข้อมูลออฟไลน์ กรุณารอเชื่อมต่อออนไลน์ (AC-41, O2)');
+    expect(result.message).toBe('ไม่พบข้อมูลบัตรในชุดข้อมูลออฟไลน์ กรุณารอเชื่อมต่อออนไลน์');
   });
 
   it('3. Offline state transitions: entry -> repeat denial -> exit -> repeat denial -> reentry (AC-96, AC-50)', () => {

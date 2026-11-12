@@ -859,7 +859,7 @@ export function OrganizerEventsManager({
       } else {
         setAmendmentFeedback({
           type: 'success',
-          message: data.message || 'ส่งคำขอแก้ไขรอบการแสดงเรียบร้อยแล้ว รอการอนุมัติจากผู้ดูแลระบบ (AC-34, G-13)',
+          message: data.message || 'ส่งคำขอแก้ไขรอบการแสดงเรียบร้อยแล้ว รอการอนุมัติจากผู้ดูแลระบบ',
         });
         setAmendmentStartTime('');
         setAmendmentEndTime('');
@@ -1356,7 +1356,7 @@ export function OrganizerEventsManager({
                       }}
                       data-testid="test-map-pin-btn"
                     >
-                      <span>ทดสอบเปิดดูพิกัดจริง &rarr;</span>
+                      <span>เปิดดูพิกัดบนแผนที่ &rarr;</span>
                     </a>
                   </div>
 
@@ -2435,7 +2435,7 @@ export function OrganizerEventsManager({
                   <span>โหมดดูตัวอย่างเสมือนจริง (Customer View Preview)</span>
                 </span>
                 <span style={{ fontSize: '0.8rem', color: '#64748b' }}>
-                  จำลองหน้าเว็บจริงที่ลูกค้าจะมองเห็นในขั้นตอนเลือกซื้อบัตร
+                  ตัวอย่างหน้าเว็บจริงที่ลูกค้าจะมองเห็นในขั้นตอนเลือกซื้อบัตร
                 </span>
               </div>
               <button
@@ -3155,7 +3155,7 @@ export function OrganizerEventsManager({
                     ))}
                   </div>
                   <p style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '0.5rem', marginBottom: 0 }}>
-                    * โควตาใหม่ต้องไม่ต่ำกว่าจำนวนสิทธิ์ที่จำหน่ายหรือกันไว้แล้วในรอบนี้ (AC-109)
+                    * โควตาใหม่ต้องไม่ต่ำกว่าจำนวนสิทธิ์ที่จำหน่ายหรือกันไว้แล้วในรอบนี้
                   </p>
                 </div>
 

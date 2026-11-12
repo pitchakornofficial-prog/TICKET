@@ -60,7 +60,7 @@ export function OwnerPaymentRecoveryManager() {
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', marginBottom: '0.2rem' }}>
             <AlertIcon />
             <h2 id="payment-recovery-title" style={{ margin: 0, fontSize: '1.25rem' }}>
-              รายการชำระเงินที่ต้องตรวจสอบ / รอคืนเงิน (G-23, G-35)
+              รายการชำระเงินที่ต้องตรวจสอบ / รอคืนเงิน
             </h2>
           </div>
           <p style={{ margin: 0, fontSize: '0.9rem', color: 'var(--muted)' }}>
@@ -160,7 +160,7 @@ export function OwnerPaymentRecoveryManager() {
                       {c.reason === 'paid_after_deadline'
                         ? 'ชำระเงินหลังหมดเวลา 15 นาที'
                         : c.reason === 'paid_after_cancellation'
-                          ? 'ชำระเงินหลังรอบการแสดงถูกยกเลิก (G-52)'
+                          ? 'ชำระเงินหลังรอบการแสดงถูกยกเลิก'
                           : 'โควตาบัตรไม่เพียงพอ'}
                     </span>
                     <strong id={`case-id-${idx}`} style={{ fontFamily: 'monospace', fontSize: '0.9rem' }}>

@@ -27,7 +27,7 @@ export async function POST(
   // AC-76 Role check: Only owner is authorized
   if (actor.role !== 'owner') {
     return Response.json(
-      { message: 'เฉพาะผู้ดูแลระบบ (Owner) เท่านั้นที่มีสิทธิ์แก้ไขข้อมูลติดต่อของคำสั่งซื้อที่ชำระแล้ว (AC-76)' },
+      { message: 'เฉพาะผู้ดูแลระบบ (Owner) เท่านั้นที่มีสิทธิ์แก้ไขข้อมูลติดต่อของคำสั่งซื้อที่ชำระแล้ว' },
       { status: 403 },
     );
   }
@@ -75,7 +75,7 @@ export async function GET(
 
   if (actor.role !== 'owner') {
     return Response.json(
-      { message: 'เฉพาะผู้ดูแลระบบ (Owner) เท่านั้นที่มีสิทธิ์ดูประวัติการแก้ไขข้อมูลติดต่อ (AC-76)' },
+      { message: 'เฉพาะผู้ดูแลระบบ (Owner) เท่านั้นที่มีสิทธิ์ดูประวัติการแก้ไขข้อมูลติดต่อ' },
       { status: 403 },
     );
   }

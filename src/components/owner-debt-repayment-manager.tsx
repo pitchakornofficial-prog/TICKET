@@ -171,7 +171,7 @@ export function OwnerDebtRepaymentManager() {
       } else {
         setFeedback({
           type: 'success',
-          message: `บันทึกรับชำระเงินคืนจากผู้จัดงานสำเร็จเรียบร้อยจำนวน ฿${numAmount.toLocaleString('th-TH', { minimumFractionDigits: 2 })} (AC-86)`,
+          message: `บันทึกรับชำระเงินคืนจากผู้จัดงานสำเร็จเรียบร้อยจำนวน ฿${numAmount.toLocaleString('th-TH', { minimumFractionDigits: 2 })}`,
         });
         setNotes('');
         await fetchReport(selectedEventId, true);
@@ -199,7 +199,7 @@ export function OwnerDebtRepaymentManager() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '12px' }}>
         <div>
           <h2 style={{ fontSize: '18px', fontWeight: 'bold', color: '#0f172a', margin: 0 }}>
-            จัดการยอดค้างชำระและการรับเงินคืนจากผู้จัดงาน (Debt Repayment — TASK-031, AC-85, AC-86)
+            จัดการยอดค้างชำระและการรับเงินคืนจากผู้จัดงาน (Debt Repayment)
           </h2>
           <p style={{ fontSize: '13px', color: '#64748b', margin: '4px 0 0' }}>
             ติดตามยอดค้างชำระจาก refund หลัง payout แยกตามงานเดิม และบันทึกรับเงินคืนจริงโดยไม่หักข้ามงาน
@@ -276,11 +276,11 @@ export function OwnerDebtRepaymentManager() {
                     color: report.isDebt ? '#991b1b' : '#166534',
                   }}
                 >
-                  {report.isDebt ? 'มียอดค้างชำระ (Debt Outstanding — AC-85)' : 'ไม่มีหนี้ค้างชำระ (No Debt)'}
+                  {report.isDebt ? 'มียอดค้างชำระ (Debt Outstanding)' : 'ไม่มีหนี้ค้างชำระ (No Debt)'}
                 </span>
                 <div style={{ fontSize: '12px', color: report.isDebt ? '#b91c1c' : '#15803d', marginTop: '2px' }}>
                   {report.isDebt
-                    ? 'ยอดค้างชำระนี้จะถูกหักจากรายรับถัดไปของงานนี้เท่านั้น และไม่ถูกนำไปหักข้ามไปยังงานคอนเสิร์ตอื่นของผู้จัดงาน (AC-85)'
+                    ? 'ยอดค้างชำระนี้จะถูกหักจากรายรับถัดไปของงานนี้เท่านั้น และไม่ถูกนำไปหักข้ามไปยังงานคอนเสิร์ตอื่นของผู้จัดงาน'
                     : 'สถานะการเงินของคอนเสิร์ตนี้ไม่มีภาระหนี้สินคงค้าง'}
                 </div>
               </div>
@@ -407,7 +407,7 @@ export function OwnerDebtRepaymentManager() {
             }}
           >
             <h3 style={{ fontSize: '14px', fontWeight: 'bold', color: '#1e293b', margin: '0 0 12px' }}>
-              บันทึกการรับชำระเงินคืนจากผู้จัดงาน (Record Debt Repayment — AC-86)
+              บันทึกการรับชำระเงินคืนจากผู้จัดงาน (Record Debt Repayment)
             </h3>
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px', alignItems: 'flex-end' }}>
@@ -495,7 +495,7 @@ export function OwnerDebtRepaymentManager() {
           {/* Repayments History Table */}
           <div>
             <h3 style={{ fontSize: '14px', fontWeight: 'bold', color: '#1e293b', margin: '0 0 10px' }}>
-              ประวัติการรับชำระเงินคืนจากผู้จัดงาน (Debt Repayment History — AC-86)
+              ประวัติการรับชำระเงินคืนจากผู้จัดงาน (Debt Repayment History)
             </h3>
 
             {report.repayments.length === 0 ? (

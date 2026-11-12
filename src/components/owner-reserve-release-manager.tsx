@@ -97,7 +97,7 @@ export function OwnerReserveReleaseManager() {
     if (!report.isFinalSessionEnded) {
       setFeedback({
         type: 'error',
-        message: 'ยังไม่สามารถปล่อยเงินสำรองได้จนกว่ารอบสุดท้ายของคอนเสิร์ตจะสิ้นสุดลง (AC-83)',
+        message: 'ยังไม่สามารถปล่อยเงินสำรองได้จนกว่ารอบสุดท้ายของคอนเสิร์ตจะสิ้นสุดลง',
       });
       return;
     }
@@ -174,10 +174,10 @@ export function OwnerReserveReleaseManager() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '12px' }}>
         <div>
           <h2 style={{ fontSize: '20px', fontWeight: 'bold', color: '#0f172a', margin: '0 0 4px 0' }}>
-            การปล่อยเงินสำรองหลังรอบสุดท้าย (Reserve Release — AC-83)
+            การปล่อยเงินสำรองหลังรอบสุดท้าย (Reserve Release)
           </h2>
           <p style={{ fontSize: '13px', color: '#64748b', margin: 0 }}>
-            Owner ตรวจสอบและสั่งปล่อยเงินสำรองที่กันไว้จริง (Held H) เข้าสู่ยอดพร้อมจ่ายหลังรอบสุดท้ายของงานสิ้นสุด
+            ผู้ดูแลระบบ (Owner) ตรวจสอบและสั่งปล่อยเงินสำรองที่กันไว้จริงเข้าสู่ยอดพร้อมจ่ายหลังรอบสุดท้ายของงานสิ้นสุด
           </p>
         </div>
 
@@ -280,8 +280,8 @@ export function OwnerReserveReleaseManager() {
               <div>
                 <div style={{ fontSize: '14px', fontWeight: 'bold', color: report.isFinalSessionEnded ? '#166534' : '#92400e' }}>
                   {report.isFinalSessionEnded
-                    ? 'รอบสุดท้ายของงานสิ้นสุดแล้ว (พร้อมตรวจสอบและปล่อยเงินสำรอง — AC-83)'
-                    : 'รอบสุดท้ายยังไม่สิ้นสุด — ไม่ปล่อยตามเวลาเดิน ต้องรอรอบสุดท้ายจบ (AC-83)'}
+                    ? 'รอบสุดท้ายของงานสิ้นสุดแล้ว (พร้อมตรวจสอบและปล่อยเงินสำรอง)'
+                    : 'รอบสุดท้ายยังไม่สิ้นสุด — ไม่ปล่อยตามเวลาเดิน ต้องรอรอบสุดท้ายจบ'}
                 </div>
                 <div style={{ fontSize: '12px', color: '#64748b' }}>
                   {report.finalSessionEnd
@@ -454,7 +454,7 @@ export function OwnerReserveReleaseManager() {
                       : 'pointer',
                 }}
               >
-                {submitting ? 'กำลังบันทึก...' : 'ปล่อยเงินสำรองเข้ายอดพร้อมจ่าย (AC-83)'}
+                {submitting ? 'กำลังบันทึก...' : 'ปล่อยเงินสำรองเข้ายอดพร้อมจ่าย'}
               </button>
             </div>
           </div>

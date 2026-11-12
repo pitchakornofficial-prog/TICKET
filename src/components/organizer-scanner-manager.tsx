@@ -525,7 +525,7 @@ export function OrganizerScannerManager() {
       if (!res.ok) {
         setError(data.message || 'กำหนดเครื่องหลักไม่สำเร็จ');
       } else {
-        setMessage('กำหนดเครื่องหลักสำหรับงานเรียบร้อยแล้ว (AC-94)');
+        setMessage('กำหนดเครื่องหลักสำหรับงานเรียบร้อยแล้ว');
         loadEventData(selectedEventId);
       }
     } catch {
@@ -576,7 +576,7 @@ export function OrganizerScannerManager() {
       if (!res.ok) {
         setError(data.message || 'สลับเครื่องหลักไม่สำเร็จ');
       } else {
-        setMessage(data.message || 'สลับเครื่องหลักประจำงานสำเร็จ (AC-97)');
+        setMessage(data.message || 'สลับเครื่องหลักประจำงานสำเร็จ');
         setHandoverTarget(null);
         setReadinessResult(null);
         loadEventData(selectedEventId);
@@ -611,7 +611,7 @@ export function OrganizerScannerManager() {
       } else {
         setMessage(
           data.message ||
-            'ระงับการใช้งานสแกนออฟไลน์เพื่อเข้าสู่กระบวนการกระทบยอดเรียบร้อยแล้ว (AC-98)',
+            'ระงับการใช้งานสแกนออฟไลน์เพื่อเข้าสู่กระบวนการกระทบยอดเรียบร้อยแล้ว',
         );
         setShowEmergencyModal(false);
         loadEventData(selectedEventId);
@@ -651,7 +651,7 @@ export function OrganizerScannerManager() {
       } else {
         setMessage(
           data.message ||
-            'กระทบยอดเสร็จสิ้น ปลดระงับและเปิดให้ตั้งเครื่องหลักใหม่เรียบร้อยแล้ว (AC-98)',
+            'กระทบยอดเสร็จสิ้น ปลดระงับและเปิดให้ตั้งเครื่องหลักใหม่เรียบร้อยแล้ว',
         );
         loadEventData(selectedEventId);
       }
@@ -751,7 +751,7 @@ export function OrganizerScannerManager() {
           <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
             <AlertTriangleIcon />
             <strong style={{ fontSize: '15px' }}>
-              การใช้งานโหมดออฟไลน์ถูกระงับเพื่อกระทบยอด (AC-98, NQ-06)
+              การใช้งานโหมดออฟไลน์ถูกระงับเพื่อกระทบยอด
             </strong>
           </div>
           <p style={{ margin: '0 0 6px', fontSize: '13px' }}>
@@ -762,7 +762,7 @@ export function OrganizerScannerManager() {
             {offlineControl?.haltDetails ? ` — ${offlineControl.haltDetails}` : ''}
           </p>
           <div style={{ fontSize: '12px', color: '#7f1d1d', marginBottom: '10px' }}>
-            <strong>ขั้นตอนการปฏิบัติงานตาม NQ-06:</strong>
+            <strong>ขั้นตอนการปฏิบัติงาน:</strong>
             <ol style={{ margin: '4px 0 0 20px', padding: 0 }}>
               <li>หยุดการสแกนออฟไลน์ทั้งหมดในงานทันที ห้ามตั้งเครื่องใหม่ข้ามขั้นตอน</li>
               <li>เจ้าของเว็บและผู้จัดงานตรวจสอบประวัติการสแกนในระบบกลางและจำนวนผู้ชมจริง</li>
@@ -1004,7 +1004,7 @@ export function OrganizerScannerManager() {
                   title="แจ้งเครื่องหลักชำรุด หรือระงับการใช้งานออฟไลน์เพื่อกระทบยอด"
                   icon={<AlertTriangleIcon width={15} height={15} className="scanner-control-emergency-icon" />}
                 >
-                  แจ้งเครื่องหลักชำรุด / ระงับออฟไลน์ (AC-98)
+                  แจ้งเครื่องหลักชำรุด / ระงับออฟไลน์
                 </Button>
               )}
             </div>
@@ -1922,7 +1922,7 @@ export function OrganizerScannerManager() {
                     }}
                   >
                     <InfoIcon width={16} height={16} style={{ flexShrink: 0, color: '#1848ed' }} />
-                    <span>คำแนะนำการใช้งานและวิธีทดสอบระบบ:</span>
+                    <span>คำแนะนำการใช้งาน:</span>
                   </div>
                   <ul
                     style={{
@@ -1941,7 +1941,7 @@ export function OrganizerScannerManager() {
                       <strong>สำหรับผู้จัดงานเอง:</strong> สามารถกดปุ่ม <strong>[เปิด Terminal สแกน]</strong> บนการ์ดเครื่องหลักได้ทันทีโดยไม่ต้องสแกน QR และจะไม่หลุดออกจากระบบ
                     </li>
                     <li>
-                      <strong>หากทดสอบสแกนเนอร์ของทีมงานบนคอมพิวเตอร์เครื่องเดียวกัน:</strong> กรุณาคัดลอกลิงก์แล้วเปิดใน <em>&quot;หน้าต่างไม่ระบุตัวตน (Incognito / InPrivate Window)&quot;</em> หรือเปิดในอีกเบราว์เซอร์ เพื่อจำลองเป็นอุปกรณ์ของทีมงาน
+                      <strong>หากเปิดใช้งานสแกนเนอร์ของทีมงานบนคอมพิวเตอร์เครื่องเดียวกัน:</strong> กรุณาคัดลอกลิงก์แล้วเปิดใน <em>&quot;หน้าต่างไม่ระบุตัวตน (Incognito / InPrivate Window)&quot;</em> หรือเปิดในอีกเบราว์เซอร์ เพื่อแยกอุปกรณ์และเซสชันของทีมงาน
                     </li>
                   </ul>
                 </div>
@@ -1964,7 +1964,7 @@ export function OrganizerScannerManager() {
             <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="handover-title">
               <div className="modal-card" style={{ maxWidth: '520px' }}>
                 <h3 id="handover-title">
-                  สลับสิทธิ์เครื่องหลักประจำงาน (Handover — AC-97)
+                  สลับสิทธิ์เครื่องหลักประจำงาน (Handover)
                 </h3>
                 <p className="card-caption">
                   การโอนสิทธิ์เครื่องหลักต้องทำขณะออนไลน์ โดยเครื่องใหม่จะดาวน์โหลดชุดข้อมูลบัตรล่าสุด และเครื่องเดิมจะสิ้นสุดสิทธิ์ออฟไลน์ทันที
@@ -2022,7 +2022,7 @@ export function OrganizerScannerManager() {
                   >
                     {readinessResult.ready ? (
                       <div>
-                        <strong>พร้อมทำการสลับเครื่อง:</strong> ผ่านเกณฑ์การตรวจสอบความพร้อม พร้อมสลับเครื่องหลัก (AC-97)
+                        <strong>พร้อมทำการสลับเครื่อง:</strong> ผ่านเกณฑ์การตรวจสอบความพร้อม พร้อมสลับเครื่องหลัก
                       </div>
                     ) : (
                       <div>
@@ -2068,22 +2068,22 @@ export function OrganizerScannerManager() {
                     onClick={handleExecuteHandover}
                     disabled={actionLoading}
                   >
-                    {actionLoading ? 'กำลังสลับเครื่อง...' : 'ยืนยันการสลับเครื่องหลัก (AC-97)'}
+                    {actionLoading ? 'กำลังสลับเครื่อง...' : 'ยืนยันการสลับเครื่องหลัก'}
                   </button>
                 </div>
               </div>
             </div>
           )}
 
-          {/* Emergency Stop Modal (AC-98, NQ-06) */}
+          {/* Emergency Stop Modal */}
           {showEmergencyModal && (
             <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="emergency-title">
               <div className="modal-card" style={{ maxWidth: '520px' }}>
                 <h3 id="emergency-title" style={{ color: '#dc2626' }}>
-                  แจ้งเครื่องหลักชำรุด / ระงับการใช้งานออฟไลน์เพื่อกระทบยอด (AC-98)
+                  แจ้งเครื่องหลักชำรุด / ระงับการใช้งานออฟไลน์เพื่อกระทบยอด
                 </h3>
                 <p className="card-caption" style={{ marginBottom: '14px' }}>
-                  เมื่อเครื่องหลักชำรุด สูญหาย หรือข้อมูลในเครื่องเสียหายพร้อมรายการค้าง: <strong>ต้องหยุดการสแกนแบบออฟไลน์ทั้งหมดในงาน</strong> และเข้าสู่กระบวนการกระทบยอดร่วมกับเจ้าของเว็บตาม NQ-06 ไม่สามารถสลับหรือเปิดเครื่องออฟไลน์เครื่องใหม่ข้ามขั้นตอนได้
+                  เมื่อเครื่องหลักชำรุด สูญหาย หรือข้อมูลในเครื่องเสียหายพร้อมรายการค้าง: <strong>ต้องหยุดการสแกนแบบออฟไลน์ทั้งหมดในงาน</strong> และเข้าสู่กระบวนการกระทบยอดร่วมกับเจ้าของเว็บ ไม่สามารถสลับหรือเปิดเครื่องออฟไลน์เครื่องใหม่ข้ามขั้นตอนได้
                 </p>
 
                 <div className="form-group" style={{ marginBottom: '12px' }}>
@@ -2113,7 +2113,7 @@ export function OrganizerScannerManager() {
                 </div>
 
                 <div className="form-group" style={{ marginBottom: '16px' }}>
-                  <label htmlFor="emergency-details">รายละเอียดเพิ่มเติมสำหรับบันทึกกระทบยอด (NQ-06)</label>
+                  <label htmlFor="emergency-details">รายละเอียดเพิ่มเติมสำหรับบันทึกกระทบยอด</label>
                   <textarea
                     id="emergency-details"
                     className="text-input"
@@ -2141,7 +2141,7 @@ export function OrganizerScannerManager() {
                     onClick={handleExecuteEmergencyStop}
                     disabled={actionLoading}
                   >
-                    {actionLoading ? 'กำลังระงับ...' : 'ยืนยันการระงับออฟไลน์เพื่อกระทบยอด (AC-98)'}
+                    {actionLoading ? 'กำลังระงับ...' : 'ยืนยันการระงับออฟไลน์เพื่อกระทบยอด'}
                   </button>
                 </div>
               </div>

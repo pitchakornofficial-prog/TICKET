@@ -71,10 +71,10 @@ export function OwnerSyncConflictManager() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px', marginBottom: '12px' }}>
         <div>
           <h2 id="sync-conflicts-heading" style={{ fontSize: '18px', fontWeight: 600, color: '#1e293b' }}>
-            รายการข้อขัดแย้งการซิงก์ออฟไลน์ (Offline Admission Conflicts — AC-99)
+            รายการข้อขัดแย้งการซิงก์ออฟไลน์ (Offline Admission Conflicts)
           </h2>
           <p className="card-caption">
-            รายการบัตรที่ถูกสแกนออฟไลน์ แต่ถูกเพิกถอนหรือคืนเงินในระบบกลางระหว่างที่เครื่องหลักออฟไลน์ (G-44)
+            รายการบัตรที่ถูกสแกนออฟไลน์ แต่ถูกเพิกถอนหรือคืนเงินในระบบกลางระหว่างที่เครื่องหลักออฟไลน์
           </p>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>

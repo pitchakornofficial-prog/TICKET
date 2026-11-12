@@ -20,7 +20,7 @@ export async function POST(
 
     if (actor?.role !== 'owner') {
       return Response.json(
-        { message: 'ไม่อนุญาต: เฉพาะเจ้าของเว็บ (Owner) เท่านั้นที่สามารถกำหนดช่วงเวลาขอคืนเงินพิเศษได้ (AC-38)' },
+        { message: 'ไม่อนุญาต: เฉพาะเจ้าของเว็บ (Owner) เท่านั้นที่สามารถกำหนดช่วงเวลาขอคืนเงินพิเศษได้' },
         { status: 403 },
       );
     }

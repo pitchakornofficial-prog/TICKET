@@ -107,7 +107,7 @@ export function ScannerEventsView({
     <section className="form-card scanner-workspace-card" aria-labelledby="scanner-heading">
       <h2 id="scanner-heading">งานคอนเสิร์ตที่ได้รับมอบหมาย</h2>
       <p className="card-caption">
-        รายการงานและรอบการแสดงที่คุณมีสิทธิ์ในการสแกนบัตรเข้างาน (AC-08, AC-09)
+        รายการงานและรอบการแสดงที่คุณมีสิทธิ์ในการสแกนบัตรเข้างาน
       </p>
 
       {error && (
@@ -135,7 +135,7 @@ export function ScannerEventsView({
                       className="status-badge approved"
                       data-testid={`event-primary-badge-${event.id}`}
                     >
-                      เครื่องหลักประจำงาน (Primary — AC-94)
+                      เครื่องหลักประจำงาน (Primary)
                     </span>
                   ) : (
                     <span

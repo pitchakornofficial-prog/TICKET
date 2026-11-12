@@ -390,7 +390,7 @@ export function QueueWaitingRoom({
                 <ShieldCheckIcon /> ป้องกันการลัดคิวและล็อกโควตาแบบ Atomic Transaction
               </span>
               <span>
-                <UsersIcon /> จำกัดสิทธิ์เข้าทำรายการ 200 คนพร้อมกัน (D-271, D-273)
+                <UsersIcon /> จำกัดสิทธิ์เข้าทำรายการ 200 คนพร้อมกัน
               </span>
             </div>
           </div>

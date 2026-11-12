@@ -140,7 +140,7 @@ export async function createPaymentQr(
   // AC-12: Must validate OTP token before creating payment QR (checkout purpose)
   const verifiedSession = await getVerifiedGuestSession(pool, input.verifiedToken, now, 'checkout');
   if (!verifiedSession) {
-    throw new Error('กรุณายืนยันตัวตนผ่าน OTP ก่อนขอรับ QR ชำระเงิน (AC-12)');
+    throw new Error('กรุณายืนยันตัวตนผ่าน OTP ก่อนขอรับ QR ชำระเงิน');
   }
 
   await ensurePaymentSchema(pool);
@@ -171,7 +171,7 @@ export async function createPaymentQr(
 
     // AC-35: Rejects payment if session is cancelled
     if (order.sessionStatus === 'cancelled') {
-      throw new Error('รอบการแสดงถูกยกเลิกแล้ว ไม่สามารถทำรายการชำระเงินได้ (AC-35)');
+      throw new Error('รอบการแสดงถูกยกเลิกแล้ว ไม่สามารถทำรายการชำระเงินได้');
     }
 
     // AC-12: Order buyerEmail must match verified OTP session email
@@ -190,7 +190,7 @@ export async function createPaymentQr(
         );
         await client.query('COMMIT');
       }
-      throw new Error('คำสั่งซื้อนี้หมดเวลาการกันบัตรหรือถูกยกเลิกแล้ว (AC-71)');
+      throw new Error('คำสั่งซื้อนี้หมดเวลาการกันบัตรหรือถูกยกเลิกแล้ว');
     }
 
     // AC-70: Repeated payment request returns existing charge and retains original deadline
@@ -295,12 +295,12 @@ export async function getPaymentChargeForOrder(
   await ensurePaymentSchema(pool);
 
   if (!verifiedToken) {
-    throw new Error('กรุณายืนยันตัวตนผ่าน OTP ก่อนเข้าถึงข้อมูลการชำระเงิน (AC-12)');
+    throw new Error('กรุณายืนยันตัวตนผ่าน OTP ก่อนเข้าถึงข้อมูลการชำระเงิน');
   }
 
   const verifiedSession = await getVerifiedGuestSession(pool, verifiedToken, now, 'checkout');
   if (!verifiedSession) {
-    throw new Error('กรุณายืนยันตัวตนผ่าน OTP ก่อนเข้าถึงข้อมูลการชำระเงิน (AC-12)');
+    throw new Error('กรุณายืนยันตัวตนผ่าน OTP ก่อนเข้าถึงข้อมูลการชำระเงิน');
   }
   const orderRes = await pool.query<{ buyerEmail: string }>(
     `SELECT "buyerEmail" FROM orders WHERE id = $1`,

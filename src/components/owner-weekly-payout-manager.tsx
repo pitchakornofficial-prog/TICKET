@@ -107,7 +107,7 @@ export function OwnerWeeklyPayoutManager() {
     }
 
     if (status === 'failed' && !failureReason.trim()) {
-      setFeedback({ type: 'error', message: 'กรุณาระบุเหตุผลการโอนเงินไม่สำเร็จ (AC-93)' });
+      setFeedback({ type: 'error', message: 'กรุณาระบุเหตุผลการโอนเงินไม่สำเร็จ' });
       return;
     }
 
@@ -165,7 +165,7 @@ export function OwnerWeeklyPayoutManager() {
           message:
             status === 'completed'
               ? `บันทึกการโอนเงินสำเร็จเรียบร้อย (รหัสรายการ: ${data.result.payoutId}) ยอดพร้อมจ่ายคงเหลือ: ฿${data.result.payableAmount.toLocaleString('th-TH', { minimumFractionDigits: 2 })}`
-              : `บันทึกรายการโอนเงินไม่สำเร็จเรียบร้อย (AC-93) ยอดพร้อมจ่ายไม่ถูกลดทอนและสามารถลองใหม่ได้`,
+              : `บันทึกรายการโอนเงินไม่สำเร็จเรียบร้อย ยอดพร้อมจ่ายไม่ถูกลดทอนและสามารถลองใหม่ได้`,
         });
         setTransferFile(null);
         setTransferNote('');
@@ -197,10 +197,10 @@ export function OwnerWeeklyPayoutManager() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '12px' }}>
         <div>
           <h2 style={{ fontSize: '20px', fontWeight: 'bold', color: '#0f172a', margin: '0 0 4px 0' }}>
-            รอบจ่ายเงินรายสัปดาห์ให้ผู้จัดงาน (Weekly Manual Payout — AC-27, AC-30, AC-79)
+            รอบจ่ายเงินรายสัปดาห์ให้ผู้จัดงาน (Weekly Manual Payout)
           </h2>
           <p style={{ fontSize: '13px', color: '#64748b', margin: 0 }}>
-            คำนวณยอดพร้อมจ่ายตามสูตร A_pay = max(0, L - H) และบันทึกหลักฐานการโอนแบบส่วนตัว (AC-92)
+            คำนวณยอดพร้อมจ่ายจากรายรับสุทธิหลังหักเงินสำรอง และบันทึกหลักฐานการโอนแบบส่วนตัว
           </p>
         </div>
 
@@ -350,7 +350,7 @@ export function OwnerWeeklyPayoutManager() {
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
               <h3 style={{ fontSize: '15px', fontWeight: 'bold', color: '#0f172a', margin: 0 }}>
-                {isFailureMode ? 'บันทึกรายการโอนเงินไม่สำเร็จ (Record Payout Failure — AC-93)' : 'บันทึกการโอนเงินตามรอบ (Record Weekly Payout — AC-27)'}
+                {isFailureMode ? 'บันทึกรายการโอนเงินไม่สำเร็จ (Record Payout Failure)' : 'บันทึกการโอนเงินตามรอบ (Record Weekly Payout)'}
               </h3>
               <button
                 type="button"
@@ -443,7 +443,7 @@ export function OwnerWeeklyPayoutManager() {
               {!isFailureMode ? (
                 <div>
                   <label htmlFor="payout-proof-file" style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#334155', marginBottom: '4px' }}>
-                    ไฟล์สลิปหลักฐานการโอน (AC-92 Private)
+                    ไฟล์สลิปหลักฐานการโอน (เฉพาะผู้ดูแลระบบ)
                   </label>
                   <input
                     id="payout-proof-file"
@@ -465,7 +465,7 @@ export function OwnerWeeklyPayoutManager() {
               ) : (
                 <div>
                   <label htmlFor="payout-failure-reason-input" style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#991b1b', marginBottom: '4px' }}>
-                    เหตุผลการโอนล้มเหลว (AC-93) *
+                    เหตุผลการโอนล้มเหลว *
                   </label>
                   <input
                     id="payout-failure-reason-input"
@@ -507,7 +507,7 @@ export function OwnerWeeklyPayoutManager() {
                     cursor: submitting || report.payableAmount <= 0 ? 'not-allowed' : 'pointer',
                   }}
                 >
-                  {submitting ? 'กำลังบันทึก...' : 'บันทึกการโอนเงิน (Record Payout — AC-27)'}
+                  {submitting ? 'กำลังบันทึก...' : 'บันทึกการโอนเงิน (Record Payout)'}
                 </button>
               ) : (
                 <button
@@ -527,7 +527,7 @@ export function OwnerWeeklyPayoutManager() {
                     cursor: submitting ? 'not-allowed' : 'pointer',
                   }}
                 >
-                  {submitting ? 'กำลังบันทึก...' : 'บันทึกรายการโอนไม่สำเร็จ (Record Failure — AC-93)'}
+                  {submitting ? 'กำลังบันทึก...' : 'บันทึกรายการโอนไม่สำเร็จ (Record Failure)'}
                 </button>
               )}
             </div>
@@ -536,7 +536,7 @@ export function OwnerWeeklyPayoutManager() {
           {/* Payout History Table */}
           <div>
             <h3 style={{ fontSize: '15px', fontWeight: 'bold', color: '#0f172a', marginBottom: '12px' }}>
-              ประวัติการโอนเงินสำหรับคอนเสิร์ตนี้ (Payout History — AC-31, AC-92)
+              ประวัติการโอนเงินสำหรับคอนเสิร์ตนี้ (Payout History)
             </h3>
 
             {report.payouts.length === 0 ? (
@@ -563,7 +563,7 @@ export function OwnerWeeklyPayoutManager() {
                       <th style={{ padding: '10px 12px', textAlign: 'center' }}>สถานะ</th>
                       <th style={{ padding: '10px 12px' }}>หมายเหตุ</th>
                       <th style={{ padding: '10px 12px' }}>บันทึกโดย</th>
-                      <th style={{ padding: '10px 12px', textAlign: 'center' }}>หลักฐาน (Owner — AC-92)</th>
+                      <th style={{ padding: '10px 12px', textAlign: 'center' }}>หลักฐาน (Owner)</th>
                     </tr>
                   </thead>
                   <tbody>

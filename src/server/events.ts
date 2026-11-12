@@ -1205,7 +1205,7 @@ export async function submitSessionAmendment(
         const currentHeld = heldRes.rows[0]?.heldQuota ? Number(heldRes.rows[0].heldQuota) : 0;
         if (item.quota < currentHeld) {
           throw new Error(
-            `โควตาใหม่ (${item.quota}) สำหรับประเภทบัตร "${item.name}" น้อยกว่าจำนวนสิทธิ์ที่จำหน่ายหรือกันไว้แล้ว (${currentHeld} ใบ) ไม่สามารถลดโควตาต่ำกว่านี้ได้ (AC-109)`,
+            `โควตาใหม่ (${item.quota}) สำหรับประเภทบัตร "${item.name}" น้อยกว่าจำนวนสิทธิ์ที่จำหน่ายหรือกันไว้แล้ว (${currentHeld} ใบ) ไม่สามารถลดโควตาต่ำกว่านี้ได้`,
           );
         }
       }
@@ -1515,7 +1515,7 @@ export async function approveSessionAmendment(
         const currentHeld = heldRes.rows[0]?.heldQuota ? Number(heldRes.rows[0].heldQuota) : 0;
         if (item.quota < currentHeld) {
           throw new Error(
-            `โควตาใหม่ (${item.quota}) สำหรับประเภทบัตร "${item.name}" น้อยกว่าจำนวนสิทธิ์ที่จำหน่ายหรือกันไว้แล้ว (${currentHeld} ใบ) ไม่สามารถลดโควตาได้ (AC-109)`,
+            `โควตาใหม่ (${item.quota}) สำหรับประเภทบัตร "${item.name}" น้อยกว่าจำนวนสิทธิ์ที่จำหน่ายหรือกันไว้แล้ว (${currentHeld} ใบ) ไม่สามารถลดโควตาได้`,
           );
         }
       }
@@ -1621,7 +1621,7 @@ export async function approveSessionAmendment(
 
     return {
       success: true,
-      message: 'อนุมัติการแก้ไขรอบการแสดงและราคาสำเร็จ ฉบับใหม่มีผลกับการซื้อรอบใหม่ทันที (AC-67, AC-68)',
+      message: 'อนุมัติการแก้ไขรอบการแสดงและราคาสำเร็จ ฉบับใหม่มีผลกับการซื้อรอบใหม่ทันที',
     };
   });
 }
@@ -1649,7 +1649,7 @@ export async function configureSpecialRefundWindow(
     // 1. Role check: Owner only
     const userRes = await client.query('SELECT role FROM auth_user WHERE id = $1', [input.ownerId]);
     if (userRes.rowCount === 0 || userRes.rows[0].role !== 'owner') {
-      throw new Error('ไม่อนุญาต: เฉพาะเจ้าของเว็บ (Owner) เท่านั้นที่สามารถกำหนดช่วงเวลาขอคืนเงินพิเศษได้ (AC-38)');
+      throw new Error('ไม่อนุญาต: เฉพาะเจ้าของเว็บ (Owner) เท่านั้นที่สามารถกำหนดช่วงเวลาขอคืนเงินพิเศษได้');
     }
 
     // 2. Validate window dates
@@ -1684,7 +1684,7 @@ export async function configureSpecialRefundWindow(
 
     return {
       success: true,
-      message: 'กำหนดช่วงเวลาขอคืนเงินพิเศษเรียบร้อยแล้ว (Special Refund Window — AC-38)',
+      message: 'กำหนดช่วงเวลาขอคืนเงินพิเศษเรียบร้อยแล้ว (Special Refund Window)',
       specialRefundWindowStart: wStart ? wStart.toISOString() : null,
       specialRefundWindowEnd: wEnd ? wEnd.toISOString() : null,
     };
@@ -1828,7 +1828,7 @@ export async function submitSessionCancellation(
       [session.id],
     );
     if (pendingRes.rowCount && pendingRes.rowCount > 0) {
-      throw new Error('มีคำขอยกเลิกรอบการแสดงนี้รอการพิจารณาอยู่แล้ว (AC-108)');
+      throw new Error('มีคำขอยกเลิกรอบการแสดงนี้รอการพิจารณาอยู่แล้ว');
     }
 
     // 3. Create cancellation request
@@ -1843,7 +1843,7 @@ export async function submitSessionCancellation(
     return {
       success: true,
       cancellationId,
-      message: 'ยื่นคำขอยกเลิกรอบการแสดงเรียบร้อยแล้ว รอการอนุมัติจากผู้ดูแลระบบ (AC-108)',
+      message: 'ยื่นคำขอยกเลิกรอบการแสดงเรียบร้อยแล้ว รอการอนุมัติจากผู้ดูแลระบบ',
     };
   });
 }

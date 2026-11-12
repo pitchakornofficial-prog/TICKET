@@ -336,7 +336,7 @@ export function OwnerWorkspaceView({ initialSection }: OwnerWorkspaceViewProps) 
                       <div className="focus-mode-content">
                         <SlidersIcon className="focus-mode-icon" />
                         <div>
-                          <h4 className="focus-mode-heading">เมนูนี้อยู่ระหว่างการปรับปรุงทีละหน้า (Coming Soon)</h4>
+                          <h4 className="focus-mode-heading">เมนูนี้อยู่ระหว่างการปรับปรุงทีละหน้า</h4>
                           <p className="focus-mode-text">
                             ขณะนี้ระบบเปิดให้ใช้งานและตรวจสอบที่เมนู <strong>"อนุมัติคอนเสิร์ต (Concert Management Hub)"</strong> เป็นหลักตามแผนงาน
                           </p>

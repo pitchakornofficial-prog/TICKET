@@ -108,7 +108,7 @@ test.describe('TASK-033: Offline Admission Scanning on Primary Device (AC-40, AC
     const setPrimaryBtn = page.locator(`[data-testid="set-primary-scanner-${sc1.scannerId}"]`);
     if (await setPrimaryBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
       await setPrimaryBtn.click();
-      await expect(page.getByText('กำหนดเครื่องหลักสำหรับงานเรียบร้อยแล้ว (AC-94)')).toBeVisible({ timeout: 20000 });
+      await expect(page.getByText('กำหนดเครื่องหลักสำหรับงานเรียบร้อยแล้ว')).toBeVisible({ timeout: 20000 });
     }
     await expect(page.locator(`[data-testid="primary-scanner-badge-${sc1.scannerId}"]`)).toBeVisible({ timeout: 20000 });
 
@@ -180,7 +180,7 @@ test.describe('TASK-033: Offline Admission Scanning on Primary Device (AC-40, AC
 
     const nonPrimaryWarning = scanner2Page.locator('[data-testid="non-primary-offline-warning"]');
     await expect(nonPrimaryWarning).toBeVisible({ timeout: 10000 });
-    await expect(nonPrimaryWarning).toContainText('เครื่องนี้เป็นเครื่องรองตาม O1 หากต้องการสแกนออฟไลน์ ต้องให้ผู้จัดงานกำหนดเป็นเครื่องหลักและหยุดเครื่องอื่นในงาน');
+    await expect(nonPrimaryWarning).toContainText('เครื่องนี้เป็นเครื่องรอง หากต้องการสแกนออฟไลน์ ต้องให้ผู้จัดงานกำหนดเป็นเครื่องหลักและหยุดเครื่องอื่นในงาน');
     // Connectivity badge remains online
     await expect(scanner2Page.locator('[data-testid="connectivity-status-badge"]')).toContainText('ออนไลน์');
     await scanner2Context.close();
@@ -214,7 +214,7 @@ test.describe('TASK-033: Offline Admission Scanning on Primary Device (AC-40, AC
     const connBadge = scanner1Page.locator('[data-testid="connectivity-status-badge"]');
     await expect(connBadge).toBeVisible();
     await expect(connBadge).toContainText('ออฟไลน์ (Offline)');
-    await expect(scanner1Page.locator('[data-testid="connectivity-status-text"]')).toContainText('ออฟไลน์ (Offline Mode — AC-40)');
+    await expect(scanner1Page.locator('[data-testid="connectivity-status-text"]')).toContainText('ออฟไลน์ (Offline Mode)');
 
     // Operational notice for stopping other devices (O1/AC-40)
     const opNotice = scanner1Page.locator('[data-testid="primary-offline-operational-notice"]');
@@ -230,7 +230,7 @@ test.describe('TASK-033: Offline Admission Scanning on Primary Device (AC-40, AC
 
     await expect(scanner1Page.locator('#scan-result-card')).toBeVisible({ timeout: 15000 });
     await expect(scanner1Page.locator('#scan-result-card')).toHaveClass(/result-rejected/);
-    await expect(scanner1Page.locator('#scan-result-message')).toContainText('ไม่พบข้อมูลบัตรในชุดข้อมูลออฟไลน์ กรุณารอเชื่อมต่อออนไลน์ (AC-41, O2)');
+    await expect(scanner1Page.locator('#scan-result-message')).toContainText('ไม่พบข้อมูลบัตรในชุดข้อมูลออฟไลน์ กรุณารอเชื่อมต่อออนไลน์');
     await scanner1Page.locator('#dismiss-scan-modal-btn').click({ force: true });
 
     // 9. Offline State Transitions Sequence (AC-96, AC-50)
@@ -251,7 +251,7 @@ test.describe('TASK-033: Offline Admission Scanning on Primary Device (AC-40, AC
     await submitBtn.click({ force: true });
 
     await expect(scanner1Page.locator('#scan-result-card')).toHaveClass(/result-rejected/);
-    await expect(scanner1Page.locator('#scan-result-message')).toContainText('บัตรอยู่ในพื้นที่จัดงานแล้ว ไม่อนุญาตให้เข้าซ้ำ (AC-49, AC-96)');
+    await expect(scanner1Page.locator('#scan-result-message')).toContainText('บัตรอยู่ในพื้นที่จัดงานแล้ว ไม่อนุญาตให้เข้าซ้ำ');
     await expect(scanner1Page.locator('[data-testid="pending-sync-count"]').first()).toHaveText('1');
     await scanner1Page.locator('#dismiss-scan-modal-btn').click({ force: true });
 
@@ -301,7 +301,7 @@ test.describe('TASK-033: Offline Admission Scanning on Primary Device (AC-40, AC
     await ticketInput.fill(purchasedQrPayload);
     await submitBtn.click({ force: true });
     await expect(scanner1Page.locator('#scan-result-card')).toHaveClass(/result-rejected/);
-    await expect(scanner1Page.locator('#scan-result-message')).toContainText('บัตรอยู่ในพื้นที่จัดงานแล้ว ไม่อนุญาตให้เข้าซ้ำ (AC-49, AC-96)');
+    await expect(scanner1Page.locator('#scan-result-message')).toContainText('บัตรอยู่ในพื้นที่จัดงานแล้ว ไม่อนุญาตให้เข้าซ้ำ');
     await scanner1Page.locator('#dismiss-scan-modal-btn').click({ force: true });
 
     // 11. Storage Write Failure Handling (AC-103)
@@ -320,7 +320,7 @@ test.describe('TASK-033: Offline Admission Scanning on Primary Device (AC-40, AC
     await submitBtn.click({ force: true });
 
     await expect(scanner1Page.locator('#scan-result-card')).toHaveClass(/result-rejected/);
-    await expect(scanner1Page.locator('#scan-result-message')).toContainText('เกิดข้อผิดพลาดในการบันทึกข้อมูลลงอุปกรณ์ (Storage Error) ไม่อนุญาตให้ผ่าน (AC-103)');
+    await expect(scanner1Page.locator('#scan-result-message')).toContainText('เกิดข้อผิดพลาดในการบันทึกข้อมูลลงอุปกรณ์ (Storage Error) ไม่อนุญาตให้ผ่าน');
 
     // Restore localStorage.setItem
     await scanner1Page.evaluate(() => {

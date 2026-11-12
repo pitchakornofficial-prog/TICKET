@@ -158,7 +158,7 @@ export function ScannerAdmissionTerminal({
         setPendingSyncCount(pending.length);
         setSyncFeedback({
           type: 'success',
-          message: `ดาวน์โหลดชุดข้อมูลออฟไลน์สำเร็จเรียบร้อย (${data.totalTickets} ใบ — AC-94)`,
+          message: `ดาวน์โหลดชุดข้อมูลออฟไลน์สำเร็จเรียบร้อย (${data.totalTickets} ใบ)`,
         });
       }
     } catch {
@@ -178,7 +178,7 @@ export function ScannerAdmissionTerminal({
       // Trying to switch to offline mode (AC-40, O1)
       if (!isPrimary) {
         setNonPrimaryOfflineWarning(
-          'เครื่องนี้เป็นเครื่องรองตาม O1 หากต้องการสแกนออฟไลน์ ต้องให้ผู้จัดงานกำหนดเป็นเครื่องหลักและหยุดเครื่องอื่นในงาน',
+          'เครื่องนี้เป็นเครื่องรอง หากต้องการสแกนออฟไลน์ ต้องให้ผู้จัดงานกำหนดเป็นเครื่องหลักและหยุดเครื่องอื่นในงาน',
         );
         return;
       }
@@ -186,7 +186,7 @@ export function ScannerAdmissionTerminal({
       if (offlineDataset?.isOfflineHalted || offlineDataset?.offlineStatus === 'halted_reconciliation_required') {
         setSyncFeedback({
           type: 'error',
-          message: 'การใช้งานโหมดออฟไลน์ถูกระงับเพื่อกระทบยอด (AC-98, NQ-06): กรุณารอเจ้าของเว็บและผู้จัดงานตรวจสอบกระทบยอดให้เสร็จสิ้น',
+          message: 'การใช้งานโหมดออฟไลน์ถูกระงับเพื่อกระทบยอด: กรุณารอเจ้าของเว็บและผู้จัดงานตรวจสอบกระทบยอดให้เสร็จสิ้น',
         });
         return;
       }
@@ -195,7 +195,7 @@ export function ScannerAdmissionTerminal({
       if (!stored) {
         setSyncFeedback({
           type: 'error',
-          message: 'กรุณาดาวน์โหลดชุดข้อมูลออฟไลน์ก่อนเริ่มใช้งานโหมดออฟไลน์ (AC-94)',
+          message: 'กรุณาดาวน์โหลดชุดข้อมูลออฟไลน์ก่อนเริ่มใช้งานโหมดออฟไลน์',
         });
         return;
       }
@@ -210,7 +210,7 @@ export function ScannerAdmissionTerminal({
     if (isOfflineMode) {
       setSyncFeedback({
         type: 'error',
-        message: 'กรุณาสลับกลับเป็นโหมดออนไลน์ก่อนทำการซิงก์ข้อมูลสู่ระบบกลาง (AC-102)',
+        message: 'กรุณาสลับกลับเป็นโหมดออนไลน์ก่อนทำการซิงก์ข้อมูลสู่ระบบกลาง',
       });
       return;
     }
@@ -395,7 +395,7 @@ export function ScannerAdmissionTerminal({
                 <span className="scanner-badge badge-primary-offline" data-testid="terminal-primary-badge">
                   <ShieldCheckIcon width={12} height={12} />
                   <span>เครื่องหลักออฟไลน์</span>
-                  <span className="sr-only"> เครื่องหลักประจำงาน (Primary Device — AC-94)</span>
+                  <span className="sr-only"> เครื่องหลักประจำงาน (Primary Device)</span>
                 </span>
               ) : (
                 <span
@@ -685,7 +685,7 @@ export function ScannerAdmissionTerminal({
           {/* Recent Scan Activity Log */}
           <section className="terminal-logs-section" aria-labelledby="logs-heading">
             <h3 id="logs-heading" className="text-sm font-semibold mb-2">
-              ประวัติการสแกนล่าสุดในรอบนี้ (AC-65: ไม่มีข้อมูลส่วนตัวผู้ซื้อ)
+              ประวัติการสแกนล่าสุดในรอบนี้ (ไม่มีข้อมูลส่วนตัวผู้ซื้อ)
             </h3>
             {recentLogs.length === 0 ? (
               <p className="text-sm text-slate-500 py-4 text-center">ยังไม่มีประวัติการสแกนในรอบนี้</p>
@@ -766,7 +766,7 @@ export function ScannerAdmissionTerminal({
                   <span>
                     สถานะการเชื่อมต่อ:{' '}
                     <strong data-testid="connectivity-status-text">
-                      {isOfflineMode ? 'ออฟไลน์ (Offline Mode — AC-40)' : 'ออนไลน์ (Online Central)'}
+                      {isOfflineMode ? 'ออฟไลน์ (Offline Mode)' : 'ออนไลน์ (Online Central)'}
                     </strong>
                   </span>
                   <span>
@@ -795,7 +795,7 @@ export function ScannerAdmissionTerminal({
                   data-testid="offline-privacy-guarantee"
                   style={{ margin: '6px 0 0', fontSize: '11px', color: '#059669' }}
                 >
-                  * ข้อมูลออฟไลน์ได้รับการคัดกรองข้อมูลระบุตัวตนผู้ซื้อ (Buyer PII) ออกทั้งหมดตาม AC-65
+                  * ข้อมูลออฟไลน์ได้รับการคัดกรองข้อมูลระบุตัวตนผู้ซื้อ (Buyer PII) ออกทั้งหมด
                 </p>
               </div>
 
@@ -807,7 +807,7 @@ export function ScannerAdmissionTerminal({
                   className="secondary-button terminal-action-btn"
                   onClick={handleToggleOfflineMode}
                 >
-                  {isOfflineMode ? 'สลับเป็นโหมดออนไลน์ (Switch to Online)' : 'สลับเป็นโหมดออฟไลน์ (Offline Mode — AC-40)'}
+                  {isOfflineMode ? 'สลับเป็นโหมดออนไลน์ (Switch to Online)' : 'สลับเป็นโหมดออฟไลน์ (Offline Mode)'}
                 </button>
 
                 <button
@@ -818,7 +818,7 @@ export function ScannerAdmissionTerminal({
                   onClick={handleDownloadOfflineDataset}
                   disabled={syncingDataset || isSyncingPending}
                 >
-                  {syncingDataset ? 'กำลังดาวน์โหลด...' : 'ดาวน์โหลดชุดข้อมูลออฟไลน์ (Download Offline Dataset — AC-94)'}
+                  {syncingDataset ? 'กำลังดาวน์โหลด...' : 'ดาวน์โหลดชุดข้อมูลออฟไลน์ (Download Offline Dataset)'}
                 </button>
 
                 <button
@@ -831,7 +831,7 @@ export function ScannerAdmissionTerminal({
                 >
                   {isSyncingPending
                     ? 'กำลังซิงก์...'
-                    : `ซิงก์ข้อมูลค้าง (${pendingSyncCount} รายการ — AC-102)`}
+                    : `ซิงก์ข้อมูลค้าง (${pendingSyncCount} รายการ)`}
                 </button>
               </div>
             </div>
@@ -843,7 +843,7 @@ export function ScannerAdmissionTerminal({
                 style={{ marginTop: '10px', fontSize: '13px' }}
                 role="note"
               >
-                <strong>ข้อปฏิบัติการทำงานออฟไลน์ (O1):</strong> เครื่องนี้ทำงานเป็นเครื่องหลักเพียงเครื่องเดียวของทั้งงาน กรุณาหยุดการใช้งานเครื่องสแกนอื่นทั้งหมดเพื่อป้องกันข้อมูลไม่ตรงกัน
+                <strong>ข้อปฏิบัติการทำงานออฟไลน์:</strong> เครื่องนี้ทำงานเป็นเครื่องหลักเพียงเครื่องเดียวของทั้งงาน กรุณาหยุดการใช้งานเครื่องสแกนอื่นทั้งหมดเพื่อป้องกันข้อมูลไม่ตรงกัน
               </div>
             )}
 
