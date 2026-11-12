@@ -1,8 +1,13 @@
 import { createSafeErrorResponse } from '@/server/api-error';
 import { getDatabasePool } from '@/server/database';
 import { extractClientIp, requestGuestOtp } from '@/server/guest-otp';
+import { isRealPgPool } from '@/server/pg-pool-utils';
 import { verifyQueueAccess } from '@/server/queue';
-import { ensureReservationSchema, getBuyerTicketCountForEvent } from '@/server/reservation';
+import {
+  ensureReservationSchema,
+  getEventLimitAndBuyerTicketCount,
+  verifyQueueAndGetEventBuyerQuota,
+} from '@/server/reservation';
 
 export const runtime = 'nodejs';
 
@@ -41,9 +46,15 @@ export async function POST(request: Request) {
 
   const pool = getDatabasePool();
   try {
-    if (body.eventId) {
-      const queueAllowed = await verifyQueueAccess(pool, body.eventId, queueToken);
-      if (!queueAllowed) {
+    let quotaCheck: { found: boolean; limitPerOrder: number; alreadyPurchased: number } | null = null;
+    if (body.eventId && body.buyer.email && isRealPgPool(pool)) {
+      const combined = await verifyQueueAndGetEventBuyerQuota(
+        pool,
+        body.eventId,
+        queueToken,
+        body.buyer.email,
+      );
+      if (!combined.queueAllowed) {
         return Response.json(
           {
             message: 'ขณะนี้มีผู้ใช้งานเต็มจำนวน 200 คิวแล้ว กรุณารอตามลำดับคิวในห้องรอคิว',
@@ -52,23 +63,34 @@ export async function POST(request: Request) {
           { status: 429 },
         );
       }
-    }
+      quotaCheck = combined;
+    } else {
+      if (body.eventId) {
+        const queueAllowed = await verifyQueueAccess(pool, body.eventId, queueToken);
+        if (!queueAllowed) {
+          return Response.json(
+            {
+              message: 'ขณะนี้มีผู้ใช้งานเต็มจำนวน 200 คิวแล้ว กรุณารอตามลำดับคิวในห้องรอคิว',
+              code: 'QUEUE_LOCKED',
+            },
+            { status: 429 },
+          );
+        }
+      }
 
-    // D-59, D-60: Anti-Scalping Cumulative Buyer Limit check before issuing OTP (Email-anchored)
-    if (body.eventId && body.buyer.email) {
-      const eventRes = await pool.query(
-        'SELECT "limitPerOrder" FROM events WHERE id = $1',
-        [body.eventId],
-      );
-      if (eventRes.rowCount && eventRes.rowCount > 0) {
+      // D-59, D-60: Anti-Scalping Cumulative Buyer Limit check before issuing OTP (Email-anchored)
+      if (body.eventId && body.buyer.email) {
         await ensureReservationSchema(pool);
-        const limitPerOrder = Number(eventRes.rows[0].limitPerOrder) || 4;
-        const alreadyPurchased = await getBuyerTicketCountForEvent(
+        quotaCheck = await getEventLimitAndBuyerTicketCount(
           pool,
           body.eventId,
           body.buyer.email,
         );
+      }
+    }
 
+    if (quotaCheck?.found && body.buyer.email) {
+      const { limitPerOrder, alreadyPurchased } = quotaCheck;
         if (alreadyPurchased >= limitPerOrder) {
           return Response.json(
             {
@@ -101,7 +123,6 @@ export async function POST(request: Request) {
           );
         }
       }
-    }
 
     const clientIp = extractClientIp(request);
     const result = await requestGuestOtp(pool, {

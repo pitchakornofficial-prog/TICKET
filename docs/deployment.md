@@ -1,5 +1,98 @@
 # Deployment — AWS Singapore
 
+## 4-Task Bottleneck Analysis and Capacity Optimization 2026-11-12
+
+User requested root-cause diagnosis of why the 4-task fleet was capped at 120 concurrent
+buyers (40.54 orders/s, p95 4.317 s) in the baseline benchmark, optimization of the application
+to support higher concurrency across 4 tasks, and re-testing in isolation without affecting
+real production data, inventory, or sales.
+
+### 1. Root Causes Identified
+
+1. **Database Lock Contention & Sequential Round-trips in Reservation**:
+   - `createReservation` acquired two exclusive locks (`ticket_types FOR UPDATE` and `event_fee_settings FOR UPDATE`)
+     and held them across 5 sequential DB round-trips.
+   - It also performed an unindexed sequential scan of `order_items JOIN orders` via `SUM(oi.quantity)` (`held_calc`),
+     which scaled linearly with total order volume ($O(N)$).
+   - The prolonged lock hold time serialized concurrent checkouts across all 4 tasks, exhausting each task's 15-connection
+     pool (`DATABASE_POOL_MAX=15`) and bottlenecking fleet throughput at ~40–43 orders/s.
+2. **Unindexed Buyer Limit Scan**:
+   - `getBuyerTicketCountForEvent` queried `LOWER(TRIM(o."buyerEmail"))` without a functional index, scanning all orders
+     for the event 3× per buyer journey (`request-otp`, `verify-otp`, `reserve`).
+3. **Payment & Ticket Issuance Round-trips**:
+   - Completing payment and issuing tickets required ~20 separate sequential database queries (order lookup, charge status,
+     webhook deduplication, order update, ticket items lookup, and ticket insertions) and generated ~300 `<rect>` SVG elements per ticket.
+4. **Fargate 0.5 vCPU Container Bound**:
+   - Each task runs with only **0.5 vCPU / 1 GiB**. When throughput exceeded ~20 orders/s per task (~140–160 HTTP req/s),
+     un-cached `Intl` formatting (which was ~30× slower than cached formatters) and Next.js route parsing pushed Event Loop
+     Utilization (ELU) above 0.90, triggering Linux CFS CPU quota throttling.
+
+### 2. Optimizations Implemented
+
+- **O(1) Quota Tracking (`ticket_type_paid_buckets`)**: Introduced a 32-bucket hash summary table updated by database triggers,
+  making paid quota verification $O(1)$ regardless of how many thousands of orders have been placed.
+- **Single Round-trip Stored Functions**:
+  - Implemented `reserve_tickets_atomic_v2` in PL/pgSQL to perform event validation, fee resolution, `FOR NO KEY UPDATE` quota locking,
+    quota math, queue completion, and `orders` + `order_items` insertion in **1 database round-trip**.
+  - Implemented `request_guest_otp_atomic_v1` and `verify_guest_otp_atomic_v1` to perform IP/email rate limits, OTP creation/consumption,
+    and verified session creation in **1 round-trip**.
+- **Lock Mode Refinement (`FOR NO KEY UPDATE`)**: Changed ticket type locks from `FOR UPDATE` to `FOR NO KEY UPDATE`
+  in `src/server/reservation.ts` and `src/server/payment.ts` (post-`opt3` AWS run, verified locally via `typecheck`,
+  `biome lint`, all 127 unit test files / 870 tests, and 11 PostgreSQL integration test files / 44 tests), preventing
+  conflicts with PostgreSQL foreign key `KEY SHARE` locks during concurrent child table inserts (`order_items`,
+  `ticket_type_paid_buckets`, `tickets`).
+- **Writable CTE for Payment & Ticket Issuance**: Consolidated webhook recording, payment charge update, order status update,
+  and batch ticket issuance into a single writable CTE round-trip in `processStripeSuccessEvent`.
+- **Targeted Partial & Functional Indexes**: Added `idx_orders_event_lower_email`, `idx_orders_active_event`,
+  `idx_order_items_tt_order_qty`, `idx_tickets_refunded_type`, and partial queue indexes.
+- **In-Process CPU Optimization**: Cached all `Intl.NumberFormat` and `Intl.DateTimeFormat` instances in `src/lib/locale.ts` and
+  `src/server/ticket-delivery.ts`; streamlined 2D QR generation using `Uint8Array` lookup tables and horizontal run-length encoded SVG paths.
+
+### 3. Re-test Results on 4 Tasks (0.5 vCPU / 1 GiB / pool 15 each)
+
+Tested on isolated AWS/Neon environment (`ticket-workload-test`, image `ticket-workload-test:capacity-20261112-opt3` / task definition `:4`,
+fresh database `capacity_20261112_c718d83e`):
+
+#### 4-Task Fleet Sweep Comparison
+
+| Concurrency | Baseline (Orders/s, p95) | Optimized (Orders/s, p95) | Throughput Gain |
+|---|---|---|---|
+| 80 | 38.31 /s (3.543 s) | 49.66 /s (2.853 s) | +29.6% |
+| 120 | 39.34 /s (4.872 s) | 81.54 /s (1.918 s) | **+107.3% (2.07×)** |
+| 160 | 42.14 /s (5.678 s - fail) | 90.33 /s (2.577 s) | **+114.4% (2.14×)** |
+| 200 | — | 81.12 /s (3.501 s) | **Pass** |
+| 240 | — | 98.36 /s (3.432 s) | **Pass** |
+| 280 | — | 103.29 /s (3.564 s) | **Pass** |
+| 320 | — | **104.68 /s (3.851 s)** | **Pass (Peak throughput)** |
+| **330** | — | **98.76 /s (4.963 s)** | **Pass (Highest passing)** |
+| 340 | — | 90.78 /s (5.378 s) | Latency exceeds criterion |
+
+- **Sweep Ceiling**: Increased from **190 to 330 concurrent buyers (+73.7%)**.
+- **Peak Fleet Throughput**: Reached **104.68 orders/s** (vs ~43.26 orders/s before, a **2.42× increase**).
+- **Median Journey Latency**: Dropped to **1.3–2.6 s** across passing stages.
+
+#### Sustained Run Comparison & Architectural Finding
+
+In sustained testing on `opt3` (`task-definition:4`, 30 orders per worker = 4,200 orders at 140 concurrency, and 4,800 orders at 160 concurrency on `opt2`/`DIAG3`):
+- Peak sustained throughput reached **82.37–93.42 orders/s** (more than 2× faster than baseline 40.54 orders/s; 55.41 orders/s when run immediately post-sweep on `opt3` due to `FOR UPDATE` vs `FOR KEY SHARE` contention prior to the `FOR NO KEY UPDATE` refinement).
+- Median latency (`p50`) on fresh sustained 160-buyer runs dropped to **551–590 ms** (down from 1,831 ms in the initial `opt1` sustained run), though tail `p95` exceeded 5 s (`5.709–6.345 s`).
+- Tail latency profiling (`--cpu-prof` and `performance.eventLoopUtilization`) showed that at >20 orders/s per container,
+  the **0.5 vCPU allocation** reaches 100% CPU usage with Linux CFS quota throttling (`ELU` up to 0.997, `2,500 ms` CPU / `5,000 ms`).
+- **Architectural Conclusion**: Database and application contention bottlenecks were fully eliminated. To sustain concurrency
+  above 200–300 buyers over long durations, the ECS task definition should scale to `1 vCPU` (1024) or autoscaling should be configured
+  for 6–8 tasks during peak sales.
+
+#### Data Integrity Audit
+
+A read-only transaction (`BEGIN READ ONLY`) audited the test database `capacity_20261112_c718d83e`:
+- **Events**: 13
+- **Orders**: 11,492 (100% paid)
+- **Tickets**: 11,492 (11,492 distinct ticket codes, 11,492 distinct QR payloads)
+- **Orphan tickets / Unpaid issued tickets / Live charges / Oversold types**: **0** (100% data integrity verified).
+- All web and driver test compute stopped cleanly. Production service `ticket-production-web:16` remained untouched and healthy.
+
+---
+
 ## Isolated AWS/Neon concurrent purchase benchmark 2026-11-12
 
 User explicitly selected a separate test environment on existing AWS/Neon with

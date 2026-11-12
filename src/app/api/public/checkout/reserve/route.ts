@@ -1,7 +1,8 @@
 import { createSafeErrorResponse } from '@/server/api-error';
 import { getDatabasePool } from '@/server/database';
+import { isRealPgPool } from '@/server/pg-pool-utils';
 import { completeQueueEntry, verifyQueueAccess } from '@/server/queue';
-import { createReservation, type CreateReservationInput } from '@/server/reservation';
+import { createReservation, QueueLockedError, type CreateReservationInput } from '@/server/reservation';
 
 export const runtime = 'nodejs';
 
@@ -24,26 +25,34 @@ export async function POST(request: Request) {
   const queueToken = rawQueueToken.trim() || null;
 
   const pool = getDatabasePool();
+  const useFastPg = isRealPgPool(pool);
   try {
-    const queueAllowed = await verifyQueueAccess(pool, body.eventId, queueToken);
-    if (!queueAllowed) {
-      return Response.json(
-        {
-          message: 'ขณะนี้มีผู้ใช้งานเต็มจำนวน 200 คิวแล้ว กรุณารอตามลำดับคิวในห้องรอคิว',
-          code: 'QUEUE_LOCKED',
-        },
-        { status: 429 },
-      );
+    if (!useFastPg) {
+      const queueAllowed = await verifyQueueAccess(pool, body.eventId, queueToken);
+      if (!queueAllowed) {
+        return Response.json(
+          {
+            message: 'ขณะนี้มีผู้ใช้งานเต็มจำนวน 200 คิวแล้ว กรุณารอตามลำดับคิวในห้องรอคิว',
+            code: 'QUEUE_LOCKED',
+          },
+          { status: 429 },
+        );
+      }
     }
 
-    const reservation = await createReservation(pool, {
-      verifiedToken: body.verifiedToken,
-      eventId: body.eventId,
-      sessionId: body.sessionId,
-      items: body.items,
-    });
+    const reservation = await createReservation(
+      pool,
+      {
+        verifiedToken: body.verifiedToken,
+        eventId: body.eventId,
+        sessionId: body.sessionId,
+        items: body.items,
+      },
+      new Date(),
+      useFastPg ? { queueToken, enforceQueue: true } : undefined,
+    );
 
-    if (queueToken) {
+    if (!useFastPg && queueToken) {
       await completeQueueEntry(pool, body.eventId, queueToken);
     }
 
@@ -55,6 +64,15 @@ export async function POST(request: Request) {
       { status: 200 },
     );
   } catch (error: unknown) {
+    if (error instanceof QueueLockedError) {
+      return Response.json(
+        {
+          message: error.message,
+          code: 'QUEUE_LOCKED',
+        },
+        { status: 429 },
+      );
+    }
     return createSafeErrorResponse(error, 'เกิดข้อผิดพลาดในการกันบัตร', {
       defaultStatus: 400,
       statusResolver: (msg) => (msg.includes('OTP') ? 401 : 400),

@@ -72,7 +72,10 @@ export function createSesTransport(config?: SesConfig | string): EmailTransport 
             'SES credentials (SES_ACCESS_KEY_ID or AWS_ACCESS_KEY_ID, SES_SECRET_ACCESS_KEY or AWS_SECRET_ACCESS_KEY) are required in production',
           );
         }
-        capturedEmails.push(structuredClone(message));
+        if (capturedEmails.length >= 500) {
+          capturedEmails.shift();
+        }
+        capturedEmails.push({ ...message });
         return { id: `local-msg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}` };
       }
 
