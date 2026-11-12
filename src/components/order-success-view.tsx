@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import type { OrderReservationDetail } from '@/server/reservation';
 import type { TicketDetail } from '@/server/tickets';
@@ -16,6 +16,7 @@ import {
   ReceiptIcon,
   XIcon,
 } from './icons';
+import { OrderLinkOtpGate } from './order-link-otp-gate';
 import { TicketIcon } from './ticket-icon';
 import { downloadTicketAsPng, downloadAllTicketsAsPng, generateTicketDataUrl } from './ticket-canvas-download';
 
@@ -40,6 +41,7 @@ export function OrderSuccessView({ orderId }: OrderSuccessViewProps) {
     text?: string;
   } | null>(null);
   const [isLoadingDevEmail, setIsLoadingDevEmail] = useState(false);
+  const [linkChallengeToken, setLinkChallengeToken] = useState<string | null>(null);
 
   const handleOpenDevEmailModal = async () => {
     setDevEmailModalOpen(true);
@@ -85,48 +87,91 @@ export function OrderSuccessView({ orderId }: OrderSuccessViewProps) {
     };
   }, [tickets, ticketImageUrls]);
 
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const qTab = new URLSearchParams(window.location.search).get('tab');
-      if (qTab === 'tickets') {
-        setActiveTab('tickets');
-      }
-    }
+  const loadOrderAndTickets = useCallback(
+    async (guestToken: string, fallbackLinkToken: string) => {
+      setIsLoading(true);
+      setLoadError(null);
+      try {
+        const orderRes = await fetch(`/api/public/checkout/orders/${orderId}`, {
+          headers: guestToken ? { 'x-guest-token': guestToken } : {},
+        });
 
-    setIsLoading(true);
-    const guestToken =
-      typeof window !== 'undefined'
-        ? sessionStorage.getItem('ticket_guest_otp_token') || ''
-        : '';
-    fetch(`/api/public/checkout/orders/${orderId}`, {
-      headers: guestToken ? { 'x-guest-token': guestToken } : {},
-    })
-      .then(async res => {
-        if (!res.ok) throw new Error('ไม่พบข้อมูลคำสั่งซื้อ');
-        return res.json();
-      })
-      .then(data => {
+        if (orderRes.status === 401 && fallbackLinkToken.startsWith('ordtok_')) {
+          if (typeof window !== 'undefined') {
+            sessionStorage.removeItem('ticket_guest_otp_token');
+          }
+          setLinkChallengeToken(fallbackLinkToken);
+          setIsLoading(false);
+          return;
+        }
+
+        if (!orderRes.ok) {
+          throw new Error('กรุณายืนยันตัวตนผ่าน OTP ก่อนเข้าดูข้อมูลคำสั่งซื้อและบัตรเข้างาน');
+        }
+
+        const data = await orderRes.json();
         if (data?.reservation) {
           setReservation(data.reservation);
         }
-        return fetch(`/api/public/checkout/orders/${orderId}/tickets`, {
+
+        const ticketsRes = await fetch(`/api/public/checkout/orders/${orderId}/tickets`, {
           headers: guestToken ? { 'x-guest-token': guestToken } : {},
         });
-      })
-      .then(async res => {
-        if (res.ok) {
-          const tktData = await res.json();
+        if (ticketsRes.ok) {
+          const tktData = await ticketsRes.json();
           if (tktData?.tickets) {
             setTickets(tktData.tickets);
           }
         }
+        setLinkChallengeToken(null);
         setIsLoading(false);
-      })
-      .catch(err => {
+      } catch (err) {
         setLoadError(err instanceof Error ? err.message : 'เกิดข้อผิดพลาดในการโหลดข้อมูล');
         setIsLoading(false);
-      });
-  }, [orderId]);
+      }
+    },
+    [orderId],
+  );
+
+  useEffect(() => {
+    let urlToken = '';
+    if (typeof window !== 'undefined') {
+      const searchParams = new URLSearchParams(window.location.search);
+      const qTab = searchParams.get('tab');
+      if (qTab === 'tickets') {
+        setActiveTab('tickets');
+      }
+      urlToken = searchParams.get('token') || '';
+    }
+
+    const savedToken =
+      typeof window !== 'undefined'
+        ? sessionStorage.getItem('ticket_guest_otp_token') ||
+          sessionStorage.getItem('ticket_guest_lookup_token') ||
+          ''
+        : '';
+
+    // AC-63 / G-17: Never use ordtok_ directly to fetch order or tickets; prompt OTP first
+    if (!savedToken && urlToken.startsWith('ordtok_')) {
+      setLinkChallengeToken(urlToken);
+      setIsLoading(false);
+      return;
+    }
+
+    loadOrderAndTickets(savedToken, urlToken);
+  }, [loadOrderAndTickets]);
+
+  const handleLinkOtpVerified = (verifiedToken: string) => {
+    if (typeof window !== 'undefined') {
+      sessionStorage.setItem('ticket_guest_otp_token', verifiedToken);
+      const currentUrl = new URL(window.location.href);
+      if (currentUrl.searchParams.has('token')) {
+        currentUrl.searchParams.delete('token');
+        window.history.replaceState(null, '', currentUrl.pathname + currentUrl.search);
+      }
+    }
+    loadOrderAndTickets(verifiedToken, '');
+  };
 
   async function handleDownloadSingle(ticket: TicketDetail) {
     setDownloadingId(ticket.id);
@@ -162,6 +207,16 @@ export function OrderSuccessView({ orderId }: OrderSuccessViewProps) {
           </div>
         </div>
       </div>
+    );
+  }
+
+  if (linkChallengeToken) {
+    return (
+      <OrderLinkOtpGate
+        orderId={orderId}
+        linkToken={linkChallengeToken}
+        onVerified={handleLinkOtpVerified}
+      />
     );
   }
 
@@ -395,7 +450,7 @@ export function OrderSuccessView({ orderId }: OrderSuccessViewProps) {
                     <span>เปิดดูตั๋วเข้างาน ({tickets.length} ใบ) →</span>
                   </button>
                   <p className="slip-email-note">
-                    * ระบบได้ส่งอีเมลยืนยันคำสั่งซื้อไปยัง <strong>{reservation.buyerEmail}</strong> เรียบร้อยแล้ว (AC-19)
+                    * ระบบได้ส่งอีเมลยืนยันคำสั่งซื้อไปยัง <strong>{reservation.buyerEmail}</strong> เรียบร้อยแล้ว
                   </p>
 
                   {process.env.NODE_ENV !== 'production' &&
@@ -421,7 +476,7 @@ export function OrderSuccessView({ orderId }: OrderSuccessViewProps) {
                           }}
                         >
                           <MailIcon style={{ width: '15px', height: '15px' }} />
-                          <span>เปิดดูอีเมลตั๋วที่ระบบส่งออก (Dev Preview)</span>
+                          <span>เปิดดูตัวอย่างอีเมลบัตรเข้างาน</span>
                         </button>
                       </div>
                     )}
@@ -659,7 +714,7 @@ export function OrderSuccessView({ orderId }: OrderSuccessViewProps) {
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                 <MailIcon style={{ width: '20px', height: '20px', color: '#0f172a' }} />
                 <h3 id="dev-email-modal-title" style={{ margin: 0, fontSize: '1rem', fontWeight: 700, color: '#0f172a' }}>
-                  จำลองการส่งอีเมลตั๋ว (Dev Mail Preview)
+                  ตัวอย่างอีเมลบัตรเข้างาน
                 </h3>
               </div>
               <button
@@ -687,7 +742,7 @@ export function OrderSuccessView({ orderId }: OrderSuccessViewProps) {
                 </div>
               ) : !capturedEmail ? (
                 <div style={{ textAlign: 'center', padding: '2rem', color: '#64748b' }}>
-                  ยังไม่พบข้อมูลอีเมลในระบบจำลอง (Captured Emails)
+                  ยังไม่พบข้อมูลอีเมลที่ส่งออก
                 </div>
               ) : (
                 <div>

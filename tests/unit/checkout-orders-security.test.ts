@@ -1,6 +1,7 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { GET as getOrderHandler } from '../../src/app/api/public/checkout/orders/[id]/route';
 import { GET as getTicketsHandler } from '../../src/app/api/public/checkout/orders/[id]/tickets/route';
+import { createOrderTicketAccessToken } from '../../src/server/order-access-token';
 import type { OrderReservationDetail } from '../../src/server/reservation';
 import type { TicketDetail } from '../../src/server/tickets';
 import type { GuestVerifiedSession } from '../../src/server/guest-otp';
@@ -248,6 +249,74 @@ describe('Checkout Orders & Tickets Authorization Security Gate', () => {
       expect(data.tickets).toHaveLength(1);
       expect(data.tickets[0].qrPayload).toBe('qr-payload-secret');
       expect(data.tickets[0].ticketCode).toBe('TCK-001');
+    });
+  });
+
+  describe('Direct Email Link Signed Token OTP Gate (AC-63, G-17)', () => {
+    it('rejects direct ordtok_ access to paid order and tickets with 401 when OTP has not been verified', async () => {
+      if (mockReservation) {
+        mockReservation.status = 'paid';
+      }
+      const token = createOrderTicketAccessToken('ORD-SEC-001', 'buyer@ticket.invalid');
+
+      const orderRes = await getOrderHandler(
+        new Request(`http://localhost/api/public/checkout/orders/ORD-SEC-001?token=${encodeURIComponent(token)}`),
+        { params: Promise.resolve({ id: 'ORD-SEC-001' }) },
+      );
+      expect(orderRes.status).toBe(401);
+
+      const ticketsRes = await getTicketsHandler(
+        new Request(`http://localhost/api/public/checkout/orders/ORD-SEC-001/tickets?token=${encodeURIComponent(token)}`),
+        { params: Promise.resolve({ id: 'ORD-SEC-001' }) },
+      );
+      expect(ticketsRes.status).toBe(401);
+
+      const headerTicketsRes = await getTicketsHandler(
+        new Request('http://localhost/api/public/checkout/orders/ORD-SEC-001/tickets', {
+          headers: { 'x-guest-token': token },
+        }),
+        { params: Promise.resolve({ id: 'ORD-SEC-001' }) },
+      );
+      expect(headerTicketsRes.status).toBe(401);
+    });
+
+    it('allows opening paid order and tickets using an OTP-verified order_lookup session token', async () => {
+      if (mockReservation) {
+        mockReservation.status = 'paid';
+      }
+      if (mockSession) {
+        mockSession.purpose = 'order_lookup';
+      }
+
+      const orderRes = await getOrderHandler(
+        new Request('http://localhost/api/public/checkout/orders/ORD-SEC-001', {
+          headers: { 'x-guest-token': 'valid-token' },
+        }),
+        { params: Promise.resolve({ id: 'ORD-SEC-001' }) },
+      );
+      expect(orderRes.status).toBe(200);
+
+      const ticketsRes = await getTicketsHandler(
+        new Request('http://localhost/api/public/checkout/orders/ORD-SEC-001/tickets', {
+          headers: { 'x-guest-token': 'valid-token' },
+        }),
+        { params: Promise.resolve({ id: 'ORD-SEC-001' }) },
+      );
+      expect(ticketsRes.status).toBe(200);
+      const ticketsData = await ticketsRes.json();
+      expect(ticketsData.tickets).toHaveLength(1);
+    });
+
+    it('rejects forged ordtok_ token with 401', async () => {
+      if (mockReservation) {
+        mockReservation.status = 'paid';
+      }
+
+      const forgedRes = await getTicketsHandler(
+        new Request('http://localhost/api/public/checkout/orders/ORD-SEC-001/tickets?token=ordtok_forgedsignature'),
+        { params: Promise.resolve({ id: 'ORD-SEC-001' }) },
+      );
+      expect(forgedRes.status).toBe(401);
     });
   });
 });
