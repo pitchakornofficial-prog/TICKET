@@ -1,6 +1,7 @@
 import { createSafeErrorResponse } from '@/server/api-error';
 import { getDatabasePool } from '@/server/database';
 import { verifyGuestOtp } from '@/server/guest-otp';
+import { verifyQueueAccess } from '@/server/queue';
 import { getBuyerTicketCountForEvent } from '@/server/reservation';
 
 export const runtime = 'nodejs';
@@ -13,6 +14,7 @@ export async function POST(request: Request) {
     purpose?: string;
     eventId?: string;
     buyer?: { name?: string; email?: string; phone?: string };
+    queueToken?: string | null;
   } = {};
 
   try {
@@ -33,8 +35,27 @@ export async function POST(request: Request) {
     );
   }
 
+  const rawQueueToken =
+    typeof body.queueToken === 'string'
+      ? body.queueToken
+      : request.headers.get('x-queue-token') || '';
+  const queueToken = rawQueueToken.trim() || null;
+
   const pool = getDatabasePool();
   try {
+    if (body.eventId) {
+      const queueAllowed = await verifyQueueAccess(pool, body.eventId, queueToken);
+      if (!queueAllowed) {
+        return Response.json(
+          {
+            message: 'ขณะนี้มีผู้ใช้งานเต็มจำนวน 200 คิวแล้ว กรุณารอตามลำดับคิวในห้องรอคิว',
+            code: 'QUEUE_LOCKED',
+          },
+          { status: 429 },
+        );
+      }
+    }
+
     const result = await verifyGuestOtp(pool, {
       email: body.email,
       code: body.code,

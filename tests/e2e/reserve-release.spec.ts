@@ -122,9 +122,26 @@ test.describe('Reserve release after final session: calculation, release, and ro
     await buyerPage.getByLabel('ชื่อ-นามสกุล *').fill(buyerName);
     await buyerPage.getByLabel('อีเมล *').fill(buyerEmail);
     await buyerPage.getByLabel('เบอร์โทรศัพท์มือถือ *').fill(buyerPhone);
-    await buyerPage.getByRole('checkbox', { name: /ฉันได้อ่านและยอมรับ/ }).check();
-    await buyerPage.getByRole('button', { name: /ยืนยันและไปหน้าชำระเงิน/ }).click();
-    await expect(buyerPage).toHaveURL(/\/orders\/ORD-[A-Z0-9-]+\/payment$/);
+    await buyerPage.getByRole('button', { name: 'ขอรหัส OTP เพื่อซื้อบัตร' }).click();
+
+    await expect(buyerPage.getByText('ส่งรหัส OTP 6 หลักไปยังอีเมลของคุณเรียบร้อยแล้ว')).toBeVisible();
+
+    const otpRes = await request.get(
+      `/api/auth/test-inspect-reset-token?type=guest_otp&email=${encodeURIComponent(buyerEmail)}`,
+    );
+    expect(otpRes.status()).toBe(200);
+    const { code } = await otpRes.json();
+
+    await buyerPage.getByLabel('รหัส OTP 6 หลัก *').fill(code);
+    await buyerPage.getByRole('button', { name: 'ยืนยันรหัส OTP' }).click();
+    await buyerPage.getByRole('button', { name: 'ยืนยันและดำเนินการต่อ' }).click();
+    await expect(buyerPage.getByRole('heading', { name: 'ยืนยันอีเมลสำเร็จ (Guest Verified)' })).toBeVisible();
+
+    // Select 1 ticket for Regular Round 1
+    const confirmBtn = buyerPage.locator('#confirm-reservation-btn');
+    await expect(confirmBtn).toBeEnabled();
+    await confirmBtn.click({ force: true });
+    await expect(buyerPage.getByText('กันบัตรสำเร็จ (Reserved)')).toBeVisible();
 
     // Generate PromptPay QR
 

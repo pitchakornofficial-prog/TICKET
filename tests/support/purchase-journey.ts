@@ -17,7 +17,7 @@ export async function reserveThroughCheckout(page: Page, input: {
   await page.getByRole('checkbox', { name: /ฉันได้อ่านและยอมรับ/ }).check();
   await page.getByRole('button', { name: /(ยืนยันและไปหน้าชำระเงิน|ขอรหัส OTP เพื่อซื้อบัตร)/ }).click();
   const digits = page.getByRole('group', { name: 'ช่องกรอกรหัส OTP 6 หลัก' }).getByRole('textbox');
-  if (await digits.first().isVisible({ timeout: 1500 }).catch(() => false)) {
+  if (await digits.first().waitFor({ state: 'visible', timeout: 10000 }).then(() => true).catch(() => false)) {
     const otp = await page.request.get(`/api/auth/test-inspect-reset-token?type=guest_otp&email=${encodeURIComponent(input.buyer.email)}`);
     expect(otp.status()).toBe(200);
     const { code } = await otp.json();

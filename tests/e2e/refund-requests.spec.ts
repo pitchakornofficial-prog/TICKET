@@ -92,9 +92,23 @@ test.describe('Buyer Refund Requests flow (TASK-021, AC-32, AC-33, AC-34, AC-21)
     await page.getByLabel('ชื่อ-นามสกุล *').fill(guestName);
     await page.getByLabel('อีเมล *').fill(guestEmail);
     await page.getByLabel('เบอร์โทรศัพท์มือถือ *').fill(guestPhone);
-    await page.getByRole('checkbox', { name: /ฉันได้อ่านและยอมรับ/ }).check();
-    await page.getByRole('button', { name: /ยืนยันและไปหน้าชำระเงิน/ }).click();
-    await expect(page).toHaveURL(/\/orders\/ORD-[A-Z0-9-]+\/payment$/);
+    await page.getByRole('button', { name: 'ขอรหัส OTP เพื่อซื้อบัตร' }).click();
+    await expect(page.getByText('ส่งรหัส OTP 6 หลักไปยังอีเมลของคุณเรียบร้อยแล้ว')).toBeVisible();
+
+    const otpRes = await request.get(
+      `/api/auth/test-inspect-reset-token?type=guest_otp&email=${encodeURIComponent(guestEmail)}`,
+    );
+    expect(otpRes.status()).toBe(200);
+    const { code } = await otpRes.json();
+
+    await page.getByLabel('รหัส OTP 6 หลัก *').fill(code);
+    await page.getByRole('button', { name: 'ยืนยันรหัส OTP' }).click();
+    await page.getByRole('button', { name: 'ยืนยันและดำเนินการต่อ' }).click();
+    await expect(page.getByRole('heading', { name: 'ยืนยันอีเมลสำเร็จ (Guest Verified)' })).toBeVisible();
+
+    // Select 2 tickets
+    await page.locator('#confirm-reservation-btn').click();
+    await expect(page.getByText('กันบัตรสำเร็จ (Reserved)')).toBeVisible();
 
     // Generate PromptPay QR and simulate payment
     await expect(page.locator('#promptpay-qr-image')).toBeVisible();
@@ -102,7 +116,7 @@ test.describe('Buyer Refund Requests flow (TASK-021, AC-32, AC-33, AC-34, AC-21)
     const simulateBtn = page.locator('#simulate-payment-button');
     await expect(simulateBtn).toBeVisible();
     await simulateBtn.click();
-    await expect(page).toHaveURL(/\/orders\/ORD-[A-Z0-9-]+\/success$/);
+    await expect(page.getByText('ชำระเงินสำเร็จ (Paid)')).toBeVisible();
     await expect(page.getByText('ออกบัตรสำเร็จแล้ว (2 ใบ)')).toBeVisible();
 
     // 4. Guest visits /my-tickets to view order and initiate refund

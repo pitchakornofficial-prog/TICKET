@@ -9,6 +9,7 @@ test.beforeEach(async ({ context }, testInfo) => {
 test.describe('Online Admission Scanning Journey (TASK-020, AC-08, AC-39, AC-49, AC-95, AC-100, AC-101, AC-65)', () => {
   test('scanner logs in, opens terminal, scans entry, repeat entry rejected, scans exit, scans reentry, checks stats and logs without buyer PII', async ({
     page,
+    request,
   }, testInfo) => {
     test.setTimeout(120000);
 
@@ -66,13 +67,13 @@ test.describe('Online Admission Scanning Journey (TASK-020, AC-08, AC-39, AC-49,
     expect(addScannerRes.status()).toBe(201);
 
     await page.getByRole('button', { name: 'ออกจากระบบ', exact: true }).click({ force: true });
-    await expect(page).toHaveURL('/login', { timeout: 15000 });
+    await expect(page).toHaveURL('/login');
 
     // 2. Owner logs in and approves session
     await page.getByLabel('อีเมล', { exact: true }).fill(fixtureAccounts.owner.email);
     await page.getByLabel('รหัสผ่าน', { exact: true }).fill(fixturePassword);
     await page.getByRole('button', { name: 'เข้าสู่ระบบ', exact: true }).click();
-    await expect(page).toHaveURL('/back-office/owner', { timeout: 15000 });
+    await expect(page).toHaveURL('/back-office/owner');
 
     const sessionCard = page.locator('.pending-session-card', { hasText: eventTitle });
     await expect(sessionCard).toBeVisible();
@@ -80,7 +81,7 @@ test.describe('Online Admission Scanning Journey (TASK-020, AC-08, AC-39, AC-49,
     await expect(page.getByText(`อนุมัติรอบการแสดงของ "${eventTitle}" สำเร็จ`)).toBeVisible();
 
     await page.getByRole('button', { name: 'ออกจากระบบ', exact: true }).click({ force: true });
-    await expect(page).toHaveURL('/login', { timeout: 15000 });
+    await expect(page).toHaveURL('/login');
 
     // 3. Guest buyer visits concert detail page and completes purchase
     await page.goto(`/events/${createdEvent.id}/checkout`);
@@ -92,9 +93,25 @@ test.describe('Online Admission Scanning Journey (TASK-020, AC-08, AC-39, AC-49,
     await page.getByLabel('ชื่อ-นามสกุล *').fill(buyerName);
     await page.getByLabel('อีเมล *').fill(buyerEmail);
     await page.getByLabel('เบอร์โทรศัพท์มือถือ *').fill(buyerPhone);
-    await page.getByRole('checkbox', { name: /ฉันได้อ่านและยอมรับ/ }).check();
-    await page.getByRole('button', { name: /ยืนยันและไปหน้าชำระเงิน/ }).click();
-    await expect(page).toHaveURL(/\/orders\/ORD-[A-Z0-9-]+\/payment$/);
+    await page.getByRole('button', { name: 'ขอรหัส OTP เพื่อซื้อบัตร' }).click();
+
+    await expect(page.getByText('ส่งรหัส OTP 6 หลักไปยังอีเมลของคุณเรียบร้อยแล้ว')).toBeVisible();
+
+    const otpInspectRes = await request.get(
+      `/api/auth/test-inspect-reset-token?type=guest_otp&email=${encodeURIComponent(buyerEmail)}`,
+    );
+    expect(otpInspectRes.status()).toBe(200);
+    const otpCode = (await otpInspectRes.json()).code;
+
+    await page.getByLabel('รหัส OTP 6 หลัก *').fill(otpCode);
+    await page.getByRole('button', { name: 'ยืนยันรหัส OTP' }).click();
+    await page.getByRole('button', { name: 'ยืนยันและดำเนินการต่อ' }).click();
+    await expect(page.getByRole('heading', { name: 'ยืนยันอีเมลสำเร็จ (Guest Verified)' })).toBeVisible();
+
+    // Select 1 ticket and reserve
+    await page.locator('#confirm-reservation-btn').click();
+
+    await expect(page.getByText('กันบัตรสำเร็จ (Reserved)')).toBeVisible();
 
     // Create PromptPay QR
     await expect(page.locator('#promptpay-qr-image')).toBeVisible();
@@ -103,6 +120,8 @@ test.describe('Online Admission Scanning Journey (TASK-020, AC-08, AC-39, AC-49,
     const simulateBtn = page.locator('#simulate-payment-button');
     await expect(simulateBtn).toBeVisible();
     await simulateBtn.click();
+
+    await expect(page.getByText('ชำระเงินสำเร็จ (Paid)')).toBeVisible();
     await expect(page).toHaveURL(/\/orders\/ORD-[A-Z0-9-]+\/success$/);
     await expect(page.getByText('ออกบัตรสำเร็จแล้ว (1 ใบ)')).toBeVisible();
     await page.locator('#tab-btn-tickets').click();

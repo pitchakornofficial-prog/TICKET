@@ -98,9 +98,25 @@ test.describe('Late payment recovery & owner exception review (TASK-016, AC-72, 
     await page.getByLabel('ชื่อ-นามสกุล *').fill(guestName);
     await page.getByLabel('อีเมล *').fill(guestEmail);
     await page.getByLabel('เบอร์โทรศัพท์มือถือ *').fill(guestPhone);
-    await page.getByRole('checkbox', { name: /ฉันได้อ่านและยอมรับ/ }).check();
-    await page.getByRole('button', { name: /ยืนยันและไปหน้าชำระเงิน/ }).click();
-    await expect(page).toHaveURL(/\/orders\/ORD-[A-Z0-9-]+\/payment$/);
+    await page.getByRole('button', { name: 'ขอรหัส OTP เพื่อซื้อบัตร' }).click();
+
+    await expect(page.getByText('ส่งรหัส OTP 6 หลักไปยังอีเมลของคุณเรียบร้อยแล้ว')).toBeVisible();
+
+    const otpRes = await request.get(
+      `/api/auth/test-inspect-reset-token?type=guest_otp&email=${encodeURIComponent(guestEmail)}`,
+    );
+    expect(otpRes.status()).toBe(200);
+    const { code } = await otpRes.json();
+
+    await page.getByLabel('รหัส OTP 6 หลัก *').fill(code);
+    await page.getByRole('button', { name: 'ยืนยันรหัส OTP' }).click();
+    await page.getByRole('button', { name: 'ยืนยันและดำเนินการต่อ' }).click();
+    await expect(page.getByRole('heading', { name: 'ยืนยันอีเมลสำเร็จ (Guest Verified)' })).toBeVisible();
+
+    // 5. Select 2 tickets (subtotal = 3,600, fee = 100, total = 3,700 THB)
+    await page.locator('#confirm-reservation-btn').click();
+
+    await expect(page.getByText('กันบัตรสำเร็จ (Reserved)')).toBeVisible();
     const orderId = (await page.locator('#reservation-order-id').innerText()).trim();
     expect(orderId).toMatch(/^ORD-/);
 

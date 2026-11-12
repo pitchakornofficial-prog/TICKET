@@ -10,6 +10,7 @@ test.beforeEach(async ({ context }, testInfo) => {
 test.describe('Ticket reservation and quotation flow (TASK-012, AC-10, AC-14, AC-61, AC-69, AC-106, AC-111, AC-13)', () => {
   test('guest completes OTP verification, reserves tickets up to limit, receives quote with 15-min countdown, and locks fee', async ({
     page,
+    request,
   }, testInfo) => {
     const eventTitle = `คอนเสิร์ตจองบัตร ${testInfo.project.name}`;
     const guestEmail = `buyer-reserve-${testInfo.project.name}@ticket.invalid`;
@@ -105,16 +106,29 @@ test.describe('Ticket reservation and quotation flow (TASK-012, AC-10, AC-14, AC
     await addVipBtn.click();
 
 
-    // 4. Guest completes direct checkout (D-188, D-272)
+    // 4. Guest completes OTP verification
     await page.getByLabel('ชื่อ-นามสกุล *').fill(guestName);
     await page.getByLabel('อีเมล *').fill(guestEmail);
     await page.getByLabel('เบอร์โทรศัพท์มือถือ *').fill(guestPhone);
-    await page.getByRole('checkbox', { name: /ฉันได้อ่านและยอมรับ/ }).check();
-    await page.getByRole('button', { name: /ยืนยันและไปหน้าชำระเงิน/ }).click();
+    await page.getByRole('button', { name: 'ขอรหัส OTP เพื่อซื้อบัตร' }).click();
 
-    // 5. Payment Page (/orders/[id]/payment)
-    await expect(page).toHaveURL(/\/orders\/ORD-[A-Z0-9-]+\/payment$/);
-    await expect(page.locator('#promptpay-qr-image')).toBeVisible();
+    await expect(page.getByText('ส่งรหัส OTP 6 หลักไปยังอีเมลของคุณเรียบร้อยแล้ว')).toBeVisible();
+
+    // Fetch OTP code
+    const otpRes = await request.get(
+      `/api/auth/test-inspect-reset-token?type=guest_otp&email=${encodeURIComponent(guestEmail)}`,
+    );
+    expect(otpRes.status()).toBe(200);
+    const { code } = await otpRes.json();
+    expect(code).toMatch(/^\d{6}$/);
+
+    await page.getByLabel('รหัส OTP 6 หลัก *').fill(code);
+    await page.getByRole('button', { name: 'ยืนยันรหัส OTP' }).click();
+    await page.getByRole('button', { name: 'ยืนยันและดำเนินการต่อ' }).click();
+    await expect(page.getByRole('heading', { name: 'ยืนยันอีเมลสำเร็จ (Guest Verified)' })).toBeVisible();
+
+    // Click confirm reservation
+    await page.locator('#confirm-reservation-btn').click();
 
     // 6. Verify Reservation Confirmed Card (AC-69, AC-13)
     await expect(page.locator('#reservation-order-id')).toHaveText(/^ORD-/);

@@ -8,6 +8,16 @@ import { getBuyerTicketCountForEvent } from '@/server/reservation';
 export const runtime = 'nodejs';
 
 export async function POST(request: Request) {
+  if (process.env.NODE_ENV === 'production') {
+    return NextResponse.json(
+      {
+        message: 'กรุณายืนยันรหัส OTP ทางอีเมลก่อนดำเนินการสั่งซื้อ',
+        code: 'OTP_REQUIRED',
+      },
+      { status: 403 },
+    );
+  }
+
   try {
     const body = await request.json();
     const name = (body.name || '').trim();
