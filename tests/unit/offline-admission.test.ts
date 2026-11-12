@@ -4,6 +4,7 @@ import {
   getOfflinePendingScans,
   getOfflineDatasetKey,
 } from '../../src/lib/offline-admission';
+import { hashOfflineQrPayload } from '../../src/lib/offline-qr-hash';
 import type { OfflineDataset, OfflineTicketItem } from '../../src/server/primary-scanner';
 
 function createMockStorage(initialData: Record<string, string> = {}) {
@@ -40,7 +41,7 @@ describe('TASK-033: Offline Admission Engine Unit Tests (AC-40, AC-41, AC-50, AC
   const validTicket1: OfflineTicketItem = {
     id: 'TICK-001',
     ticketCode: 'TK-11111111',
-    qrPayload: 'SECURE-QR-111',
+    qrHash: hashOfflineQrPayload(eventId, 'SECURE-QR-111'),
     ticketTypeId: 'TT-REG',
     ticketTypeName: 'Regular Zone',
     sessionId,
@@ -58,7 +59,7 @@ describe('TASK-033: Offline Admission Engine Unit Tests (AC-40, AC-41, AC-50, AC
   const cancelledTicket: OfflineTicketItem = {
     id: 'TICK-002',
     ticketCode: 'TK-22222222',
-    qrPayload: 'SECURE-QR-222',
+    qrHash: hashOfflineQrPayload(eventId, 'SECURE-QR-222'),
     ticketTypeId: 'TT-REG',
     ticketTypeName: 'Regular Zone',
     sessionId,
@@ -74,7 +75,7 @@ describe('TASK-033: Offline Admission Engine Unit Tests (AC-40, AC-41, AC-50, AC
   const refundedTicket: OfflineTicketItem = {
     id: 'TICK-003',
     ticketCode: 'TK-33333333',
-    qrPayload: 'SECURE-QR-333',
+    qrHash: hashOfflineQrPayload(eventId, 'SECURE-QR-333'),
     ticketTypeId: 'TT-REG',
     ticketTypeName: 'Regular Zone',
     sessionId,
@@ -90,7 +91,7 @@ describe('TASK-033: Offline Admission Engine Unit Tests (AC-40, AC-41, AC-50, AC
   const wrongSessionTicket: OfflineTicketItem = {
     id: 'TICK-004',
     ticketCode: 'TK-44444444',
-    qrPayload: 'SECURE-QR-444',
+    qrHash: hashOfflineQrPayload(eventId, 'SECURE-QR-444'),
     ticketTypeId: 'TT-REG',
     ticketTypeName: 'Regular Zone',
     sessionId: 'SESS-OTHER',
@@ -425,6 +426,30 @@ describe('TASK-033: Offline Admission Engine Unit Tests (AC-40, AC-41, AC-50, AC
         scannerName: "ทีมสแกน 1",
         isPrimary: true,
         qrPayloadOrCode: "TK-11111111", // guessable ticketCode must not be accepted
+        action: "entry",
+        now,
+      },
+      storage,
+    );
+
+    expect(result.success).toBe(false);
+    expect(result.status).toBe("rejected");
+    expect(result.reason).toBe("OFFLINE_TICKET_NOT_FOUND");
+  });
+
+  it("rejects offline scan when raw qrHash from dataset is replayed instead of real qrPayload", () => {
+    const storage = createMockStorage({
+      [getOfflineDatasetKey(eventId)]: JSON.stringify(baseDataset),
+    });
+
+    const result = performOfflineAdmissionScan(
+      {
+        eventId,
+        sessionId,
+        scannerId: "SCAN-PRI",
+        scannerName: "ทีมสแกน 1",
+        isPrimary: true,
+        qrPayloadOrCode: validTicket1.qrHash,
         action: "entry",
         now,
       },

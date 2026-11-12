@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { Pool } from 'pg';
+import { hashOfflineQrPayload } from '../lib/offline-qr-hash.ts';
 import { ensureEventSchema } from './events.ts';
 import { ensureTicketSchema } from './tickets.ts';
 import { ensureAdmissionSchema } from './admission.ts';
@@ -56,7 +57,7 @@ export interface HandoverReadiness {
 export interface OfflineTicketItem {
   id: string;
   ticketCode: string;
-  qrPayload: string;
+  qrHash: string;
   ticketTypeId: string;
   ticketTypeName: string;
   sessionId: string;
@@ -453,7 +454,7 @@ export async function getOfflineDataset(
     return {
       id: t.id,
       ticketCode: t.ticketCode,
-      qrPayload: t.qrPayload,
+      qrHash: hashOfflineQrPayload(eventId, t.qrPayload),
       ticketTypeId: t.ticketTypeId,
       ticketTypeName: t.ticketTypeName,
       sessionId: t.sessionId,

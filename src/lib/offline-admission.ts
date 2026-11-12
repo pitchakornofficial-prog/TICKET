@@ -1,4 +1,5 @@
 import type { OfflineDataset, OfflineTicketItem } from '../server/primary-scanner';
+import { hashOfflineQrPayload } from './offline-qr-hash';
 
 export interface OfflinePendingScanItem {
   id: string;
@@ -177,8 +178,9 @@ export function performOfflineAdmissionScan(
 
   // 4. Ticket lookup in cached dataset (AC-41, O2)
   const cleanInput = input.qrPayloadOrCode.trim();
+  const inputHash = hashOfflineQrPayload(input.eventId, cleanInput);
   const ticketIndex = dataset.tickets.findIndex(
-    (t: OfflineTicketItem) => t.qrPayload === cleanInput,
+    (t: OfflineTicketItem) => typeof t.qrHash === 'string' && t.qrHash === inputHash,
   );
 
   if (ticketIndex === -1) {

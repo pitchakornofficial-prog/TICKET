@@ -202,7 +202,7 @@ test.describe('Offline Primary Dataset & Privacy Protection (TASK-032, AC-94, AC
     expect(datasetJson.totalTickets).toBeGreaterThanOrEqual(1);
     expect(datasetJson.lastSuccessfulSync).toBeDefined();
 
-    // CRITICAL (AC-65): Zero buyer PII in any ticket or log
+    // CRITICAL (AC-65 & QR secret protection): Zero buyer PII and zero raw qrPayload in any ticket or log
     for (const t of datasetJson.tickets) {
       expect(t.buyerName).toBeUndefined();
       expect(t.buyerEmail).toBeUndefined();
@@ -210,6 +210,8 @@ test.describe('Offline Primary Dataset & Privacy Protection (TASK-032, AC-94, AC
       expect(t.customerFee).toBeUndefined();
       expect(t.paymentId).toBeUndefined();
       expect(t.chargeId).toBeUndefined();
+      expect(t.qrPayload).toBeUndefined();
+      expect(t.qrHash).toMatch(/^[a-f0-9]{64}$/);
       expect(t.ticketCode).toBeDefined();
       expect(t.status).toBe('valid');
       expect(t.admissionStatus).toBe('outside');
@@ -233,6 +235,8 @@ test.describe('Offline Primary Dataset & Privacy Protection (TASK-032, AC-94, AC
     expect(localData.tickets[0].buyerName).toBeUndefined();
     expect(localData.tickets[0].buyerEmail).toBeUndefined();
     expect(localData.tickets[0].buyerPhone).toBeUndefined();
+    expect(localData.tickets[0].qrPayload).toBeUndefined();
+    expect(localData.tickets[0].qrHash).toMatch(/^[a-f0-9]{64}$/);
 
     // 8. Scanner 2 logs in (secondary scanner)
     const scanner2Context = await createIsolatedBrowserContext(browser, testInfo, );
