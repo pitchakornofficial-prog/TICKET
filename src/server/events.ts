@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+import { randomBytes, randomUUID } from 'node:crypto';
 import type { Pool } from 'pg';
 import { hashPassword, verifyPassword } from 'better-auth/crypto';
 import { inTransaction } from './database.ts';
@@ -803,7 +803,7 @@ export async function addScannerToEvent(
         targetName = existing.name;
       } else {
         targetScannerId = randomUUID();
-        const pwd = data.password || 'Scanner-Default-Password!2026';
+        const pwd = data.password || `Scanner!${randomBytes(16).toString('hex')}`;
         if (pwd.length < 15) throw new Error('รหัสผ่านต้องมีความยาวอย่างน้อย 15 ตัวอักษร');
         const hashedPassword = await hashPassword(pwd);
 
@@ -2085,7 +2085,19 @@ export async function approveSessionCancellation(
  * Idempotently seeds the UBU Freshy Music Fest 2026 event, organizer user,
  * session, ticket type, and custom fee model (D-181).
  */
-export async function seedUbuFreshyFest(pool: Pool): Promise<void> {
+export async function seedUbuFreshyFest(
+  pool: Pool,
+  options?: { organizerPassword?: string },
+): Promise<void> {
+  const configuredPassword =
+    options?.organizerPassword?.trim() || process.env.SEED_UBU_ORGANIZER_PASSWORD?.trim();
+  if (configuredPassword && (configuredPassword.length < 15 || configuredPassword.length > 128)) {
+    throw new Error('SEED_UBU_ORGANIZER_PASSWORD ต้องมีความยาว 15-128 ตัวอักษร');
+  }
+  if (!configuredPassword && process.env.NODE_ENV === 'production') {
+    throw new Error('ต้องระบุ SEED_UBU_ORGANIZER_PASSWORD เมื่อ seed บัญชีผู้จัดงานใน production');
+  }
+
   try {
     const organizerId = 'org-freshy-fest-ubu';
     const eventId = 'event-ubu-freshy-2026';
@@ -2101,7 +2113,8 @@ export async function seedUbuFreshyFest(pool: Pool): Promise<void> {
     );
     const accCheck = await pool.query('SELECT id FROM auth_account WHERE "userId" = $1', [organizerId]);
     if (accCheck.rowCount === 0) {
-      const hashedPassword = await hashPassword('Password123!');
+      const initialPassword = configuredPassword || `UbuOrg!${randomBytes(18).toString('base64url')}`;
+      const hashedPassword = await hashPassword(initialPassword);
       await pool.query(
         'INSERT INTO auth_account (id, "accountId", "providerId", "userId", password, "createdAt", "updatedAt") VALUES ($1, $2, $3, $4, $5, now(), now())',
         ['acc-freshy-fest-ubu', organizerId, 'credential', organizerId, hashedPassword],

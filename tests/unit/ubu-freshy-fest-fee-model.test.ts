@@ -7,6 +7,7 @@ import {
   roundHalfUp,
   saveEventFeeSettings,
 } from '../../src/server/fees';
+import { seedUbuFreshyFest } from '../../src/server/events';
 import { isUbuEmail } from '../../src/server/reservation';
 
 describe('D-181: UBU Freshy Music Fest 2026, 6% Customer Fee, 150B/99B UBU Email Discount & Tiered 2%/3% Organizer Fee', () => {
@@ -58,8 +59,9 @@ describe('D-181: UBU Freshy Music Fest 2026, 6% Customer Fee, 150B/99B UBU Email
     expect(isUbuEmail('')).toBe(false);
   });
 
-  it('seeds UBU Freshy Music Fest 2026 with 150B price, 4500 quota, and organizer account', () => {
+  it('seeds UBU Freshy Music Fest 2026 with 150B price, 4500 quota, and organizer account without hardcoded passwords', async () => {
     const eventsContent = readFileSync(join(rootDir, 'src/server/events.ts'), 'utf8');
+    const createTestOrgContent = readFileSync(join(rootDir, 'scripts/create-test-organizer.ts'), 'utf8');
     expect(eventsContent).toContain('seedUbuFreshyFest');
     expect(eventsContent).toContain('UBU Freshy Music Fest 2026');
     expect(eventsContent).toContain('organizer.freshy@ubu.ac.th');
@@ -67,7 +69,28 @@ describe('D-181: UBU Freshy Music Fest 2026, 6% Customer Fee, 150B/99B UBU Email
     expect(eventsContent).toContain('General Admission (บัตรเข้างานทั่วไป)');
     expect(eventsContent).toContain('150');
     expect(eventsContent).toContain('4500');
+    expect(eventsContent).not.toContain('Password123!');
+    expect(eventsContent).not.toContain('Scanner-Default-Password!2026');
+    expect(createTestOrgContent).not.toContain('Password123!');
     expect(eventsContent).not.toMatch(/\p{Extended_Pictographic}/u);
+
+    const mockPool = { query: async () => ({ rowCount: 0, rows: [] }) } as unknown as Parameters<
+      typeof seedUbuFreshyFest
+    >[0];
+    await expect(seedUbuFreshyFest(mockPool, { organizerPassword: 'short' })).rejects.toThrow(/15-128/);
+
+    const origEnv = process.env.NODE_ENV;
+    const origSeedPwd = process.env.SEED_UBU_ORGANIZER_PASSWORD;
+    try {
+      (process.env as Record<string, string | undefined>).NODE_ENV = 'production';
+      delete process.env.SEED_UBU_ORGANIZER_PASSWORD;
+      await expect(seedUbuFreshyFest(mockPool)).rejects.toThrow(/SEED_UBU_ORGANIZER_PASSWORD/);
+    } finally {
+      (process.env as Record<string, string | undefined>).NODE_ENV = origEnv;
+      if (origSeedPwd !== undefined) {
+        process.env.SEED_UBU_ORGANIZER_PASSWORD = origSeedPwd;
+      }
+    }
   });
 
   it('supports admin configuration in OwnerFeeSettingsManager with UBU privilege toggle and tiered rates', () => {
