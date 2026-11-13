@@ -113,15 +113,28 @@ export async function POST(
     try {
       const eventDetails = await getEventDetails(pool, id, session.user.id);
       if (!eventDetails) return Response.json({ message: 'ไม่พบงานคอนเสิร์ต' }, { status: 404 });
+      if (!['draft', 'rejected'].includes(eventDetails.status)) {
+        return Response.json(
+          { message: 'ส่งขออนุมัติได้เฉพาะงานที่อยู่ในสถานะฉบับร่างหรือถูกปฏิเสธเท่านั้น' },
+          { status: 400 },
+        );
+      }
       for (const sess of eventDetails.sessions) {
-        if (sess.status === 'draft') {
+        if (sess.status === 'draft' || sess.status === 'rejected') {
           await submitSessionForApproval(pool, sess.id, session.user.id);
         }
       }
-      await pool.query(
-        `UPDATE events SET status = 'pending_approval', "updatedAt" = now() WHERE id = $1`,
-        [id],
+      const updateRes = await pool.query(
+        `UPDATE events SET status = 'pending_approval', "updatedAt" = now()
+         WHERE id = $1 AND "organizerId" = $2 AND status IN ('draft', 'rejected')`,
+        [id, session.user.id],
       );
+      if (updateRes.rowCount === 0) {
+        return Response.json(
+          { message: 'ไม่สามารถส่งขออนุมัติได้ เนื่องจากสถานะงานไม่ถูกต้อง' },
+          { status: 400 },
+        );
+      }
       return Response.json({ message: 'ส่งงานคอนเสิร์ตเพื่อขออนุมัติสำเร็จ' }, { status: 200 });
     } catch (error: unknown) {
       return createSafeErrorResponse(error, 'เกิดข้อผิดพลาดในการส่งงานเพื่อขออนุมัติ', { defaultStatus: 400 });
