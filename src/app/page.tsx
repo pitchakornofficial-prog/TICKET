@@ -1,6 +1,9 @@
 import { Suspense } from 'react';
 import { getDatabasePool } from '@/server/database';
-import { listPublicEvents, type PublicEventSummary } from '@/server/events';
+import {
+  queryPublicEventsCatalog,
+  type PublicEventCatalogResult,
+} from '@/server/events';
 import { HomeConcertCatalog } from '@/components/home-concert-catalog';
 import { HomeCatalogSkeleton } from '@/components/home-catalog-skeleton';
 
@@ -9,13 +12,27 @@ export const metadata = {
   description: 'แพลตฟอร์มจำหน่ายบัตรคอนเสิร์ตในประเทศไทย ซื้อบัตรได้โดยไม่สมัครสมาชิก',
 };
 
+const INITIAL_CATALOG_PAGE_SIZE = 12;
+
 async function AsyncHomeCatalog({ q }: { q?: string }) {
-  let allEvents: PublicEventSummary[] = [];
+  let initialCatalog: PublicEventCatalogResult = {
+    events: [],
+    totalCount: 0,
+    page: 1,
+    limit: INITIAL_CATALOG_PAGE_SIZE,
+    hasMore: false,
+    locations: [],
+  };
 
   try {
     const pool = getDatabasePool();
-    // Load all public approved events for instant in-memory client filtering
-    allEvents = await listPublicEvents(pool);
+    // Filter and paginate server-side without shipping descriptions in RSC payload
+    initialCatalog = await queryPublicEventsCatalog(pool, {
+      q,
+      page: 1,
+      limit: INITIAL_CATALOG_PAGE_SIZE,
+      includeLocations: true,
+    });
   } catch (error) {
     const err = error as { code?: string; message?: string };
     if (err?.code !== 'ECONNREFUSED') {
@@ -23,7 +40,16 @@ async function AsyncHomeCatalog({ q }: { q?: string }) {
     }
   }
 
-  return <HomeConcertCatalog allEvents={allEvents} initialQuery={q} />;
+  return (
+    <HomeConcertCatalog
+      allEvents={initialCatalog.events}
+      initialTotalCount={initialCatalog.totalCount}
+      initialHasMore={initialCatalog.hasMore}
+      initialLocations={initialCatalog.locations}
+      serverCatalogEnabled
+      initialQuery={q}
+    />
+  );
 }
 
 export default async function Home({

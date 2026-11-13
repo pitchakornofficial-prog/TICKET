@@ -11,17 +11,22 @@ import {
 } from './icons';
 // Note: ChevronUpIcon previously used for Back-to-Top (D-143), unified with organizer arrow (D-172)
 import { formatBahtCompact } from '@/lib/locale';
-import type { PublicEventSummary } from '@/server/events';
+import type { PublicCatalogLocationFacet, PublicEventSummary } from '@/server/events';
 import {
   loadHomeBanners,
   isBannerScheduleActive,
   EVENT_HOME_BANNERS_CHANGED,
   type HeroBannerItem,
 } from '@/lib/home-banners-sync';
+import { ResponsiveImage } from './responsive-image';
 
 interface HomeConcertCatalogProps {
   allEvents: PublicEventSummary[];
   initialQuery?: string;
+  initialTotalCount?: number;
+  initialHasMore?: boolean;
+  initialLocations?: PublicCatalogLocationFacet[];
+  serverCatalogEnabled?: boolean;
 }
 
 type FilterTab = 'all' | 'available' | 'upcoming';
@@ -30,10 +35,18 @@ type SortOrder = 'date_asc' | 'price_asc' | 'price_desc';
 type SearchAvailability = 'all' | 'available' | 'upcoming';
 
 const BATCH_SIZE = 12;
+const BANNER_WIDTHS = [640, 960, 1280, 1600] as const;
+const BANNER_SIZES = '(max-width: 768px) 100vw, (max-width: 1200px) 92vw, 1280px';
+const POSTER_WIDTHS = [240, 360, 480, 640] as const;
+const POSTER_SIZES = '(max-width: 640px) 46vw, (max-width: 1024px) 30vw, 280px';
 
 export function HomeConcertCatalog({
   allEvents,
   initialQuery = '',
+  initialTotalCount,
+  initialHasMore = false,
+  initialLocations,
+  serverCatalogEnabled = false,
 }: HomeConcertCatalogProps) {
   const router = useRouter();
   const [query, setQuery] = useState(initialQuery);
@@ -51,11 +64,26 @@ export function HomeConcertCatalog({
   const [availability, setAvailability] = useState<SearchAvailability>('all');
   const [sortBy, setSortBy] = useState<SortOrder>('date_asc');
 
-  // Batched Infinite Scroll & Back-to-Top State (D-143)
+  // Server-backed catalog state (#5) and batched infinite scroll / back-to-top state (D-143)
+  const [serverEvents, setServerEvents] = useState<PublicEventSummary[]>(allEvents);
+  const [serverTotalCount, setServerTotalCount] = useState<number>(initialTotalCount ?? allEvents.length);
+  const [serverHasMore, setServerHasMore] = useState<boolean>(initialHasMore);
+  const [serverPage, setServerPage] = useState<number>(1);
+  const [isLoadingMore, setIsLoadingMore] = useState<boolean>(false);
+  const [locationFacets, setLocationFacets] = useState<PublicCatalogLocationFacet[]>(
+    initialLocations ?? [],
+  );
+  const [allCatalogTotalCount, setAllCatalogTotalCount] = useState<number>(() => {
+    if (initialLocations && initialLocations.length > 0) {
+      return initialLocations.reduce((sum, l) => sum + l.count, 0);
+    }
+    return initialTotalCount ?? allEvents.length;
+  });
   const [visibleCount, setVisibleCount] = useState(BATCH_SIZE);
   const [showBackToTop, setShowBackToTop] = useState(false);
   const searchSentinelRef = useRef<HTMLDivElement | null>(null);
   const catalogSentinelRef = useRef<HTMLDivElement | null>(null);
+  const lastFetchedKeyRef = useRef<string | null>(null);
 
   // Sync state with browser navigation (back/forward)
   useEffect(() => {
@@ -82,17 +110,38 @@ export function HomeConcertCatalog({
 
   const trimmedQuery = query.trim().toLowerCase();
   const isSearching = Boolean(trimmedQuery);
+  const activeEvents = serverCatalogEnabled ? serverEvents : allEvents;
 
-  // Available locations extracted from all events
+  // Available locations extracted from server facets or events list
   const availableLocations = useMemo(() => {
+    if (serverCatalogEnabled && locationFacets.length > 0) {
+      return locationFacets.map(f => f.location);
+    }
     const locSet = new Set<string>();
-    for (const ev of allEvents) {
+    for (const ev of activeEvents) {
       if (ev.location?.trim()) {
         locSet.add(ev.location.trim());
       }
     }
     return Array.from(locSet).sort((a, b) => a.localeCompare(b, 'th'));
-  }, [allEvents]);
+  }, [serverCatalogEnabled, locationFacets, activeEvents]);
+
+  const locationCountMap = useMemo(() => {
+    const map = new Map<string, number>();
+    if (serverCatalogEnabled && locationFacets.length > 0) {
+      for (const f of locationFacets) {
+        map.set(f.location, f.count);
+      }
+      return map;
+    }
+    for (const ev of activeEvents) {
+      const loc = ev.location?.trim();
+      if (loc) {
+        map.set(loc, (map.get(loc) || 0) + 1);
+      }
+    }
+    return map;
+  }, [serverCatalogEnabled, locationFacets, activeEvents]);
 
   // Configured Hero Banners from Store (Q1A, Q2A, Q3A, Q4A)
   const [configuredBanners, setConfiguredBanners] = useState<HeroBannerItem[]>(() => loadHomeBanners());
@@ -128,7 +177,7 @@ export function HomeConcertCatalog({
   const bannerSlides = useMemo(() => {
     if (activeBanners.length > 0) {
       return activeBanners.map(b => {
-        const linkedEvent = b.eventId ? allEvents.find(e => e.id === b.eventId) : undefined;
+        const linkedEvent = b.eventId ? activeEvents.find(e => e.id === b.eventId) : undefined;
         let targetUrl: string | null = null;
         if (b.linkType === 'concert') {
           targetUrl = b.eventId ? `/events/${b.eventId}` : (linkedEvent ? `/events/${linkedEvent.id}` : '#');
@@ -156,7 +205,7 @@ export function HomeConcertCatalog({
       ctaText: 'จองบัตรเลย',
       isClickable: true,
     }));
-  }, [activeBanners, upcomingEvents, allEvents]);
+  }, [activeBanners, upcomingEvents, activeEvents]);
 
   const totalSlides = bannerSlides.length;
 
@@ -284,13 +333,130 @@ export function HomeConcertCatalog({
     availability !== 'all' ||
     sortBy !== 'date_asc';
 
-  // Reset visibleCount on filter or search query changes (D-143)
+  // Reset visibleCount / fetch server catalog when filter or search query changes (D-143, #5)
   const filterKey = `${trimmedQuery}:${filterTab}:${selectedLocation}:${priceRange}:${availability}:${sortBy}`;
   useEffect(() => {
-    if (filterKey) {
-      setVisibleCount(BATCH_SIZE);
+    setVisibleCount(BATCH_SIZE);
+    if (!serverCatalogEnabled) return;
+
+    // Skip duplicate fetch on initial mount when SSR already loaded exact matching page 1
+    if (lastFetchedKeyRef.current === null) {
+      lastFetchedKeyRef.current = filterKey;
+      return;
     }
-  }, [filterKey]);
+    if (lastFetchedKeyRef.current === filterKey) return;
+
+    const controller = new AbortController();
+    const debounceMs = isSearching ? 180 : 0;
+
+    const timer = setTimeout(() => {
+      const params = new URLSearchParams({
+        page: '1',
+        limit: String(BATCH_SIZE),
+      });
+      if (query.trim()) params.set('q', query.trim());
+      if (!isSearching && filterTab !== 'all') params.set('tab', filterTab);
+      if (isSearching) {
+        if (selectedLocation !== 'all') params.set('location', selectedLocation);
+        if (priceRange !== 'all') params.set('priceRange', priceRange);
+        if (availability !== 'all') params.set('availability', availability);
+        if (sortBy !== 'date_asc') params.set('sort', sortBy);
+      }
+      if (locationFacets.length === 0) {
+        params.set('includeLocations', 'true');
+      }
+
+      setIsLoadingMore(true);
+      fetch(`/api/public/events?${params.toString()}`, { signal: controller.signal })
+        .then(res => (res.ok ? res.json() : null))
+        .then(data => {
+          if (controller.signal.aborted || !data || !Array.isArray(data.events)) return;
+          lastFetchedKeyRef.current = filterKey;
+          setServerEvents(data.events);
+          setServerTotalCount(typeof data.totalCount === 'number' ? data.totalCount : data.events.length);
+          setServerHasMore(Boolean(data.hasMore));
+          setServerPage(1);
+          if (!isSearching && filterTab === 'all' && typeof data.totalCount === 'number') {
+            setAllCatalogTotalCount(data.totalCount);
+          }
+          if (Array.isArray(data.locations) && data.locations.length > 0) {
+            setLocationFacets(data.locations);
+          }
+        })
+        .catch(() => {})
+        .finally(() => {
+          if (!controller.signal.aborted) {
+            setIsLoadingMore(false);
+          }
+        });
+    }, debounceMs);
+
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
+  }, [
+    filterKey,
+    serverCatalogEnabled,
+    isSearching,
+    query,
+    filterTab,
+    selectedLocation,
+    priceRange,
+    availability,
+    sortBy,
+    locationFacets.length,
+  ]);
+
+  const loadMoreServerEvents = useCallback(() => {
+    if (!serverCatalogEnabled || !serverHasMore || isLoadingMore) return;
+    const nextPage = serverPage + 1;
+    const params = new URLSearchParams({
+      page: String(nextPage),
+      limit: String(BATCH_SIZE),
+    });
+    if (query.trim()) params.set('q', query.trim());
+    if (!isSearching && filterTab !== 'all') params.set('tab', filterTab);
+    if (isSearching) {
+      if (selectedLocation !== 'all') params.set('location', selectedLocation);
+      if (priceRange !== 'all') params.set('priceRange', priceRange);
+      if (availability !== 'all') params.set('availability', availability);
+      if (sortBy !== 'date_asc') params.set('sort', sortBy);
+    }
+
+    setIsLoadingMore(true);
+    fetch(`/api/public/events?${params.toString()}`)
+      .then(res => (res.ok ? res.json() : null))
+      .then(data => {
+        if (!data || !Array.isArray(data.events)) return;
+        setServerEvents(prev => {
+          const seen = new Set(prev.map(e => e.id));
+          const additions = (data.events as PublicEventSummary[]).filter(e => !seen.has(e.id));
+          return [...prev, ...additions];
+        });
+        setServerTotalCount(typeof data.totalCount === 'number' ? data.totalCount : serverTotalCount);
+        setServerHasMore(Boolean(data.hasMore));
+        setServerPage(nextPage);
+        setVisibleCount(prev => prev + BATCH_SIZE);
+      })
+      .catch(() => {})
+      .finally(() => {
+        setIsLoadingMore(false);
+      });
+  }, [
+    serverCatalogEnabled,
+    serverHasMore,
+    isLoadingMore,
+    serverPage,
+    query,
+    isSearching,
+    filterTab,
+    selectedLocation,
+    priceRange,
+    availability,
+    sortBy,
+    serverTotalCount,
+  ]);
 
   // Monitor scroll position for Floating Back-to-Top Button (D-143)
   useEffect(() => {
@@ -317,7 +483,11 @@ export function HomeConcertCatalog({
     const observer = new IntersectionObserver(
       entries => {
         if (entries[0]?.isIntersecting) {
-          setVisibleCount(prev => prev + BATCH_SIZE);
+          if (serverCatalogEnabled) {
+            loadMoreServerEvents();
+          } else {
+            setVisibleCount(prev => prev + BATCH_SIZE);
+          }
         }
       },
       { rootMargin: '200px' },
@@ -325,9 +495,27 @@ export function HomeConcertCatalog({
 
     observer.observe(activeSentinel);
     return () => observer.disconnect();
-  }, [isSearching]);
+  }, [isSearching, serverCatalogEnabled, loadMoreServerEvents]);
 
   const activeSlide = bannerSlides[currentSlide] || null;
+  const displayedCatalogEvents = serverCatalogEnabled
+    ? serverEvents
+    : catalogEvents.slice(0, visibleCount);
+  const displayedSearchEvents = serverCatalogEnabled
+    ? serverEvents
+    : sortedSearchEvents.slice(0, visibleCount);
+  const searchTotalBadgeCount = serverCatalogEnabled
+    ? serverTotalCount
+    : searchFilteredEvents.length;
+  const hasMoreCatalog = serverCatalogEnabled
+    ? serverHasMore
+    : visibleCount < catalogEvents.length;
+  const hasMoreSearch = serverCatalogEnabled
+    ? serverHasMore
+    : visibleCount < sortedSearchEvents.length;
+  const catalogTabTotalCount = serverCatalogEnabled
+    ? allCatalogTotalCount
+    : allEvents.length;
 
   return (
     <div className="home-container">
@@ -349,12 +537,14 @@ export function HomeConcertCatalog({
                   {bannerSlides.map((slide, index) => {
                     const isActive = index === currentSlide;
                     const SlideContent = slide.imageUrl ? (
-                      /* biome-ignore lint/performance/noImgElement: wide panoramic banner */
-                      <img
+                      <ResponsiveImage
                         src={slide.imageUrl}
                         alt={`แบนเนอร์ ${slide.title || 'คอนเสิร์ต'}`}
                         className="banner-image"
                         loading={index === 0 ? 'eager' : 'lazy'}
+                        fetchPriority={index === 0 ? 'high' : 'auto'}
+                        widths={BANNER_WIDTHS}
+                        sizes={BANNER_SIZES}
                       />
                     ) : (
                       <div className="banner-graphic-card">
@@ -465,7 +655,7 @@ export function HomeConcertCatalog({
                   className={`catalog-tab-btn ${filterTab === 'all' ? 'active' : ''}`}
                   onClick={() => setFilterTab('all')}
                 >
-                  ทั้งหมด ({allEvents.length})
+                  ทั้งหมด ({catalogTabTotalCount})
                 </button>
                 <button
                   type="button"
@@ -488,7 +678,7 @@ export function HomeConcertCatalog({
               </div>
             </div>
 
-            {catalogEvents.length === 0 ? (
+            {displayedCatalogEvents.length === 0 ? (
               <div className="empty-filter-box">
                 <TicketIcon />
                 <p>ยังไม่มีรายการคอนเสิร์ตในหมวดหมู่นี้</p>
@@ -496,7 +686,7 @@ export function HomeConcertCatalog({
             ) : (
               <div className="catalog-grid-wrapper">
                 <div className="catalog-events-grid">
-                  {catalogEvents.slice(0, visibleCount).map(event => (
+                  {displayedCatalogEvents.map(event => (
                     <article key={event.id} className="concert-card-split catalog-card-item">
                       <Link
                         href={`/events/${event.id}`}
@@ -505,12 +695,13 @@ export function HomeConcertCatalog({
                       >
                         <div className="card-split-poster-frame">
                           {event.posterUrl ? (
-                            /* biome-ignore lint/performance/noImgElement: concert poster 4:5 */
-                            <img
+                            <ResponsiveImage
                               src={event.posterUrl}
                               alt={`โปสเตอร์ ${event.title}`}
                               className="card-split-img"
                               loading="lazy"
+                              widths={POSTER_WIDTHS}
+                              sizes={POSTER_SIZES}
                             />
                           ) : (
                             <div className="card-split-placeholder">
@@ -545,14 +736,14 @@ export function HomeConcertCatalog({
                   ))}
                 </div>
 
-                {visibleCount < catalogEvents.length ? (
+                {hasMoreCatalog ? (
                   <div
                     ref={catalogSentinelRef}
                     className="infinite-scroll-sentinel"
                     aria-hidden="true"
                   />
                 ) : (
-                  catalogEvents.length > BATCH_SIZE && (
+                  displayedCatalogEvents.length > BATCH_SIZE && (
                     <p className="all-events-loaded-msg">
                       ท่านได้ดูรายการคอนเสิร์ตทั้งหมดแล้ว
                     </p>
@@ -577,7 +768,7 @@ export function HomeConcertCatalog({
                   ผลการค้นหาสำหรับ &ldquo;<span className="search-results-query">{query}</span>&rdquo;
                 </h1>
                 <span className="search-count-badge">
-                  พบ {searchFilteredEvents.length} คอนเสิร์ต
+                  พบ {searchTotalBadgeCount} คอนเสิร์ต
                 </span>
               </div>
               <p className="search-results-sub">
@@ -619,9 +810,9 @@ export function HomeConcertCatalog({
                 onChange={e => setSelectedLocation(e.target.value)}
                 className="filter-select"
               >
-                <option value="all">ทุกสถานที่ ({allEvents.length})</option>
+                <option value="all">ทุกสถานที่ ({catalogTabTotalCount})</option>
                 {availableLocations.map(loc => {
-                  const count = allEvents.filter(ev => ev.location?.trim() === loc).length;
+                  const count = locationCountMap.get(loc) ?? 0;
                   return (
                     <option key={loc} value={loc}>
                       {loc} ({count})
@@ -686,10 +877,10 @@ export function HomeConcertCatalog({
           </section>
 
           {/* Results: Responsive Grid vs Clean Empty State (D-69, D-143) */}
-          {sortedSearchEvents.length > 0 ? (
+          {displayedSearchEvents.length > 0 ? (
             <div className="search-results-wrapper">
               <div className="search-results-grid">
-                {sortedSearchEvents.slice(0, visibleCount).map(event => (
+                {displayedSearchEvents.map(event => (
                   <article key={event.id} className="concert-card-split search-card-item">
                     <Link
                       href={`/events/${event.id}`}
@@ -698,12 +889,13 @@ export function HomeConcertCatalog({
                     >
                       <div className="card-split-poster-frame">
                         {event.posterUrl ? (
-                          /* biome-ignore lint/performance/noImgElement: concert poster 4:5 */
-                          <img
+                          <ResponsiveImage
                             src={event.posterUrl}
                             alt={`โปสเตอร์ ${event.title}`}
                             className="card-split-img"
                             loading="lazy"
+                            widths={POSTER_WIDTHS}
+                            sizes={POSTER_SIZES}
                           />
                         ) : (
                           <div className="card-split-placeholder">
@@ -738,14 +930,14 @@ export function HomeConcertCatalog({
                 ))}
               </div>
 
-              {visibleCount < sortedSearchEvents.length ? (
+              {hasMoreSearch ? (
                 <div
                   ref={searchSentinelRef}
                   className="infinite-scroll-sentinel"
                   aria-hidden="true"
                 />
               ) : (
-                sortedSearchEvents.length > BATCH_SIZE && (
+                displayedSearchEvents.length > BATCH_SIZE && (
                   <p className="all-events-loaded-msg">
                     ท่านได้ดูผลการค้นหาคอนเสิร์ตทั้งหมดแล้ว
                   </p>

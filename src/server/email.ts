@@ -39,11 +39,62 @@ export function clearCapturedEmails() {
 const sha256Hex = (data: Uint8Array | string) => createHash('sha256').update(data).digest('hex');
 const hmac = (key: Buffer | string, data: string) => createHmac('sha256', key).update(data).digest();
 
+const NON_ROUTABLE_EXACT_DOMAINS = new Set([
+  'localhost',
+  'example.com',
+  'example.org',
+  'example.net',
+]);
+
+const NON_ROUTABLE_SUFFIXES = [
+  '.invalid',
+  '.test',
+  '.localhost',
+  '.local',
+  '.example',
+  '.example.com',
+  '.example.org',
+  '.example.net',
+];
+
+function extractEmailDomain(address: string): string {
+  const angleMatch = address.match(/<([^<>]+)>/);
+  const cleanAddr = (angleMatch ? angleMatch[1] : address).trim().toLowerCase();
+  const atIdx = cleanAddr.lastIndexOf('@');
+  if (atIdx === -1) return '';
+  return cleanAddr.slice(atIdx + 1).replace(/\.+$/, '');
+}
+
+/**
+ * Returns true when an email destination uses a reserved non-routable / test domain
+ * (RFC 2606 / RFC 6761: .invalid, .test, .localhost, .local, .example, example.{com,org,net}).
+ */
+export function isNonRoutableEmailAddress(address: string): boolean {
+  const domain = extractEmailDomain(address);
+  if (!domain) return false;
+  if (NON_ROUTABLE_EXACT_DOMAINS.has(domain)) return true;
+  return NON_ROUTABLE_SUFFIXES.some(suffix => domain.endsWith(suffix));
+}
+
+function captureEmailLocally(message: EmailMessage, prefix = 'local-msg'): { id: string } {
+  if (capturedEmails.length >= 500) {
+    capturedEmails.shift();
+  }
+  capturedEmails.push({ ...message });
+  return { id: `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}` };
+}
+
 export function createSesTransport(config?: SesConfig | string): EmailTransport {
   return {
     async send(message: EmailMessage) {
       if (customTransport) {
         return customTransport.send(message);
+      }
+
+      // Vitest default transport never hits live AWS SES even if shell/.env.local has credentials.
+      // Explicit config objects in unit tests still exercise the SES signing & fetch contract.
+      if (config === undefined && process.env.VITEST && process.env.NODE_ENV !== 'production') {
+        return captureEmailLocally(message);
       }
 
       const accessKeyId =
@@ -72,11 +123,20 @@ export function createSesTransport(config?: SesConfig | string): EmailTransport 
             'SES credentials (SES_ACCESS_KEY_ID or AWS_ACCESS_KEY_ID, SES_SECRET_ACCESS_KEY or AWS_SECRET_ACCESS_KEY) are required in production',
           );
         }
-        if (capturedEmails.length >= 500) {
-          capturedEmails.shift();
+        return captureEmailLocally(message);
+      }
+
+      const hasCustomEndpoint = Boolean(typeof config === 'object' && config?.endpoint);
+      if (!hasCustomEndpoint && !process.env.VITEST && isNonRoutableEmailAddress(message.to)) {
+        if (process.env.NODE_ENV === 'production') {
+          throw new Error(
+            'ไม่สามารถส่งอีเมลไปยังโดเมนทดสอบหรือโดเมนที่ไม่มีอยู่จริง (non-routable domain)',
+          );
         }
-        capturedEmails.push({ ...message });
-        return { id: `local-msg-${Date.now()}-${Math.random().toString(36).slice(2, 8)}` };
+        console.warn(
+          `[TICKET] Suppressed AWS SES send to non-routable domain (${message.to}); captured locally instead.`,
+        );
+        return captureEmailLocally(message, 'local-suppressed');
       }
 
       // SES v2 SendEmail REST API: POST https://email.{region}.amazonaws.com/v2/email/outbound-emails

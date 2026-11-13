@@ -14,10 +14,11 @@ import {
 } from './icons';
 import { formatTime } from '@/lib/locale';
 import {
-  performOfflineAdmissionScan,
-  getOfflinePendingScans,
-  getOfflineDatasetKey,
-  syncPendingOfflineScans,
+  saveOfflineDatasetAsync,
+  getOfflineDatasetMetaAsync,
+  getOfflinePendingScansAsync,
+  performOfflineAdmissionScanAsync,
+  syncPendingOfflineScansAsync,
 } from '@/lib/offline-admission';
 
 interface ScannedTicketSummary {
@@ -128,19 +129,24 @@ export function ScannerAdmissionTerminal({
   const [syncFeedback, setSyncFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   useEffect(() => {
-    try {
-      const stored = localStorage.getItem(getOfflineDatasetKey(eventId));
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        if (parsed?.lastSuccessfulSync && typeof parsed.totalTickets === 'number') {
-          setOfflineDataset(parsed);
+    let active = true;
+    Promise.all([
+      getOfflineDatasetMetaAsync(eventId),
+      getOfflinePendingScansAsync(eventId),
+    ])
+      .then(([meta, pending]) => {
+        if (!active) return;
+        if (meta?.lastSuccessfulSync && typeof meta.totalTickets === 'number') {
+          setOfflineDataset(meta);
         }
-      }
-      const pending = getOfflinePendingScans(eventId);
-      setPendingSyncCount(pending.length);
-    } catch {
-      // Ignored
-    }
+        setPendingSyncCount(pending.length);
+      })
+      .catch(() => {
+        // Ignored
+      });
+    return () => {
+      active = false;
+    };
   }, [eventId]);
 
   async function handleDownloadOfflineDataset() {
@@ -152,9 +158,9 @@ export function ScannerAdmissionTerminal({
       if (!res.ok) {
         setSyncFeedback({ type: 'error', message: data.message || 'ไม่สามารถดาวน์โหลดชุดข้อมูลออฟไลน์ได้' });
       } else {
-        localStorage.setItem(getOfflineDatasetKey(eventId), JSON.stringify(data));
+        await saveOfflineDatasetAsync(eventId, data);
         setOfflineDataset(data);
-        const pending = getOfflinePendingScans(eventId);
+        const pending = await getOfflinePendingScansAsync(eventId);
         setPendingSyncCount(pending.length);
         setSyncFeedback({
           type: 'success',
@@ -168,7 +174,7 @@ export function ScannerAdmissionTerminal({
     }
   }
 
-  function handleToggleOfflineMode() {
+  async function handleToggleOfflineMode() {
     if (isOfflineMode) {
       // Switch back to online
       setIsOfflineMode(false);
@@ -183,7 +189,8 @@ export function ScannerAdmissionTerminal({
         return;
       }
 
-      if (offlineDataset?.isOfflineHalted || offlineDataset?.offlineStatus === 'halted_reconciliation_required') {
+      const meta = offlineDataset || (await getOfflineDatasetMetaAsync(eventId));
+      if (meta?.isOfflineHalted || meta?.offlineStatus === 'halted_reconciliation_required') {
         setSyncFeedback({
           type: 'error',
           message: 'การใช้งานโหมดออฟไลน์ถูกระงับเพื่อกระทบยอด: กรุณารอเจ้าของเว็บและผู้จัดงานตรวจสอบกระทบยอดให้เสร็จสิ้น',
@@ -191,8 +198,7 @@ export function ScannerAdmissionTerminal({
         return;
       }
 
-      const stored = localStorage.getItem(getOfflineDatasetKey(eventId));
-      if (!stored) {
+      if (!meta) {
         setSyncFeedback({
           type: 'error',
           message: 'กรุณาดาวน์โหลดชุดข้อมูลออฟไลน์ก่อนเริ่มใช้งานโหมดออฟไลน์',
@@ -200,6 +206,7 @@ export function ScannerAdmissionTerminal({
         return;
       }
 
+      setOfflineDataset(meta);
       setIsOfflineMode(true);
       setNonPrimaryOfflineWarning(null);
       setSyncFeedback(null);
@@ -217,7 +224,7 @@ export function ScannerAdmissionTerminal({
     setIsSyncingPending(true);
     setSyncFeedback(null);
     try {
-      const res = await syncPendingOfflineScans(eventId);
+      const res = await syncPendingOfflineScansAsync(eventId);
       if (res.success) {
         setPendingSyncCount(res.remainingCount);
         if (res.lastSuccessfulSync) {
@@ -274,7 +281,7 @@ export function ScannerAdmissionTerminal({
     if (isOfflineMode) {
       setLoading(true);
       try {
-        const offResult = performOfflineAdmissionScan({
+        const offResult = await performOfflineAdmissionScanAsync({
           eventId,
           sessionId,
           scannerId: scannerId || 'scanner',

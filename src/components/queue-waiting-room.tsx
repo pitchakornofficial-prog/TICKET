@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { startAdaptivePoller } from '@/lib/adaptive-polling';
 import { PurchaseStepIndicator } from './purchase-step-indicator';
 import {
   ClockIcon,
@@ -94,59 +95,69 @@ export function QueueWaitingRoom({
     }
   }, [eventId]);
 
-  // Query queue status from server or process admission (D-271)
+  // Query queue status from server or process admission with adaptive polling, jitter, and backoff (D-271)
   useEffect(() => {
     let isMounted = true;
-    let pollInterval: NodeJS.Timeout | null = null;
 
-    const checkQueue = async () => {
-      try {
-        const savedToken = typeof window !== 'undefined'
-          ? sessionStorage.getItem(`ticket_queue_token_${eventId}`)
-          : null;
-        const res = await fetch(`/api/events/${eventId}/queue/status?token=${savedToken || ''}`);
-        if (res.status === 503) {
-          // Keep polling when server queue is temporarily busy instead of bypassing queue
-          return;
-        }
-        if (!res.ok) throw new Error('Queue status API error');
-        const data = await res.json();
+    const stopPolling = startAdaptivePoller({
+      baseIntervalMs: 3000,
+      minIntervalMs: 2000,
+      maxIntervalMs: 15000,
+      hiddenIntervalMs: 12000,
+      jitterRatio: 0.2,
+      step: async ({ signal }) => {
+        try {
+          const savedToken = typeof window !== 'undefined'
+            ? sessionStorage.getItem(`ticket_queue_token_${eventId}`)
+            : null;
+          const res = await fetch(`/api/events/${eventId}/queue/status?token=${savedToken || ''}`, {
+            signal,
+          });
+          if (res.status === 503) {
+            // Keep polling with exponential backoff when server queue is temporarily busy instead of bypassing queue
+            return { backoff: true };
+          }
+          if (!res.ok) throw new Error('Queue status API error');
+          const data = await res.json();
 
-        if (!isMounted) return;
+          if (!isMounted || signal.aborted) return { stop: true };
 
-        if (data.token && typeof window !== 'undefined') {
-          sessionStorage.setItem(`ticket_queue_token_${eventId}`, data.token);
-        }
+          if (data.token && typeof window !== 'undefined') {
+            sessionStorage.setItem(`ticket_queue_token_${eventId}`, data.token);
+          }
 
-        if (data.queueNumber) {
-          setQueueNumber(`A-${data.queueNumber}`);
-        }
+          if (data.queueNumber) {
+            setQueueNumber(`A-${data.queueNumber}`);
+          }
 
-        if (data.allowed) {
-          // Within 200 users: granted direct admission
-          setPeopleAhead(0);
-          setIsReady(true);
-          if (pollInterval) clearInterval(pollInterval);
-        } else {
-          // Person 201 onwards: in waiting queue
+          if (data.allowed) {
+            // Within 200 users: granted direct admission
+            setPeopleAhead(0);
+            setIsReady(true);
+            return { stop: true };
+          }
+
+          // Person 201 onwards: in waiting queue; scale interval smoothly by queue depth
           const ahead = Math.max(0, data.peopleAhead ?? 1);
           setPeopleAhead(ahead);
           setTotalQueueCount(prev => Math.max(prev, ahead));
-        }
-      } catch {
-        // Fallback for isolated environments or network drop
-        if (!isMounted) return;
-        setPeopleAhead(0);
-        setIsReady(true);
-      }
-    };
 
-    checkQueue();
-    pollInterval = setInterval(checkQueue, 2500);
+          const adaptiveDelayMs =
+            ahead > 200 ? 8000 : ahead > 50 ? 5000 : 3000;
+          return { nextDelayMs: adaptiveDelayMs };
+        } catch {
+          // Fallback for isolated environments or network drop
+          if (!isMounted || signal.aborted) return { stop: true };
+          setPeopleAhead(0);
+          setIsReady(true);
+          return { stop: true };
+        }
+      },
+    });
 
     return () => {
       isMounted = false;
-      if (pollInterval) clearInterval(pollInterval);
+      stopPolling();
     };
   }, [eventId]);
 

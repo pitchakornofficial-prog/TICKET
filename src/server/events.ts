@@ -55,7 +55,7 @@ export interface SessionDraftInput {
 export interface PublicEventSummary {
   id: string;
   title: string;
-  description: string;
+  description?: string;
   location: string;
   posterUrl: string | null;
   limitPerOrder: number;
@@ -65,6 +65,32 @@ export interface PublicEventSummary {
   startingPrice: number;
   approvedSessionCount: number;
   totalQuota: number;
+}
+
+export interface PublicCatalogQueryOptions {
+  q?: string;
+  tab?: 'all' | 'available' | 'upcoming';
+  location?: string;
+  priceRange?: 'all' | 'under1500' | '1500to3000' | 'above3000';
+  availability?: 'all' | 'available' | 'upcoming';
+  sort?: 'date_asc' | 'price_asc' | 'price_desc';
+  page?: number;
+  limit?: number;
+  includeLocations?: boolean;
+}
+
+export interface PublicCatalogLocationFacet {
+  location: string;
+  count: number;
+}
+
+export interface PublicEventCatalogResult {
+  events: PublicEventSummary[];
+  totalCount: number;
+  page: number;
+  limit: number;
+  hasMore: boolean;
+  locations: PublicCatalogLocationFacet[];
 }
 
 const eventSchemaPromises = new WeakMap<Pool, Promise<void>>();
@@ -618,7 +644,7 @@ export async function listPublicEvents(pool: Pool, search?: string): Promise<Pub
       JOIN event_sessions s ON s."eventId" = e.id AND s.status = 'approved'
       LEFT JOIN ticket_types tt ON tt."sessionId" = s.id
       WHERE e.status = 'approved'
-        AND ($1::text IS NULL OR e.title ILIKE '%' || $1 || '%' OR e.location ILIKE '%' || $1 || '%')
+        AND ($1::text IS NULL OR e.title ILIKE '%' || $1 || '%' OR e.location ILIKE '%' || $1 || '%' OR COALESCE(e.description, '') ILIKE '%' || $1 || '%')
       GROUP BY e.id, e.title, e.description, e.location, e."posterUrl", e."limitPerOrder", e.status
       ORDER BY MIN(s."startTime") ASC
     `;
@@ -639,6 +665,165 @@ export async function listPublicEvents(pool: Pool, search?: string): Promise<Pub
       console.error('Failed to list public events:', error);
     }
     return [];
+  }
+}
+
+/**
+ * Queries the public concert catalog with server-side filtering (including event description search),
+ * sorting, and pagination without shipping event descriptions over the wire.
+ */
+export async function queryPublicEventsCatalog(
+  pool: Pool,
+  options: PublicCatalogQueryOptions = {},
+): Promise<PublicEventCatalogResult> {
+  const page = Math.max(1, Math.floor(options.page || 1));
+  const limit = Math.min(48, Math.max(1, Math.floor(options.limit || 12)));
+  const offset = (page - 1) * limit;
+  const search = options.q?.trim() ? options.q.trim() : null;
+  const locationFilter =
+    options.location && options.location !== 'all' ? options.location.trim() : null;
+  const priceRange = options.priceRange || 'all';
+  const effectiveAvailability =
+    search !== null
+      ? options.availability || 'all'
+      : options.tab && options.tab !== 'all'
+        ? options.tab
+        : options.availability || 'all';
+  const sort = options.sort || 'date_asc';
+
+  const orderByClause =
+    sort === 'price_asc'
+      ? '"startingPrice" ASC, "earliestStartTime" ASC'
+      : sort === 'price_desc'
+        ? '"startingPrice" DESC, "earliestStartTime" ASC'
+        : '"earliestStartTime" ASC';
+
+  try {
+    await ensureEventSchema(pool);
+    const catalogPromise = pool.query<{
+      id: string;
+      title: string;
+      location: string;
+      posterUrl: string | null;
+      limitPerOrder: number;
+      status: string;
+      earliestStartTime: Date;
+      latestEndTime: Date;
+      startingPrice: string | number;
+      approvedSessionCount: number;
+      totalQuota: number;
+      fullCount: number;
+    }>(
+      `WITH event_agg AS (
+         SELECT
+           e.id,
+           e.title,
+           COALESCE(e.description, '') AS description_text,
+           e.location,
+           e."posterUrl",
+           e."limitPerOrder",
+           e.status,
+           MIN(s."startTime") AS "earliestStartTime",
+           MAX(s."endTime") AS "latestEndTime",
+           COALESCE(MIN(tt.price), 0) AS "startingPrice",
+           COUNT(DISTINCT s.id)::int AS "approvedSessionCount",
+           COALESCE(SUM(tt.quota), 0)::int AS "totalQuota"
+         FROM events e
+         JOIN event_sessions s ON s."eventId" = e.id AND s.status = 'approved'
+         LEFT JOIN ticket_types tt ON tt."sessionId" = s.id
+         WHERE e.status = 'approved'
+         GROUP BY e.id, e.title, e.description, e.location, e."posterUrl", e."limitPerOrder", e.status
+       ),
+       filtered AS (
+         SELECT
+           id, title, location, "posterUrl", "limitPerOrder", status,
+           "earliestStartTime", "latestEndTime", "startingPrice",
+           "approvedSessionCount", "totalQuota"
+         FROM event_agg
+         WHERE (
+           $1::text IS NULL
+           OR title ILIKE '%' || $1 || '%'
+           OR location ILIKE '%' || $1 || '%'
+           OR description_text ILIKE '%' || $1 || '%'
+         )
+           AND ($2::text IS NULL OR TRIM(location) = $2)
+           AND (
+             $3::text = 'all'
+             OR ($3 = 'under1500' AND "startingPrice" <= 1500)
+             OR ($3 = '1500to3000' AND "startingPrice" > 1500 AND "startingPrice" <= 3000)
+             OR ($3 = 'above3000' AND "startingPrice" > 3000)
+           )
+           AND (
+             $4::text = 'all'
+             OR ($4 = 'available' AND "totalQuota" > 0)
+             OR ($4 = 'upcoming' AND "earliestStartTime" > now())
+           )
+       )
+       SELECT *, COUNT(*) OVER()::int AS "fullCount"
+       FROM filtered
+       ORDER BY ${orderByClause}
+       LIMIT $5 OFFSET $6`,
+      [search, locationFilter, priceRange, effectiveAvailability, limit, offset],
+    );
+
+    const locationsPromise =
+      options.includeLocations === false
+        ? Promise.resolve(null)
+        : pool.query<{ location: string; count: number }>(
+            `SELECT TRIM(e.location) AS location, COUNT(DISTINCT e.id)::int AS count
+             FROM events e
+             JOIN event_sessions s ON s."eventId" = e.id AND s.status = 'approved'
+             WHERE e.status = 'approved' AND TRIM(COALESCE(e.location, '')) <> ''
+             GROUP BY TRIM(e.location)
+             ORDER BY TRIM(e.location) ASC`,
+          );
+
+    const [catalogRes, locRes] = await Promise.all([catalogPromise, locationsPromise]);
+    const totalCount =
+      catalogRes.rows[0]?.fullCount ??
+      (page === 1 ? 0 : (await pool.query<{ total: number }>(
+        `SELECT COUNT(DISTINCT e.id)::int AS total
+         FROM events e
+         JOIN event_sessions s ON s."eventId" = e.id AND s.status = 'approved'
+         WHERE e.status = 'approved'
+           AND ($1::text IS NULL OR e.title ILIKE '%' || $1 || '%' OR e.location ILIKE '%' || $1 || '%' OR COALESCE(e.description, '') ILIKE '%' || $1 || '%')`,
+        [search],
+      )).rows[0]?.total ?? 0);
+
+    const events: PublicEventSummary[] = catalogRes.rows.map(r => ({
+      id: r.id,
+      title: r.title,
+      location: r.location,
+      posterUrl: r.posterUrl,
+      limitPerOrder: Number(r.limitPerOrder),
+      status: r.status,
+      earliestStartTime:
+        r.earliestStartTime instanceof Date
+          ? r.earliestStartTime.toISOString()
+          : String(r.earliestStartTime),
+      latestEndTime:
+        r.latestEndTime instanceof Date ? r.latestEndTime.toISOString() : String(r.latestEndTime),
+      startingPrice: Number(r.startingPrice),
+      approvedSessionCount: Number(r.approvedSessionCount),
+      totalQuota: Number(r.totalQuota),
+    }));
+
+    return {
+      events,
+      totalCount,
+      page,
+      limit,
+      hasMore: offset + events.length < totalCount,
+      locations: locRes ? locRes.rows : [],
+    };
+  } catch (error) {
+    const err = error as { code?: string; message?: string };
+    if (err?.code === 'ECONNREFUSED') {
+      console.warn('[TICKET] ฐานข้อมูล PostgreSQL ยังไม่พร้อมทำงานที่ 127.0.0.1:55432 (รัน "npm run db:up" เพื่อเปิดใช้งาน)');
+    } else {
+      console.error('Failed to query public event catalog:', error);
+    }
+    return { events: [], totalCount: 0, page, limit, hasMore: false, locations: [] };
   }
 }
 
@@ -667,45 +852,91 @@ export async function getPublicEventWithApprovedSessions(pool: Pool, eventId: st
       [eventId],
     );
 
+    if (sessRes.rows.length === 0) {
+      return { ...event, sessions: [] };
+    }
+
+    const sessionIds = sessRes.rows.map(s => s.id as string);
     const hasOrderTablesRes = await pool.query(
-      "SELECT to_regclass('public.orders') as orders, to_regclass('public.order_items') as items",
+      "SELECT to_regclass('public.orders') as orders, to_regclass('public.order_items') as items, to_regclass('public.tickets') as tickets",
     );
     const canCheckHeld = Boolean(hasOrderTablesRes.rows[0]?.orders && hasOrderTablesRes.rows[0]?.items);
+    const canCheckTickets = Boolean(hasOrderTablesRes.rows[0]?.tickets);
 
-    const sessions = [];
-    for (const sess of sessRes.rows) {
-      const query = canCheckHeld
-        ? `SELECT tt.id, tt.name, tt.price, tt.description, tt."isStudentPrivilege", tt."studentPrice",
-                  GREATEST(0, tt.quota - GREATEST(0, COALESCE(
-                    (SELECT SUM(oi.quantity)::int
-                     FROM order_items oi
-                     JOIN orders o ON oi."orderId" = o.id
-                     WHERE oi."ticketTypeId" = tt.id
-                       AND (o.status = 'paid' OR (o.status = 'reserved' AND o."expiresAt" > now()))
-                    ), 0
-                  ) - COALESCE(
-                    (SELECT COUNT(*)::int
-                     FROM tickets t
-                     WHERE t."ticketTypeId" = tt.id AND t.status = 'refunded'
-                    ), 0
-                  ))) AS quota
-           FROM ticket_types tt
-           WHERE tt."sessionId" = $1
-           ORDER BY tt.price ASC`
-        : 'SELECT id, name, price, quota, description, "isStudentPrivilege", "studentPrice" FROM ticket_types WHERE "sessionId" = $1 ORDER BY price ASC';
+    // Single batched query across all sessions with pre-aggregated held & refunded counts (#4)
+    const ttQuery = canCheckHeld
+      ? `WITH target_tt AS (
+           SELECT id
+           FROM ticket_types
+           WHERE "sessionId" = ANY($1::text[])
+         ),
+         held_agg AS (
+           SELECT oi."ticketTypeId", COALESCE(SUM(oi.quantity), 0)::int AS held_qty
+           FROM order_items oi
+           JOIN orders o ON oi."orderId" = o.id
+           JOIN target_tt ttt ON ttt.id = oi."ticketTypeId"
+           WHERE o.status = 'paid' OR (o.status = 'reserved' AND o."expiresAt" > now())
+           GROUP BY oi."ticketTypeId"
+         )${
+           canCheckTickets
+             ? `,
+         refund_agg AS (
+           SELECT t."ticketTypeId", COUNT(*)::int AS refunded_qty
+           FROM tickets t
+           JOIN target_tt ttt ON ttt.id = t."ticketTypeId"
+           WHERE t.status = 'refunded'
+           GROUP BY t."ticketTypeId"
+         )`
+             : ''
+         }
+         SELECT tt.id, tt."sessionId", tt.name, tt.price, tt.description,
+                tt."isStudentPrivilege", tt."studentPrice",
+                GREATEST(0, tt.quota - GREATEST(0, COALESCE(ha.held_qty, 0) - ${
+                  canCheckTickets ? 'COALESCE(ra.refunded_qty, 0)' : '0'
+                })) AS quota
+         FROM ticket_types tt
+         LEFT JOIN held_agg ha ON ha."ticketTypeId" = tt.id
+         ${canCheckTickets ? 'LEFT JOIN refund_agg ra ON ra."ticketTypeId" = tt.id' : ''}
+         WHERE tt."sessionId" = ANY($1::text[])
+         ORDER BY tt."sessionId" ASC, tt.price ASC`
+      : `SELECT id, "sessionId", name, price, quota, description, "isStudentPrivilege", "studentPrice"
+         FROM ticket_types
+         WHERE "sessionId" = ANY($1::text[])
+         ORDER BY "sessionId" ASC, price ASC`;
 
-      const ttRes = await pool.query(query, [sess.id]);
-      sessions.push({
-        ...sess,
-        ticketTypes: ttRes.rows.map(tt => ({
-          ...tt,
-          price: Number(tt.price),
-          quota: Number(tt.quota),
-          isStudentPrivilege: Boolean(tt.isStudentPrivilege),
-          studentPrice: tt.studentPrice != null ? Number(tt.studentPrice) : null,
-        })),
+    const ttRes = await pool.query(ttQuery, [sessionIds]);
+
+    const ttBySession = new Map<
+      string,
+      Array<{
+        id: string;
+        name: string;
+        price: number;
+        quota: number;
+        description: string | null;
+        isStudentPrivilege: boolean;
+        studentPrice: number | null;
+      }>
+    >();
+
+    for (const row of ttRes.rows) {
+      const list = ttBySession.get(row.sessionId) || [];
+      list.push({
+        id: row.id,
+        name: row.name,
+        price: Number(row.price),
+        quota: Number(row.quota),
+        description: row.description ?? null,
+        isStudentPrivilege: Boolean(row.isStudentPrivilege),
+        studentPrice: row.studentPrice != null ? Number(row.studentPrice) : null,
       });
+      ttBySession.set(row.sessionId, list);
     }
+
+    const sessions = sessRes.rows.map(sess => ({
+      ...sess,
+      ticketTypes: ttBySession.get(sess.id) || [],
+    }));
 
     return { ...event, sessions };
   } catch (error) {

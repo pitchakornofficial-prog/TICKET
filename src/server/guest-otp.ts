@@ -1,6 +1,6 @@
 import { createHmac, randomInt, randomUUID, timingSafeEqual } from 'node:crypto';
 import type { Pool } from 'pg';
-import { emailTransport } from './email.ts';
+import { emailTransport, isNonRoutableEmailAddress } from './email.ts';
 import { inTransaction } from './database.ts';
 import { isRealPgPool } from './pg-pool-utils.ts';
 
@@ -446,6 +446,17 @@ export function validateBuyerDetails(input: Partial<GuestBuyerDetails>): {
   }
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     return { valid: false, error: 'รูปแบบอีเมลไม่ถูกต้อง' };
+  }
+  const hasLiveSesCreds = Boolean(
+    process.env.SES_ACCESS_KEY_ID?.trim() || process.env.AWS_ACCESS_KEY_ID?.trim(),
+  );
+  if (
+    process.env.NODE_ENV === 'production' &&
+    !process.env.VITEST &&
+    hasLiveSesCreds &&
+    isNonRoutableEmailAddress(email)
+  ) {
+    return { valid: false, error: 'กรุณาใช้อีเมลที่ใช้งานได้จริง ไม่สามารถใช้โดเมนสำหรับทดสอบได้' };
   }
   if (!phone) {
     return { valid: false, error: 'กรุณากรอกเบอร์โทรศัพท์' };

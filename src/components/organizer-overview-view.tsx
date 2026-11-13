@@ -83,39 +83,31 @@ export function OrganizerOverviewView({
       setEvents(loadedEvents);
 
       const statsMap: Record<string, EventProgressStats> = {};
-      const BATCH_SIZE = 3;
-
-      for (let i = 0; i < loadedEvents.length; i += BATCH_SIZE) {
-        if (controller.signal.aborted) return;
-        const batch = loadedEvents.slice(i, i + BATCH_SIZE);
-        await Promise.allSettled(
-          batch.map(async (ev) => {
-            try {
-              const reportRes = await fetch(`/api/organizer/events/${ev.id}/money-report`, {
-                cache: 'no-store',
-                signal: controller.signal,
-              });
-              if (reportRes.ok) {
-                const reportData = await reportRes.json();
-                if (reportData.report) {
-                  const rep = reportData.report;
-                  const validTickets = rep.validTicketsCount ?? 0;
-                  const gross = rep.grossSales ?? 0;
-                  const fee = rep.organizerFee ?? Math.round(gross * 0.03);
-                  const net = rep.netEntitlement ?? (gross - fee);
-                  statsMap[ev.id] = {
-                    soldTickets: validTickets,
-                    grossSales: gross,
-                    fee,
-                    netSales: net,
-                  };
-                }
-              }
-            } catch {
-              // Silently skip failed or aborted reports
+      if (loadedEvents.length > 0 && !controller.signal.aborted) {
+        try {
+          const summariesRes = await fetch('/api/organizer/finance/summaries', {
+            cache: 'no-store',
+            signal: controller.signal,
+          });
+          if (summariesRes.ok) {
+            const summariesData = await summariesRes.json();
+            const summaries = Array.isArray(summariesData?.summaries) ? summariesData.summaries : [];
+            for (const rep of summaries) {
+              const validTickets = rep.totalTicketsValidCount ?? rep.validTicketsCount ?? 0;
+              const gross = rep.grossSales ?? 0;
+              const fee = rep.organizerFee ?? Math.round(gross * 0.03);
+              const net = rep.netEntitlement ?? (gross - fee);
+              statsMap[rep.eventId] = {
+                soldTickets: validTickets,
+                grossSales: gross,
+                fee,
+                netSales: net,
+              };
             }
-          }),
-        );
+          }
+        } catch {
+          // Silently skip failed or aborted summaries
+        }
       }
 
       if (!controller.signal.aborted) {

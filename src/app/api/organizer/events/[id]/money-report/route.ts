@@ -1,6 +1,6 @@
 import { createSafeErrorResponse } from '@/server/api-error';
 import { getAuth } from '@/server/auth';
-import { getEventMoneyReport } from '@/server/reports';
+import { getEventMoneyReport, parseMoneyReportQueryOptions } from '@/server/reports';
 import type { Pool } from 'pg';
 
 export const runtime = 'nodejs';
@@ -30,10 +30,16 @@ export async function GET(
   const pool = auth.options.database as Pool;
 
   try {
-    const report = await getEventMoneyReport(pool, eventId, {
-      id: session.user.id,
-      role: session.user.role as 'organizer' | 'owner',
-    });
+    const options = parseMoneyReportQueryOptions(request.url);
+    const report = await getEventMoneyReport(
+      pool,
+      eventId,
+      {
+        id: session.user.id,
+        role: session.user.role as 'organizer' | 'owner',
+      },
+      options,
+    );
 
     return Response.json({ report }, { status: 200, headers: { 'Cache-Control': 'no-store' } });
   } catch (error: unknown) {

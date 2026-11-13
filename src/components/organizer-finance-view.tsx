@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import type { EventMoneyReportDetail, PayoutHistoryItem } from '@/server/reports';
+import type { EventFinanceSummaryItem, EventMoneyReportDetail, PayoutHistoryItem } from '@/server/reports';
 import { formatBaht, formatDate, formatTime } from '@/lib/locale';
 import {
   BanknotesIcon,
@@ -98,8 +98,8 @@ export function OrganizerFinanceView({
   // Active event's report
   const [currentReport, setCurrentReport] = useState<EventMoneyReportDetail | null>(null);
 
-  // All reports cache for top KPI aggregate
-  const [allReports, setAllReports] = useState<Record<string, EventMoneyReportDetail>>({});
+  // All reports/summaries cache for top KPI aggregate
+  const [allReports, setAllReports] = useState<Record<string, EventFinanceSummaryItem | EventMoneyReportDetail>>({});
 
   // Search in concert selector
   const [concertSearchQuery, setConcertSearchQuery] = useState('');
@@ -244,12 +244,12 @@ export function OrganizerFinanceView({
     loadEvents();
   }, [loadEvents]);
 
-  // 2. Load report for selected event
+  // 2. Load report for selected event (orders not needed in this view)
   const loadReport = useCallback(async (eventId: string) => {
     if (!eventId) return;
     setReportLoading(true);
     try {
-      const res = await fetch(`/api/organizer/events/${eventId}/money-report`, {
+      const res = await fetch(`/api/organizer/events/${eventId}/money-report?includeOrders=false`, {
         cache: 'no-store',
       });
       const data = await res.json();
@@ -274,23 +274,23 @@ export function OrganizerFinanceView({
     }
   }, [selectedEventId, loadReport]);
 
-  // Pre-load all reports in the background to calculate aggregate KPIs
+  // Pre-load all finance summaries in a single batched request for aggregate KPIs
   useEffect(() => {
-    if (events.length > 0) {
-      for (const ev of events) {
-        if (!allReports[ev.id]) {
-          fetch(`/api/organizer/events/${ev.id}/money-report`, { cache: 'no-store' })
-            .then((res) => (res.ok ? res.json() : null))
-            .then((data) => {
-              if (data?.report) {
-                setAllReports((prev) => ({ ...prev, [ev.id]: data.report }));
-              }
-            })
-            .catch(() => {});
+    if (events.length === 0) return;
+    const controller = new AbortController();
+    fetch('/api/organizer/finance/summaries', { cache: 'no-store', signal: controller.signal })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (controller.signal.aborted || !Array.isArray(data?.summaries)) return;
+        const summaryMap: Record<string, EventFinanceSummaryItem> = {};
+        for (const s of data.summaries as EventFinanceSummaryItem[]) {
+          summaryMap[s.eventId] = s;
         }
-      }
-    }
-  }, [events, allReports]);
+        setAllReports((prev) => ({ ...summaryMap, ...prev }));
+      })
+      .catch(() => {});
+    return () => controller.abort();
+  }, [events]);
 
   // Refresh handler
   const handleRefresh = async () => {

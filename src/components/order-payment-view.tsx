@@ -7,6 +7,7 @@ import type { OrderReservationDetail } from '@/server/reservation';
 import type { PaymentChargeDetail } from '@/server/payment';
 import type { TicketDetail } from '@/server/tickets';
 import { formatBaht, formatDate, formatTime } from '@/lib/locale';
+import { startAdaptivePoller } from '@/lib/adaptive-polling';
 import { isUbuEmail } from './guest-checkout-entry';
 import { PurchaseStepIndicator } from './purchase-step-indicator';
 import { PurchaseTermsFaqList } from './purchase-terms-faq-list';
@@ -180,36 +181,53 @@ export function OrderPaymentView({ orderId }: OrderPaymentViewProps) {
   }, [orderId, handleGeneratePaymentQr, router]);
 
 
-  // Poll order status while reserved to detect payment completion via webhook in real time
+  // Poll order status while reserved with adaptive intervals, jitter, and backoff
   useEffect(() => {
     if (!orderId || reservation?.status !== 'reserved') return;
 
-    const interval = setInterval(async () => {
-      try {
-        const guestToken =
-          typeof window !== 'undefined'
-            ? sessionStorage.getItem('ticket_guest_otp_token') || ''
-            : '';
-        const res = await fetch(`/api/public/checkout/orders/${orderId}`, {
-          headers: guestToken ? { 'x-guest-token': guestToken } : {},
-        });
-        if (!res.ok) return;
-        const data = await res.json();
-        if (data?.reservation) {
-          if (data.reservation.status === 'paid') {
-            setReservation(data.reservation);
-            router.replace(`/orders/${orderId}/success`);
-          } else if (data.reservation.status === 'expired') {
-            setReservation(data.reservation);
-            setIsTimeoutModalOpen(true);
+    return startAdaptivePoller({
+      baseIntervalMs: 3000,
+      minIntervalMs: 2500,
+      maxIntervalMs: 15000,
+      hiddenIntervalMs: 12000,
+      jitterRatio: 0.2,
+      immediate: false,
+      step: async ({ signal, attempt }) => {
+        try {
+          const guestToken =
+            typeof window !== 'undefined'
+              ? sessionStorage.getItem('ticket_guest_otp_token') || ''
+              : '';
+          const res = await fetch(`/api/public/checkout/orders/${orderId}`, {
+            headers: guestToken ? { 'x-guest-token': guestToken } : {},
+            signal,
+          });
+          if (!res.ok) {
+            return { backoff: true };
           }
+          const data = await res.json();
+          if (signal.aborted) return { stop: true };
+          if (data?.reservation) {
+            if (data.reservation.status === 'paid') {
+              setReservation(data.reservation);
+              router.replace(`/orders/${orderId}/success`);
+              return { stop: true };
+            }
+            if (data.reservation.status === 'expired') {
+              setReservation(data.reservation);
+              setIsTimeoutModalOpen(true);
+              return { stop: true };
+            }
+          }
+          // Gradually widen interval as reservation waiting continues
+          const nextDelayMs = attempt >= 10 ? 7500 : attempt >= 4 ? 5000 : 3000;
+          return { nextDelayMs };
+        } catch {
+          if (signal.aborted) return { stop: true };
+          return { backoff: true };
         }
-      } catch {
-        // silent polling catch
-      }
-    }, 2500);
-
-    return () => clearInterval(interval);
+      },
+    });
   }, [orderId, reservation?.status, router]);
 
   // Fetch issued tickets when order is paid
