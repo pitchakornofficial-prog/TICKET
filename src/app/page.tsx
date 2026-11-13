@@ -1,4 +1,5 @@
 import { Suspense } from 'react';
+import { unstable_cache } from 'next/cache';
 import { getDatabasePool } from '@/server/database';
 import {
   queryPublicEventsCatalog,
@@ -14,6 +15,19 @@ export const metadata = {
 
 const INITIAL_CATALOG_PAGE_SIZE = 12;
 
+const getCachedDefaultCatalog = unstable_cache(
+  async () => {
+    const pool = getDatabasePool();
+    return queryPublicEventsCatalog(pool, {
+      page: 1,
+      limit: INITIAL_CATALOG_PAGE_SIZE,
+      includeLocations: true,
+    });
+  },
+  ['home-public-events-catalog'],
+  { revalidate: 30, tags: ['public-events'] },
+);
+
 async function AsyncHomeCatalog({ q }: { q?: string }) {
   let initialCatalog: PublicEventCatalogResult = {
     events: [],
@@ -25,14 +39,18 @@ async function AsyncHomeCatalog({ q }: { q?: string }) {
   };
 
   try {
-    const pool = getDatabasePool();
-    // Filter and paginate server-side without shipping descriptions in RSC payload
-    initialCatalog = await queryPublicEventsCatalog(pool, {
-      q,
-      page: 1,
-      limit: INITIAL_CATALOG_PAGE_SIZE,
-      includeLocations: true,
-    });
+    if (q?.trim()) {
+      const pool = getDatabasePool();
+      // Filter and paginate server-side without shipping descriptions in RSC payload
+      initialCatalog = await queryPublicEventsCatalog(pool, {
+        q,
+        page: 1,
+        limit: INITIAL_CATALOG_PAGE_SIZE,
+        includeLocations: true,
+      });
+    } else {
+      initialCatalog = await getCachedDefaultCatalog();
+    }
   } catch (error) {
     const err = error as { code?: string; message?: string };
     if (err?.code !== 'ECONNREFUSED') {

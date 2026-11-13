@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { unstable_cache } from 'next/cache';
 import { notFound } from 'next/navigation';
 import {
   CalendarIcon,
@@ -30,6 +31,14 @@ interface OtherArticleInfo {
   publishedAt: string;
 }
 
+export const revalidate = 60;
+
+const getCachedNewsById = unstable_cache(
+  async (id: string) => getPublishedNewsById(getDatabasePool(), id),
+  ['public-news-detail'],
+  { revalidate: 60, tags: ['public-news'] },
+);
+
 export default async function NewsDetailPage({
   params,
 }: {
@@ -50,7 +59,7 @@ export default async function NewsDetailPage({
   let pool: ReturnType<typeof getDatabasePool> | null = null;
   try {
     pool = getDatabasePool();
-    const dbItem = await getPublishedNewsById(pool, id);
+    const dbItem = await getCachedNewsById(id);
     if (dbItem) {
       newsItem = {
         ...dbItem,

@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { unstable_cache } from 'next/cache';
 import { notFound } from 'next/navigation';
 import { TicketIcon } from '@/components/ticket-icon';
 import { AlertIcon } from '@/components/alert-icon';
@@ -29,6 +30,12 @@ interface EventDetailPageProps {
   searchParams?: Promise<{ orderId?: string; expired?: string }>;
 }
 
+const getCachedPublicEvent = unstable_cache(
+  async (eventId: string) => getPublicEventWithApprovedSessions(getDatabasePool(), eventId),
+  ['public-event-detail'],
+  { revalidate: 15, tags: ['public-events'] },
+);
+
 export default async function EventDetailPage({ params, searchParams }: EventDetailPageProps) {
   const { id } = await params;
   const resolvedSearchParams = searchParams ? await searchParams : {};
@@ -37,8 +44,7 @@ export default async function EventDetailPage({ params, searchParams }: EventDet
   let event = null;
 
   try {
-    const pool = getDatabasePool();
-    event = await getPublicEventWithApprovedSessions(pool, id);
+    event = await getCachedPublicEvent(id);
   } catch (error) {
     const err = error as { code?: string; message?: string };
     if (err?.code !== 'ECONNREFUSED') {

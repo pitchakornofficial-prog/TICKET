@@ -1,6 +1,7 @@
 import { createSafeErrorResponse } from '@/server/api-error';
 import { assertSameOrigin } from '@/server/origin';
 import { getAuth } from '@/server/auth';
+import { safeRevalidateTag } from '@/server/cache';
 import { listPendingSessionsForOwner, approveSession, rejectSession } from '@/server/events';
 import { saveEventFeeSettings, getEventFeeSettings } from '@/server/fees';
 import type { Pool } from 'pg';
@@ -102,6 +103,7 @@ export async function POST(request: Request) {
       }
     }
 
+    safeRevalidateTag('public-events');
     return Response.json({ message: 'อนุมัติรอบการแสดงและบันทึกข้อตกลงค่าบริการสำเร็จ', result }, { status: 200 });
   } catch (error: unknown) {
     return createSafeErrorResponse(error, 'เกิดข้อผิดพลาด', { defaultStatus: 400 });
