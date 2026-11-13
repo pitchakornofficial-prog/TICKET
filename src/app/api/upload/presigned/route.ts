@@ -1,11 +1,15 @@
 import type { Pool } from 'pg';
 import { getAuth } from '@/server/auth';
+import { assertSameOrigin } from '@/server/origin';
 import { MAX_JSON_BODY_SIZE, readBoundedJson } from '@/server/upload-quota';
 import { handlePresignedRequest } from '../route';
 
 export const runtime = 'nodejs';
 
 export async function POST(request: Request) {
+  const originError = assertSameOrigin(request);
+  if (originError) return originError;
+
   const auth = getAuth();
   const session = await auth.api.getSession({ headers: request.headers });
   if (!session || (session.user.role !== 'organizer' && session.user.role !== 'owner')) {
