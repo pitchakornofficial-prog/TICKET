@@ -7,6 +7,7 @@ import { ensureReservationSchema } from './reservation.ts';
 import { ensureRefundSchema, processSessionCancellationRefunds } from './refunds.ts';
 import { ensureNewsSchema } from './news.ts';
 import { ensureTicketSchema } from './tickets.ts';
+import { parseSafeGoogleMapsUrl } from '../lib/google-maps-url.ts';
 import {
   ensureScannerAccessTokenSchema,
   issueScannerAccessTokenWithClient,
@@ -274,6 +275,7 @@ export async function createEventDraft(
   if (!eventInput.location?.trim()) throw new Error('กรุณาระบุสถานที่จัดงาน');
   const limit = eventInput.limitPerOrder ?? 4;
   if (limit <= 0) throw new Error('จำกัดการซื้อต่อคำสั่งซื้อต้องมากกว่า 0');
+  const safeGoogleMapsUrl = parseSafeGoogleMapsUrl(eventInput.googleMapsUrl);
 
   await ensureEventSchema(pool);
 
@@ -291,7 +293,7 @@ export async function createEventDraft(
         eventInput.posterUrl || null,
         eventInput.ticketTemplateUrl || null,
         eventInput.coverBannerUrl || null,
-        eventInput.googleMapsUrl || null,
+        safeGoogleMapsUrl,
         eventInput.salesStartTime ? new Date(eventInput.salesStartTime) : null,
         eventInput.salesEndTime ? new Date(eventInput.salesEndTime) : null,
         limit,
@@ -384,7 +386,8 @@ export async function updateEventDraft(
       await client.query('UPDATE events SET "coverBannerUrl" = $1, "updatedAt" = now() WHERE id = $2', [eventInput.coverBannerUrl, eventId]);
     }
     if (eventInput.googleMapsUrl !== undefined) {
-      await client.query('UPDATE events SET "googleMapsUrl" = $1, "updatedAt" = now() WHERE id = $2', [eventInput.googleMapsUrl, eventId]);
+      const safeGoogleMapsUrl = parseSafeGoogleMapsUrl(eventInput.googleMapsUrl);
+      await client.query('UPDATE events SET "googleMapsUrl" = $1, "updatedAt" = now() WHERE id = $2', [safeGoogleMapsUrl, eventId]);
     }
     if (eventInput.salesStartTime !== undefined) {
       await client.query('UPDATE events SET "salesStartTime" = $1, "updatedAt" = now() WHERE id = $2', [eventInput.salesStartTime ? new Date(eventInput.salesStartTime) : null, eventId]);
