@@ -93,4 +93,33 @@ describe('TASK-017 Unit: Ticket Email Delivery Content', () => {
     expect(html).not.toMatch(/\p{Extended_Pictographic}/u);
     expect(text).not.toMatch(/\p{Extended_Pictographic}/u);
   });
+
+  it('escapes HTML entities in buyer/event fields and rejects unsafe qrCodeUrl/orderUrl schemes', () => {
+    const xssTickets: TicketDetail[] = [
+      {
+        ...dummyTickets[0],
+        ticketTypeName: '<img src=x onerror=alert(1)>VIP & "Special"',
+        ticketCode: 'TK-<script>alert(1)</script>',
+        qrCodeUrl: 'javascript:alert(1)',
+      },
+    ];
+
+    const { html } = buildTicketEmailContent(
+      'ORD-XSS-1',
+      '<b>Attacker</b><a href="https://evil.invalid">Click</a>',
+      'Concert <script>alert(2)</script>',
+      'Hall "A" & \'B\'',
+      '2026-12-15T19:00:00.000Z',
+      xssTickets,
+      'javascript:alert(document.cookie)',
+    );
+
+    expect(html).not.toContain('<b>Attacker</b>');
+    expect(html).not.toContain('<script>alert(2)</script>');
+    expect(html).not.toContain('<img src=x onerror=alert(1)>');
+    expect(html).not.toContain('javascript:alert');
+    expect(html).toContain('&lt;b&gt;Attacker&lt;/b&gt;');
+    expect(html).toContain('Hall &quot;A&quot; &amp; &#39;B&#39;');
+    expect(html).toContain('href="#"');
+  });
 });
