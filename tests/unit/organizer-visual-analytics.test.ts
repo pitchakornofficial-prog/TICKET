@@ -101,7 +101,7 @@ describe('Organizer Overview Executive 4-KPI Grid, Search, Filter & Vertical Car
   });
 
   it('verifies globals.css includes rules for 4kpi grid, toolbar, horizontal cards, and pagination', () => {
-    const cssContent = readFileSync(join(rootDir, 'src/app/globals.css'), 'utf8');
+    const cssContent = (`${readFileSync(join(rootDir, 'src/app/globals.css'), 'utf8')}\n${readFileSync(join(rootDir, 'src/app/globals.css').replace("src/app/globals.css", "src/app/back-office/back-office.css"), 'utf8')}`);
 
     expect(cssContent).toContain('.overview-4kpi-grid');
     expect(cssContent).toContain('.kpi-hero-card');

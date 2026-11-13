@@ -115,7 +115,7 @@ describe('D-210 to D-216: Organizer Overview Executive Redesign, Multi-Period KP
     expect(eventsSrc).toContain('soft-pulse-highlight');
 
     // 4. CSS contains soft-pulse-highlight keyframe animation
-    const css = readFileSync(join(rootDir, 'src/app/globals.css'), 'utf8');
+    const css = (`${readFileSync(join(rootDir, 'src/app/globals.css'), 'utf8')}\n${readFileSync(join(rootDir, 'src/app/globals.css').replace("src/app/globals.css", "src/app/back-office/back-office.css"), 'utf8')}`);
     expect(css).toContain('@keyframes softPulseGlow');
     expect(css).toContain('.soft-pulse-highlight');
   });
@@ -168,7 +168,7 @@ describe('D-210 to D-216: Organizer Overview Executive Redesign, Multi-Period KP
       join(rootDir, 'src/components/organizer-overview-view.tsx'),
       'utf8',
     );
-    const css = readFileSync(join(rootDir, 'src/app/globals.css'), 'utf8');
+    const css = (`${readFileSync(join(rootDir, 'src/app/globals.css'), 'utf8')}\n${readFileSync(join(rootDir, 'src/app/globals.css').replace("src/app/globals.css", "src/app/back-office/back-office.css"), 'utf8')}`);
 
     // D-258: Inline Borderless Refresh in header title row without quick-actions-bar container
     expect(overviewSrc).toContain('overview-header-title-row');

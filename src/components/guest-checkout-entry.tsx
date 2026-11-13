@@ -62,7 +62,6 @@ export function GuestCheckoutEntry({
   // OTP details
   const [otpCode, setOtpCode] = useState('');
   const [otpDigits, setOtpDigits] = useState<string[]>(['', '', '', '', '', '']);
-  const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
   const [requestId, setRequestId] = useState('');
   const [cooldownSeconds, setCooldownSeconds] = useState(0);
@@ -300,7 +299,6 @@ export function GuestCheckoutEntry({
 
         const data = await res.json();
         if (!res.ok) {
-          setIsConfirmModalOpen(false);
           if (data.code === 'CUMULATIVE_LIMIT_EXCEEDED' && onQuotaExceeded) {
             onQuotaExceeded({
               alreadyPurchased: data.alreadyPurchased,
@@ -323,7 +321,6 @@ export function GuestCheckoutEntry({
           sessionStorage.setItem('ticket_guest_otp_token', data.verifiedToken);
         }
 
-        setIsConfirmModalOpen(false);
         setVerifiedBuyer(buyerInfo);
         setStep('verified');
         if (onStepChange) onStepChange('verified');
@@ -641,7 +638,6 @@ export function GuestCheckoutEntry({
                 id="back-to-details-btn"
                 onClick={() => {
                   setStep('details');
-                  setIsConfirmModalOpen(false);
                   setOtpCode('');
                   setOtpDigits(['', '', '', '', '', '']);
                   setError(null);
@@ -656,15 +652,6 @@ export function GuestCheckoutEntry({
               <button
                 type="button"
                 disabled={isPending || otpCode.trim().length !== 6}
-                onClick={() => setIsConfirmModalOpen(true)}
-                className="otp-modal-cancel-btn"
-                id="verify-otp-open-confirm-btn"
-              >
-                ยืนยันรหัส OTP
-              </button>
-              <button
-                type="button"
-                disabled={isPending || otpCode.trim().length !== 6}
                 onClick={() => handleExecuteVerifyOtp(true)}
                 className="otp-modal-confirm-btn"
                 id="confirm-otp-modal-proceed-btn"
@@ -672,43 +659,6 @@ export function GuestCheckoutEntry({
                 {isPending ? 'กำลังตรวจสอบ...' : 'ยืนยันและไปหน้าชำระเงิน'}
               </button>
             </div>
-
-            {isConfirmModalOpen && (
-              <div
-                style={{
-                  marginTop: '1rem',
-                  padding: '1rem',
-                  borderRadius: '10px',
-                  background: '#f8fafc',
-                  border: '1px solid #cbd5e1',
-                }}
-              >
-                <h4 style={{ margin: '0 0 0.5rem', fontSize: '1rem', fontWeight: 700, color: '#0f172a' }}>
-                  ยืนยันข้อมูลคำสั่งซื้อและการล็อกสิทธิ์
-                </h4>
-                <p style={{ margin: '0 0 0.75rem', fontSize: '0.85rem', color: '#475569' }}>
-                  กรุณาตรวจสอบข้อมูลผู้ซื้อก่อนยืนยันตัวตน เมื่อยืนยันแล้วจะไม่สามารถแก้ไขจำนวนบัตรได้
-                </p>
-                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
-                  <button
-                    type="button"
-                    className="otp-modal-cancel-btn"
-                    onClick={() => setIsConfirmModalOpen(false)}
-                    disabled={isPending}
-                  >
-                    แก้ไขข้อมูล
-                  </button>
-                  <button
-                    type="button"
-                    className="otp-modal-confirm-btn"
-                    onClick={() => handleExecuteVerifyOtp(false)}
-                    disabled={isPending}
-                  >
-                    {isPending ? 'กำลังตรวจสอบ...' : 'ยืนยันและดำเนินการต่อ'}
-                  </button>
-                </div>
-              </div>
-            )}
           </div>
         </div>
       )}

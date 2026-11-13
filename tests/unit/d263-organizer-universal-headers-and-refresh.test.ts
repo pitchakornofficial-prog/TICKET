@@ -26,14 +26,14 @@ describe('D-263: Universal Organizer Headers Standardization and Inline Borderle
   });
 
   it('standardizes header title row and inline refresh styling in globals.css', () => {
-    const css = readFileSync(join(rootDir, 'src/app/globals.css'), 'utf8');
+    const css = (`${readFileSync(join(rootDir, 'src/app/globals.css'), 'utf8')}\n${readFileSync(join(rootDir, 'src/app/globals.css').replace("src/app/globals.css", "src/app/back-office/back-office.css"), 'utf8')}`);
     expect(css).toContain('.organizer-header-title-row');
     expect(css).toContain('.organizer-inline-refresh-btn');
     expect(css).toContain('.inline-refresh-icon');
   });
 
   it('standardizes all 8 organizer H1 page titles to 1.5rem and 700 weight', () => {
-    const css = readFileSync(join(rootDir, 'src/app/globals.css'), 'utf8');
+    const css = (`${readFileSync(join(rootDir, 'src/app/globals.css'), 'utf8')}\n${readFileSync(join(rootDir, 'src/app/globals.css').replace("src/app/globals.css", "src/app/back-office/back-office.css"), 'utf8')}`);
     const titles = [
       '.overview-header-title',
       '.events-management-title',
@@ -51,7 +51,7 @@ describe('D-263: Universal Organizer Headers Standardization and Inline Borderle
   });
 
   it('standardizes section H2 titles to 1.15rem so they never overpower page headers', () => {
-    const css = readFileSync(join(rootDir, 'src/app/globals.css'), 'utf8');
+    const css = (`${readFileSync(join(rootDir, 'src/app/globals.css'), 'utf8')}\n${readFileSync(join(rootDir, 'src/app/globals.css').replace("src/app/globals.css", "src/app/back-office/back-office.css"), 'utf8')}`);
     expect(css).toContain('.overview-performance-section .section-title');
     expect(css).toContain('font-size: 1.15rem;');
   });

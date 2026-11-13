@@ -1,3 +1,4 @@
+import { reserveThroughCheckout } from '../support/purchase-journey';
 import { testClientIp } from '../support/client-context';
 import { saveEventDraft } from '../support/event-draft';
 import { expect, test } from '@playwright/test';
@@ -11,7 +12,6 @@ test.beforeEach(async ({ context }, testInfo) => {
 test.describe('Dedicated Payment Success Page & Ticket Download (D-52)', () => {
   test('buyer completes payment, is redirected to dedicated success page, and can view/download 1200x500 classic ticket stubs', async ({
     page,
-    request,
   }, testInfo) => {
     const eventTitle = `คอนเสิร์ตบัตรคลาสสิก ${testInfo.project.name}`;
     const guestEmail = `buyer-stub-${testInfo.project.name}@ticket.invalid`;
@@ -82,36 +82,14 @@ test.describe('Dedicated Payment Success Page & Ticket Download (D-52)', () => {
     await expect(page).toHaveURL(`/events/${createdEvent.id}/checkout`);
 
     // 4. Select 2 tickets
-    const addBtn = page.getByRole('button', { name: 'เพิ่มจำนวน บัตร Gold Seating A' });
-    await addBtn.click();
-    await addBtn.click();
-
-    // 5. Fill buyer info & verify OTP
-    await page.getByLabel('ชื่อ-นามสกุล *').fill(guestName);
-    await page.getByLabel('อีเมล *').fill(guestEmail);
-    await page.getByLabel('เบอร์โทรศัพท์มือถือ *').fill(guestPhone);
-    await page.getByRole('button', { name: 'ขอรหัส OTP เพื่อซื้อบัตร' }).click();
-
-    await expect(page.getByText('ส่งรหัส OTP 6 หลักไปยังอีเมลของคุณเรียบร้อยแล้ว')).toBeVisible();
-
-    const otpRes = await request.get(
-      `/api/auth/test-inspect-reset-token?type=guest_otp&email=${encodeURIComponent(guestEmail)}`,
-    );
-    expect(otpRes.status()).toBe(200);
-    const { code } = await otpRes.json();
-
-    await page.getByLabel('รหัส OTP 6 หลัก *').fill(code);
-    await page.getByRole('button', { name: 'ยืนยันรหัส OTP' }).click();
-
-    await expect(page.getByRole('heading', { name: 'ยืนยันข้อมูลคำสั่งซื้อและการล็อกสิทธิ์' })).toBeVisible();
-    await page.getByRole('button', { name: 'ยืนยันและดำเนินการต่อ' }).click();
-    await expect(page.getByRole('heading', { name: 'ยืนยันอีเมลสำเร็จ (Guest Verified)' })).toBeVisible();
-
-    // 6. Confirm reservation
-    const confirmReserveBtn = page.locator('#confirm-reservation-btn');
-    await expect(confirmReserveBtn).toBeEnabled();
-    await confirmReserveBtn.scrollIntoViewIfNeeded();
-    await confirmReserveBtn.click({ force: true });
+    await reserveThroughCheckout(page, {
+      eventId: createdEvent.id,
+      buyer: { name: guestName, email: guestEmail, phone: guestPhone },
+      tickets: [{ name: 'บัตร Gold Seating A', quantity: 2 }],
+    });
+    // A reserved order is fixed; payment offers no ticket/buyer editing controls.
+    await expect(page.getByRole('button', { name: 'เพิ่มจำนวน บัตร Gold Seating A' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'แก้ไขข้อมูล / เลือกบัตรใหม่' })).toHaveCount(0);
 
     await expect(page).toHaveURL(/\/orders\/ORD-[A-Z0-9-]+\/payment$/);
     const orderId = (await page.locator('#reservation-order-id').innerText()).trim();

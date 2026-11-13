@@ -7,7 +7,7 @@ describe('D-256: Back-Office Owner Overview Modernization & Flat Canvas Layout',
   const cssPath = resolve(process.cwd(), 'src/app/globals.css');
 
   const overviewSrc = readFileSync(overviewPath, 'utf8');
-  const cssSrc = readFileSync(cssPath, 'utf8');
+  const cssSrc = (`${readFileSync(cssPath, 'utf8')}\n${readFileSync(cssPath.replace("src/app/globals.css", "src/app/back-office/back-office.css"), 'utf8')}`);
 
   it('preserves top 4 KPI cards with test IDs and pure-kpi styling', () => {
     expect(overviewSrc).toContain('data-testid="owner-kpi-concerts"');

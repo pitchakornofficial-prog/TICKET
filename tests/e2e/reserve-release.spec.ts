@@ -1,3 +1,4 @@
+import { reserveThroughCheckout } from '../support/purchase-journey';
 import { testClientIp, createIsolatedBrowserContext } from '../support/client-context';
 import { saveEventDraft } from '../support/event-draft';
 import { expect, test } from '@playwright/test';
@@ -20,12 +21,12 @@ test.describe('Reserve release after final session: calculation, release, and ro
     const buyerName = 'คุณวิชัย ปล่อยสำรอง';
 
     const now = Date.now();
-    const session1Start = new Date(now - 48 * 3600 * 1000).toISOString();
-    const session1End = new Date(now - 44 * 3600 * 1000).toISOString();
-    const session2Start = new Date(now - 24 * 3600 * 1000).toISOString();
-    const session2End = new Date(now - 20 * 3600 * 1000).toISOString();
+    const session1Start = new Date(now + 48 * 3600 * 1000).toISOString();
+    const session1End = new Date(now + 52 * 3600 * 1000).toISOString();
+    const session2Start = new Date(now + 72 * 3600 * 1000).toISOString();
+    const session2End = new Date(now + 76 * 3600 * 1000).toISOString();
 
-    // 1. Organizer logs in and creates event with two past sessions
+    // 1. Create sellable future sessions; advance fixture chronology after purchase.
     await page.goto('/login');
     await expect(page.getByRole('button', { name: 'เข้าสู่ระบบ', exact: true })).toBeVisible();
     await page.getByLabel('อีเมล', { exact: true }).fill(fixtureAccounts.organizer.email);
@@ -114,33 +115,11 @@ test.describe('Reserve release after final session: calculation, release, and ro
     await buyerPage.goto(`/events/${createdEvent.id}/checkout`);
     await expect(buyerPage.getByRole('heading', { name: eventTitle })).toBeVisible();
 
-    const addBtn = buyerPage.getByRole('button', { name: 'เพิ่มจำนวน Regular Round 1' });
-    await expect(addBtn).toBeVisible();
-    await addBtn.click();
-
-
-    await buyerPage.getByLabel('ชื่อ-นามสกุล *').fill(buyerName);
-    await buyerPage.getByLabel('อีเมล *').fill(buyerEmail);
-    await buyerPage.getByLabel('เบอร์โทรศัพท์มือถือ *').fill(buyerPhone);
-    await buyerPage.getByRole('button', { name: 'ขอรหัส OTP เพื่อซื้อบัตร' }).click();
-
-    await expect(buyerPage.getByText('ส่งรหัส OTP 6 หลักไปยังอีเมลของคุณเรียบร้อยแล้ว')).toBeVisible();
-
-    const otpRes = await request.get(
-      `/api/auth/test-inspect-reset-token?type=guest_otp&email=${encodeURIComponent(buyerEmail)}`,
-    );
-    expect(otpRes.status()).toBe(200);
-    const { code } = await otpRes.json();
-
-    await buyerPage.getByLabel('รหัส OTP 6 หลัก *').fill(code);
-    await buyerPage.getByRole('button', { name: 'ยืนยันรหัส OTP' }).click();
-    await buyerPage.getByRole('button', { name: 'ยืนยันและดำเนินการต่อ' }).click();
-    await expect(buyerPage.getByRole('heading', { name: 'ยืนยันอีเมลสำเร็จ (Guest Verified)' })).toBeVisible();
-
-    // Select 1 ticket for Regular Round 1
-    const confirmBtn = buyerPage.locator('#confirm-reservation-btn');
-    await expect(confirmBtn).toBeEnabled();
-    await confirmBtn.click({ force: true });
+    await reserveThroughCheckout(buyerPage, {
+      eventId: createdEvent.id,
+      buyer: { name: buyerName, email: buyerEmail, phone: buyerPhone },
+      tickets: [{ name: 'Regular Round 1', quantity: 1 }],
+    });
     await expect(buyerPage.getByText('กันบัตรสำเร็จ (Reserved)')).toBeVisible();
 
     // Generate PromptPay QR
@@ -153,6 +132,10 @@ test.describe('Reserve release after final session: calculation, release, and ro
 
     await expect(buyerPage.getByText('ชำระเงินสำเร็จ (Paid)')).toBeVisible({ timeout: 25000 });
     await buyerContext.close();
+
+    const ended = await request.get(`/api/auth/test-inspect-reset-token?type=end_sessions&eventId=${encodeURIComponent(createdEvent.id)}`);
+    expect(ended.status()).toBe(200);
+    expect((await ended.json()).endedSessions).toBe(2);
 
     // 4. Owner verifies initial accounting and pays out 810 THB
     // E = 900, Reserve target = 90, Held H = 90, Payable = 810, Paid = 0

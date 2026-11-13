@@ -1,3 +1,4 @@
+import { reserveThroughCheckout } from '../support/purchase-journey';
 import { testClientIp, createIsolatedBrowserContext } from '../support/client-context';
 import { saveEventDraft } from '../support/event-draft';
 import { expect, test } from '@playwright/test';
@@ -87,27 +88,11 @@ test.describe('Cancel issued session & create refund cases (TASK-026, AC-35, AC-
     await expect(buyerPage.getByRole('heading', { name: eventTitle })).toBeVisible();
 
     // Guest checkout form
-    const addBtn = buyerPage.getByRole('button', { name: 'เพิ่มจำนวน VIP Seating' });
-    await addBtn.click();
-
-    await buyerPage.getByLabel('ชื่อ-นามสกุล *').fill(guestName);
-    await buyerPage.getByLabel('อีเมล *').fill(guestEmail);
-    await buyerPage.getByLabel('เบอร์โทรศัพท์มือถือ *').fill(guestPhone);
-    await buyerPage.getByRole('button', { name: 'ขอรหัส OTP เพื่อซื้อบัตร' }).click();
-    await expect(buyerPage.getByText('ส่งรหัส OTP 6 หลักไปยังอีเมลของคุณเรียบร้อยแล้ว')).toBeVisible();
-
-    const otpRes = await request.get(
-      `/api/auth/test-inspect-reset-token?type=guest_otp&email=${encodeURIComponent(guestEmail)}`,
-    );
-    expect(otpRes.status()).toBe(200);
-    const { code } = await otpRes.json();
-
-    await buyerPage.getByLabel('รหัส OTP 6 หลัก *').fill(code);
-    await buyerPage.getByRole('button', { name: 'ยืนยันรหัส OTP' }).click();
-    await buyerPage.getByRole('button', { name: 'ยืนยันและดำเนินการต่อ' }).click();
-    await expect(buyerPage.getByRole('heading', { name: 'ยืนยันอีเมลสำเร็จ (Guest Verified)' })).toBeVisible();
-
-    await buyerPage.locator('#confirm-reservation-btn').click();
+    await reserveThroughCheckout(buyerPage, {
+      eventId: createdEvent.id,
+      buyer: { name: guestName, email: guestEmail, phone: guestPhone },
+      tickets: [{ name: 'VIP Seating', quantity: 1 }],
+    });
     await expect(buyerPage.getByText('กันบัตรสำเร็จ (Reserved)')).toBeVisible();
 
     await expect(buyerPage.locator('#promptpay-qr-image')).toBeVisible();

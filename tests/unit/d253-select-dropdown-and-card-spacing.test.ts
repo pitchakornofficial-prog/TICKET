@@ -6,7 +6,7 @@ describe('D-253: Enterprise Custom Select Dropdown Styling, Relaxed Card Breathi
   const rootDir = process.cwd();
 
   it('verifies D-253: Enterprise Custom Select Dropdown styling with SVG Chevron, 38px height and smooth states (Q1 -> A1)', () => {
-    const cssContent = readFileSync(join(rootDir, 'src/app/globals.css'), 'utf8');
+    const cssContent = (`${readFileSync(join(rootDir, 'src/app/globals.css'), 'utf8')}\n${readFileSync(join(rootDir, 'src/app/globals.css').replace("src/app/globals.css", "src/app/back-office/back-office.css"), 'utf8')}`);
 
     // Rule contains all relevant select classes
     expect(cssContent).toContain('.hub-sort-select');
@@ -31,7 +31,7 @@ describe('D-253: Enterprise Custom Select Dropdown Styling, Relaxed Card Breathi
   });
 
   it('verifies D-253: Relaxed Card Spacing & Layered Internal Padding (Q2 -> B1)', () => {
-    const cssContent = readFileSync(join(rootDir, 'src/app/globals.css'), 'utf8');
+    const cssContent = (`${readFileSync(join(rootDir, 'src/app/globals.css'), 'utf8')}\n${readFileSync(join(rootDir, 'src/app/globals.css').replace("src/app/globals.css", "src/app/back-office/back-office.css"), 'utf8')}`);
 
     // List container gap: 1.5rem (24px)
     expect(cssContent).toContain('.concert-horizontal-list {');
@@ -48,7 +48,7 @@ describe('D-253: Enterprise Custom Select Dropdown Styling, Relaxed Card Breathi
   });
 
   it('verifies D-253: Spacious Action Column & Generous Button Gap (Q3 -> C1)', () => {
-    const cssContent = readFileSync(join(rootDir, 'src/app/globals.css'), 'utf8');
+    const cssContent = (`${readFileSync(join(rootDir, 'src/app/globals.css'), 'utf8')}\n${readFileSync(join(rootDir, 'src/app/globals.css').replace("src/app/globals.css", "src/app/back-office/back-office.css"), 'utf8')}`);
 
     // Card-to-column gap: 2rem
     expect(cssContent).toContain('gap: 2rem;');
@@ -62,7 +62,7 @@ describe('D-253: Enterprise Custom Select Dropdown Styling, Relaxed Card Breathi
   });
 
   it('verifies D-253: Toolbar search box and refresh button align at 38px height', () => {
-    const cssContent = readFileSync(join(rootDir, 'src/app/globals.css'), 'utf8');
+    const cssContent = (`${readFileSync(join(rootDir, 'src/app/globals.css'), 'utf8')}\n${readFileSync(join(rootDir, 'src/app/globals.css').replace("src/app/globals.css", "src/app/back-office/back-office.css"), 'utf8')}`);
 
     // .hub-search-box has height: 38px
     expect(cssContent).toMatch(/\.hub-search-box\s*\{[^}]*height:\s*38px;/);

@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { startAdaptivePoller } from '@/lib/adaptive-polling';
 import { PurchaseStepIndicator } from './purchase-step-indicator';
 import {
   ClockIcon,
@@ -94,63 +95,72 @@ export function QueueWaitingRoom({
     }
   }, [eventId]);
 
-  // Query queue status from server or process admission (D-271)
+  // Query queue status from server or process admission with adaptive polling, jitter, and backoff (D-271)
   useEffect(() => {
     let isMounted = true;
-    let pollInterval: NodeJS.Timeout | null = null;
 
-    const checkQueue = async () => {
-      try {
-        const savedToken = typeof window !== 'undefined'
-          ? sessionStorage.getItem(`ticket_queue_token_${eventId}`)
-          : null;
-        const res = await fetch(`/api/events/${eventId}/queue/status?token=${savedToken || ''}`);
-        if (res.status === 503) {
-          // Keep polling when server queue is temporarily busy instead of bypassing queue
-          return;
-        }
-        if (!res.ok) throw new Error('Queue status API error');
-        const data = await res.json();
+    const stopPolling = startAdaptivePoller({
+      baseIntervalMs: 3000,
+      minIntervalMs: 2000,
+      maxIntervalMs: 15000,
+      hiddenIntervalMs: 12000,
+      jitterRatio: 0.2,
+      step: async ({ signal }) => {
+        try {
+          const savedToken = typeof window !== 'undefined'
+            ? sessionStorage.getItem(`ticket_queue_token_${eventId}`)
+            : null;
+          const res = await fetch(`/api/events/${eventId}/queue/status?token=${savedToken || ''}`, {
+            signal,
+          });
+          if (res.status === 503) {
+            // Keep polling with exponential backoff when server queue is temporarily busy instead of bypassing queue
+            return { backoff: true };
+          }
+          if (!res.ok) throw new Error('Queue status API error');
+          const data = await res.json();
 
-        if (!isMounted) return;
+          if (!isMounted || signal.aborted) return { stop: true };
 
-        if (data.token && typeof window !== 'undefined') {
-          sessionStorage.setItem(`ticket_queue_token_${eventId}`, data.token);
-        }
+          if (data.token && typeof window !== 'undefined') {
+            sessionStorage.setItem(`ticket_queue_token_${eventId}`, data.token);
+          }
 
-        if (data.queueNumber) {
-          setQueueNumber(`A-${data.queueNumber}`);
-        }
+          if (data.queueNumber) {
+            setQueueNumber(`A-${data.queueNumber}`);
+          }
 
-        if (data.allowed) {
-          // Within 200 users: granted direct admission
-          setPeopleAhead(0);
-          setIsReady(true);
-          if (pollInterval) clearInterval(pollInterval);
-        } else {
-          // Person 201 onwards: in waiting queue
+          if (data.allowed) {
+            // Within 200 users: granted direct admission
+            setPeopleAhead(0);
+            setIsReady(true);
+            return { stop: true };
+          }
+
+          // Person 201 onwards: in waiting queue; scale interval smoothly by queue depth
           const ahead = Math.max(0, data.peopleAhead ?? 1);
           setPeopleAhead(ahead);
           setTotalQueueCount(prev => Math.max(prev, ahead));
-        }
-      } catch {
-        // Fallback for isolated environments or network drop
-        if (!isMounted) return;
-        setPeopleAhead(0);
-        setIsReady(true);
-      }
-    };
 
-    checkQueue();
-    pollInterval = setInterval(checkQueue, 2500);
+          const adaptiveDelayMs =
+            ahead > 200 ? 8000 : ahead > 50 ? 5000 : 3000;
+          return { nextDelayMs: adaptiveDelayMs };
+        } catch {
+          // A network failure cannot grant admission. Keep the server token and
+          // retry with backoff until the server explicitly allows checkout.
+          if (!isMounted || signal.aborted) return { stop: true };
+          return { backoff: true };
+        }
+      },
+    });
 
     return () => {
       isMounted = false;
-      if (pollInterval) clearInterval(pollInterval);
+      stopPolling();
     };
   }, [eventId]);
 
-  // Smooth queue decrement and automatic redirect when reaching turn (D-271)
+  // Redirect only after explicit admission from the server (D-271)
   useEffect(() => {
     if (peopleAhead <= 0 && isReady) {
       if (isRedirectingRef.current) return;
@@ -176,24 +186,11 @@ export function QueueWaitingRoom({
       return () => clearTimeout(redirectTimer);
     }
 
-    // Client-side smooth progression step if waiting
-    if (peopleAhead > 0) {
-      const stepTimer = setInterval(() => {
-        setPeopleAhead(prev => {
-          const next = Math.max(0, prev - 1);
-          if (next === 0) {
-            setIsReady(true);
-          }
-          return next;
-        });
-      }, 2000);
-      return () => clearInterval(stepTimer);
-    }
   }, [peopleAhead, isReady, eventId, queueNumber, router]);
 
   const handleProceedNow = () => {
-    if (!isReady && peopleAhead > 0) {
-      // D-273: Bypassing queue is strictly locked when queue has people ahead
+    if (!isReady) {
+      // D-273: Only explicit server admission unlocks checkout.
       return;
     }
     if (typeof window !== 'undefined') {
@@ -211,7 +208,7 @@ export function QueueWaitingRoom({
     router.push(`/events/${eventId}/checkout`);
   };
 
-  const progressPercent = peopleAhead <= 0
+  const progressPercent = isReady
     ? 100
     : Math.min(
         99,
@@ -221,9 +218,11 @@ export function QueueWaitingRoom({
   const totalSeconds = peopleAhead * 2;
   const minutes = Math.floor(totalSeconds / 60);
   const remainingSeconds = totalSeconds % 60;
-  const estimatedTimeText = isReady || peopleAhead <= 0
+  const estimatedTimeText = isReady
     ? 'พร้อมทันที'
-    : minutes > 0
+    : peopleAhead <= 0
+      ? 'รอสิทธิ์เข้าซื้อ'
+      : minutes > 0
       ? `~${minutes} นาที ${remainingSeconds > 0 ? `${remainingSeconds} วินาที` : ''}`
       : `~${remainingSeconds} วินาที`;
 
@@ -244,7 +243,7 @@ export function QueueWaitingRoom({
           data-testid="queue-waiting-card"
         >
           <div className="queue-status-pill-wrap">
-            {isReady || peopleAhead <= 0 ? (
+            {isReady ? (
               <span className="status-badge available-badge" id="queue-ready-badge">
                 <CheckCircleIcon /> ถึงคิวของคุณแล้ว ระบบกำลังพาเข้าสู่หน้าซื้อบัตรอัตโนมัติ
               </span>
@@ -291,7 +290,7 @@ export function QueueWaitingRoom({
           {/* Progress Bar */}
           <div className="queue-progress-section">
             <div className="queue-progress-header">
-              <span>{isReady || peopleAhead <= 0 ? 'ถึงคิวของคุณแล้ว' : 'สถานะการเลื่อนคิว'}</span>
+              <span>{isReady ? 'ถึงคิวของคุณแล้ว' : 'สถานะการเลื่อนคิว'}</span>
               <strong>{progressPercent}%</strong>
             </div>
             <div
@@ -354,7 +353,7 @@ export function QueueWaitingRoom({
 
           {/* Action Button (D-273: Lockout bypassing while waiting in queue) */}
           <div className="queue-actions">
-            {isReady || peopleAhead <= 0 ? (
+            {isReady ? (
               <button
                 id="proceed-to-checkout-btn"
                 type="button"

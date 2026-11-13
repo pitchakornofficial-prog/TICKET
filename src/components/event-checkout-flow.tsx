@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
@@ -15,6 +15,7 @@ import { CheckoutTimeoutModal } from './checkout-timeout-modal';
 import { QuotaLimitAlertModal } from './quota-limit-alert-modal';
 import { FloatingBackToTop } from './floating-back-to-top';
 import { formatBaht, formatDate, formatTime } from '@/lib/locale';
+import { getEventSalesStatus, isSessionEnded } from '@/lib/sales-window';
 import {
   AcademicCapIcon,
   CheckCircleIcon,
@@ -53,6 +54,8 @@ interface EventCheckoutFlowProps {
   eventLocation: string;
   eventPosterUrl?: string | null;
   limitPerOrder: number;
+  salesStartTime?: string | Date | null;
+  salesEndTime?: string | Date | null;
   sessions: SessionInfo[];
   feeSettings?: {
     customerFeeMode?: 'percentage' | 'per_ticket' | 'per_order';
@@ -70,13 +73,17 @@ export function EventCheckoutFlow({
   eventLocation,
   eventPosterUrl: _eventPosterUrl,
   limitPerOrder,
+  salesStartTime,
+  salesEndTime,
   sessions,
   feeSettings,
 }: EventCheckoutFlowProps) {
   const router = useRouter();
-  const [selectedSessionId, setSelectedSessionId] = useState<string>(
-    sessions.length > 0 ? sessions[0].id : '',
-  );
+  const [selectedSessionId, setSelectedSessionId] = useState<string>(() => {
+    const firstActive = sessions.find(s => !isSessionEnded(s));
+    return firstActive ? firstActive.id : (sessions.length > 0 ? sessions[0].id : '');
+  });
+  const errorBannerRef = useRef<HTMLDivElement | null>(null);
   const [quantities, setQuantities] = useState<Record<string, number>>({});
   const [buyer, setBuyer] = useState<VerifiedBuyerInfo | null>(null);
   const [buyerQuota, setBuyerQuota] = useState<BuyerQuotaInfo | null>(null);
@@ -199,9 +206,24 @@ export function EventCheckoutFlow({
 
   const selectedSession = sessions.find(s => s.id === selectedSessionId) || sessions[0];
   const ticketTypes = selectedSession?.ticketTypes || [];
+  const salesStatus = getEventSalesStatus({ salesStartTime, salesEndTime, sessions });
+  const selectedSessionEnded = isSessionEnded(selectedSession);
+  const salesClosedMessage = !salesStatus.isOpen
+    ? (salesStatus.reason === 'not_started' && salesStatus.opensAt
+        ? `ยังไม่ถึงเวลาเปิดจำหน่ายบัตร (เปิดจำหน่าย ${formatDate(salesStatus.opensAt)} เวลา ${formatTime(salesStatus.opensAt)} น.)`
+        : salesStatus.message)
+    : selectedSessionEnded
+      ? 'รอบการแสดงที่เลือกสิ้นสุดลงแล้ว ไม่สามารถทำการจองบัตรได้'
+      : null;
+
+  useEffect(() => {
+    if (error && errorBannerRef.current) {
+      errorBannerRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }, [error]);
 
   const totalTickets = Object.values(quantities).reduce((sum, q) => sum + q, 0);
-  const isLocked = buyer !== null || checkoutStep === 'otp' || checkoutStep === 'verified';
+  const isLocked = buyer !== null || checkoutStep === 'otp' || checkoutStep === 'verified' || Boolean(salesClosedMessage);
   const selectedSubtotal = ticketTypes.reduce(
     (sum, tt) => sum + (quantities[tt.id] || 0) * Number(tt.price),
     0,
@@ -456,6 +478,28 @@ export function EventCheckoutFlow({
       </section>
 
       <div className="checkout-centered-container">
+        {salesClosedMessage && (
+          <div
+            role="alert"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.6rem',
+              padding: '1rem 1.25rem',
+              borderRadius: '12px',
+              marginBottom: '1.5rem',
+              fontSize: '0.95rem',
+              background: '#fef2f2',
+              color: '#991b1b',
+              border: '1px solid #fecaca',
+              boxShadow: '0 4px 12px rgba(239, 68, 68, 0.08)',
+            }}
+          >
+            <AlertIcon />
+            <span>{salesClosedMessage}</span>
+          </div>
+        )}
+
         {/* Step 1: Select Session & Ticket Quantities */}
         <section
           className="account-card"
@@ -737,7 +781,7 @@ export function EventCheckoutFlow({
             eventId={eventId}
             totalTickets={totalTickets}
             stepNumber={2}
-            hasSelectedTickets={totalTickets > 0}
+            hasSelectedTickets={totalTickets > 0 && !salesClosedMessage}
             onStepChange={setCheckoutStep}
             summaryDetails={{
               sessionText: selectedSession
@@ -785,12 +829,10 @@ export function EventCheckoutFlow({
           />
         </div>
 
-        {/* Card 3: Purchase Terms & Guidance (D-42: Independent FAQ item cards) */}
-        <PurchaseTermsFaqList />
-
-        {/* Global Error Banner if any */}
+        {/* Global Error Banner immediately visible below Step 2 */}
         {error && (
           <div
+            ref={errorBannerRef}
             role="alert"
             style={{
               display: 'flex',
@@ -810,6 +852,9 @@ export function EventCheckoutFlow({
             <span>{error}</span>
           </div>
         )}
+
+        {/* Card 3: Purchase Terms & Guidance (D-42: Independent FAQ item cards) */}
+        <PurchaseTermsFaqList />
       </div>
 
       {/* Sticky Bottom Bar for Order Summary & Action (D-38) */}
@@ -960,7 +1005,7 @@ export function EventCheckoutFlow({
                 type="button"
                 aria-label={`ยืนยันการเลือกบัตร (${totalTickets} ใบ)`}
                 onClick={() => handleConfirmReservation()}
-                disabled={totalTickets <= 0 || !buyer || isPending}
+                disabled={totalTickets <= 0 || !buyer || isPending || Boolean(salesClosedMessage)}
                 className="primary-button checkout-sticky-confirm-btn"
               >
                 {isPending ? 'กำลังดำเนินการ...' : 'ยืนยันและชำระเงิน'}

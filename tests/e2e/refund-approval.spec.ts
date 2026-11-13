@@ -1,3 +1,4 @@
+import { reserveThroughCheckout } from '../support/purchase-journey';
 import { testClientIp, createIsolatedBrowserContext } from '../support/client-context';
 import { saveEventDraft } from '../support/event-draft';
 import { expect, test } from '@playwright/test';
@@ -102,30 +103,11 @@ test.describe('Owner Refund Approval flow (TASK-022, AC-36, AC-88, AC-89, AC-90,
     await page.goto(`/events/${createdEvent.id}/checkout`);
     await expect(page.getByRole('heading', { name: eventTitle })).toBeVisible();
 
-    const addBtn = page.getByRole('button', { name: 'เพิ่มจำนวน VIP Zone A' });
-    await addBtn.click();
-    await addBtn.click();
-
-
-    await page.getByLabel('ชื่อ-นามสกุล *').fill(guestName);
-    await page.getByLabel('อีเมล *').fill(guestEmail);
-    await page.getByLabel('เบอร์โทรศัพท์มือถือ *').fill(guestPhone);
-    await page.getByRole('button', { name: 'ขอรหัส OTP เพื่อซื้อบัตร' }).click();
-    await expect(page.getByText('ส่งรหัส OTP 6 หลักไปยังอีเมลของคุณเรียบร้อยแล้ว')).toBeVisible();
-
-    const otpRes = await request.get(
-      `/api/auth/test-inspect-reset-token?type=guest_otp&email=${encodeURIComponent(guestEmail)}`,
-    );
-    expect(otpRes.status()).toBe(200);
-    const { code } = await otpRes.json();
-
-    await page.getByLabel('รหัส OTP 6 หลัก *').fill(code);
-    await page.getByRole('button', { name: 'ยืนยันรหัส OTP' }).click();
-    await page.getByRole('button', { name: 'ยืนยันและดำเนินการต่อ' }).click();
-    await expect(page.getByRole('heading', { name: 'ยืนยันอีเมลสำเร็จ (Guest Verified)' })).toBeVisible();
-
-    // Select 2 tickets
-    await page.locator('#confirm-reservation-btn').click();
+    await reserveThroughCheckout(page, {
+      eventId: createdEvent.id,
+      buyer: { name: guestName, email: guestEmail, phone: guestPhone },
+      tickets: [{ name: 'VIP Zone A', quantity: 2 }],
+    });
     await expect(page.getByText('กันบัตรสำเร็จ (Reserved)')).toBeVisible();
 
     // Generate PromptPay QR and simulate payment
@@ -205,7 +187,9 @@ test.describe('Owner Refund Approval flow (TASK-022, AC-36, AC-88, AC-89, AC-90,
     // Click Approve (AC-36, AC-90, AC-107)
     const approveBtn = pendingRefundItem.getByRole('button', { name: 'อนุมัติการคืนเงิน' });
     await approveBtn.scrollIntoViewIfNeeded();
-    await approveBtn.click({ force: true });
+    const approveResponse = page.waitForResponse(response => response.url().endsWith('/approve') && response.request().method() === 'POST', { timeout: 20000 });
+    await approveBtn.click();
+    expect((await approveResponse).status()).toBe(200);
 
     const feedbackBanner = page.locator('#owner-refund-feedback-banner');
     await expect(feedbackBanner).toBeVisible();

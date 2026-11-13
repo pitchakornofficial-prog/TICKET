@@ -71,6 +71,15 @@ export async function ensureTicketDeliverySchema(pool: Pool): Promise<void> {
   await promise;
 }
 
+const thLocaleDateTimeFormatter = new Intl.DateTimeFormat('th-TH', {
+  year: 'numeric',
+  month: 'numeric',
+  day: 'numeric',
+  hour: '2-digit',
+  minute: '2-digit',
+  second: '2-digit',
+});
+
 /**
  * Builds email HTML & text content for ticket delivery (AC-20).
  * Strict adherence to D-14: zero emojis, Thai language, Kanit font / clean sans-serif.
@@ -85,6 +94,7 @@ export function buildTicketEmailContent(
   orderUrl: string,
 ): { subject: string; html: string; text: string } {
   const subject = `[TICKET] บัตรคอนเสิร์ตและ QR Code สำหรับเข้างาน - คำสั่งซื้อ ${orderId}`;
+  const formattedSessionStart = thLocaleDateTimeFormatter.format(new Date(sessionStartTime));
 
   const ticketsHtml = tickets
     .map(
@@ -125,7 +135,7 @@ export function buildTicketEmailContent(
           <div style="background-color: #f1f5f9; border-radius: 6px; padding: 16px; margin: 20px 0;">
             <div style="font-size: 15px; font-weight: bold; margin-bottom: 6px;">${eventTitle}</div>
             <div style="font-size: 13px; color: #475569; margin-bottom: 4px;">สถานที่: ${location}</div>
-            <div style="font-size: 13px; color: #475569;">รอบการแสดง: ${new Date(sessionStartTime).toLocaleString('th-TH')}</div>
+            <div style="font-size: 13px; color: #475569;">รอบการแสดง: ${formattedSessionStart}</div>
           </div>
 
           <h3 style="font-size: 16px; margin: 24px 0 12px; color: #0f172a;">รายการบัตรสำหรับเข้างาน (QR Code แยกเฉพาะใบ)</h3>
@@ -161,7 +171,7 @@ TICKET - บัตรคอนเสิร์ตของคุณ
 
 งาน: ${eventTitle}
 สถานที่: ${location}
-รอบการแสดง: ${new Date(sessionStartTime).toLocaleString('th-TH')}
+รอบการแสดง: ${formattedSessionStart}
 
 รายการบัตร (${tickets.length} ใบ):
 ${ticketsText}
@@ -180,40 +190,67 @@ export async function sendOrderTicketsEmail(
     transport?: EmailTransport;
     now?: Date;
     baseUrl?: string;
+    preloadedTickets?: TicketDetail[];
+    skipExistingCheck?: boolean;
   },
 ): Promise<TicketEmailDeliveryRecord> {
   await ensureTicketDeliverySchema(pool);
   const now = options?.now || new Date();
   const transport = options?.transport || emailTransport;
 
-  // 1. Fetch order details
-  const orderRes = await pool.query(
-    `SELECT o.id, o."buyerName", o."buyerEmail", o."buyerPhone", o.status, o."eventId",
-            e.title as "eventTitle", e.location,
-            es."startTime" as "sessionStartTime"
-     FROM orders o
-     JOIN events e ON o."eventId" = e.id
-     JOIN event_sessions es ON o."sessionId" = es.id
-     WHERE o.id = $1`,
-    [orderId],
-  );
+  let order: {
+    id: string;
+    buyerName: string;
+    buyerEmail: string;
+    eventTitle: string;
+    location: string;
+    sessionStartTime: string;
+  };
+  let tickets: TicketDetail[];
 
-  if (orderRes.rowCount === 0) {
-    throw new Error('ไม่พบคำสั่งซื้อที่ระบุ');
-  }
+  if (options?.preloadedTickets && options.preloadedTickets.length > 0) {
+    tickets = options.preloadedTickets;
+    const first = tickets[0];
+    order = {
+      id: orderId,
+      buyerName: first.buyerName,
+      buyerEmail: first.buyerEmail,
+      eventTitle: first.eventTitle,
+      location: first.location,
+      sessionStartTime: first.sessionStartTime,
+    };
+  } else {
+    // 1. Fetch order details
+    const orderRes = await pool.query(
+      `SELECT o.id, o."buyerName", o."buyerEmail", o."buyerPhone", o.status, o."eventId",
+              e.title as "eventTitle", e.location,
+              es."startTime" as "sessionStartTime"
+       FROM orders o
+       JOIN events e ON o."eventId" = e.id
+       JOIN event_sessions es ON o."sessionId" = es.id
+       WHERE o.id = $1`,
+      [orderId],
+    );
 
-  const order = orderRes.rows[0];
+    if (orderRes.rowCount === 0) {
+      throw new Error('ไม่พบคำสั่งซื้อที่ระบุ');
+    }
 
-  // 2. Fetch issued tickets
-  const tickets = await getOrderTickets(pool, orderId);
-  if (tickets.length === 0) {
-    throw new Error('คำสั่งซื้อนี้ยังไม่มีบัตรที่ออกสำเร็จ จึงไม่สามารถจัดส่งอีเมลบัตรได้');
+    order = orderRes.rows[0];
+
+    // 2. Fetch issued tickets
+    tickets = await getOrderTickets(pool, orderId);
+    if (tickets.length === 0) {
+      throw new Error('คำสั่งซื้อนี้ยังไม่มีบัตรที่ออกสำเร็จ จึงไม่สามารถจัดส่งอีเมลบัตรได้');
+    }
   }
 
   // Check if email was already sent successfully for this order (AC-18 idempotency)
-  const existingDelivery = await getOrderEmailDelivery(pool, orderId);
-  if (existingDelivery?.status === 'sent') {
-    return existingDelivery;
+  if (!options?.skipExistingCheck) {
+    const existingDelivery = await getOrderEmailDelivery(pool, orderId);
+    if (existingDelivery?.status === 'sent') {
+      return existingDelivery;
+    }
   }
 
   const deliveryId = `EML-${randomUUID().slice(0, 8).toUpperCase()}`;

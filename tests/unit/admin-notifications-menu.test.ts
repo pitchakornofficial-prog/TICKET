@@ -46,10 +46,10 @@ describe('Admin Notifications Menu & Interactive Detail Modal (D-80)', () => {
   });
 
   it('includes proper styling rules in globals.css for notifications bell, dropdown, cards and modal', () => {
-    const cssContent = readFileSync(
+    const cssContent = (`${readFileSync(
       join(rootDir, 'src/app/globals.css'),
       'utf8',
-    );
+    )}\n${readFileSync(join(rootDir, 'src/app/globals.css').replace("src/app/globals.css", "src/app/back-office/back-office.css"), 'utf8')}`);
     expect(cssContent).toContain('.admin-notifications-wrap');
     expect(cssContent).toContain('.admin-notifications-bell-btn');
     expect(cssContent).toContain('.bell-unread-dot');
@@ -59,10 +59,10 @@ describe('Admin Notifications Menu & Interactive Detail Modal (D-80)', () => {
   });
 
   it('enforces 100% monochrome black and white styling across all notification components (D-125)', () => {
-    const cssContent = readFileSync(
+    const cssContent = (`${readFileSync(
       join(rootDir, 'src/app/globals.css'),
       'utf8',
-    );
+    )}\n${readFileSync(join(rootDir, 'src/app/globals.css').replace("src/app/globals.css", "src/app/back-office/back-office.css"), 'utf8')}`);
     // Bell unread dot uses black (#0f172a), no red
     expect(cssContent).toMatch(/\.bell-unread-dot\s*\{[^}]*background:\s*#0f172a/);
     // Unread pill uses monochrome
@@ -111,7 +111,7 @@ describe('Admin Notifications Menu & Interactive Detail Modal (D-80)', () => {
     expect(compContent).not.toMatch(/\p{Extended_Pictographic}/u);
 
     // CSS rules for saved button and saved indicator
-    const cssContent = readFileSync(join(rootDir, 'src/app/globals.css'), 'utf8');
+    const cssContent = (`${readFileSync(join(rootDir, 'src/app/globals.css'), 'utf8')}\n${readFileSync(join(rootDir, 'src/app/globals.css').replace("src/app/globals.css", "src/app/back-office/back-office.css"), 'utf8')}`);
     expect(cssContent).toContain('.notification-action-btn.is-saved');
     expect(cssContent).toContain('.notification-saved-indicator');
     expect(cssContent).toContain('.notification-modal-btn.btn-save.is-saved');

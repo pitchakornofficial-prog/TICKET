@@ -29,6 +29,7 @@ import { HeaderInfoTooltip } from './header-info-tooltip';
 import { OrganizerMoneyReportView } from './organizer-money-report-view';
 import { loadPayoutAccounts, getPrimaryPayoutAccount, type PayoutBankAccount } from '@/lib/organizer-payout-sync';
 import { formatBaht, formatDate, formatTime } from '@/lib/locale';
+import { startAdaptivePoller } from '@/lib/adaptive-polling';
 
 interface TicketTypeDraft {
   id: string;
@@ -380,73 +381,74 @@ export function OrganizerEventsManager({
     setRefreshing(false);
   };
 
-  const loadEvents = useCallback(async () => {
+  const loadEvents = useCallback(async (signal?: AbortSignal): Promise<boolean> => {
     try {
-      const res = await fetch('/api/events');
+      const res = await fetch('/api/events', signal ? { signal } : undefined);
       if (res.ok) {
         const data = await res.json();
         setEvents(data.events || []);
+        return true;
       }
+      return false;
+    } catch (error) {
+      if (error instanceof Error && error.name === 'AbortError') {
+        return true;
+      }
+      return false;
     } finally {
       setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    loadEvents();
     if (typeof window === 'undefined') return;
-    const onFocusOrVisible = () => {
-      if (document.visibilityState === 'visible') {
-        loadEvents();
-      }
+    const stopPolling = startAdaptivePoller({
+      baseIntervalMs: 30000,
+      minIntervalMs: 15000,
+      maxIntervalMs: 120000,
+      hiddenIntervalMs: 120000,
+      jitterRatio: 0.15,
+      immediate: true,
+      step: async ({ signal }) => {
+        const ok = await loadEvents(signal);
+        return ok ? undefined : { backoff: true };
+      },
+    });
+    const onHashChange = () => {
+      void loadEvents();
     };
-    window.addEventListener('focus', onFocusOrVisible);
-    window.addEventListener('hashchange', loadEvents);
-    document.addEventListener('visibilitychange', onFocusOrVisible);
-    const interval = setInterval(() => {
-      if (document.visibilityState === 'visible') {
-        loadEvents();
-      }
-    }, 3000);
+    window.addEventListener('hashchange', onHashChange);
     return () => {
-      window.removeEventListener('focus', onFocusOrVisible);
-      window.removeEventListener('hashchange', loadEvents);
-      document.removeEventListener('visibilitychange', onFocusOrVisible);
-      clearInterval(interval);
+      window.removeEventListener('hashchange', onHashChange);
+      stopPolling();
     };
   }, [loadEvents]);
 
   // Handle local poster file preview
   function handlePosterChange(file: File | null) {
     setPosterFile(file);
-    if (file) {
-      const url = URL.createObjectURL(file);
-      setPosterPreviewUrl(url);
-    } else {
-      setPosterPreviewUrl(null);
-    }
+    setPosterPreviewUrl(prev => {
+      if (prev?.startsWith('blob:')) URL.revokeObjectURL(prev);
+      return file ? URL.createObjectURL(file) : null;
+    });
   }
 
   // Handle local cover banner file preview
   function handleCoverBannerChange(file: File | null) {
     setCoverBannerFile(file);
-    if (file) {
-      const url = URL.createObjectURL(file);
-      setCoverBannerPreviewUrl(url);
-    } else {
-      setCoverBannerPreviewUrl(null);
-    }
+    setCoverBannerPreviewUrl(prev => {
+      if (prev?.startsWith('blob:')) URL.revokeObjectURL(prev);
+      return file ? URL.createObjectURL(file) : null;
+    });
   }
 
   // Handle local ticket template preview
   function handleTemplateChange(file: File | null) {
     setTicketTemplateFile(file);
-    if (file) {
-      const url = URL.createObjectURL(file);
-      setTicketTemplatePreviewUrl(url);
-    } else {
-      setTicketTemplatePreviewUrl(null);
-    }
+    setTicketTemplatePreviewUrl(prev => {
+      if (prev?.startsWith('blob:')) URL.revokeObjectURL(prev);
+      return file ? URL.createObjectURL(file) : null;
+    });
   }
 
   // Session draft helpers

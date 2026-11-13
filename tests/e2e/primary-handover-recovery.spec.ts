@@ -133,6 +133,7 @@ test.describe('TASK-035: Primary Handover and Emergency Recovery (AC-97, AC-98)'
     await expect(openTerminalBtn).toBeVisible({ timeout: 20000 });
     await openTerminalBtn.click();
 
+    await scanner2Page.getByTestId('terminal-tab-offline').click({ timeout: 10000 });
     const downloadBtn = scanner2Page.locator('#download-offline-dataset-btn');
     await expect(downloadBtn).toBeVisible({ timeout: 20000 });
     await downloadBtn.click();

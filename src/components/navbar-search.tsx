@@ -46,23 +46,30 @@ export function NavbarSearch() {
     setSearchTerm(q);
   }, [searchParams]);
 
-  // Load events once for fast instant client-side autocomplete
+  // Query slim autocomplete suggestions from server only when user types a search term
   useEffect(() => {
-    let active = true;
-    fetch('/api/public/events')
-      .then(res => res.json())
-      .then(data => {
-        if (active && Array.isArray(data.events)) {
-          setEvents(data.events);
-        }
+    const trimmedQuery = searchTerm.trim();
+    if (!trimmedQuery) return;
+    const controller = new AbortController();
+    const timer = setTimeout(() => {
+      fetch(`/api/public/events?q=${encodeURIComponent(trimmedQuery)}&limit=12`, {
+        signal: controller.signal,
       })
-      .catch(() => {
-        // Fallback gracefully if API is temporarily unavailable
-      });
+        .then(res => (res.ok ? res.json() : null))
+        .then(data => {
+          if (!controller.signal.aborted && Array.isArray(data?.events)) {
+            setEvents(data.events);
+          }
+        })
+        .catch(() => {
+          // Fallback gracefully if API is temporarily unavailable
+        });
+    }, 150);
     return () => {
-      active = false;
+      clearTimeout(timer);
+      controller.abort();
     };
-  }, []);
+  }, [searchTerm]);
 
   // Close dropdown on click outside
   useEffect(() => {

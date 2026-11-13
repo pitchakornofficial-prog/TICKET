@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import type { EventMoneyReportDetail } from '@/server/reports';
+import type { EventFinanceSummaryItem, EventMoneyReportDetail } from '@/server/reports';
 import { formatBaht, formatDate, formatTime } from '@/lib/locale';
 import {
   BanknotesIcon,
@@ -96,81 +96,105 @@ export function OwnerFinanceHub() {
 
   // Modal 3: View Full Money Report Details Modal
   const [viewingReportConcert, setViewingReportConcert] = useState<PayableConcertItem | null>(null);
+  const [viewingReportDetail, setViewingReportDetail] = useState<EventMoneyReportDetail | null>(null);
+  const [isLoadingReportDetail, setIsLoadingReportDetail] = useState(false);
 
-  // Fetch real data on mount
+  // Lazy-load full event breakdown only when Modal 3 opens
+  useEffect(() => {
+    if (!viewingReportConcert) {
+      setViewingReportDetail(null);
+      setIsLoadingReportDetail(false);
+      return;
+    }
+    const controller = new AbortController();
+    setIsLoadingReportDetail(true);
+    setViewingReportDetail(null);
+    fetch(`/api/owner/events/${viewingReportConcert.id}/money-report?ordersPage=1&ordersLimit=20`, {
+      cache: 'no-store',
+      signal: controller.signal,
+    })
+      .then(async res => {
+        if (!res.ok) return null;
+        const payload = await res.json();
+        return (payload?.report as EventMoneyReportDetail) || null;
+      })
+      .then(detail => {
+        if (!controller.signal.aborted) {
+          setViewingReportDetail(detail);
+        }
+      })
+      .catch(() => {
+        // Keep summary modal fields intact if detail fetch fails
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) {
+          setIsLoadingReportDetail(false);
+        }
+      });
+    return () => controller.abort();
+  }, [viewingReportConcert]);
+
+  // Fetch all event finance summaries in a single batched request on mount
   const fetchData = useCallback(async () => {
     setIsLoadingData(true);
     try {
-      const res = await fetch('/api/owner/events/fee-settings', { cache: 'no-store' });
+      const res = await fetch('/api/owner/finance/summaries', { cache: 'no-store' });
       if (res.ok) {
         const data = await res.json();
-        if (Array.isArray(data.events)) {
-          const eventsList = data.events;
+        if (Array.isArray(data.summaries)) {
+          const summaries: EventFinanceSummaryItem[] = data.summaries;
           const liveConcerts: PayableConcertItem[] = [];
           const livePayouts: PayoutRecordItem[] = [];
 
-          for (const ev of eventsList) {
-            try {
-              const repRes = await fetch(`/api/owner/events/${ev.id}/money-report`, { cache: 'no-store' });
-              if (repRes.ok) {
-                const payload = await repRes.json();
-                const repData: EventMoneyReportDetail = payload.report;
-                if (!repData) throw new Error('ไม่พบข้อมูลรายงานการเงิน');
-                liveConcerts.push({
-                  id: ev.id,
-                  title: ev.title,
-                  organizerId: ev.organizerId,
-                  organizerName: ev.organizerName || 'ผู้จัดงาน',
-                  organizerEmail: ev.organizerEmail || '',
-                  location: ev.location || 'สถานที่จัดแสดง',
-                  sessionTime: repData.sessions?.[0]?.sessionStartTime || '',
-                  status: ev.status === 'approved' ? 'เปิดขายบัตรแล้ว' : ev.status,
-                  cycleStatus: repData.payableAmount > 0 ? 'ready' : 'cutoff',
-                  cutoffDate: '',
-                  payoutBankName: (ev as { payoutBankName?: string }).payoutBankName || '',
-                  payoutAccountNumber: (ev as { payoutAccountNumber?: string }).payoutAccountNumber || '',
-                  payoutAccountName: (ev as { payoutAccountName?: string }).payoutAccountName || '',
-                  isBankVerified: false,
-                  grossSales: repData.grossSales || 0,
-                  customerFee: 0,
-                  platformFee: repData.organizerFee || 0,
-                  netSales: repData.netSales || 0,
-                  netEntitlement: repData.netEntitlement || 0,
-                  reservePercentage: repData.reservePercentage ?? 0,
-                  reserveTarget: repData.reserveTarget || 0,
-                  actualHeldReserve: repData.actualHeldReserve || 0,
-                  totalPaidOut: repData.totalPaidOut || 0,
-                  payableAmount: repData.payableAmount || 0,
-                });
+          for (const repData of summaries) {
+            liveConcerts.push({
+              id: repData.eventId,
+              title: repData.eventTitle,
+              organizerId: repData.organizerId,
+              organizerName: repData.organizerName || 'ผู้จัดงาน',
+              organizerEmail: repData.organizerEmail || '',
+              location: repData.location || 'สถานที่จัดแสดง',
+              sessionTime: repData.firstSessionStartTime || '',
+              status: repData.status === 'approved' ? 'เปิดขายบัตรแล้ว' : repData.status,
+              cycleStatus: repData.payableAmount > 0 ? 'ready' : 'cutoff',
+              cutoffDate: '',
+              payoutBankName: repData.payoutBankName || '',
+              payoutAccountNumber: repData.payoutAccountNumber || '',
+              payoutAccountName: repData.payoutAccountName || '',
+              isBankVerified: false,
+              grossSales: repData.grossSales || 0,
+              customerFee: 0,
+              platformFee: repData.organizerFee || 0,
+              netSales: repData.netSales || 0,
+              netEntitlement: repData.netEntitlement || 0,
+              reservePercentage: repData.reservePercentage ?? 0,
+              reserveTarget: repData.reserveTarget || 0,
+              actualHeldReserve: repData.actualHeldReserve || 0,
+              totalPaidOut: repData.totalPaidOut || 0,
+              payableAmount: repData.payableAmount || 0,
+            });
 
-                if (Array.isArray(repData.payouts) && repData.payouts.length > 0) {
-                  for (const p of repData.payouts) {
-                    livePayouts.push({
-                      id: p.id,
-                      eventId: p.eventId,
-                      eventTitle: ev.title,
-                      organizerName: ev.organizerName || 'ผู้จัดงาน',
-                      amount: p.amount,
-                      paidAt: p.paidAt,
-                      status: p.status,
-                      payoutBankName: (ev as { payoutBankName?: string }).payoutBankName || '',
-                      payoutAccountNumber: (ev as { payoutAccountNumber?: string }).payoutAccountNumber || '',
-                      payoutAccountName: (ev as { payoutAccountName?: string }).payoutAccountName || '',
-                      transferProofKey: p.transferProofKey,
-                      transferProofUrl: p.transferProofUrl,
-                      transferNote: p.transferNote,
-                      transferRef: (p as { transferRef?: string }).transferRef || '',
-                      recordedByName: p.recordedByName || null,
-                      createdAt: p.createdAt,
-                    });
-                  }
-                }
+            if (Array.isArray(repData.payouts) && repData.payouts.length > 0) {
+              for (const p of repData.payouts) {
+                livePayouts.push({
+                  id: p.id,
+                  eventId: p.eventId,
+                  eventTitle: repData.eventTitle,
+                  organizerName: repData.organizerName || 'ผู้จัดงาน',
+                  amount: p.amount,
+                  paidAt: p.paidAt,
+                  status: p.status,
+                  payoutBankName: repData.payoutBankName || '',
+                  payoutAccountNumber: repData.payoutAccountNumber || '',
+                  payoutAccountName: repData.payoutAccountName || '',
+                  transferProofKey: p.transferProofKey,
+                  transferProofUrl: p.transferProofUrl,
+                  transferNote: p.transferNote,
+                  transferRef: (p as { transferRef?: string }).transferRef || '',
+                  recordedByName: p.recordedByName || null,
+                  createdAt: p.createdAt,
+                });
               }
-              else {
-                throw new Error('โหลดรายงานการเงินไม่สำเร็จ');
-              }
-            } catch {
-              triggerToast({ type: 'error', message: `โหลดรายงานการเงินของ ${ev.title} ไม่สำเร็จ` });
             }
           }
 
@@ -178,7 +202,7 @@ export function OwnerFinanceHub() {
           setPayoutHistory(livePayouts);
         }
       } else {
-        throw new Error('โหลดรายชื่องานไม่สำเร็จ');
+        throw new Error('โหลดสรุปข้อมูลการเงินไม่สำเร็จ');
       }
     } catch {
       setPayableConcerts([]);
@@ -1109,6 +1133,19 @@ export function OwnerFinanceHub() {
                     {formatBaht(viewingReportConcert.payableAmount)}
                   </strong>
                 </div>
+                {isLoadingReportDetail ? (
+                  <div className="summary-field">
+                    <span className="summary-label">รายละเอียดรอบและคำสั่งซื้อ:</span>
+                    <span className="summary-val" style={{ color: '#64748b' }}>กำลังโหลด...</span>
+                  </div>
+                ) : viewingReportDetail ? (
+                  <div className="summary-field">
+                    <span className="summary-label">สรุปรอบและคำสั่งซื้อ:</span>
+                    <strong className="summary-val">
+                      {viewingReportDetail.sessions.length} รอบ · {viewingReportDetail.totalOrdersCount} คำสั่งซื้อ · {viewingReportDetail.totalTicketsValidCount} ใบใช้งานได้
+                    </strong>
+                  </div>
+                ) : null}
               </div>
             </div>
 

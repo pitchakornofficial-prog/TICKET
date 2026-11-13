@@ -1,15 +1,23 @@
 import { headers } from 'next/headers';
 import { notFound, redirect } from 'next/navigation';
 import Link from 'next/link';
+import dynamic from 'next/dynamic';
 import { getAuth, readActor } from '@/server/auth';
 import { isRole, roleAccess } from '@/lib/back-office-access';
 import { SignOutButton } from '@/components/sign-out-button';
-import { OrganizerWorkspaceView } from '@/components/organizer-workspace-view';
-import { ScannerEventsView } from '@/components/scanner-events-view';
-import { OwnerWorkspaceView } from '@/components/owner-workspace-view';
 import { TicketIcon } from '@/components/ticket-icon';
 import { AdminDateTimeDisplay } from '@/components/admin-date-time-display';
 import { AdminNotificationsMenu } from '@/components/admin-notifications-menu';
+
+const OrganizerWorkspaceView = dynamic(() =>
+  import('@/components/organizer-workspace-view').then(m => m.OrganizerWorkspaceView),
+);
+const ScannerEventsView = dynamic(() =>
+  import('@/components/scanner-events-view').then(m => m.ScannerEventsView),
+);
+const OwnerWorkspaceView = dynamic(() =>
+  import('@/components/owner-workspace-view').then(m => m.OwnerWorkspaceView),
+);
 
 const roleNames = { owner: 'เจ้าของเว็บ', organizer: 'ผู้จัดงาน', scanner: 'ทีมสแกนบัตร' };
 

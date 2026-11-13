@@ -1,8 +1,15 @@
+import { unstable_cache } from 'next/cache';
 import { getDatabasePool } from '@/server/database';
 import { listPublishedNews, type PublicNewsSummary } from '@/server/news';
 import { NewsListClient, type NewsItemDisplay } from '@/components/news-list-client';
 
-export const dynamic = 'force-dynamic';
+export const revalidate = 60;
+
+const getCachedPublishedNews = unstable_cache(
+  async () => listPublishedNews(getDatabasePool()),
+  ['public-news-list'],
+  { revalidate: 60, tags: ['public-news'] },
+);
 
 export const metadata = {
   title: 'ข่าวสารและประกาศ — TICKET',
@@ -13,8 +20,7 @@ export default async function NewsListPage() {
   let dbNewsList: PublicNewsSummary[] = [];
 
   try {
-    const pool = getDatabasePool();
-    dbNewsList = await listPublishedNews(pool);
+    dbNewsList = await getCachedPublishedNews();
   } catch (error) {
     const err = error as { code?: string };
     if (err?.code !== 'ECONNREFUSED') {

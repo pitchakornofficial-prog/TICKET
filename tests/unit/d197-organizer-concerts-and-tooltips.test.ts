@@ -21,7 +21,7 @@ describe('D-197: Organizer Concerts Redesign, Financial Report Pop-up, and Unive
   const eventsManagerContent = fs.readFileSync(eventsManagerPath, 'utf8');
   const moneyReportContent = fs.readFileSync(moneyReportPath, 'utf8');
   const tooltipComponentContent = fs.readFileSync(tooltipComponentPath, 'utf8');
-  const globalsCssContent = fs.readFileSync(globalsCssPath, 'utf8');
+  const globalsCssContent = (`${fs.readFileSync(globalsCssPath, 'utf8')}\n${fs.readFileSync(globalsCssPath.replace("src/app/globals.css", "src/app/back-office/back-office.css"), 'utf8')}`);
   const eventsServerContent = fs.readFileSync(eventsServerPath, 'utf8');
 
   it('1. Organizer Events Manager includes unified capsule tabs matching homepage (.catalog-tabs) without upcoming', () => {

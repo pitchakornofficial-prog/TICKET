@@ -12,20 +12,32 @@ export interface OrganizerMoneyReportViewProps {
   apiEndpoint?: string; // default to '/api/organizer/events/${eventId}/money-report'
 }
 
+const ORDERS_PAGE_SIZE = 50;
+
 export function OrganizerMoneyReportView({
   eventId: _eventId,
   onClose,
   apiEndpoint = `/api/organizer/events/${_eventId}/money-report`,
 }: OrganizerMoneyReportViewProps) {
   const [report, setReport] = useState<EventMoneyReportDetail | null>(null);
+  const [ordersPage, setOrdersPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const buildReportUrl = useCallback(
+    (page?: number, limit?: number) => {
+      if (!page || !limit) return apiEndpoint;
+      const sep = apiEndpoint.includes('?') ? '&' : '?';
+      return `${apiEndpoint}${sep}ordersPage=${page}&ordersLimit=${limit}`;
+    },
+    [apiEndpoint],
+  );
 
   const fetchReport = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(apiEndpoint, { cache: 'no-store' });
+      const res = await fetch(buildReportUrl(ordersPage, ORDERS_PAGE_SIZE), { cache: 'no-store' });
       const data = await res.json();
       if (!res.ok) {
         setError(data.message || 'ไม่สามารถโหลดรายงานการเงินได้');
@@ -37,44 +49,59 @@ export function OrganizerMoneyReportView({
     } finally {
       setLoading(false);
     }
-  }, [apiEndpoint]);
+  }, [buildReportUrl, ordersPage]);
 
   useEffect(() => {
     fetchReport();
   }, [fetchReport]);
 
-  const handleExportCsv = () => {
+  const handleExportCsv = async () => {
     if (!report) return;
+    let exportReport = report;
+    if (report.orders.length < report.totalOrdersCount) {
+      try {
+        const res = await fetch(buildReportUrl(), { cache: 'no-store' });
+        if (!res.ok) throw new Error('Full report unavailable');
+        const data = await res.json();
+        if (!data?.report || data.report.orders.length !== data.report.totalOrdersCount) {
+          throw new Error('Incomplete report');
+        }
+        exportReport = data.report;
+      } catch {
+        setError('ไม่สามารถโหลดรายการคำสั่งซื้อครบทั้งหมดเพื่อส่งออก CSV กรุณาลองอีกครั้ง');
+        return;
+      }
+    }
     const lines: string[] = [];
-    lines.push(`"รายงานสรุปการเงิน TICKET - ${report.eventTitle}"`);
-    lines.push(`"รหัสคอนเสิร์ต: ${report.eventId}"`);
+    lines.push(`"รายงานสรุปการเงิน TICKET - ${exportReport.eventTitle}"`);
+    lines.push(`"รหัสคอนเสิร์ต: ${exportReport.eventId}"`);
     lines.push(`"วันที่ออกรายงาน: ${formatDate(new Date())}"`);
     lines.push('');
     lines.push('"หัวข้อสรุปการเงิน","จำนวนเงิน (บาท)","รายละเอียด / หมายเหตุ"');
-    lines.push(`"ยอดขายบัตรทั้งหมด (Gross)",${report.grossSales.toFixed(2)},"ออกบัตรแล้ว ${report.totalTicketsIssuedCount} ใบ"`);
-    lines.push(`"ยอดคืนเงินที่อนุมัติ (Refunds)",${(-report.approvedRefundDeductions).toFixed(2)},"คืนแล้ว ${report.totalTicketsRefundedCount} ใบ"`);
-    lines.push(`"ยอดขายสุทธิ (Net Sales)",${report.netSales.toFixed(2)},"บัตรใช้งานได้ ${report.totalTicketsValidCount} ใบ"`);
-    lines.push(`"ค่าบริการระบบ (Organizer Fee)",${(-report.organizerFee).toFixed(2)},"หักค่าบริการแพลตฟอร์ม"`);
-    lines.push(`"สิทธิ์สุทธิผู้จัดงาน (E)",${report.netEntitlement.toFixed(2)},"ยอดขายสุทธิหักค่าบริการ"`);
-    lines.push(`"เงินสำรองที่กันไว้จริง (Held H)",${report.actualHeldReserve.toFixed(2)},"เป้าหมายสำรอง ${report.reserveTarget.toFixed(2)}"`);
-    lines.push(`"ยอดที่โอนจ่ายแล้ว (Paid P)",${report.totalPaidOut.toFixed(2)},"โอนจ่ายตามรอบสำเร็จ"`);
-    lines.push(`"ยอดพร้อมจ่าย (Payable)",${(report.isDebt ? -report.debtAmount : report.payableAmount).toFixed(2)},"${report.isDebt ? 'หนี้ค้างชำระ' : 'ยอดที่โอนได้ทันที'}"`);
+    lines.push(`"ยอดขายบัตรทั้งหมด (Gross)",${exportReport.grossSales.toFixed(2)},"ออกบัตรแล้ว ${exportReport.totalTicketsIssuedCount} ใบ"`);
+    lines.push(`"ยอดคืนเงินที่อนุมัติ (Refunds)",${(-exportReport.approvedRefundDeductions).toFixed(2)},"คืนแล้ว ${exportReport.totalTicketsRefundedCount} ใบ"`);
+    lines.push(`"ยอดขายสุทธิ (Net Sales)",${exportReport.netSales.toFixed(2)},"บัตรใช้งานได้ ${exportReport.totalTicketsValidCount} ใบ"`);
+    lines.push(`"ค่าบริการระบบ (Organizer Fee)",${(-exportReport.organizerFee).toFixed(2)},"หักค่าบริการแพลตฟอร์ม"`);
+    lines.push(`"สิทธิ์สุทธิผู้จัดงาน (E)",${exportReport.netEntitlement.toFixed(2)},"ยอดขายสุทธิหักค่าบริการ"`);
+    lines.push(`"เงินสำรองที่กันไว้จริง (Held H)",${exportReport.actualHeldReserve.toFixed(2)},"เป้าหมายสำรอง ${exportReport.reserveTarget.toFixed(2)}"`);
+    lines.push(`"ยอดที่โอนจ่ายแล้ว (Paid P)",${exportReport.totalPaidOut.toFixed(2)},"โอนจ่ายตามรอบสำเร็จ"`);
+    lines.push(`"ยอดพร้อมจ่าย (Payable)",${(exportReport.isDebt ? -exportReport.debtAmount : exportReport.payableAmount).toFixed(2)},"${exportReport.isDebt ? 'หนี้ค้างชำระ' : 'ยอดที่โอนได้ทันที'}"`);
     lines.push('');
 
-    if (report.sessions.length > 0) {
+    if (exportReport.sessions.length > 0) {
       lines.push('"สรุปตามรอบการแสดง"');
       lines.push('"รอบการแสดง","สถานะ","ออกบัตร (ใบ)","บัตรคงเหลือ (ใบ)","คืนบัตร (ใบ)","ยอดขายรวม (บาท)","ยอดคืนเงิน (บาท)","ยอดสุทธิ (บาท)"');
-      for (const s of report.sessions) {
+      for (const s of exportReport.sessions) {
         const sDate = `${formatDate(new Date(s.sessionStartTime))} ${formatTime(new Date(s.sessionStartTime))}`;
         lines.push(`"${sDate}","${s.sessionStatus === 'approved' ? 'เปิดขายปกติ' : s.sessionStatus === 'cancelled' ? 'ยกเลิกรอบ' : s.sessionStatus}",${s.issuedTicketsCount},${s.validTicketsCount},${s.refundedTicketsCount},${s.grossSales.toFixed(2)},${s.approvedRefunds.toFixed(2)},${s.netSales.toFixed(2)}`);
       }
       lines.push('');
     }
 
-    if (report.orders.length > 0) {
+    if (exportReport.orders.length > 0) {
       lines.push('"รายการคำสั่งซื้อ"');
       lines.push('"หมายเลขคำสั่งซื้อ","ผู้ซื้อ","อีเมล","เบอร์โทร","บัตรคงเหลือ / ทั้งหมด","ยอดขายรวม (บาท)","ยอดคืนเงิน (บาท)","ยอดสุทธิ (บาท)","ค่าบริการ (บาท)"');
-      for (const o of report.orders) {
+      for (const o of exportReport.orders) {
         lines.push(`"${o.orderId}","${o.buyerName}","${o.buyerEmail}","${o.buyerPhone}","${o.validTicketsCount} / ${o.totalTicketsCount}",${o.grossSubtotal.toFixed(2)},${o.refundDeductions.toFixed(2)},${o.netSubtotal.toFixed(2)},${o.orderFeeAdjusted.toFixed(2)}`);
       }
       lines.push('');
@@ -85,7 +112,7 @@ export function OrganizerMoneyReportView({
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.setAttribute('download', `ticket-money-report-${report.eventId}-${Date.now()}.csv`);
+    link.setAttribute('download', `ticket-money-report-${exportReport.eventId}-${Date.now()}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -514,7 +541,7 @@ export function OrganizerMoneyReportView({
             <summary className="report-collapsible-summary">
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', flexWrap: 'wrap', gap: '8px' }}>
                 <span style={{ fontSize: '15px', fontWeight: 'bold', color: '#0f172a' }}>
-                  รายการคำสั่งซื้อและค่าบริการรายคำสั่ง ({report.orders.length} รายการ)
+                  รายการคำสั่งซื้อและค่าบริการรายคำสั่ง ({report.totalOrdersCount} รายการ)
                 </span>
                 <span style={{ fontSize: '12px', color: '#64748b', fontWeight: 'normal' }}>
                   * ข้อมูลติดต่อผู้ซื้อถูกปิดบังบางส่วนเพื่อความปลอดภัย
@@ -573,6 +600,53 @@ export function OrganizerMoneyReportView({
                       ))}
                     </tbody>
                   </table>
+                </div>
+              )}
+              {report.ordersPagination && report.ordersPagination.totalPages > 1 && (
+                <div
+                  data-testid="orders-pagination-controls"
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    marginTop: '12px',
+                    fontSize: '12px',
+                    color: '#475569',
+                  }}
+                >
+                  <span>
+                    แสดงหน้า {report.ordersPagination.page} จาก {report.ordersPagination.totalPages} (ทั้งหมด {report.ordersPagination.totalCount} รายการ)
+                  </span>
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    <button
+                      type="button"
+                      disabled={ordersPage <= 1 || loading}
+                      onClick={() => setOrdersPage((p) => Math.max(1, p - 1))}
+                      style={{
+                        padding: '4px 10px',
+                        borderRadius: '4px',
+                        border: '1px solid #cbd5e1',
+                        backgroundColor: ordersPage <= 1 ? '#f8fafc' : '#ffffff',
+                        cursor: ordersPage <= 1 ? 'not-allowed' : 'pointer',
+                      }}
+                    >
+                      ก่อนหน้า
+                    </button>
+                    <button
+                      type="button"
+                      disabled={ordersPage >= report.ordersPagination.totalPages || loading}
+                      onClick={() => setOrdersPage((p) => p + 1)}
+                      style={{
+                        padding: '4px 10px',
+                        borderRadius: '4px',
+                        border: '1px solid #cbd5e1',
+                        backgroundColor: ordersPage >= report.ordersPagination.totalPages ? '#f8fafc' : '#ffffff',
+                        cursor: ordersPage >= report.ordersPagination.totalPages ? 'not-allowed' : 'pointer',
+                      }}
+                    >
+                      ถัดไป
+                    </button>
+                  </div>
                 </div>
               )}
             </div>

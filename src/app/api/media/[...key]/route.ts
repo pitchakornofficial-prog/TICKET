@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { headers } from 'next/headers';
 import { getAuth, readActor } from '@/server/auth';
 import { storage } from '@/server/storage';
@@ -10,7 +11,11 @@ export async function GET(
 ) {
   const { key } = await params;
   const fullKey = key.map(decodeURIComponent).join('/');
-  const item = await storage.get(fullKey);
+
+  const streamItem = storage.getStream ? await storage.getStream(fullKey) : null;
+  const bufferItem = streamItem ? null : await storage.get(fullKey);
+  const item = streamItem ?? bufferItem;
+
   if (!item) {
     return new Response('Not found', { status: 404 });
   }
@@ -25,6 +30,7 @@ export async function GET(
     }
     const actor = await readActor(getAuth(), reqHeaders);
     if (actor?.role !== 'owner') {
+      await streamItem?.stream.cancel().catch(() => {});
       return new Response('Forbidden: Access restricted to owner only', { status: 403 });
     }
   }
@@ -45,15 +51,56 @@ export async function GET(
     contentDisposition = `attachment; filename="${safeFilename}"`;
   }
 
-  return new Response(new Uint8Array(item.data), {
+  const etag =
+    streamItem?.etag ||
+    (bufferItem
+      ? `"${createHash('sha256').update(bufferItem.data).digest('hex').slice(0, 16)}"`
+      : undefined);
+
+  const cacheControl =
+    item.visibility === 'private'
+      ? 'private, no-cache, no-store, must-revalidate'
+      : 'public, max-age=31536000, immutable';
+
+  if (item.visibility === 'public' && etag) {
+    const ifNoneMatch = request.headers.get('if-none-match');
+    if (ifNoneMatch && (ifNoneMatch === etag || ifNoneMatch === '*')) {
+      await streamItem?.stream.cancel().catch(() => {});
+      return new Response(null, {
+        status: 304,
+        headers: {
+          ETag: etag,
+          'Cache-Control': cacheControl,
+        },
+      });
+    }
+  }
+
+  const responseHeaders: Record<string, string> = {
+    'Content-Type': effectiveContentType,
+    'Content-Disposition': contentDisposition,
+    'Content-Security-Policy': "default-src 'none'; sandbox",
+    'X-Content-Type-Options': 'nosniff',
+    'X-Frame-Options': 'DENY',
+    'Cache-Control': cacheControl,
+  };
+
+  if (etag) {
+    responseHeaders.ETag = etag;
+  }
+  const contentLength = streamItem?.contentLength ?? bufferItem?.data.byteLength;
+  if (contentLength !== undefined) {
+    responseHeaders['Content-Length'] = String(contentLength);
+  }
+
+  const body: BodyInit | null = streamItem
+    ? streamItem.stream
+    : bufferItem
+      ? new Uint8Array(bufferItem.data)
+      : null;
+
+  return new Response(body, {
     status: 200,
-    headers: {
-      'Content-Type': effectiveContentType,
-      'Content-Disposition': contentDisposition,
-      'Content-Security-Policy': "default-src 'none'; sandbox",
-      'X-Content-Type-Options': 'nosniff',
-      'X-Frame-Options': 'DENY',
-      'Cache-Control': item.visibility === 'private' ? 'private, no-cache' : 'public, max-age=3600',
-    },
+    headers: responseHeaders,
   });
 }

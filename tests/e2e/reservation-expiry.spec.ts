@@ -1,3 +1,4 @@
+import { reserveThroughCheckout } from '../support/purchase-journey';
 import { testClientIp } from '../support/client-context';
 import { expect, test } from '@playwright/test';
 import { fixtureAccounts, fixturePassword } from '../support/auth-fixture';
@@ -81,43 +82,11 @@ test.describe('Reservation expiry, refresh idempotency and quota release (TASK-0
     await expect(page).toHaveURL(new RegExp(`/events/${createdEvent.id}/checkout`));
 
     // 4. Select 2 tickets (consuming all quota)
-    const addBtn = page.getByRole('button', { name: 'เพิ่มจำนวน บัตรนั่งมาตรฐาน' });
-    await addBtn.click();
-    await addBtn.click();
-    await expect(page.getByText('รวมราคาบัตร (2 ใบ)')).toBeVisible();
-
-    // Complete OTP verification
-    await page.getByLabel('ชื่อ-นามสกุล *').fill(guestName);
-    await page.getByLabel('อีเมล *').fill(guestEmail);
-    await page.getByLabel('เบอร์โทรศัพท์มือถือ *').fill(guestPhone);
-    await page.getByRole('button', { name: 'ขอรหัส OTP เพื่อซื้อบัตร' }).click();
-
-    await expect(page.getByText('ส่งรหัส OTP 6 หลักไปยังอีเมลของคุณเรียบร้อยแล้ว')).toBeVisible();
-
-    const otpRes = await request.get(
-      `/api/auth/test-inspect-reset-token?type=guest_otp&email=${encodeURIComponent(guestEmail)}`,
-    );
-    expect(otpRes.status()).toBe(200);
-    const { code } = await otpRes.json();
-    expect(code).toMatch(/^\d{6}$/);
-
-    await page.getByLabel('รหัส OTP 6 หลัก *').fill(code);
-    await page.getByRole('button', { name: 'ยืนยันรหัส OTP' }).click();
-
-    const confirmModalBtn = page.getByRole('button', { name: 'ยืนยันและดำเนินการต่อ' });
-    if (await confirmModalBtn.isVisible()) {
-      await confirmModalBtn.click();
-    }
-    await expect(page.getByRole('heading', { name: 'ยืนยันอีเมลสำเร็จ (Guest Verified)' })).toBeVisible();
-
-    // 5. Confirm reservation -> navigates to Payment page
-    const confirmReserveBtn = page.locator('#confirm-reservation-btn');
-    await expect(confirmReserveBtn).toBeEnabled();
-    await confirmReserveBtn.scrollIntoViewIfNeeded();
-    await confirmReserveBtn.click({ force: true });
-
-    // 6. Active reservation confirmed
-    await expect(page).toHaveURL(/\/orders\/ORD-[A-Z0-9-]+\/payment$/);
+    await reserveThroughCheckout(page, {
+      eventId: createdEvent.id,
+      buyer: { name: guestName, email: guestEmail, phone: guestPhone },
+      tickets: [{ name: 'บัตรนั่งมาตรฐาน', quantity: 2 }],
+    });
     await expect(page.getByText('กันบัตรสำเร็จ (Reserved)')).toBeVisible();
     const orderId = (await page.locator('#reservation-order-id').innerText()).trim();
     expect(orderId).toMatch(/^ORD-/);

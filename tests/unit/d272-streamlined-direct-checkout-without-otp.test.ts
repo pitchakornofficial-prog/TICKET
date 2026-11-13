@@ -79,6 +79,7 @@ describe('Checkout OTP Restoration & Production Direct-Session Guard (Supersedes
     expect(guestEntrySrc).not.toContain('/api/public/checkout/direct-session');
     expect(guestEntrySrc).toContain('ขอรหัส OTP เพื่อซื้อบัตร');
     expect(guestEntrySrc).toContain('ยืนยันและไปหน้าชำระเงิน');
+    expect(guestEntrySrc).not.toContain('verify-otp-open-confirm-btn');
 
     // Retains backward contract strings
     expect(guestEntrySrc).toContain('pdpa-consent-checkbox');

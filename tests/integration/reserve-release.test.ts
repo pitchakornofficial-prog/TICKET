@@ -15,6 +15,7 @@ import { setCustomEmailTransport, clearCapturedEmails, getCapturedEmails } from 
 describe('TASK-030: Reserve Release Integration Tests (AC-83, G-30, G-31)', () => {
   let fixture: Awaited<ReturnType<typeof authFixture>>;
   const baseURL = 'http://127.0.0.1:3100';
+  const endedSessionWindows = new Map<string, { id: string; start: Date; end: Date }[]>();
 
   beforeAll(async () => {
     fixture = await authFixture('integration', baseURL);
@@ -56,8 +57,8 @@ describe('TASK-030: Reserve Release Integration Tests (AC-83, G-30, G-31)', () =
       },
       [
         {
-          startTime: session1Start.toISOString(),
-          endTime: session1End.toISOString(),
+          startTime: new Date(now + 24 * 3600 * 1000).toISOString(),
+          endTime: new Date(now + 28 * 3600 * 1000).toISOString(),
           ticketTypes: [
             {
               name: 'บัตรทั่วไป 1',
@@ -68,8 +69,8 @@ describe('TASK-030: Reserve Release Integration Tests (AC-83, G-30, G-31)', () =
           ],
         },
         {
-          startTime: session2Start.toISOString(),
-          endTime: session2End.toISOString(),
+          startTime: new Date(now + 48 * 3600 * 1000).toISOString(),
+          endTime: new Date(now + 52 * 3600 * 1000).toISOString(),
           ticketTypes: [
             {
               name: 'บัตรทั่วไป 2',
@@ -100,6 +101,12 @@ describe('TASK-030: Reserve Release Integration Tests (AC-83, G-30, G-31)', () =
       fixture.ids.owner,
     );
 
+    // Buy while the sessions are open, then advance only the fixture's event
+    // chronology after payment. Purchasing an already ended session is invalid.
+    endedSessionWindows.set(eventDraft.id, [
+      { id: eventDraft.sessions[0].id, start: session1Start, end: session1End },
+      { id: eventDraft.sessions[1].id, start: session2Start, end: session2End },
+    ]);
     return {
       event: eventDraft,
       session1: eventDraft.sessions[0],
@@ -148,6 +155,13 @@ describe('TASK-030: Reserve Release Integration Tests (AC-83, G-30, G-31)', () =
       chargeId: charge.id,
       providerPaidAt: new Date(),
     });
+    expect(payResult.success).toBe(true);
+    for (const session of endedSessionWindows.get(eventId) ?? []) {
+      await fixture.pool.query(
+        'UPDATE event_sessions SET "startTime" = $2, "endTime" = $3 WHERE id = $1',
+        [session.id, session.start, session.end],
+      );
+    }
 
     return { reservation, charge, payResult, buyerEmail, buyerPhone, buyerName, verifiedToken };
   }

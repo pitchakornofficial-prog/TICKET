@@ -32,10 +32,10 @@ describe('D-229 to D-232: Removal of Header Shortcuts, All-Status Mock Concerts,
       join(rootDir, 'src/components/owner-session-approval-manager.tsx'),
       'utf8',
     );
-    const cssContent = readFileSync(
+    const cssContent = (`${readFileSync(
       join(rootDir, 'src/app/globals.css'),
       'utf8',
-    );
+    )}\n${readFileSync(join(rootDir, 'src/app/globals.css').replace("src/app/globals.css", "src/app/back-office/back-office.css"), 'utf8')}`);
 
     // Manager uses horizontal row card classes and hairline dividers (evolved in D-242 to image-free cards)
     expect(managerContent).toContain('concert-horizontal-row-card');

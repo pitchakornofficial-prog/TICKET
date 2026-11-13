@@ -294,7 +294,7 @@ describe('TASK-026: Session Cancellation Integration Tests (AC-35, AC-91, AC-108
         sessionId,
         items: [{ ticketTypeId, quantity: 1 }],
       }),
-    ).rejects.toThrow('รอบการแสดงนี้ถูกยกเลิกแล้ว ไม่สามารถทำการจองบัตรได้ (AC-35)');
+    ).rejects.toThrow('รอบการแสดงนี้ถูกยกเลิกแล้ว ไม่สามารถทำการจองบัตรได้');
 
     // 6. Idempotency test: calling approveSessionCancellation again returns alreadyApproved
     const repeatRes = await approveSessionCancellation(fixture.pool, {

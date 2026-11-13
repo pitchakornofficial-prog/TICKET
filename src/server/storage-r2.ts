@@ -1,12 +1,13 @@
 // ADR-0003: Cloudflare R2 driver (S3-compatible, AWS SigV4 ด้วย node:crypto ไม่เพิ่ม dependency)
 import { createHash, createHmac } from 'node:crypto';
-import type { PresignedUploadResult, StorageDriver, StorageItem } from './storage.ts';
+import type { PresignedUploadResult, StorageDriver, StorageItem, StorageStreamItem } from './storage.ts';
 
 export type R2Config = {
   accessKeyId: string;
   secretAccessKey: string;
   bucket: string;
   endpoint: string;
+  publicBaseUrl?: string;
 };
 
 export function readR2Config(env: NodeJS.ProcessEnv = process.env): R2Config | null {
@@ -18,7 +19,8 @@ export function readR2Config(env: NodeJS.ProcessEnv = process.env): R2Config | n
     endpoint = `https://${env.R2_ACCOUNT_ID.trim()}.r2.cloudflarestorage.com`;
   }
   if (!accessKeyId || !secretAccessKey || !bucket || !endpoint) return null;
-  return { accessKeyId, secretAccessKey, bucket, endpoint: endpoint.replace(/\/+$/, '') };
+  const publicBaseUrl = env.R2_PUBLIC_BASE_URL?.trim().replace(/\/+$/, '') || undefined;
+  return { accessKeyId, secretAccessKey, bucket, endpoint: endpoint.replace(/\/+$/, ''), publicBaseUrl };
 }
 
 const sha256Hex = (data: Uint8Array | string) => createHash('sha256').update(data).digest('hex');
@@ -74,6 +76,13 @@ export class R2StorageDriver implements StorageDriver {
     });
   }
 
+  private resolvePublicUrl(key: string, visibility: 'public' | 'private'): string {
+    if (visibility === 'public' && this.config.publicBaseUrl) {
+      return `${this.config.publicBaseUrl}/${encodeKey(key)}`;
+    }
+    return `/api/media/${encodeURIComponent(key)}`;
+  }
+
   async put(
     key: string,
     data: Uint8Array | Buffer,
@@ -81,12 +90,32 @@ export class R2StorageDriver implements StorageDriver {
     visibility: 'public' | 'private' = 'public',
   ): Promise<{ url: string; key: string }> {
     const buf = Buffer.isBuffer(data) ? data : Buffer.from(data);
+    const cacheControl =
+      visibility === 'public' ? 'public, max-age=31536000, immutable' : 'private, no-store';
     const res = await this.request('PUT', key, buf, {
       'content-type': contentType,
+      'cache-control': cacheControl,
       'x-amz-meta-visibility': visibility,
     });
     if (!res.ok) throw new Error(`R2 put failed: ${res.status} ${(await res.text()).slice(0, 200)}`);
-    return { url: `/api/media/${encodeURIComponent(key)}`, key };
+    return { url: this.resolvePublicUrl(key, visibility), key };
+  }
+
+  async getStream(key: string): Promise<StorageStreamItem | null> {
+    const res = await this.request('GET', key);
+    if (res.status === 404) return null;
+    if (!res.ok) throw new Error(`R2 get failed: ${res.status} ${(await res.text()).slice(0, 200)}`);
+    if (!res.body) return null;
+    const rawLen = res.headers.get('content-length');
+    const parsedLen = rawLen ? Number.parseInt(rawLen, 10) : Number.NaN;
+    return {
+      stream: res.body,
+      contentType: res.headers.get('content-type') || 'application/octet-stream',
+      // metadata หายหรืออ่านไม่ได้ ให้ถือเป็น private (fail closed)
+      visibility: res.headers.get('x-amz-meta-visibility') === 'public' ? 'public' : 'private',
+      contentLength: Number.isFinite(parsedLen) ? parsedLen : undefined,
+      etag: res.headers.get('etag') || undefined,
+    };
   }
 
   async get(key: string): Promise<StorageItem | null> {
@@ -168,7 +197,7 @@ export class R2StorageDriver implements StorageDriver {
     const signature = createHmac('sha256', kSigning).update(stringToSign).digest('hex');
 
     const uploadUrl = `${endpoint}${path}?${canonicalQueryString}&X-Amz-Signature=${signature}`;
-    const publicUrl = `/api/media/${encodeURIComponent(key)}`;
+    const publicUrl = this.resolvePublicUrl(key, visibility);
 
     return {
       uploadUrl,

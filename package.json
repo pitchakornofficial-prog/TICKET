@@ -30,7 +30,8 @@
     "freshy:seed": "node --env-file=.env.local scripts/seed-ubu-freshy.ts",
     "db:reset-backoffice": "node --env-file=.env.local scripts/reset-backoffice-data.ts",
     "tokens:revoke": "node --env-file=.env.local scripts/revoke-pending-tokens.ts",
-    "test:simulation": "node --experimental-strip-types --env-file=.env.test.local scripts/test-4500-tickets-flow.ts"
+    "test:simulation": "node --experimental-strip-types --env-file=.env.test.local scripts/test-4500-tickets-flow.ts",
+    "benchmark:optimizations": "node --env-file-if-exists=.env.test.local node_modules/vitest/vitest.mjs run --config vitest.benchmark.config.ts"
   },
   "dependencies": {
     "@fontsource/kanit": "5.3.0",
@@ -38,7 +39,8 @@
     "next": "16.4.2",
     "pg": "8.23.1",
     "react": "19.3.1",
-    "react-dom": "19.3.1"
+    "react-dom": "19.3.1",
+    "sharp": "0.35.5"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.15",

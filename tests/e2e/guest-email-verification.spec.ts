@@ -12,6 +12,7 @@ test.describe('Guest checkout email verification and details entry (TASK-011, AC
     page,
     request,
   }, testInfo) => {
+    test.setTimeout(60000);
     const eventTitle = `คอนเสิร์ตยืนยันอีเมล ${testInfo.project.name}`;
     const guestEmail = `buyer-${testInfo.project.name}@ticket.invalid`;
     const guestName = `สมชาย ใจดี ${testInfo.project.name}`;
@@ -143,20 +144,22 @@ test.describe('Guest checkout email verification and details entry (TASK-011, AC
 
     // 7. Test wrong OTP submission (AC-57 / AC-59)
     await page.getByLabel('รหัส OTP 6 หลัก *').fill('000000');
-    await page.getByRole('button', { name: 'ยืนยันรหัส OTP' }).click();
-    await page.getByRole('button', { name: 'ยืนยันและดำเนินการต่อ' }).click();
+    await page.getByRole('button', { name: 'ยืนยันและไปหน้าชำระเงิน', exact: true }).click();
     await expect(page.getByText(/รหัส OTP ไม่ถูกต้อง/)).toBeVisible();
 
     // 8. Submit correct OTP
     await page.getByLabel('รหัส OTP 6 หลัก *').fill(code);
-    await page.getByRole('button', { name: 'ยืนยันรหัส OTP' }).click();
-    await page.getByRole('button', { name: 'ยืนยันและดำเนินการต่อ' }).click();
+    await page.getByRole('button', { name: 'ยืนยันและไปหน้าชำระเงิน', exact: true }).click();
 
-    // 9. Arrive at Verified step (AC-57)
-    await expect(page.getByRole('heading', { name: 'ยืนยันอีเมลสำเร็จ (Guest Verified)' })).toBeVisible();
-    await expect(page.locator('#verified-buyer-name')).toHaveText(guestName);
-    await expect(page.locator('#verified-buyer-email')).toHaveText(guestEmail);
-    await expect(page.locator('#verified-buyer-phone')).toHaveText(guestPhone);
+    // Successful OTP now reserves directly and navigates to payment.
+    await expect(page).toHaveURL(/\/orders\/ORD-[A-Z0-9-]+\/payment$/);
+    const orderId = (await page.locator('#reservation-order-id').innerText()).trim();
+    const token = await page.evaluate(() => sessionStorage.getItem('ticket_guest_otp_token'));
+    const order = await page.request.get(`/api/public/checkout/orders/${orderId}`, {
+      headers: token ? { 'x-guest-token': token } : {},
+    });
+    expect(order.status()).toBe(200);
+    expect((await order.json()).reservation).toMatchObject({ buyerName: guestName, buyerEmail: guestEmail, buyerPhone: guestPhone });
     await expect(page.getByRole('button', { name: 'แก้ไขข้อมูล / เลือกบัตรใหม่' })).toHaveCount(0);
 
     // 10. Design constraints: Zero emojis (D-14), responsive layout

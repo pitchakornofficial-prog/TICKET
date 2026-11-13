@@ -300,6 +300,6 @@ describe('TASK-025: Reschedule and Special Refund Window Integration Tests (AC-3
         specialRefundWindowStart: new Date(),
         specialRefundWindowEnd: new Date(Date.now() + 24 * 3600 * 1000),
       }),
-    ).rejects.toThrow('ไม่อนุญาต: เฉพาะเจ้าของเว็บ (Owner) เท่านั้นที่สามารถกำหนดช่วงเวลาขอคืนเงินพิเศษได้ (AC-38)');
+    ).rejects.toThrow('ไม่อนุญาต: เฉพาะเจ้าของเว็บ (Owner) เท่านั้นที่สามารถกำหนดช่วงเวลาขอคืนเงินพิเศษได้');
   });
 });

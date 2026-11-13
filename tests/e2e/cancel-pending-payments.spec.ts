@@ -104,13 +104,18 @@ test.describe('Cancel session while payment is pending and refund timely amounts
 
     const approveCanBtn = canRequestCard.getByRole('button', { name: 'อนุมัติยกเลิกรอบการแสดง' });
     await expect(approveCanBtn).toBeVisible();
+    const cancellationPoll = buyerPage.waitForResponse(async response => {
+      if (!response.url().endsWith(`/api/public/checkout/orders/${orderId}`) || response.request().method() !== 'GET') return false;
+      return response.ok() && (await response.json()).reservation?.status === 'cancelled';
+    }, { timeout: 20000 });
     await approveCanBtn.click({ force: true });
     await expect(ownerPage.getByText(/อนุมัติการยกเลิกรอบการแสดงของ.*สำเร็จ/)).toBeVisible();
 
     // 6. Buyer checks reservation state:
     // When owner approves cancellation at C, active reservations terminate (status = 'cancelled'),
     // UI displays #reservation-cancelled-alert and stops presenting PromptPay QR (AC-112, G-50)
-    await buyerPage.reload();
+    // Keep the payment page open: its real poll must remove the QR without refresh.
+    expect((await (await cancellationPoll).json()).reservation.status).toBe('cancelled');
     await expect(buyerPage.locator('#reservation-cancelled-alert')).toBeVisible();
     await expect(buyerPage.locator('#reservation-cancelled-alert')).toContainText('รอบการแสดงนี้ถูกยกเลิกแล้ว');
     await expect(buyerPage.locator('#promptpay-qr-image')).not.toBeVisible();

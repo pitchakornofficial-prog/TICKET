@@ -4,7 +4,7 @@ import { join } from 'node:path';
 
 describe('Unified 1200px Workspace Width & Standardized Section Header Architecture (D-119)', () => {
   const rootDir = process.cwd();
-  const css = readFileSync(join(rootDir, 'src/app/globals.css'), 'utf8');
+  const css = (`${readFileSync(join(rootDir, 'src/app/globals.css'), 'utf8')}\n${readFileSync(join(rootDir, 'src/app/globals.css').replace("src/app/globals.css", "src/app/back-office/back-office.css"), 'utf8')}`);
 
   it('standardizes 1200px max-width across all organizer and owner section containers in globals.css', () => {
     // Stage containers

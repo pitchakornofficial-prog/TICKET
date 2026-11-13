@@ -3,7 +3,7 @@ import type { Pool, PoolClient } from 'pg';
 import { inTransaction } from './database.ts';
 import { getVerifiedGuestSession } from './guest-otp.ts';
 import { ensureReservationSchema } from './reservation.ts';
-import { ensureTicketSchema, issueTicketsForOrder, type TicketDetail } from './tickets.ts';
+import { ensureTicketSchema, issueTicketsForOrder, buildTicketsToIssue, type TicketDetail, type TicketIssuanceItemRow } from './tickets.ts';
 import { ensureRefundSchema } from './refunds.ts';
 import { roundHalfUp } from './fees.ts';
 import { sendOrderTicketsEmail } from './ticket-delivery.ts';
@@ -146,7 +146,7 @@ export async function createPaymentQr(
   await ensurePaymentSchema(pool);
 
   return inTransaction(pool, async (client: PoolClient) => {
-    // 1. Lock and read order
+    // 1. Lock order and check existing pending charge in a single round-trip
     const orderRes = await client.query<{
       id: string;
       buyerEmail: string;
@@ -154,10 +154,33 @@ export async function createPaymentQr(
       total: number;
       expiresAt: Date;
       sessionStatus: string;
+      existingChargeId: string | null;
+      existingChargeOrderId: string | null;
+      existingChargeAmount: number | null;
+      existingChargeCurrency: string | null;
+      existingChargeStatus: string | null;
+      existingChargeQrCodeUrl: string | null;
+      existingChargeExpiresAt: Date | null;
+      existingChargeCreatedAt: Date | null;
+      existingChargePromptpayData: string | null;
+      existingChargeLivemode: boolean | null;
     }>(
-      `SELECT o.id, o."buyerEmail", o.status, o.total, o."expiresAt", es.status AS "sessionStatus"
+      `SELECT o.id, o."buyerEmail", o.status, o.total, o."expiresAt", es.status AS "sessionStatus",
+              pc.id AS "existingChargeId", pc."orderId" AS "existingChargeOrderId",
+              pc.amount AS "existingChargeAmount", pc.currency AS "existingChargeCurrency",
+              pc.status AS "existingChargeStatus", pc."qrCodeUrl" AS "existingChargeQrCodeUrl",
+              pc."expiresAt" AS "existingChargeExpiresAt", pc."createdAt" AS "existingChargeCreatedAt",
+              pc."promptpayData" AS "existingChargePromptpayData", pc."livemode" AS "existingChargeLivemode"
        FROM orders o
        JOIN event_sessions es ON es.id = o."sessionId"
+       LEFT JOIN LATERAL (
+         SELECT id, "orderId", amount, currency, status, "qrCodeUrl", "expiresAt", "createdAt",
+                "promptpayData", "livemode"
+         FROM payment_charges
+         WHERE "orderId" = o.id AND status = 'pending'
+         ORDER BY "createdAt" DESC
+         LIMIT 1
+       ) pc ON TRUE
        WHERE o.id = $1
        FOR UPDATE OF o`,
       [input.orderId],
@@ -194,29 +217,18 @@ export async function createPaymentQr(
     }
 
     // AC-70: Repeated payment request returns existing charge and retains original deadline
-    const existingRes = await client.query(
-      `SELECT id, "orderId", amount, currency, status, "qrCodeUrl", "expiresAt", "createdAt",
-              "promptpayData", "livemode"
-       FROM payment_charges
-       WHERE "orderId" = $1 AND status = 'pending'
-       ORDER BY "createdAt" DESC
-       LIMIT 1`,
-      [order.id],
-    );
-
-    if (existingRes.rowCount && existingRes.rowCount > 0) {
-      const row = existingRes.rows[0];
+    if (order.existingChargeId) {
       return {
-        id: row.id,
-        orderId: row.orderId,
-        amount: Number(row.amount),
-        currency: row.currency as 'thb',
-        status: row.status as 'pending',
-        qrCodeUrl: row.qrCodeUrl,
-        promptpayData: row.promptpayData || undefined,
-        expiresAt: new Date(row.expiresAt).toISOString(),
-        createdAt: new Date(row.createdAt).toISOString(),
-        livemode: Boolean(row.livemode),
+        id: order.existingChargeId,
+        orderId: order.existingChargeOrderId ?? order.id,
+        amount: Number(order.existingChargeAmount),
+        currency: (order.existingChargeCurrency ?? 'thb') as 'thb',
+        status: (order.existingChargeStatus ?? 'pending') as 'pending',
+        qrCodeUrl: order.existingChargeQrCodeUrl ?? '',
+        promptpayData: order.existingChargePromptpayData || undefined,
+        expiresAt: new Date(order.existingChargeExpiresAt ?? order.expiresAt).toISOString(),
+        createdAt: new Date(order.existingChargeCreatedAt ?? now).toISOString(),
+        livemode: Boolean(order.existingChargeLivemode),
       };
     }
 
@@ -298,41 +310,61 @@ export async function getPaymentChargeForOrder(
     throw new Error('กรุณายืนยันตัวตนผ่าน OTP ก่อนเข้าถึงข้อมูลการชำระเงิน');
   }
 
-  const verifiedSession = await getVerifiedGuestSession(pool, verifiedToken, now, 'checkout');
-  if (!verifiedSession) {
+  const res = await pool.query<{
+    sessionEmail: string;
+    orderIdExists: string | null;
+    orderBuyerEmail: string | null;
+    id: string | null;
+    orderId: string | null;
+    amount: number | null;
+    currency: string | null;
+    status: string | null;
+    qrCodeUrl: string | null;
+    expiresAt: Date | null;
+    createdAt: Date | null;
+    promptpayData: string | null;
+    livemode: boolean | null;
+  }>(
+    `SELECT s.email AS "sessionEmail",
+            o.id AS "orderIdExists",
+            o."buyerEmail" AS "orderBuyerEmail",
+            pc.id, pc."orderId", pc.amount, pc.currency, pc.status, pc."qrCodeUrl",
+            pc."expiresAt", pc."createdAt", pc."promptpayData", pc."livemode"
+     FROM guest_verified_sessions s
+     LEFT JOIN orders o ON o.id = $2
+     LEFT JOIN LATERAL (
+       SELECT id, "orderId", amount, currency, status, "qrCodeUrl", "expiresAt", "createdAt",
+              "promptpayData", "livemode"
+       FROM payment_charges
+       WHERE "orderId" = o.id
+       ORDER BY "createdAt" DESC
+       LIMIT 1
+     ) pc ON TRUE
+     WHERE s.token = $1 AND s."expiresAt" > $3 AND s.purpose = 'checkout'`,
+    [verifiedToken, orderId, now],
+  );
+
+  if (res.rowCount === 0) {
     throw new Error('กรุณายืนยันตัวตนผ่าน OTP ก่อนเข้าถึงข้อมูลการชำระเงิน');
   }
-  const orderRes = await pool.query<{ buyerEmail: string }>(
-    `SELECT "buyerEmail" FROM orders WHERE id = $1`,
-    [orderId],
-  );
-  if (orderRes.rowCount === 0) return null;
-  if (orderRes.rows[0].buyerEmail.toLowerCase() !== verifiedSession.email.toLowerCase()) {
+
+  const row = res.rows[0];
+  if (!row.orderIdExists || !row.orderBuyerEmail) return null;
+  if (row.orderBuyerEmail.toLowerCase() !== row.sessionEmail.toLowerCase()) {
     throw new Error('ท่านไม่มีสิทธิ์ในการเข้าถึงข้อมูลการชำระเงินสำหรับคำสั่งซื้อนี้');
   }
+  if (!row.id) return null;
 
-  const res = await pool.query(
-    `SELECT id, "orderId", amount, currency, status, "qrCodeUrl", "expiresAt", "createdAt",
-            "promptpayData", "livemode"
-     FROM payment_charges
-     WHERE "orderId" = $1
-     ORDER BY "createdAt" DESC
-     LIMIT 1`,
-    [orderId],
-  );
-
-  if (res.rowCount === 0) return null;
-  const row = res.rows[0];
   return {
     id: row.id,
-    orderId: row.orderId,
+    orderId: row.orderId ?? orderId,
     amount: Number(row.amount),
-    currency: row.currency as 'thb',
-    status: row.status as 'pending' | 'successful' | 'failed' | 'expired',
-    qrCodeUrl: row.qrCodeUrl,
+    currency: (row.currency ?? 'thb') as 'thb',
+    status: (row.status ?? 'pending') as 'pending' | 'successful' | 'failed' | 'expired',
+    qrCodeUrl: row.qrCodeUrl ?? '',
     promptpayData: row.promptpayData || undefined,
-    expiresAt: new Date(row.expiresAt).toISOString(),
-    createdAt: new Date(row.createdAt).toISOString(),
+    expiresAt: new Date(row.expiresAt ?? now).toISOString(),
+    createdAt: new Date(row.createdAt ?? now).toISOString(),
     livemode: Boolean(row.livemode),
   };
 }
@@ -472,16 +504,112 @@ export async function processStripeSuccessEvent(
 
   // 5. Atomic database processing
   const result = await inTransaction(pool, async (client: PoolClient): Promise<ProcessStripeEventResult> => {
-    // Lock payment charge
-    const chargeRes = await client.query(
-      `SELECT id, "orderId", amount, currency, status, "expiresAt", "livemode", "stripeEventId"
-       FROM payment_charges
-       WHERE id = $1
-       FOR UPDATE`,
-      [retrievedIntent.id],
+    // Lock charge + order + check idempotency tables in a single round-trip
+    const stateRes = await client.query<{
+      chargeId: string;
+      orderId: string;
+      chargeAmount: number;
+      chargeCurrency: string;
+      chargeStatus: string;
+      chargeExpiresAt: Date;
+      chargeLivemode: boolean;
+      stripeEventId: string | null;
+      eventId: string;
+      sessionId: string;
+      orderStatus: string;
+      total: number;
+      subtotal: number;
+      customerFee: number;
+      discountAmount: number | null;
+      buyerEmail: string;
+      buyerName: string;
+      buyerPhone: string;
+      orderExpiresAt: Date;
+      sessionStatus: string;
+      sessionUpdatedAt: Date;
+      eventTitle: string;
+      eventLocation: string;
+      sessionStartTime: Date;
+      sessionEndTime: Date;
+      orderItemsJson: Array<{
+        id: string;
+        ticketTypeId: string;
+        quantity: number;
+        unitPrice: number | string;
+        ticketTypeName: string;
+      }> | null;
+      cancellationApprovedAt: Date | null;
+      eventRecorded: boolean;
+      existingRefundId: string | null;
+      existingRefundAmount: number | null;
+      existingRefundReason: string | null;
+      existingCaseId: string | null;
+      existingCaseReason: string | null;
+      existingCaseAmount: number | null;
+      existingCaseCustomerFee: number | null;
+      existingCaseSubtotal: number | null;
+      existingCaseStatus: string | null;
+      existingCaseProviderPaidAt: Date | null;
+      existingCaseOrderExpiresAt: Date | null;
+      existingCaseBuyerName: string | null;
+      existingCaseBuyerEmail: string | null;
+      existingCaseBuyerPhone: string | null;
+      existingCaseNotes: string | null;
+      existingCaseCreatedAt: Date | null;
+      existingCaseUpdatedAt: Date | null;
+    }>(
+      `SELECT pc.id AS "chargeId", pc."orderId", pc.amount AS "chargeAmount", pc.currency AS "chargeCurrency",
+              pc.status AS "chargeStatus", pc."expiresAt" AS "chargeExpiresAt", pc."livemode" AS "chargeLivemode",
+              pc."stripeEventId",
+              o."eventId", o."sessionId", o.status AS "orderStatus", o.total, o.subtotal, o."customerFee", o."discountAmount",
+              o."buyerEmail", o."buyerName", o."buyerPhone", o."expiresAt" AS "orderExpiresAt",
+              es.status AS "sessionStatus", es."updatedAt" AS "sessionUpdatedAt",
+              e.title AS "eventTitle", e.location AS "eventLocation",
+              es."startTime" AS "sessionStartTime", es."endTime" AS "sessionEndTime",
+              (
+                SELECT json_agg(json_build_object(
+                  'id', oi.id,
+                  'ticketTypeId', oi."ticketTypeId",
+                  'quantity', oi.quantity,
+                  'unitPrice', oi."unitPrice",
+                  'ticketTypeName', tt.name
+                ))
+                FROM order_items oi
+                JOIN ticket_types tt ON tt.id = oi."ticketTypeId"
+                WHERE oi."orderId" = o.id
+              ) AS "orderItemsJson",
+              sc."reviewedAt" AS "cancellationApprovedAt",
+              EXISTS(SELECT 1 FROM stripe_webhook_events swe WHERE swe.id = $2) AS "eventRecorded",
+              rr.id AS "existingRefundId", rr."requestedAmount" AS "existingRefundAmount", rr.reason AS "existingRefundReason",
+              prc.id AS "existingCaseId", prc.reason AS "existingCaseReason", prc.amount AS "existingCaseAmount",
+              prc."customerFee" AS "existingCaseCustomerFee", prc.subtotal AS "existingCaseSubtotal",
+              prc.status AS "existingCaseStatus", prc."providerPaidAt" AS "existingCaseProviderPaidAt",
+              prc."orderExpiresAt" AS "existingCaseOrderExpiresAt", prc."buyerName" AS "existingCaseBuyerName",
+              prc."buyerEmail" AS "existingCaseBuyerEmail", prc."buyerPhone" AS "existingCaseBuyerPhone",
+              prc.notes AS "existingCaseNotes", prc."createdAt" AS "existingCaseCreatedAt", prc."updatedAt" AS "existingCaseUpdatedAt"
+       FROM payment_charges pc
+       JOIN orders o ON o.id = pc."orderId"
+       JOIN event_sessions es ON es.id = o."sessionId"
+       JOIN events e ON e.id = o."eventId"
+       LEFT JOIN LATERAL (
+         SELECT "reviewedAt"
+         FROM session_cancellations
+         WHERE "sessionId" = o."sessionId" AND status = 'approved'
+         LIMIT 1
+       ) sc ON TRUE
+       LEFT JOIN LATERAL (
+         SELECT id, "requestedAmount", reason
+         FROM refund_requests
+         WHERE "orderId" = o.id
+         LIMIT 1
+       ) rr ON TRUE
+       LEFT JOIN payment_recovery_cases prc ON prc."chargeId" = pc.id
+       WHERE pc.id = $1
+       FOR UPDATE OF pc, o`,
+      [retrievedIntent.id, event.id],
     );
 
-    if (chargeRes.rowCount === 0) {
+    if (stateRes.rowCount === 0) {
       return {
         success: false,
         status: 'mismatch',
@@ -490,7 +618,17 @@ export async function processStripeSuccessEvent(
       };
     }
 
-    const charge = chargeRes.rows[0];
+    const row = stateRes.rows[0];
+    const charge = {
+      id: row.chargeId,
+      orderId: row.orderId,
+      amount: row.chargeAmount,
+      currency: row.chargeCurrency,
+      status: row.chargeStatus,
+      expiresAt: row.chargeExpiresAt,
+      livemode: row.chargeLivemode,
+      stripeEventId: row.stripeEventId,
+    };
 
     // Reference matching (AC-119)
     const intentOrderId = retrievedIntent.metadata?.order_id;
@@ -504,48 +642,23 @@ export async function processStripeSuccessEvent(
       };
     }
 
-    // Lock and read order
-    const orderRes = await client.query<{
-      id: string;
-      eventId: string;
-      sessionId: string;
-      status: string;
-      total: number;
-      subtotal: number;
-      customerFee: number;
-      discountAmount?: number | null;
-      buyerEmail: string;
-      buyerName: string;
-      buyerPhone: string;
-      expiresAt: Date;
-      sessionStatus: string;
-      sessionUpdatedAt: Date;
-      cancellationApprovedAt: Date | null;
-    }>(
-      `SELECT o.id, o."eventId", o."sessionId", o.status, o.total, o.subtotal, o."customerFee", o."discountAmount",
-              o."buyerEmail", o."buyerName", o."buyerPhone", o."expiresAt",
-              es.status AS "sessionStatus",
-              es."updatedAt" AS "sessionUpdatedAt",
-              sc."reviewedAt" AS "cancellationApprovedAt"
-       FROM orders o
-       JOIN event_sessions es ON es.id = o."sessionId"
-       LEFT JOIN session_cancellations sc ON sc."sessionId" = o."sessionId" AND sc.status = 'approved'
-       WHERE o.id = $1
-       FOR UPDATE OF o`,
-      [charge.orderId],
-    );
-
-    if (orderRes.rowCount === 0) {
-      return {
-        success: false,
-        status: 'mismatch',
-        intentId: retrievedIntent.id,
-        orderId: charge.orderId,
-        message: 'ไม่พบคำสั่งซื้อที่ผูกกับรายการชำระเงินนี้',
-      };
-    }
-
-    const order = orderRes.rows[0];
+    const order = {
+      id: row.orderId,
+      eventId: row.eventId,
+      sessionId: row.sessionId,
+      status: row.orderStatus,
+      total: row.total,
+      subtotal: row.subtotal,
+      customerFee: row.customerFee,
+      discountAmount: row.discountAmount,
+      buyerEmail: row.buyerEmail,
+      buyerName: row.buyerName,
+      buyerPhone: row.buyerPhone,
+      expiresAt: row.orderExpiresAt,
+      sessionStatus: row.sessionStatus,
+      sessionUpdatedAt: row.sessionUpdatedAt,
+      cancellationApprovedAt: row.cancellationApprovedAt,
+    };
 
     // Monetary match (AC-119, AC-26)
     const expectedSatang = Math.round(Number(order.total) * 100);
@@ -568,38 +681,16 @@ export async function processStripeSuccessEvent(
       ? new Date(order.cancellationApprovedAt).getTime()
       : (order.sessionUpdatedAt ? new Date(order.sessionUpdatedAt).getTime() : now.getTime());
 
-    // Idempotency: Event ID already processed (AC-18, AC-120)
-    const existingEvtRes = await client.query(
-      `SELECT id FROM stripe_webhook_events WHERE id = $1`,
-      [event.id],
-    );
-    const isEventAlreadyRecorded = (existingEvtRes.rowCount ?? 0) > 0;
+    const isEventAlreadyRecorded = Boolean(row.eventRecorded);
 
     // Idempotency: Check if refund request already exists for this order (AC-18, AC-120, G-51, G-52)
-    const existingRefundRes = await client.query<{
-      id: string;
-      requestedAmount: number;
-      reason: string;
-      status: string;
-    }>(
-      `SELECT id, "requestedAmount", reason, status
-       FROM refund_requests
-       WHERE "orderId" = $1
-       LIMIT 1`,
-      [order.id],
-    );
-
-    if (existingRefundRes.rowCount && existingRefundRes.rowCount > 0) {
-      const ex = existingRefundRes.rows[0];
-      const isG51FaceValue = ex.reason?.includes('G-51');
-      const isG52Full = ex.reason?.includes('G-52');
-      const isFullRefund = isG52Full || (!isG51FaceValue && Math.round(Number(ex.requestedAmount) * 100) === Math.round(Number(order.total) * 100));
-
-      const existingCaseForRefund = await client.query<{ id: string }>(
-        `SELECT id FROM payment_recovery_cases WHERE "orderId" = $1 LIMIT 1`,
-        [order.id],
-      );
-      const caseId = existingCaseForRefund.rows[0]?.id;
+    if (row.existingRefundId) {
+      const exReason = row.existingRefundReason || '';
+      const exAmount = Number(row.existingRefundAmount);
+      const isG51FaceValue = exReason.includes('G-51');
+      const isG52Full = exReason.includes('G-52');
+      const isFullRefund = isG52Full || (!isG51FaceValue && Math.round(exAmount * 100) === Math.round(Number(order.total) * 100));
+      const caseId = row.existingCaseId || undefined;
 
       if (!isEventAlreadyRecorded) {
         await client.query(
@@ -626,8 +717,8 @@ export async function processStripeSuccessEvent(
         eventId: event.id,
         duplicate: true,
         message: 'รายการชำระเงินนี้ได้รับการประมวลผลการคืนเงินสำหรับรอบที่ยกเลิกแล้ว (Idempotent replay)',
-        refundRequestId: ex.id,
-        refundAmount: Number(ex.requestedAmount),
+        refundRequestId: row.existingRefundId,
+        refundAmount: exAmount,
         caseId,
       };
     }
@@ -666,34 +757,24 @@ export async function processStripeSuccessEvent(
     }
 
     // Idempotency: Already processed recovery case
-    const existingCaseRes = await client.query(
-      `SELECT id, "orderId", "chargeId", reason, amount, "customerFee", subtotal,
-              status, "providerPaidAt", "orderExpiresAt", "buyerName", "buyerEmail",
-              "buyerPhone", notes, "createdAt", "updatedAt"
-       FROM payment_recovery_cases
-       WHERE "chargeId" = $1`,
-      [charge.id],
-    );
-
-    if (existingCaseRes.rowCount && existingCaseRes.rowCount > 0) {
-      const r = existingCaseRes.rows[0];
+    if (row.existingCaseId) {
       const recoveryCase: PaymentRecoveryCaseDetail = {
-        id: r.id,
-        orderId: r.orderId,
-        chargeId: r.chargeId,
-        reason: r.reason as 'paid_after_deadline' | 'insufficient_quota' | 'paid_after_cancellation',
-        amount: Number(r.amount),
-        customerFee: Number(r.customerFee),
-        subtotal: Number(r.subtotal),
-        status: r.status as 'pending_review',
-        providerPaidAt: new Date(r.providerPaidAt).toISOString(),
-        orderExpiresAt: new Date(r.orderExpiresAt).toISOString(),
-        buyerName: r.buyerName,
-        buyerEmail: r.buyerEmail,
-        buyerPhone: r.buyerPhone,
-        notes: r.notes || undefined,
-        createdAt: new Date(r.createdAt).toISOString(),
-        updatedAt: new Date(r.updatedAt).toISOString(),
+        id: row.existingCaseId,
+        orderId: order.id,
+        chargeId: charge.id,
+        reason: row.existingCaseReason as 'paid_after_deadline' | 'insufficient_quota' | 'paid_after_cancellation',
+        amount: Number(row.existingCaseAmount),
+        customerFee: Number(row.existingCaseCustomerFee),
+        subtotal: Number(row.existingCaseSubtotal),
+        status: row.existingCaseStatus as 'pending_review',
+        providerPaidAt: new Date(row.existingCaseProviderPaidAt ?? paidAt).toISOString(),
+        orderExpiresAt: new Date(row.existingCaseOrderExpiresAt ?? order.expiresAt).toISOString(),
+        buyerName: row.existingCaseBuyerName ?? order.buyerName,
+        buyerEmail: row.existingCaseBuyerEmail ?? order.buyerEmail,
+        buyerPhone: row.existingCaseBuyerPhone ?? order.buyerPhone,
+        notes: row.existingCaseNotes || undefined,
+        createdAt: new Date(row.existingCaseCreatedAt ?? now).toISOString(),
+        updatedAt: new Date(row.existingCaseUpdatedAt ?? now).toISOString(),
       };
       if (!isEventAlreadyRecorded) {
         await client.query(
@@ -725,7 +806,90 @@ export async function processStripeSuccessEvent(
       };
     }
 
-    // Record the event in stripe_webhook_events
+    // Fast path for normal timely payment on active non-expired order:
+    // Record webhook event + mark charge successful + mark order paid + insert tickets in one CTE round-trip!
+    const isHoldExpired = order.status === 'expired' || now.getTime() > D_ms;
+    if (T_ms <= D_ms && !isCancelledSession && !isHoldExpired) {
+      const preloadedItems = Array.isArray(row.orderItemsJson) ? row.orderItemsJson : [];
+      if (preloadedItems.length === 0) {
+        throw new Error('ไม่พบรายการประเภทบัตรในคำสั่งซื้อนี้');
+      }
+      const issuanceRows: TicketIssuanceItemRow[] = preloadedItems.map(item => ({
+        id: item.id,
+        ticketTypeId: item.ticketTypeId,
+        quantity: Number(item.quantity),
+        unitPrice: item.unitPrice,
+        eventId: order.eventId,
+        sessionId: order.sessionId,
+        buyerName: order.buyerName,
+        buyerEmail: order.buyerEmail,
+        buyerPhone: order.buyerPhone,
+        ticketTypeName: item.ticketTypeName,
+        sessionStartTime: row.sessionStartTime,
+        sessionEndTime: row.sessionEndTime,
+        location: row.eventLocation,
+        eventTitle: row.eventTitle,
+      }));
+      const builtTickets = buildTicketsToIssue(order.id, issuanceRows, now);
+
+      await client.query(
+        `WITH ins_evt AS (
+           INSERT INTO stripe_webhook_events (
+             id, "eventType", "intentId", "orderId", "apiVersion", "livemode", "eventCreated"
+           ) VALUES ($1, $2, $3, $4, $5, $6, $7)
+           ON CONFLICT (id) DO NOTHING
+         ),
+         upd_charge AS (
+           UPDATE payment_charges
+           SET status = 'successful', "paidAt" = $7, "stripeEventId" = $1, "stripeApiVersion" = $5, "updatedAt" = $8
+           WHERE id = $9
+         ),
+         upd_order AS (
+           UPDATE orders
+           SET status = 'paid', "updatedAt" = $8
+           WHERE id = $4
+         )
+         INSERT INTO tickets (
+           id, "orderId", "orderItemId", "eventId", "sessionId", "ticketTypeId",
+           "ticketCode", "qrPayload", price, status, "admissionStatus", "createdAt", "updatedAt"
+         )
+         SELECT id, $4, "orderItemId", "eventId", "sessionId", "ticketTypeId",
+                "ticketCode", "qrPayload", price, 'valid', 'outside', $8, $8
+         FROM UNNEST($10::text[], $11::text[], $12::text[], $13::text[], $14::text[], $15::text[], $16::text[], $17::numeric[])
+           AS t(id, "orderItemId", "eventId", "sessionId", "ticketTypeId", "ticketCode", "qrPayload", price)`,
+        [
+          event.id,
+          event.type,
+          retrievedIntent.id,
+          order.id,
+          event.api_version || null,
+          event.livemode,
+          paidAt,
+          now,
+          charge.id,
+          builtTickets.ticketIds,
+          builtTickets.orderItemIds,
+          builtTickets.eventIds,
+          builtTickets.sessionIds,
+          builtTickets.ticketTypeIds,
+          builtTickets.ticketCodes,
+          builtTickets.qrPayloads,
+          builtTickets.prices,
+        ],
+      );
+
+      return {
+        success: true,
+        status: 'paid',
+        orderId: order.id,
+        intentId: retrievedIntent.id,
+        eventId: event.id,
+        message: 'ชำระเงินสำเร็จ ออกบัตรคอนเสิร์ตเรียบร้อยแล้ว',
+        tickets: builtTickets.issuedTickets,
+      };
+    }
+
+    // Record the event in stripe_webhook_events for exception/expired/cancelled paths
     await client.query(
       `INSERT INTO stripe_webhook_events (
          id, "eventType", "intentId", "orderId", "apiVersion", "livemode", "eventCreated"
@@ -961,7 +1125,6 @@ export async function processStripeSuccessEvent(
 
     // Case 3: T <= D and Session is Active (AC-17, AC-72, AC-119, AC-124)
     // Check if reservation hold expired before callback arrived
-    const isHoldExpired = order.status === 'expired' || now.getTime() > D_ms;
     if (isHoldExpired) {
       const itemsRes = await client.query(
         `SELECT id, "ticketTypeId", quantity FROM order_items WHERE "orderId" = $1`,
@@ -969,7 +1132,7 @@ export async function processStripeSuccessEvent(
       );
       const ticketTypeIds = itemsRes.rows.map(r => r.ticketTypeId);
       const ttRes = await client.query(
-        `SELECT id, name, quota FROM ticket_types WHERE id = ANY($1) FOR UPDATE`,
+        `SELECT id, name, quota FROM ticket_types WHERE id = ANY($1) FOR NO KEY UPDATE`,
         [ticketTypeIds],
       );
       const ttMap = new Map(ttRes.rows.map(r => [r.id, r]));
@@ -1104,7 +1267,11 @@ export async function processStripeSuccessEvent(
   // Post-transaction email delivery (AC-75)
   if (result.status === 'paid' && result.tickets && result.tickets.length > 0 && !result.duplicate && result.orderId) {
     try {
-      await sendOrderTicketsEmail(pool, result.orderId, { now });
+      await sendOrderTicketsEmail(pool, result.orderId, {
+        now,
+        preloadedTickets: result.tickets,
+        skipExistingCheck: true,
+      });
     } catch {
       // Delivery errors are tracked in ticket_email_deliveries and do not fail payment
     }
@@ -1716,7 +1883,11 @@ export async function verifyAndProcessPayment(
 
   if (result.status === 'paid' && result.tickets && result.tickets.length > 0) {
     try {
-      await sendOrderTicketsEmail(pool, result.orderId, { now });
+      await sendOrderTicketsEmail(pool, result.orderId, {
+        now,
+        preloadedTickets: result.tickets,
+        skipExistingCheck: true,
+      });
     } catch {
       // Delivery errors are tracked in ticket_email_deliveries and do not fail payment (AC-75)
     }

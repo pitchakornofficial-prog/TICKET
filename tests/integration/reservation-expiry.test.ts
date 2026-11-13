@@ -104,13 +104,16 @@ describe('Reservation expiry, quota release, and refresh idempotency (TASK-013, 
     expect(quotaAfter.availableQuota).toBe(2);
     expect(quotaAfter.heldQuota).toBe(0);
 
-    // Check public event details also shows released quota
-    const publicEvent = await getPublicEventDetails(fixture.pool, event.id);
-    expect(publicEvent?.sessions[0].ticketTypes[0].quota).toBe(2);
+    // Public detail uses the database wall clock, not the future clock passed
+    // to the quota probe. Until expiry is persisted, this order is still held.
+    const publicBeforeExpiry = await getPublicEventDetails(fixture.pool, event.id);
+    expect(publicBeforeExpiry?.sessions[0].ticketTypes[0].quota).toBe(0);
 
     // 4. expireOrders transitions the order to 'expired'
     const expiredCount = await expireOrders(fixture.pool, afterExpiry);
     expect(expiredCount).toBe(1);
+    const publicAfterExpiry = await getPublicEventDetails(fixture.pool, event.id);
+    expect(publicAfterExpiry?.sessions[0].ticketTypes[0].quota).toBe(2);
 
     // getOrderReservation returns status 'expired'
     const orderCheck = await getOrderReservation(fixture.pool, res1.id, afterExpiry);

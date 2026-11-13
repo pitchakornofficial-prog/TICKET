@@ -1,5 +1,6 @@
 import type { Pool } from 'pg';
 import { ensureGuestOtpSchema, hashOtpCode } from '../../src/server/guest-otp.ts';
+import { ensureQueueSchema } from '../../src/server/queue.ts';
 
 export async function handleTestInspectRequest(
   pool: Pool,
@@ -18,6 +19,39 @@ export async function handleTestInspectRequest(
   }
 
   const type = url.searchParams.get('type') || 'reset';
+  // Fixture-only chronology transition: purchases happen before a session ends.
+  // This handler exists only in the isolated E2E proxy, never in the app routes.
+  if (['end_sessions', 'seed_queue', 'release_queue'].includes(type)) {
+    const eventId = url.searchParams.get('eventId') || '';
+    const schema = await pool.query<{ schema: string }>('SELECT current_schema() AS schema');
+    if (!schema.rows[0]?.schema.startsWith('e2e_') || !/^[a-zA-Z0-9_-]{1,128}$/.test(eventId)) {
+      return { status: 400, body: { error: 'Invalid isolated fixture event' } };
+    }
+    const event = await pool.query('SELECT id FROM events WHERE id = $1', [eventId]);
+    if (!event.rowCount) return { status: 404, body: { error: 'Fixture event not found' } };
+    if (type === 'seed_queue') {
+      await ensureQueueSchema(pool);
+      const seeded = await pool.query(
+        `INSERT INTO event_queue_entries (id, "eventId", "queueNumber", status, "expiresAt")
+         SELECT $2 || n, $1, n, 'active', now() + interval '15 minutes' FROM generate_series(1,200) n`,
+        [eventId, `e2e-seed-${eventId}-`],
+      );
+      return { status: 200, body: { seeded: seeded.rowCount } };
+    }
+    if (type === 'release_queue') {
+      const released = await pool.query(
+        `UPDATE event_queue_entries SET status = 'expired', "expiresAt" = now() - interval '1 second'
+         WHERE "eventId" = $1 AND LEFT(id, LENGTH($2)) = $2 AND status = 'active' RETURNING id`,
+        [eventId, `e2e-seed-${eventId}-`],
+      );
+      return { status: 200, body: { released: released.rowCount } };
+    }
+    const result = await pool.query(
+      `UPDATE event_sessions SET "startTime" = now() - interval '48 hours',
+       "endTime" = now() - interval '44 hours' WHERE "eventId" = $1 RETURNING id`, [eventId],
+    );
+    return { status: 200, body: { endedSessions: result.rowCount } };
+  }
   if (type === 'clear_guest_cooldown' && email) {
     await pool.query('DELETE FROM guest_otp_tracking WHERE key LIKE $1', [`${email}:%`]);
     return { status: 200, body: { cleared: true } };

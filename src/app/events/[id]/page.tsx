@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { unstable_cache } from 'next/cache';
 import { notFound } from 'next/navigation';
 import { TicketIcon } from '@/components/ticket-icon';
 import { AlertIcon } from '@/components/alert-icon';
@@ -14,6 +15,7 @@ import {
 import { getDatabasePool } from '@/server/database';
 import { getPublicEventWithApprovedSessions } from '@/server/events';
 import { formatDate, formatTime, formatBaht } from '@/lib/locale';
+import { getEventSalesStatus } from '@/lib/sales-window';
 import { PurchaseStepIndicator } from '@/components/purchase-step-indicator';
 import { EventSessionsAccordion, type EventSession } from '@/components/event-sessions-accordion';
 import { PurchaseTermsFaqList } from '@/components/purchase-terms-faq-list';
@@ -28,6 +30,12 @@ interface EventDetailPageProps {
   searchParams?: Promise<{ orderId?: string; expired?: string }>;
 }
 
+const getCachedPublicEvent = unstable_cache(
+  async (eventId: string) => getPublicEventWithApprovedSessions(getDatabasePool(), eventId),
+  ['public-event-detail'],
+  { revalidate: 15, tags: ['public-events'] },
+);
+
 export default async function EventDetailPage({ params, searchParams }: EventDetailPageProps) {
   const { id } = await params;
   const resolvedSearchParams = searchParams ? await searchParams : {};
@@ -36,8 +44,7 @@ export default async function EventDetailPage({ params, searchParams }: EventDet
   let event = null;
 
   try {
-    const pool = getDatabasePool();
-    event = await getPublicEventWithApprovedSessions(pool, id);
+    event = await getCachedPublicEvent(id);
   } catch (error) {
     const err = error as { code?: string; message?: string };
     if (err?.code !== 'ECONNREFUSED') {
@@ -50,6 +57,11 @@ export default async function EventDetailPage({ params, searchParams }: EventDet
   }
 
   const sessions: EventSession[] = event.sessions || [];
+  const salesStatus = getEventSalesStatus({
+    salesStartTime: event.salesStartTime,
+    salesEndTime: event.salesEndTime,
+    sessions,
+  });
 
   let startingPrice = 0;
   for (const s of sessions) {
@@ -71,6 +83,31 @@ export default async function EventDetailPage({ params, searchParams }: EventDet
 
       {/* Stepper showing: 1. รายละเอียดคอนเสิร์ต -> 2. เลือกรอบและประเภทบัตร -> 3. ชำระเงิน (Read-only D-34) */}
       <PurchaseStepIndicator currentStep="details" eventId={event.id} />
+
+      {!salesStatus.isOpen && (
+        <div
+          role="alert"
+          style={{
+            backgroundColor: salesStatus.reason === 'not_started' ? '#eff6ff' : '#fef2f2',
+            border: `1px solid ${salesStatus.reason === 'not_started' ? '#bfdbfe' : '#fecaca'}`,
+            borderRadius: '12px',
+            padding: '14px 18px',
+            marginBottom: '20px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '12px',
+            fontSize: '14px',
+            color: salesStatus.reason === 'not_started' ? '#1e40af' : '#991b1b',
+          }}
+        >
+          <AlertIcon />
+          <span style={{ fontWeight: 500 }}>
+            {salesStatus.reason === 'not_started' && salesStatus.opensAt
+              ? `ยังไม่ถึงเวลาเปิดจำหน่ายบัตร (เปิดจำหน่าย ${formatDate(salesStatus.opensAt)} เวลา ${formatTime(salesStatus.opensAt)} น.)`
+              : salesStatus.message}
+          </span>
+        </div>
+      )}
 
       {isExpired && (
         <div
@@ -380,14 +417,27 @@ export default async function EventDetailPage({ params, searchParams }: EventDet
             </span>
           </div>
           <div className="sticky-bar-cta-wrap">
-            <Link
-              href={`/events/${event.id}/queue`}
-              className="primary-button sticky-bar-buy-btn"
-              id="sidebar-buy-tickets-btn"
-              data-testid="enter-queue-cta-btn"
-            >
-              ซื้อบัตร
-            </Link>
+            {salesStatus.isOpen ? (
+              <Link
+                href={`/events/${event.id}/queue`}
+                className="primary-button sticky-bar-buy-btn"
+                id="sidebar-buy-tickets-btn"
+                data-testid="enter-queue-cta-btn"
+              >
+                ซื้อบัตร
+              </Link>
+            ) : (
+              <button
+                type="button"
+                disabled
+                className="primary-button sticky-bar-buy-btn"
+                id="sidebar-buy-tickets-btn"
+                data-testid="enter-queue-cta-btn"
+                style={{ opacity: 0.55, cursor: 'not-allowed' }}
+              >
+                {salesStatus.reason === 'not_started' ? 'ยังไม่เปิดจำหน่าย' : 'ปิดการจำหน่ายแล้ว'}
+              </button>
+            )}
           </div>
         </div>
       </aside>

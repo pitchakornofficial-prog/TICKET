@@ -179,38 +179,17 @@ export function createStripeSuccessEvent(options: {
   };
 }
 
+const PROMPTPAY_SVG_PREFIX = encodeURIComponent(
+  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" width="240" height="240" style="background:#ffffff;border-radius:8px"><rect width="240" height="240" fill="#ffffff"/><rect x="20" y="20" width="60" height="60" fill="#1848ed" rx="4"/><rect x="30" y="30" width="40" height="40" fill="#ffffff" rx="2"/><rect x="40" y="40" width="20" height="20" fill="#1848ed"/><rect x="160" y="20" width="60" height="60" fill="#1848ed" rx="4"/><rect x="170" y="30" width="40" height="40" fill="#ffffff" rx="2"/><rect x="180" y="40" width="20" height="20" fill="#1848ed"/><rect x="20" y="160" width="60" height="60" fill="#1848ed" rx="4"/><rect x="30" y="170" width="40" height="40" fill="#ffffff" rx="2"/><rect x="40" y="180" width="20" height="20" fill="#1848ed"/><rect x="100" y="25" width="40" height="15" fill="#0f172a"/><rect x="95" y="55" width="20" height="25" fill="#0f172a"/><rect x="125" y="50" width="25" height="30" fill="#0f172a"/><rect x="90" y="90" width="60" height="60" fill="#1848ed" rx="4"/><circle cx="120" cy="120" r="16" fill="#ffffff"/><rect x="114" y="110" width="12" height="20" fill="#1848ed"/><rect x="25" y="95" width="55" height="20" fill="#0f172a"/><rect x="30" y="125" width="50" height="25" fill="#0f172a"/><rect x="160" y="95" width="55" height="25" fill="#0f172a"/><rect x="165" y="130" width="50" height="20" fill="#0f172a"/><rect x="95" y="160" width="30" height="55" fill="#0f172a"/><rect x="135" y="160" width="25" height="55" fill="#0f172a"/><rect x="170" y="165" width="50" height="50" fill="#0f172a"/><text x="120" y="232" font-family="sans-serif" font-size="9" fill="#64748b" text-anchor="middle">PromptPay • ',
+);
+const PROMPTPAY_SVG_SUFFIX = encodeURIComponent('</text></svg>');
+
 /**
  * Generates an SVG QR payload for PromptPay test double.
  */
 export function generatePromptPaySvg(intentId: string, amountSatang: number): string {
   const amountBaht = (amountSatang / 100).toFixed(2);
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 240" width="240" height="240" style="background:#ffffff;border-radius:8px">
-    <rect width="240" height="240" fill="#ffffff"/>
-    <rect x="20" y="20" width="60" height="60" fill="#1848ed" rx="4"/>
-    <rect x="30" y="30" width="40" height="40" fill="#ffffff" rx="2"/>
-    <rect x="40" y="40" width="20" height="20" fill="#1848ed"/>
-    <rect x="160" y="20" width="60" height="60" fill="#1848ed" rx="4"/>
-    <rect x="170" y="30" width="40" height="40" fill="#ffffff" rx="2"/>
-    <rect x="180" y="40" width="20" height="20" fill="#1848ed"/>
-    <rect x="20" y="160" width="60" height="60" fill="#1848ed" rx="4"/>
-    <rect x="30" y="170" width="40" height="40" fill="#ffffff" rx="2"/>
-    <rect x="40" y="180" width="20" height="20" fill="#1848ed"/>
-    <rect x="100" y="25" width="40" height="15" fill="#0f172a"/>
-    <rect x="95" y="55" width="20" height="25" fill="#0f172a"/>
-    <rect x="125" y="50" width="25" height="30" fill="#0f172a"/>
-    <rect x="90" y="90" width="60" height="60" fill="#1848ed" rx="4"/>
-    <circle cx="120" cy="120" r="16" fill="#ffffff"/>
-    <rect x="114" y="110" width="12" height="20" fill="#1848ed"/>
-    <rect x="25" y="95" width="55" height="20" fill="#0f172a"/>
-    <rect x="30" y="125" width="50" height="25" fill="#0f172a"/>
-    <rect x="160" y="95" width="55" height="25" fill="#0f172a"/>
-    <rect x="165" y="130" width="50" height="20" fill="#0f172a"/>
-    <rect x="95" y="160" width="30" height="55" fill="#0f172a"/>
-    <rect x="135" y="160" width="25" height="55" fill="#0f172a"/>
-    <rect x="170" y="165" width="50" height="50" fill="#0f172a"/>
-    <text x="120" y="232" font-family="sans-serif" font-size="9" fill="#64748b" text-anchor="middle">PromptPay • ${amountBaht} THB • ${intentId.slice(0, 16)}</text>
-  </svg>`;
-  return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
+  return `data:image/svg+xml;utf8,${PROMPTPAY_SVG_PREFIX}${encodeURIComponent(`${amountBaht} THB • ${intentId.slice(0, 16)}`)}${PROMPTPAY_SVG_SUFFIX}`;
 }
 
 /**

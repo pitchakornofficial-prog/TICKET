@@ -1,3 +1,4 @@
+import { reserveThroughCheckout } from '../support/purchase-journey';
 import { createIsolatedBrowserContext } from '../support/client-context';
 import { saveEventDraft } from '../support/event-draft';
 import { test, expect } from '@playwright/test';
@@ -125,26 +126,12 @@ test.describe('Offline Primary Dataset & Privacy Protection (TASK-032, AC-94, AC
     await buyerPage.goto(`/events/${event.id}/checkout`);
     await expect(buyerPage.getByRole('heading', { name: eventTitle })).toBeVisible({ timeout: 25000 });
 
-    await buyerPage.getByRole('button', { name: 'เพิ่มจำนวน Regular Zone' }).click();
-
-    await buyerPage.getByLabel('ชื่อ-นามสกุล *').fill(buyerName);
-    await buyerPage.getByLabel('อีเมล *').fill(buyerEmail);
-    await buyerPage.getByLabel('เบอร์โทรศัพท์มือถือ *').fill(buyerPhone);
-    await buyerPage.getByRole('button', { name: 'ขอรหัส OTP เพื่อซื้อบัตร' }).click();
-    await expect(buyerPage.getByText('ส่งรหัส OTP 6 หลักไปยังอีเมลของคุณเรียบร้อยแล้ว')).toBeVisible({ timeout: 20000 });
-
-    const otpRes = await request.get(`/api/auth/test-inspect-reset-token?type=guest_otp&email=${encodeURIComponent(buyerEmail)}`);
-    const { code } = await otpRes.json();
-    await buyerPage.getByLabel('รหัส OTP 6 หลัก *').fill(code);
-    await buyerPage.getByRole('button', { name: 'ยืนยันรหัส OTP' }).click();
-    await buyerPage.getByRole('button', { name: 'ยืนยันและดำเนินการต่อ' }).click();
-    await expect(buyerPage.getByRole('heading', { name: 'ยืนยันอีเมลสำเร็จ (Guest Verified)' })).toBeVisible({ timeout: 20000 });
-
-    const confirmBtn = buyerPage.locator('#confirm-reservation-btn');
-    await expect(confirmBtn).toBeVisible({ timeout: 20000 });
-    await confirmBtn.scrollIntoViewIfNeeded();
-    await confirmBtn.click();
-    await expect(buyerPage.getByText('กันบัตรสำเร็จ (Reserved)')).toBeVisible({ timeout: 20000 });
+    await reserveThroughCheckout(buyerPage, {
+      eventId: event.id,
+      buyer: { name: buyerName, email: buyerEmail, phone: buyerPhone },
+      tickets: [{ name: 'Regular Zone', quantity: 1 }],
+    });
+    await expect(buyerPage.getByText('กันบัตรสำเร็จ (Reserved)')).toBeVisible();
 
     await expect(buyerPage.locator('#promptpay-qr-image')).toBeVisible({ timeout: 20000 });
     const simBtn = buyerPage.locator('#simulate-payment-button');
@@ -178,6 +165,7 @@ test.describe('Offline Primary Dataset & Privacy Protection (TASK-032, AC-94, AC
     await expect(terminalPrimaryBadge).toBeVisible({ timeout: 20000 });
     await expect(terminalPrimaryBadge).toContainText('เครื่องหลักประจำงาน (Primary Device)');
 
+    await scanner1Page.getByTestId('terminal-tab-offline').click({ timeout: 10000 });
     // Offline dataset panel is visible
     const datasetPanel = scanner1Page.locator('[data-testid="offline-dataset-panel"]');
     await expect(datasetPanel).toBeVisible({ timeout: 20000 });
@@ -189,7 +177,7 @@ test.describe('Offline Primary Dataset & Privacy Protection (TASK-032, AC-94, AC
     // Intercept network request to inspect offline dataset payload (CRITICAL AC-65 & AC-94 check)
     const [datasetResponse] = await Promise.all([
       scanner1Page.waitForResponse(resp => resp.url().includes(`/api/scanner/events/${event.id}/offline-dataset`)),
-      downloadBtn.click({ force: true }),
+      downloadBtn.click(),
     ]);
 
     expect(datasetResponse.status()).toBe(200);
@@ -224,10 +212,25 @@ test.describe('Offline Primary Dataset & Privacy Protection (TASK-032, AC-94, AC
     await expect(scanner1Page.locator('[data-testid="last-successful-sync-time"]')).not.toBeEmpty();
     await expect(scanner1Page.locator('[data-testid="offline-privacy-guarantee"]')).toBeVisible();
 
-    // Check localStorage in browser contains dataset with zero PII
-    const localData = await scanner1Page.evaluate((evtId) => {
-      const item = localStorage.getItem(`ticket_offline_dataset_${evtId}`);
-      return item ? JSON.parse(item) : null;
+    // Inspect the actual native IndexedDB snapshot, including its indexed ticket rows.
+    const localData = await scanner1Page.evaluate(async (evtId) => {
+      const db = await new Promise<IDBDatabase>((resolve, reject) => {
+        const request = indexedDB.open('ticket_offline_admission_db', 1);
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+      });
+      try {
+        return await new Promise<{ totalTickets: number; tickets: Record<string, unknown>[] }>((resolve, reject) => {
+          const tx = db.transaction(['datasets', 'tickets'], 'readonly');
+          const meta = tx.objectStore('datasets').get(evtId);
+          const tickets = tx.objectStore('tickets').index('by_event').getAll(evtId);
+          tx.oncomplete = () => resolve({ ...meta.result, tickets: tickets.result });
+          tx.onerror = () => reject(tx.error);
+          tx.onabort = () => reject(tx.error);
+        });
+      } finally {
+        db.close();
+      }
     }, event.id);
 
     expect(localData).not.toBeNull();

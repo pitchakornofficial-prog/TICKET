@@ -13,7 +13,7 @@ describe('D-204 to D-209: Settings, Finance, and Contact Refinements & Real-Time
   const rootDir = process.cwd();
 
   it('verifies D-204: Settings form inputs expand to full width (width: 100%, no max-width: 560px constraint)', () => {
-    const css = readFileSync(join(rootDir, 'src/app/globals.css'), 'utf8');
+    const css = (`${readFileSync(join(rootDir, 'src/app/globals.css'), 'utf8')}\n${readFileSync(join(rootDir, 'src/app/globals.css').replace("src/app/globals.css", "src/app/back-office/back-office.css"), 'utf8')}`);
     expect(css).toMatch(/\.settings-form\s*\{[^}]*width:\s*100%/);
     expect(css).not.toMatch(/\.settings-form\s*\{[^}]*max-width:\s*560px/);
   });
@@ -124,7 +124,7 @@ describe('D-204 to D-209: Settings, Finance, and Contact Refinements & Real-Time
     expect(contactSrc).not.toContain('ส่งข้อความตรงถึงเจ้าของระบบ');
     expect(contactSrc).toContain('contact-centered-grid');
 
-    const css = readFileSync(join(rootDir, 'src/app/globals.css'), 'utf8');
+    const css = (`${readFileSync(join(rootDir, 'src/app/globals.css'), 'utf8')}\n${readFileSync(join(rootDir, 'src/app/globals.css').replace("src/app/globals.css", "src/app/back-office/back-office.css"), 'utf8')}`);
     expect(css).toMatch(/\.contact-centered-grid\s*\{[^}]*max-width:\s*820px/);
   });
 

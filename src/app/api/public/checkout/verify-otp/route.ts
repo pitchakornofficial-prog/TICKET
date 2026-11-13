@@ -2,7 +2,7 @@ import { createSafeErrorResponse } from '@/server/api-error';
 import { getDatabasePool } from '@/server/database';
 import { verifyGuestOtp } from '@/server/guest-otp';
 import { verifyQueueAccess } from '@/server/queue';
-import { getBuyerTicketCountForEvent } from '@/server/reservation';
+import { getEventLimitAndBuyerTicketCount } from '@/server/reservation';
 
 export const runtime = 'nodejs';
 
@@ -72,18 +72,12 @@ export async function POST(request: Request) {
     // D-59, D-60: Calculate buyer cumulative quota for this event (Email-anchored)
     let buyerQuota: { alreadyPurchased: number; limitPerOrder: number; remainingQuota: number } | undefined;
     if (body.eventId && body.buyer.email) {
-      const eventRes = await pool.query(
-        'SELECT "limitPerOrder" FROM events WHERE id = $1',
-        [body.eventId],
+      const { found, limitPerOrder, alreadyPurchased } = await getEventLimitAndBuyerTicketCount(
+        pool,
+        body.eventId,
+        body.buyer.email,
       );
-      if (eventRes.rowCount && eventRes.rowCount > 0) {
-        const limitPerOrder = Number(eventRes.rows[0].limitPerOrder) || 4;
-        const alreadyPurchased = await getBuyerTicketCountForEvent(
-          pool,
-          body.eventId,
-          body.buyer.email,
-        );
-
+      if (found) {
         if (alreadyPurchased >= limitPerOrder) {
           return Response.json(
             {

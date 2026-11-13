@@ -1,0 +1,31 @@
+# TASK-046: Independent local optimization verification
+
+- Status: in_progress
+- Spec: [SPEC-001](../specs/SPEC-001-concert-ticket-lifecycle.md)
+
+## Goal
+
+Independently verify optimization commit `36801b9` against its parent `f623c17`, fix regressions within the seven optimization surfaces, and retain repeatable BEFORE/AFTER benchmarks. Authorized by the user on 2026-11-13. Preserve money/rounding (AC-77–84/110), quota (AC-14/106), public search (AC-01/03), offline persistence/atomicity (AC-96/102/103), and server-controlled queue admission (requirement D-271/D-273, AC-117). Use real local PostgreSQL and Chromium IndexedDB; distinguish measured HTTP/browser results from models and external provider doubles. No cloud, deployment, commit, or push.
+
+## Blocked by
+
+- None. Existing local test runners and test PostgreSQL service are available.
+
+## Todo
+
+- [x] Reviewed seven optimization surfaces. Fixed filtered empty-page totals, stable catalog tie ordering, search_path-aware quota reads, IndexedDB replacement cursor deleting new rows, pending snapshot replacement, legacy storage migration/race, same-millisecond scan ordering, terminal poll revival, source-key image cache freshness, and partial CSV export on failed full fetch. No financial formulas or product scope changed.
+- [x] Added `npm run benchmark:optimizations`, `scripts/benchmarks/`, dedicated Vitest benchmark configuration, [reproduction instructions](../benchmarks/README.md), [generated report](../benchmarks/RESULTS.md) and raw JSON samples. BEFORE comes from `f623c17` (parent of `36801b9`), with an explicit isolated-schema adapter for detail quota parity. AFTER source hashes/runtime provenance are included on rerun.
+- [x] Real Chromium IndexedDB + local HTTP benchmark passed; reload, rollback, replacement/pending safety checked. Real Next upload/resize/private-denial E2E also passed desktop during full run. Cold AVIF encoding cost and memory storage backing are disclosed; hidden-tab/1,000-tab rates are not claimed as measured capacity.
+- [x] PostgreSQL independent hardcoded expectations + baseline parity: gross 1,200,000 / net 1,160,000 / fee 58,000 / entitlement 1,102,000 / held 110,200 / payable 991,800. Legacy university-email fee fallback also matched baseline (34,800). New integration checks full/summary/page/batch parity, quota 20→14 after six sales, description-only search, correct filtered totals and stable ties.
+- [ ] Run full integration and desktop/mobile E2E; diagnose/fix failures and record genuine limitations.
+- [ ] Verification policy: CONTEXT.md confirmed auto unit/integration/E2E/code-review, all relevant and runners available; final verification dispatched sequentially, review after in_review.
+- [ ] Run typecheck, lint, build and selected unit verification after fixes.
+- [ ] Final independent code review and recorded outcome; no commit/push.
+- [x] Initial full integration reproduced 7 failures (165 passed), then exposed an expiry fixture clock mismatch after fixing quota schema detection. Corrected test chronology and stale AC-label suffix assertions without weakening business checks. Full rerun passed 47 files / 174 tests, exit 0 (36.91s, `/tmp/ticket-integration-final-rerun.log`).
+- [x] Unit verifier passed 130 files / 883 tests, exit 0 (6.78s, `/tmp/ticket-unit-independent.log`); added terminal stop/dispose regressions. Fresh final run after scan-sequence change remains pending below.
+- [x] Initial E2E attempt found obsolete OTP/intermediate reservation steps (12 passed, 2 failed, 1 interrupted, 117 not run). Migrated task-owned journeys to existing `reserveThroughCheckout`, kept payment/refund/quantity assertions, and added fixture-only session-ending transition in the isolated test proxy; no production time changes.
+- [x] Full desktop/mobile E2E executed 132 cases: 127 passed / 5 failed (14.9m). Correction run 15/16 passed exposed a genuine mobile scanner obstruction: intrinsic tab width overflow and sticky-header interception, previously hidden by force-clicks into inactive panels. Fixed scoped scanner min-width/tab wrapping/scroll margin and actual panel hiding, preserved shared CSS changes, and exposed dataset download for secondary handover candidates while retaining primary-only offline scanning. All four scanner/handover files then passed desktop/mobile 8/8 (1.6m).
+- [x] Real queue/polling E2E passed both projects: 200 fixture-only active slots → repeated real waiting responses while proceed disabled → release seeded slots → real server admission → checkout → external payment API completion detected by polling. Removed client countdown/network-error admission bypasses; server `allowed` is the sole UI readiness authority. Cancellation is now detected by polling without reload, with QR hidden and correct refund/no issuance assertions passing both projects.
+- [x] Native IndexedDB regressions passed: concurrent first-load legacy migration, pending snapshot replacement denial, reload, transaction abort, equal timestamp/descending random IDs with persisted sequence `[1,2,3]`. Real Next media AVIF/WebP/private-denial and CSV partial-export failure checks passed both projects. Original refund-response latency cause remains unproven; corrected test requires real completed HTTP 200 rather than a forced click or a five-second banner assumption.
+- [x] Real PostgreSQL probe reproduced plain-text search false positives: `%` / `_` were interpreted as SQL wildcards. Escaped LIKE metacharacters in bound parameters, preserving literal backslash too. Fresh complete unit gate passed 130 files / 883 tests (3.55s, `/tmp/ticket-unit-search-final.log`), then fresh integration passed 47 files / 175 tests (36.44s, `/tmp/ticket-integration-search-final.log`), including decimal per-order/partial/per-ticket/flat/legacy-privilege matrix and literal search.
+- [x] Final benchmark command `npm run benchmark:optimizations` passed 2 files / 3 tests (100.08s); database-only refresh after the search correction passed (8.21s). Generated report refreshed. All DB result source hashes match current source; all browser-relevant hashes (polling, media, IndexedDB and client flows) match, with only the separately remeasured `events.ts` context hash differing from the earlier browser run. No redundant browser timing rerun was used for an unrelated DB-only correction.
