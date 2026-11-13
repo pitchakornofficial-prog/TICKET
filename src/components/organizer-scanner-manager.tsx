@@ -365,14 +365,10 @@ export function OrganizerScannerManager() {
       return;
     }
 
-    // Auto-generate credentials if blank (D-89)
+    // Let server generate cryptographically random email/password if omitted (D-89)
     const targetName = name.trim() || 'เจ้าหน้าที่สแกน';
-    const targetEmail =
-      email.trim() ||
-      `scanner-${Date.now()}-${Math.random().toString(36).slice(2, 7)}@ticket.local`;
-    const targetPassword =
-      password.trim() ||
-      `Scanner!${Math.random().toString(36).slice(2)}${Date.now()}`;
+    const trimmedEmail = email.trim();
+    const trimmedPassword = password.trim();
 
     setSubmitting(true);
     try {
@@ -381,8 +377,8 @@ export function OrganizerScannerManager() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name: targetName,
-          email: targetEmail,
-          password: targetPassword,
+          email: trimmedEmail || undefined,
+          password: trimmedPassword || undefined,
         }),
       });
 
@@ -394,8 +390,8 @@ export function OrganizerScannerManager() {
         const createdScanner: ScannerItem = {
           id: data.scanner?.id || String(Date.now()),
           scannerId: data.scanner?.scannerId || String(Date.now()),
-          name: targetName,
-          email: targetEmail,
+          name: data.scanner?.name || targetName,
+          email: data.scanner?.email || trimmedEmail,
           assignedAt: new Date().toISOString(),
           isPrimary: data.scanner?.isPrimary ?? scanners.length === 0,
           hasActiveToken: Boolean(data.scanner?.accessUrl),

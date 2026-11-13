@@ -216,4 +216,40 @@ describe('Scanner Account Security and Scope Isolation (Issue #3)', () => {
     );
     expect(checkOrg.allowed).toBe(true);
   });
+
+  it('enforces scanner quota atomically inside transaction with pg_advisory_xact_lock', async () => {
+    const executedSql: string[] = [];
+    const mockClient = {
+      query: vi.fn().mockImplementation((sql: string) => {
+        executedSql.push(sql);
+        if (sql.includes('FROM event_scanners')) {
+          return Promise.resolve({
+            rowCount: 1,
+            rows: [{ totalCount: '4', additionalCount: '3' }],
+          });
+        }
+        return Promise.resolve({ rowCount: 0, rows: [] });
+      }),
+      release: vi.fn(),
+    } as unknown as PoolClient;
+
+    const mockPool = {
+      query: vi.fn().mockImplementation((sql: string) => {
+        if (sql.includes('SELECT "organizerId" FROM events WHERE id = $1')) {
+          return Promise.resolve({ rowCount: 1, rows: [{ organizerId: 'org-b' }] });
+        }
+        return Promise.resolve({ rowCount: 0, rows: [] });
+      }),
+      connect: vi.fn().mockResolvedValue(mockClient),
+    } as unknown as Pool;
+
+    await expect(
+      addScannerToEvent(mockPool, 'org-b', 'event-b', {
+        name: 'Extra Scanner',
+        email: 'extra@scanner.invalid',
+      }),
+    ).rejects.toThrow('จำกัดจำนวนทีมสแกนเพิ่มเติมไม่เกิน 3 คนต่อคอนเสิร์ต');
+
+    expect(executedSql.some(s => s.includes('pg_advisory_xact_lock'))).toBe(true);
+  });
 });

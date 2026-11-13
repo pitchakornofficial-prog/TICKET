@@ -76,20 +76,23 @@ export function assertSameOrigin(request: Request): Response | null {
     }
   }
 
-  // 4. In test/server environments without browser headers, check request.url origin
-  try {
-    const urlObj = new URL(request.url);
-    const urlOrigin = urlObj.origin;
-    if (isAllowedOrigin(urlOrigin)) {
-      return null;
-    }
-    const baseOrigin = getBaseOrigin();
-    const isLocalBase = ['127.0.0.1', 'localhost', '[::1]'].includes(baseOrigin.hostname);
-    const isLocalUrl = ['127.0.0.1', 'localhost', '[::1]'].includes(urlObj.hostname);
-    if (isLocalBase && isLocalUrl) {
-      return null;
-    }
-  } catch {}
+  // 4. In non-production (dev/test) environments without browser headers, check request.url origin.
+  // In production, fail closed when both Origin and Referer are missing.
+  if (process.env.NODE_ENV !== 'production') {
+    try {
+      const urlObj = new URL(request.url);
+      const urlOrigin = urlObj.origin;
+      if (isAllowedOrigin(urlOrigin)) {
+        return null;
+      }
+      const baseOrigin = getBaseOrigin();
+      const isLocalBase = ['127.0.0.1', 'localhost', '[::1]'].includes(baseOrigin.hostname);
+      const isLocalUrl = ['127.0.0.1', 'localhost', '[::1]'].includes(urlObj.hostname);
+      if (isLocalBase && isLocalUrl) {
+        return null;
+      }
+    } catch {}
+  }
 
   // Missing all origin evidence on state-changing request
   return Response.json(

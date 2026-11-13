@@ -1047,6 +1047,20 @@ export async function addScannerToEvent(
   }
 
   return inTransaction(pool, async client => {
+    await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`scanner-quota:${eventId}`]);
+    const quotaRes = await client.query<{ totalCount: string; additionalCount: string }>(
+      `SELECT COUNT(*)::text AS "totalCount",
+              COUNT(*) FILTER (WHERE NOT COALESCE("isPrimary", false))::text AS "additionalCount"
+       FROM event_scanners
+       WHERE "eventId" = $1`,
+      [eventId],
+    );
+    const totalCount = Number(quotaRes.rows[0]?.totalCount ?? 0);
+    const additionalCount = Number(quotaRes.rows[0]?.additionalCount ?? 0);
+    if (additionalCount >= 3 || totalCount >= 4) {
+      throw new Error('จำกัดจำนวนทีมสแกนเพิ่มเติมไม่เกิน 3 คนต่อคอนเสิร์ต');
+    }
+
     let targetScannerId = data.scannerId;
     let targetName = data.name.trim();
     const targetEmail = data.email.trim().toLowerCase();

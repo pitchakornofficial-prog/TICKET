@@ -1,8 +1,9 @@
 import { randomUUID } from 'node:crypto';
-import type { Pool } from 'pg';
+import type { Pool, PoolClient } from 'pg';
 import { inTransaction } from './database.ts';
 import { storage } from './storage.ts';
 import { ensureTicketSchema } from './tickets.ts';
+import { validateTransferProof } from './proof-validation.ts';
 import {
   roundHalfUp,
   type OrganizerFeeMode,
@@ -486,12 +487,14 @@ export function parseMoneyReportQueryOptions(requestUrl: string): GetEventMoneyR
  * Aggregates order/session/event totals in PostgreSQL and supports optional order pagination or summary-only mode.
  */
 export async function getEventMoneyReport(
-  pool: Pool,
+  pool: Pool | PoolClient,
   eventId: string,
   actor: ActorContext,
   options?: GetEventMoneyReportOptions,
 ): Promise<EventMoneyReportDetail> {
-  await ensureReportSchema(pool);
+  if ('connect' in pool) {
+    await ensureReportSchema(pool);
+  }
 
   // 1. Role enforcement (AC-82): Scanners are strictly rejected
   if (actor.role === 'scanner') {
@@ -1108,7 +1111,7 @@ export async function recordEventPayout(
   const status = input.status || 'completed';
   const amount = roundHalfUp(Number(input.amount || 0));
 
-  if (amount <= 0) {
+  if (!Number.isFinite(amount) || amount <= 0) {
     return {
       success: false,
       code: 'INVALID_AMOUNT',
@@ -1116,84 +1119,113 @@ export async function recordEventPayout(
     };
   }
 
-  // 1. Concurrency / duplicate submission protection (AC-87)
-  // Check if an identical completed payout was submitted in the last 15 seconds
-  if (status === 'completed') {
-    const recentDup = await pool.query<{ id: string; amount: string }>(
-      `SELECT id, amount::text
-       FROM event_payouts
-       WHERE "eventId" = $1 AND amount = $2 AND status = 'completed' AND "paidAt" >= now() - INTERVAL '15 seconds'`,
-      [input.eventId, amount],
+  const proofCheck = validateTransferProof(input.transferProofKey, input.transferProofUrl);
+  if (!proofCheck.valid) {
+    return {
+      success: false,
+      code: 'INVALID_PROOF',
+      error: proofCheck.error,
+    };
+  }
+
+  return inTransaction(pool, async client => {
+    // Serialize payout checks and inserts per eventId to prevent concurrent overpayment
+    await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`payout:${input.eventId}`]);
+
+    // 1. Concurrency / duplicate submission protection (AC-87)
+    // Check if an identical completed payout was submitted in the last 15 seconds
+    if (status === 'completed') {
+      const recentDup = await client.query<{ id: string; amount: string }>(
+        `SELECT id, amount::text
+         FROM event_payouts
+         WHERE "eventId" = $1 AND amount = $2 AND status = 'completed' AND "paidAt" >= now() - INTERVAL '15 seconds'`,
+        [input.eventId, amount],
+      );
+
+      if (recentDup.rowCount && recentDup.rowCount > 0) {
+        const report = await getEventMoneyReport(
+          client,
+          input.eventId,
+          { id: input.recordedBy || '', role: 'owner' },
+          { includeOrders: false },
+        );
+        return {
+          success: true,
+          payoutId: recentDup.rows[0].id,
+          status: 'completed',
+          amount,
+          payableAmount: report.payableAmount,
+        };
+      }
+    }
+
+    // 2. For completed payouts, verify current payable readiness before insert (AC-27, AC-30, AC-79)
+    if (status === 'completed') {
+      const currentReport = await getEventMoneyReport(
+        client,
+        input.eventId,
+        { id: input.recordedBy || '', role: 'owner' },
+        { includeOrders: false },
+      );
+      if (currentReport.payableAmount <= 0) {
+        return {
+          success: false,
+          code: 'CANNOT_PAY_ZERO_PAYABLE',
+          error: 'ไม่มียอดพร้อมจ่าย (Payable = 0) สำหรับคอนเสิร์ตนี้ ไม่สามารถโอนจ่ายได้',
+        };
+      }
+
+      if (amount > currentReport.payableAmount) {
+        return {
+          success: false,
+          code: 'EXCEEDS_PAYABLE_AMOUNT',
+          error: `ยอดเงินที่บันทึก (฿${amount.toLocaleString('th-TH')}) เกินกว่ายอดพร้อมจ่ายในปัจจุบัน (฿${currentReport.payableAmount.toLocaleString('th-TH')})`,
+        };
+      }
+    }
+
+    // 3. Insert payout record
+    const id = `PO-${randomUUID().slice(0, 8).toUpperCase()}`;
+    const paidAt = input.paidAt || input.now || new Date();
+    const failedAt = status === 'failed' ? (input.now || new Date()) : null;
+
+    await client.query(
+      `INSERT INTO event_payouts (
+         id, "eventId", amount, status, "paidAt",
+         "transferProofKey", "transferProofUrl", "transferNote",
+         "transferFailureReason", "transferFailedAt", "recordedBy",
+         "createdAt", "updatedAt"
+       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, now(), now())`,
+      [
+        id,
+        input.eventId,
+        amount,
+        status,
+        paidAt,
+        proofCheck.transferProofKey,
+        proofCheck.transferProofUrl,
+        input.transferNote?.trim() || null,
+        input.transferFailureReason?.trim() || null,
+        failedAt,
+        input.recordedBy || null,
+      ],
     );
 
-    if (recentDup.rowCount && recentDup.rowCount > 0) {
-      const report = await getEventMoneyReport(pool, input.eventId, { id: input.recordedBy || '', role: 'owner' }, { includeOrders: false });
-      return {
-        success: true,
-        payoutId: recentDup.rows[0].id,
-        status: 'completed',
-        amount,
-        payableAmount: report.payableAmount,
-      };
-    }
-  }
-
-  // 2. For completed payouts, verify current payable readiness before insert (AC-27, AC-30, AC-79)
-  if (status === 'completed') {
-    const currentReport = await getEventMoneyReport(pool, input.eventId, { id: input.recordedBy || '', role: 'owner' }, { includeOrders: false });
-    if (currentReport.payableAmount <= 0) {
-      return {
-        success: false,
-        code: 'CANNOT_PAY_ZERO_PAYABLE',
-        error: 'ไม่มียอดพร้อมจ่าย (Payable = 0) สำหรับคอนเสิร์ตนี้ ไม่สามารถโอนจ่ายได้',
-      };
-    }
-
-    if (amount > currentReport.payableAmount) {
-      return {
-        success: false,
-        code: 'EXCEEDS_PAYABLE_AMOUNT',
-        error: `ยอดเงินที่บันทึก (฿${amount.toLocaleString('th-TH')}) เกินกว่ายอดพร้อมจ่ายในปัจจุบัน (฿${currentReport.payableAmount.toLocaleString('th-TH')})`,
-      };
-    }
-  }
-
-  // 3. Insert payout record
-  const id = `PO-${randomUUID().slice(0, 8).toUpperCase()}`;
-  const paidAt = input.paidAt || input.now || new Date();
-  const failedAt = status === 'failed' ? (input.now || new Date()) : null;
-
-  await pool.query(
-    `INSERT INTO event_payouts (
-       id, "eventId", amount, status, "paidAt",
-       "transferProofKey", "transferProofUrl", "transferNote",
-       "transferFailureReason", "transferFailedAt", "recordedBy",
-       "createdAt", "updatedAt"
-     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, now(), now())`,
-    [
-      id,
+    const updatedReport = await getEventMoneyReport(
+      client,
       input.eventId,
-      amount,
+      { id: input.recordedBy || '', role: 'owner' },
+      { includeOrders: false },
+    );
+
+    return {
+      success: true,
+      payoutId: id,
       status,
-      paidAt,
-      input.transferProofKey || null,
-      input.transferProofUrl || null,
-      input.transferNote?.trim() || null,
-      input.transferFailureReason?.trim() || null,
-      failedAt,
-      input.recordedBy || null,
-    ],
-  );
-
-  const updatedReport = await getEventMoneyReport(pool, input.eventId, { id: input.recordedBy || '', role: 'owner' }, { includeOrders: false });
-
-  return {
-    success: true,
-    payoutId: id,
-    status,
-    amount,
-    payableAmount: updatedReport.payableAmount,
-  };
+      amount,
+      payableAmount: updatedReport.payableAmount,
+    };
+  });
 }
 
 /**
