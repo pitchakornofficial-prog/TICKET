@@ -363,4 +363,133 @@ describe('Performance Optimizations Verification (#1-#7)', () => {
     expect((await getOfflinePendingScansAsync(eventId, fakeIdb)).length).toBe(1);
     expect(tickets.get(`${eventId}:tkt-1`)?.admissionStatus).toBe('inside');
   });
+
+  it('#8: batches getEventDetails, combines owner overview counts, trims news content, and aggregates organizer analytics in SQL', async () => {
+    const { getEventDetails } = await import('../../src/server/events');
+    const { getOwnerOverviewCounts } = await import('../../src/server/overview');
+    const { listPublishedNews } = await import('../../src/server/news');
+    const { getOrganizerAnalytics } = await import('../../src/server/organizer-analytics');
+
+    // 1. getEventDetails: 20 sessions -> 3 queries total (no N+1)
+    let eventQueries = 0;
+    const eventPool = {
+      query: async (sql: string) => {
+        eventQueries += 1;
+        if (sql.includes('FROM events')) return { rows: [{ id: 'ev-1', organizerId: 'org-1' }], rowCount: 1 };
+        if (sql.includes('FROM event_sessions')) {
+          return { rows: Array.from({ length: 20 }, (_, i) => ({ id: `s-${i}` })), rowCount: 20 };
+        }
+        if (sql.includes('FROM ticket_types')) {
+          expect(sql).toContain('ANY($1::text[])');
+          return {
+            rows: Array.from({ length: 40 }, (_, i) => ({ id: `tt-${i}`, sessionId: `s-${i % 20}` })),
+            rowCount: 40,
+          };
+        }
+        return { rows: [], rowCount: 0 };
+      },
+    } as unknown as import('pg').Pool;
+    const details = await getEventDetails(eventPool, 'ev-1');
+    expect(details?.sessions).toHaveLength(20);
+    expect(eventQueries).toBe(3);
+
+    // 2. getOwnerOverviewCounts: 1 combined query instead of 7
+    let overviewQueries = 0;
+    const overviewPool = {
+      query: async (sql: string) => {
+        if (!sql.includes('CREATE TABLE') && !sql.includes('ALTER TABLE') && !sql.includes('CREATE INDEX')) {
+          overviewQueries += 1;
+        }
+        return {
+          rows: [{
+            sessionsCount: 2,
+            amendmentsCount: 1,
+            cancellationsCount: 1,
+            pendingRefunds: 3,
+            failedEmails: 1,
+            paymentExceptions: 2,
+            syncConflicts: 1,
+          }],
+          rowCount: 1,
+        };
+      },
+    } as unknown as import('pg').Pool;
+    // Warm schema cache once, then verify steady-state query count is 1
+    await getOwnerOverviewCounts(overviewPool);
+    overviewQueries = 0;
+    const counts = await getOwnerOverviewCounts(overviewPool);
+    expect(overviewQueries).toBe(1);
+    expect(counts.pendingSessions).toBe(4);
+    expect(counts.totalPending).toBe(11);
+
+    // 3. listPublishedNews uses LEFT(content, 201)
+    const newsSqls: string[] = [];
+    const newsPool = {
+      query: async (sql: string) => {
+        newsSqls.push(sql);
+        if (sql.includes('FROM news')) {
+          return {
+            rows: [{
+              id: 'n-1',
+              title: 'News 1',
+              content: 'x'.repeat(201),
+              coverUrl: null,
+              publishedAt: new Date().toISOString(),
+              createdAt: new Date().toISOString(),
+            }],
+            rowCount: 1,
+          };
+        }
+        return { rows: [], rowCount: 0 };
+      },
+    } as unknown as import('pg').Pool;
+    const newsList = await listPublishedNews(newsPool);
+    expect(newsSqls.some(s => s.includes('LEFT(content, 201)'))).toBe(true);
+    expect(newsList[0]?.snippet.length).toBe(200);
+
+    // 4. getOrganizerAnalytics aggregates in SQL instead of fetching raw ticket rows
+    const analyticsSqls: string[] = [];
+    const analyticsPool = {
+      query: async (sql: string) => {
+        analyticsSqls.push(sql);
+        if (sql.includes('FROM events')) {
+          return {
+            rows: [{ id: 'ev-1', title: 'Show 1', status: 'approved', location: 'BKK', createdAt: new Date() }],
+            rowCount: 1,
+          };
+        }
+        if (sql.includes('FROM ticket_types')) {
+          return {
+            rows: [{ id: 'tt-1', name: 'VIP', price: 2000, quota: 100, eventId: 'ev-1', eventTitle: 'Show 1' }],
+            rowCount: 1,
+          };
+        }
+        if (sql.includes('FILTER (WHERE')) {
+          return {
+            rows: [{ grossSales: 10000, totalTicketsSold: 5, totalAdmitted: 2, totalRefunded: 1 }],
+            rowCount: 1,
+          };
+        }
+        if (sql.includes('GROUP BY t."eventId", tt.name')) {
+          return {
+            rows: [{ eventId: 'ev-1', tierName: 'VIP', sold: 5, grossSales: 10000 }],
+            rowCount: 1,
+          };
+        }
+        if (sql.includes('LIMIT 7')) {
+          return {
+            rows: [{ dateKey: '2026-11-12', sales: 10000, tickets: 5 }],
+            rowCount: 1,
+          };
+        }
+        return { rows: [], rowCount: 0 };
+      },
+    } as unknown as import('pg').Pool;
+    const analytics = await getOrganizerAnalytics(analyticsPool, 'org-1');
+    expect(analytics.kpi.grossSales).toBe(10000);
+    expect(analytics.kpi.totalTicketsSold).toBe(5);
+    expect(analytics.tierBreakdown[0]?.sold).toBe(5);
+    expect(analytics.salesTrend[0]?.tickets).toBe(5);
+    expect(analyticsSqls.some(s => s.includes('FILTER (WHERE'))).toBe(true);
+  });
 });

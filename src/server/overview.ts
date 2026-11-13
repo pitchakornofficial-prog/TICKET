@@ -25,33 +25,35 @@ export async function getOwnerOverviewCounts(pool: Pool): Promise<OwnerOverviewC
   await ensurePaymentSchema(pool);
   await ensureAdmissionSchema(pool);
 
-  const [
-    sessionsRes,
-    amendmentsRes,
-    cancellationsRes,
-    refundsRes,
-    emailsRes,
-    paymentsRes,
-    conflictsRes,
-  ] = await Promise.all([
-    pool.query<{ count: string }>(`SELECT COUNT(*) FROM event_sessions WHERE status = 'pending_approval'`),
-    pool.query<{ count: string }>(`SELECT COUNT(*) FROM session_amendments WHERE status = 'pending'`),
-    pool.query<{ count: string }>(`SELECT COUNT(*) FROM session_cancellations WHERE status = 'pending'`),
-    pool.query<{ count: string }>(`SELECT COUNT(*) FROM refund_requests WHERE status = 'pending'`),
-    pool.query<{ count: string }>(`SELECT COUNT(*) FROM ticket_email_deliveries WHERE status = 'failed'`),
-    pool.query<{ count: string }>(`SELECT COUNT(*) FROM payment_recovery_cases WHERE status = 'pending_review'`),
-    pool.query<{ count: string }>(`SELECT COUNT(*) FROM admission_sync_conflicts WHERE status = 'pending_review'`),
-  ]);
+  const countsRes = await pool.query<{
+    sessionsCount: number;
+    amendmentsCount: number;
+    cancellationsCount: number;
+    pendingRefunds: number;
+    failedEmails: number;
+    paymentExceptions: number;
+    syncConflicts: number;
+  }>(`
+    SELECT
+      (SELECT COUNT(*)::int FROM event_sessions WHERE status = 'pending_approval') AS "sessionsCount",
+      (SELECT COUNT(*)::int FROM session_amendments WHERE status = 'pending') AS "amendmentsCount",
+      (SELECT COUNT(*)::int FROM session_cancellations WHERE status = 'pending') AS "cancellationsCount",
+      (SELECT COUNT(*)::int FROM refund_requests WHERE status = 'pending') AS "pendingRefunds",
+      (SELECT COUNT(*)::int FROM ticket_email_deliveries WHERE status = 'failed') AS "failedEmails",
+      (SELECT COUNT(*)::int FROM payment_recovery_cases WHERE status = 'pending_review') AS "paymentExceptions",
+      (SELECT COUNT(*)::int FROM admission_sync_conflicts WHERE status = 'pending_review') AS "syncConflicts"
+  `);
 
+  const row = countsRes.rows[0];
   const pendingSessions =
-    Number(sessionsRes.rows[0]?.count || 0) +
-    Number(amendmentsRes.rows[0]?.count || 0) +
-    Number(cancellationsRes.rows[0]?.count || 0);
+    Number(row?.sessionsCount || 0) +
+    Number(row?.amendmentsCount || 0) +
+    Number(row?.cancellationsCount || 0);
 
-  const pendingRefunds = Number(refundsRes.rows[0]?.count || 0);
-  const failedEmails = Number(emailsRes.rows[0]?.count || 0);
-  const paymentExceptions = Number(paymentsRes.rows[0]?.count || 0);
-  const syncConflicts = Number(conflictsRes.rows[0]?.count || 0);
+  const pendingRefunds = Number(row?.pendingRefunds || 0);
+  const failedEmails = Number(row?.failedEmails || 0);
+  const paymentExceptions = Number(row?.paymentExceptions || 0);
+  const syncConflicts = Number(row?.syncConflicts || 0);
 
   const totalPending = pendingSessions + pendingRefunds + failedEmails + paymentExceptions + syncConflicts;
 

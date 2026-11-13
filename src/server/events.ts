@@ -609,15 +609,24 @@ export async function getEventDetails(clientOrPool: { query: Pool['query'] }, ev
     'SELECT * FROM event_sessions WHERE "eventId" = $1 ORDER BY "startTime" ASC',
     [eventId],
   );
-  const sessions = [];
-
-  for (const sess of sessRes.rows) {
+  const sessionIds = sessRes.rows.map((s) => s.id as string);
+  const ticketTypesBySession = new Map<string, Record<string, unknown>[]>();
+  if (sessionIds.length > 0) {
     const ttRes = await clientOrPool.query(
-      'SELECT * FROM ticket_types WHERE "sessionId" = $1 ORDER BY price ASC',
-      [sess.id],
+      'SELECT * FROM ticket_types WHERE "sessionId" = ANY($1::text[]) ORDER BY price ASC',
+      [sessionIds],
     );
-    sessions.push({ ...sess, ticketTypes: ttRes.rows });
+    for (const tt of ttRes.rows) {
+      const sid = tt.sessionId as string;
+      const list = ticketTypesBySession.get(sid);
+      if (list) list.push(tt);
+      else ticketTypesBySession.set(sid, [tt]);
+    }
   }
+  const sessions = sessRes.rows.map((sess) => ({
+    ...sess,
+    ticketTypes: ticketTypesBySession.get(sess.id as string) ?? [],
+  }));
 
   return { ...event, sessions };
 }
@@ -827,6 +836,8 @@ export async function queryPublicEventsCatalog(
   }
 }
 
+const orderTablesCache = new WeakMap<Pool, { canCheckHeld: boolean; canCheckTickets: boolean }>();
+
 export async function getPublicEventWithApprovedSessions(pool: Pool, eventId: string) {
   try {
     await ensureEventSchema(pool);
@@ -857,11 +868,20 @@ export async function getPublicEventWithApprovedSessions(pool: Pool, eventId: st
     }
 
     const sessionIds = sessRes.rows.map(s => s.id as string);
-    const hasOrderTablesRes = await pool.query(
-      "SELECT to_regclass('orders') as orders, to_regclass('order_items') as items, to_regclass('tickets') as tickets",
-    );
-    const canCheckHeld = Boolean(hasOrderTablesRes.rows[0]?.orders && hasOrderTablesRes.rows[0]?.items);
-    const canCheckTickets = Boolean(hasOrderTablesRes.rows[0]?.tickets);
+    let tableFlags = orderTablesCache.get(pool);
+    if (!tableFlags?.canCheckHeld || !tableFlags.canCheckTickets) {
+      const hasOrderTablesRes = await pool.query(
+        "SELECT to_regclass('orders') as orders, to_regclass('order_items') as items, to_regclass('tickets') as tickets",
+      );
+      tableFlags = {
+        canCheckHeld: Boolean(hasOrderTablesRes.rows[0]?.orders && hasOrderTablesRes.rows[0]?.items),
+        canCheckTickets: Boolean(hasOrderTablesRes.rows[0]?.tickets),
+      };
+      if (tableFlags.canCheckHeld && tableFlags.canCheckTickets) {
+        orderTablesCache.set(pool, tableFlags);
+      }
+    }
+    const { canCheckHeld, canCheckTickets } = tableFlags;
 
     // Single batched query across all sessions with pre-aggregated held & refunded counts (#4)
     const ttQuery = canCheckHeld

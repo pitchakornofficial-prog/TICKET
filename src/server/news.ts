@@ -85,7 +85,7 @@ export async function listPublishedNews(pool: Pool): Promise<PublicNewsSummary[]
       SELECT
         id,
         title,
-        content,
+        LEFT(content, 201) AS content,
         "coverUrl",
         "publishedAt",
         "createdAt"

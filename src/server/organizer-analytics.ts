@@ -83,52 +83,78 @@ export async function getOrganizerAnalytics(
     [organizerId, activeEventId],
   );
 
-  // 3. Fetch issued tickets
-  const ticketsRes = await pool.query<{
-    id: string;
-    eventId: string;
-    ticketTypeId: string;
-    status: string;
-    admissionStatus: string;
-    createdAt: Date;
-    tierName: string;
-    price: string | number;
-  }>(
-    `SELECT t.id, t."eventId", t."ticketTypeId", t.status, t."admissionStatus", t."createdAt",
-            tt.name AS "tierName", tt.price
-     FROM tickets t
-     JOIN ticket_types tt ON tt.id = t."ticketTypeId"
-     JOIN events e ON e.id = t."eventId"
-     WHERE e."organizerId" = $1
-       AND ($2::text IS NULL OR e.id = $2)`,
-    [organizerId, activeEventId],
-  );
-
-  const allTickets = ticketsRes.rows;
+  // 3. Aggregate ticket KPIs, per-event/tier sales, and 7-day sales trend directly in PostgreSQL
+  const [kpiRes, tierEventAggRes, trendRes] = await Promise.all([
+    pool.query<{
+      grossSales: number;
+      totalTicketsSold: number;
+      totalAdmitted: number;
+      totalRefunded: number;
+    }>(
+      `SELECT
+         COALESCE(SUM(tt.price) FILTER (WHERE t.status IN ('valid', 'used')), 0)::float8 AS "grossSales",
+         COUNT(*) FILTER (WHERE t.status IN ('valid', 'used'))::int AS "totalTicketsSold",
+         COUNT(*) FILTER (WHERE t."admissionStatus" IN ('inside', 'admitted') OR t.status = 'used')::int AS "totalAdmitted",
+         COUNT(*) FILTER (WHERE t.status = 'refunded')::int AS "totalRefunded"
+       FROM tickets t
+       JOIN ticket_types tt ON tt.id = t."ticketTypeId"
+       JOIN events e ON e.id = t."eventId"
+       WHERE e."organizerId" = $1
+         AND ($2::text IS NULL OR e.id = $2)`,
+      [organizerId, activeEventId],
+    ),
+    pool.query<{
+      eventId: string;
+      tierName: string;
+      sold: number;
+      grossSales: number;
+    }>(
+      `SELECT
+         t."eventId",
+         tt.name AS "tierName",
+         COUNT(*)::int AS sold,
+         COALESCE(SUM(tt.price), 0)::float8 AS "grossSales"
+       FROM tickets t
+       JOIN ticket_types tt ON tt.id = t."ticketTypeId"
+       JOIN events e ON e.id = t."eventId"
+       WHERE e."organizerId" = $1
+         AND ($2::text IS NULL OR e.id = $2)
+         AND t.status IN ('valid', 'used')
+       GROUP BY t."eventId", tt.name`,
+      [organizerId, activeEventId],
+    ),
+    pool.query<{
+      dateKey: string;
+      sales: number;
+      tickets: number;
+    }>(
+      `SELECT
+         TO_CHAR(t."createdAt" AT TIME ZONE 'Asia/Bangkok', 'YYYY-MM-DD') AS "dateKey",
+         COALESCE(SUM(tt.price), 0)::float8 AS sales,
+         COUNT(*)::int AS tickets
+       FROM tickets t
+       JOIN ticket_types tt ON tt.id = t."ticketTypeId"
+       JOIN events e ON e.id = t."eventId"
+       WHERE e."organizerId" = $1
+         AND ($2::text IS NULL OR e.id = $2)
+         AND t.status IN ('valid', 'used')
+       GROUP BY 1
+       ORDER BY 1 DESC
+       LIMIT 7`,
+      [organizerId, activeEventId],
+    ),
+  ]);
 
   // 4. Calculate KPIs
   const totalEvents = events.length;
   const approvedEvents = events.filter(e => e.status === 'approved').length;
   const draftEvents = events.filter(e => e.status === 'draft').length;
 
-  let grossSales = 0;
-  let totalTicketsSold = 0;
-  let totalAdmitted = 0;
-  let totalRefunded = 0;
-
-  for (const t of allTickets) {
-    const numPrice = Number(t.price) || 0;
-    if (t.status === 'valid' || t.status === 'used') {
-      grossSales += numPrice;
-      totalTicketsSold += 1;
-    }
-    if (t.status === 'refunded') {
-      totalRefunded += 1;
-    }
-    if (t.admissionStatus === 'inside' || t.admissionStatus === 'admitted' || t.status === 'used') {
-      totalAdmitted += 1;
-    }
-  }
+  const kpiRow = kpiRes.rows[0];
+  const grossSales = Number(kpiRow?.grossSales) || 0;
+  const totalTicketsSold = Number(kpiRow?.totalTicketsSold) || 0;
+  const totalAdmitted = Number(kpiRow?.totalAdmitted) || 0;
+  const totalRefunded = Number(kpiRow?.totalRefunded) || 0;
 
   const totalQuota = tiersRes.rows.reduce((sum, tier) => sum + tier.quota, 0);
 
@@ -148,12 +174,10 @@ export async function getOrganizerAnalytics(
     }
   }
 
-  for (const t of allTickets) {
-    if (t.status === 'valid' || t.status === 'used') {
-      const existing = tierMap.get(t.tierName);
-      if (existing) {
-        existing.sold += 1;
-      }
+  for (const agg of tierEventAggRes.rows) {
+    const existing = tierMap.get(agg.tierName);
+    if (existing) {
+      existing.sold += Number(agg.sold) || 0;
     }
   }
 
@@ -182,47 +206,33 @@ export async function getOrganizerAnalytics(
     }
   }
 
-  for (const t of allTickets) {
-    const ev = concertMap.get(t.eventId);
-    if (ev && (t.status === 'valid' || t.status === 'used')) {
-      ev.sold += 1;
-      ev.grossSales += Number(t.price) || 0;
+  for (const agg of tierEventAggRes.rows) {
+    const ev = concertMap.get(agg.eventId);
+    if (ev) {
+      ev.sold += Number(agg.sold) || 0;
+      ev.grossSales += Number(agg.grossSales) || 0;
     }
   }
 
   const concertComparison = Array.from(concertMap.values());
 
-  // 7. Sales trend buckets (group by day)
-  const validTickets = allTickets.filter(t => t.status === 'valid' || t.status === 'used');
-  const trendBuckets: { id?: string; period: string; sales: number; tickets: number }[] = [];
-  if (validTickets.length > 0) {
-    const sorted = [...validTickets].sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-    const dayMap = new Map<string, { label: string; sales: number; tickets: number }>();
-
-    for (const t of sorted) {
-      const d = new Date(t.createdAt);
-      const dateKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-      const label = d.toLocaleDateString('th-TH', { month: 'short', day: 'numeric' });
-      const current = dayMap.get(dateKey) || { label, sales: 0, tickets: 0 };
-      current.sales += Number(t.price) || 0;
-      current.tickets += 1;
-      dayMap.set(dateKey, current);
-    }
-
-    for (const [dateKey, val] of dayMap.entries()) {
-      trendBuckets.push({
-        id: dateKey,
-        period: val.label,
-        sales: val.sales,
-        tickets: val.tickets,
+  // 7. Sales trend buckets (last 7 active days from SQL)
+  const trendBuckets: { id?: string; period: string; sales: number; tickets: number }[] = [...trendRes.rows]
+    .reverse()
+    .map(row => {
+      const d = new Date(`${row.dateKey}T00:00:00+07:00`);
+      const label = d.toLocaleDateString('th-TH', {
+        month: 'short',
+        day: 'numeric',
+        timeZone: 'Asia/Bangkok',
       });
-    }
-
-    // Keep up to 7 most recent days if there are many days
-    if (trendBuckets.length > 7) {
-      trendBuckets.splice(0, trendBuckets.length - 7);
-    }
-  }
+      return {
+        id: row.dateKey,
+        period: label,
+        sales: Number(row.sales) || 0,
+        tickets: Number(row.tickets) || 0,
+      };
+    });
 
   if (trendBuckets.length === 0) {
     // If no tickets sold yet, return baseline zero points so chart renders cleanly
