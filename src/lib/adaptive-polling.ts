@@ -141,6 +141,10 @@ export function startAdaptivePoller(options: AdaptivePollerOptions): () => void 
 
       if (result?.stop) {
         shouldStop = true;
+        disposed = true;
+        if (typeof document !== 'undefined') {
+          document.removeEventListener('visibilitychange', handleVisibilityChange);
+        }
         return;
       }
 

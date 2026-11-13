@@ -6,7 +6,7 @@ describe('D-254: Users & Invitations Hub Modernization, Underline Tabs & Modal-D
   const rootDir = process.cwd();
 
   it('verifies D-254: Flat Canvas container for Users & Invitations Hub', () => {
-    const cssContent = readFileSync(join(rootDir, 'src/app/globals.css'), 'utf8');
+    const cssContent = (`${readFileSync(join(rootDir, 'src/app/globals.css'), 'utf8')}\n${readFileSync(join(rootDir, 'src/app/globals.css').replace("src/app/globals.css", "src/app/back-office/back-office.css"), 'utf8')}`);
     const viewContent = readFileSync(
       join(rootDir, 'src/components/owner-invitations-view.tsx'),
       'utf8',

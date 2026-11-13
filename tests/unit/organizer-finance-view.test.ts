@@ -91,7 +91,7 @@ describe('Organizer Financial Reports & Payouts Workspace (D-113)', () => {
   });
 
   it('includes proper CSS styling and @media print rules in globals.css', () => {
-    const cssContent = readFileSync(join(rootDir, 'src/app/globals.css'), 'utf8');
+    const cssContent = (`${readFileSync(join(rootDir, 'src/app/globals.css'), 'utf8')}\n${readFileSync(join(rootDir, 'src/app/globals.css').replace("src/app/globals.css", "src/app/back-office/back-office.css"), 'utf8')}`);
     expect(cssContent).toContain('.finance-management-container');
     expect(cssContent).toContain('.finance-summary-strip');
     expect(cssContent).toContain('.finance-kpi-card');
@@ -142,7 +142,7 @@ describe('Organizer Financial Reports & Payouts Workspace (D-113)', () => {
     expect(financeContent).not.toMatch(/\p{Extended_Pictographic}/u);
 
     // CSS rules
-    const cssContent = readFileSync(join(rootDir, 'src/app/globals.css'), 'utf8');
+    const cssContent = (`${readFileSync(join(rootDir, 'src/app/globals.css'), 'utf8')}\n${readFileSync(join(rootDir, 'src/app/globals.css').replace("src/app/globals.css", "src/app/back-office/back-office.css"), 'utf8')}`);
     expect(cssContent).toContain('.finance-tooltip-wrap');
     expect(cssContent).toContain('.finance-tooltip-popover');
     expect(cssContent).toContain('.btn-export-csv');
@@ -217,7 +217,7 @@ describe('Organizer Financial Reports & Payouts Workspace (D-113)', () => {
     expect(bankSlipContent).not.toMatch(/\p{Extended_Pictographic}/u);
 
     // CSS rules for sharp corners (border-radius: 0) and shadow
-    const cssContent = readFileSync(join(rootDir, 'src/app/globals.css'), 'utf8');
+    const cssContent = (`${readFileSync(join(rootDir, 'src/app/globals.css'), 'utf8')}\n${readFileSync(join(rootDir, 'src/app/globals.css').replace("src/app/globals.css", "src/app/back-office/back-office.css"), 'utf8')}`);
     expect(cssContent).toContain('.finance-slip-pure-img');
     expect(cssContent).toContain('border-radius: 0');
     expect(cssContent).toContain('box-shadow');

@@ -378,6 +378,6 @@ describe('TASK-032: Offline Primary Dataset Integration Tests (AC-94, AC-65, G-4
         { id: scannerB.scannerId, role: 'scanner' },
         eventA.id,
       ),
-    ).rejects.toThrow('ไม่อนุญาต: คุณไม่ได้เป็นทีมสแกนของคอนเสิร์ตนี้ (AC-08)');
+    ).rejects.toThrow('ไม่อนุญาต: คุณไม่ได้เป็นทีมสแกนของคอนเสิร์ตนี้');
   });
 });

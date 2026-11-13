@@ -6,7 +6,7 @@ describe('D-233 to D-245: Concert Hub Modernization, Balanced Toolbar, Card Hier
   const rootDir = process.cwd();
 
   it('verifies D-233: Containerless flat canvas for Concert Hub', () => {
-    const cssContent = readFileSync(join(rootDir, 'src/app/globals.css'), 'utf8');
+    const cssContent = (`${readFileSync(join(rootDir, 'src/app/globals.css'), 'utf8')}\n${readFileSync(join(rootDir, 'src/app/globals.css').replace("src/app/globals.css", "src/app/back-office/back-office.css"), 'utf8')}`);
     // Ensure .owner-section-body > div does not apply background/border to .owner-concert-management-hub
     expect(cssContent).toContain('.owner-section-body > div:not(.owner-concert-management-hub)');
     expect(cssContent).toContain('.owner-concert-management-hub {');
@@ -19,7 +19,7 @@ describe('D-233 to D-245: Concert Hub Modernization, Balanced Toolbar, Card Hier
       join(rootDir, 'src/components/owner-session-approval-manager.tsx'),
       'utf8',
     );
-    const cssContent = readFileSync(join(rootDir, 'src/app/globals.css'), 'utf8');
+    const cssContent = (`${readFileSync(join(rootDir, 'src/app/globals.css'), 'utf8')}\n${readFileSync(join(rootDir, 'src/app/globals.css').replace("src/app/globals.css", "src/app/back-office/back-office.css"), 'utf8')}`);
 
     // Balanced toolbar layout
     expect(managerContent).toContain('hub-toolbar-row');
@@ -46,7 +46,7 @@ describe('D-233 to D-245: Concert Hub Modernization, Balanced Toolbar, Card Hier
       join(rootDir, 'src/components/owner-session-approval-manager.tsx'),
       'utf8',
     );
-    const cssContent = readFileSync(join(rootDir, 'src/app/globals.css'), 'utf8');
+    const cssContent = (`${readFileSync(join(rootDir, 'src/app/globals.css'), 'utf8')}\n${readFileSync(join(rootDir, 'src/app/globals.css').replace("src/app/globals.css", "src/app/back-office/back-office.css"), 'utf8')}`);
 
     // Cards do not have poster image or placeholder
     expect(managerContent).not.toContain('row-poster-img');
@@ -75,7 +75,7 @@ describe('D-233 to D-245: Concert Hub Modernization, Balanced Toolbar, Card Hier
       join(rootDir, 'src/components/owner-session-approval-manager.tsx'),
       'utf8',
     );
-    const cssContent = readFileSync(join(rootDir, 'src/app/globals.css'), 'utf8');
+    const cssContent = (`${readFileSync(join(rootDir, 'src/app/globals.css'), 'utf8')}\n${readFileSync(join(rootDir, 'src/app/globals.css').replace("src/app/globals.css", "src/app/back-office/back-office.css"), 'utf8')}`);
 
     // Default status state is pending
     expect(managerContent).toContain("useState<'pending' | 'approved' | 'rejected'>('pending')");
@@ -92,7 +92,7 @@ describe('D-233 to D-245: Concert Hub Modernization, Balanced Toolbar, Card Hier
       join(rootDir, 'src/components/owner-workspace-view.tsx'),
       'utf8',
     );
-    const cssContent = readFileSync(join(rootDir, 'src/app/globals.css'), 'utf8');
+    const cssContent = (`${readFileSync(join(rootDir, 'src/app/globals.css'), 'utf8')}\n${readFileSync(join(rootDir, 'src/app/globals.css').replace("src/app/globals.css", "src/app/back-office/back-office.css"), 'utf8')}`);
 
     // No coming-soon pill
     expect(workspaceContent).not.toContain('subnav-coming-soon-pill');
@@ -154,7 +154,7 @@ describe('D-233 to D-245: Concert Hub Modernization, Balanced Toolbar, Card Hier
   });
 
   it('verifies D-238: High-contrast button hierarchy (Primary black, Secondary white, Danger red outline)', () => {
-    const cssContent = readFileSync(join(rootDir, 'src/app/globals.css'), 'utf8');
+    const cssContent = (`${readFileSync(join(rootDir, 'src/app/globals.css'), 'utf8')}\n${readFileSync(join(rootDir, 'src/app/globals.css').replace("src/app/globals.css", "src/app/back-office/back-office.css"), 'utf8')}`);
 
     // Secondary buttons: white background with dark border and text
     expect(cssContent).toContain('.owner-workspace-container .secondary-button');
@@ -170,7 +170,7 @@ describe('D-233 to D-245: Concert Hub Modernization, Balanced Toolbar, Card Hier
   });
 
   it('verifies D-246: Uniform Card Architecture, Divider Alignment & Fixed Action Column (240px)', () => {
-    const cssContent = readFileSync(join(rootDir, 'src/app/globals.css'), 'utf8');
+    const cssContent = (`${readFileSync(join(rootDir, 'src/app/globals.css'), 'utf8')}\n${readFileSync(join(rootDir, 'src/app/globals.css').replace("src/app/globals.css", "src/app/back-office/back-office.css"), 'utf8')}`);
     const managerContent = readFileSync(
       join(rootDir, 'src/components/owner-session-approval-manager.tsx'),
       'utf8',
@@ -198,7 +198,7 @@ describe('D-233 to D-245: Concert Hub Modernization, Balanced Toolbar, Card Hier
   });
 
   it('verifies D-247: Modernized Refund Management Hub (Flat Canvas, 3 Underline Tabs, Uniform Cards & Modal Dialogs)', () => {
-    const cssContent = readFileSync(join(rootDir, 'src/app/globals.css'), 'utf8');
+    const cssContent = (`${readFileSync(join(rootDir, 'src/app/globals.css'), 'utf8')}\n${readFileSync(join(rootDir, 'src/app/globals.css').replace("src/app/globals.css", "src/app/back-office/back-office.css"), 'utf8')}`);
     const refundsContent = readFileSync(
       join(rootDir, 'src/components/owner-refund-approval-manager.tsx'),
       'utf8',
@@ -241,7 +241,7 @@ describe('D-233 to D-245: Concert Hub Modernization, Balanced Toolbar, Card Hier
       join(rootDir, 'src/components/owner-workspace-view.tsx'),
       'utf8',
     );
-    const cssContent = readFileSync(join(rootDir, 'src/app/globals.css'), 'utf8');
+    const cssContent = (`${readFileSync(join(rootDir, 'src/app/globals.css'), 'utf8')}\n${readFileSync(join(rootDir, 'src/app/globals.css').replace("src/app/globals.css", "src/app/back-office/back-office.css"), 'utf8')}`);
 
     // 1. 4 Functional Navigation Groups
     expect(workspaceContent).toContain('SECTION_GROUPS');
@@ -265,7 +265,7 @@ describe('D-233 to D-245: Concert Hub Modernization, Balanced Toolbar, Card Hier
   });
 
   it('verifies D-249: Persistent Sticky Top Navigation for Admin & Organizer Portals', () => {
-    const cssContent = readFileSync(join(rootDir, 'src/app/globals.css'), 'utf8');
+    const cssContent = (`${readFileSync(join(rootDir, 'src/app/globals.css'), 'utf8')}\n${readFileSync(join(rootDir, 'src/app/globals.css').replace("src/app/globals.css", "src/app/back-office/back-office.css"), 'utf8')}`);
     const clockContent = readFileSync(
       join(rootDir, 'src/components/admin-date-time-display.tsx'),
       'utf8',

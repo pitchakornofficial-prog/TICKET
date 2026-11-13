@@ -1,3 +1,4 @@
+import { reserveThroughCheckout } from '../support/purchase-journey';
 import { testClientIp } from '../support/client-context';
 import { saveEventDraft } from '../support/event-draft';
 import { expect, test } from '@playwright/test';
@@ -11,7 +12,6 @@ test.beforeEach(async ({ context }, testInfo) => {
 test.describe('Multi-step purchase journey: Details -> Queue -> Checkout -> Payment (TASK-040, AC-117, D-27)', () => {
   test('buyer navigates across 4 distinct pages with step indicator, waiting room queue, ticket selection + OTP, and PromptPay QR payment', async ({
     page,
-    request,
   }, testInfo) => {
     const eventTitle = `คอนเสิร์ตแยกหน้า 4 ขั้นตอน ${testInfo.project.name}`;
     const guestEmail = `buyer-step-${testInfo.project.name}@ticket.invalid`;
@@ -118,44 +118,14 @@ test.describe('Multi-step purchase journey: Details -> Queue -> Checkout -> Paym
     await expect(page.locator('#checkout-queue-badge')).toContainText('ผ่านคิวแล้ว');
 
     // 3a. Select 2 tickets first (Card 1)
-    const addStandingBtn = page.getByRole('button', { name: 'เพิ่มจำนวน บัตร Standing Zone A' });
-    await addStandingBtn.click();
-    await addStandingBtn.click();
-    await expect(page.getByText('รวมราคาบัตร (2 ใบ)')).toBeVisible();
-
-    // 3b. Fill Buyer Info & Verify OTP (Card 2)
-    await page.getByLabel('ชื่อ-นามสกุล *').fill(guestName);
-    await page.getByLabel('อีเมล *').fill(guestEmail);
-    await page.getByLabel('เบอร์โทรศัพท์มือถือ *').fill(guestPhone);
-    await page.getByRole('button', { name: 'ขอรหัส OTP เพื่อซื้อบัตร' }).click();
-
-    await expect(page.getByText('ส่งรหัส OTP 6 หลักไปยังอีเมลของคุณเรียบร้อยแล้ว')).toBeVisible();
-
-    const otpRes = await request.get(
-      `/api/auth/test-inspect-reset-token?type=guest_otp&email=${encodeURIComponent(guestEmail)}`,
-    );
-    expect(otpRes.status()).toBe(200);
-    const { code } = await otpRes.json();
-
-    await page.getByLabel('รหัส OTP 6 หลัก *').fill(code);
-    await page.getByRole('button', { name: 'ยืนยันรหัส OTP' }).click();
-
-    // D-46: Pre-verification confirmation modal appears before permanent lock
-    await expect(page.getByRole('heading', { name: 'ยืนยันข้อมูลคำสั่งซื้อและการล็อกสิทธิ์' })).toBeVisible();
-    await page.getByRole('button', { name: 'ยืนยันและดำเนินการต่อ' }).click();
-
-    await expect(page.getByRole('heading', { name: 'ยืนยันอีเมลสำเร็จ (Guest Verified)' })).toBeVisible();
-
-    // D-43 & D-46: Ticket selection is permanently locked; edit button is removed
-    await expect(page.getByRole('button', { name: 'เพิ่มจำนวน บัตร Standing Zone A' })).toBeDisabled();
-    await expect(page.getByRole('button', { name: 'ลดจำนวน บัตร Standing Zone A' })).toBeDisabled();
+    await reserveThroughCheckout(page, {
+      eventId: createdEvent.id,
+      buyer: { name: guestName, email: guestEmail, phone: guestPhone },
+      tickets: [{ name: 'บัตร Standing Zone A', quantity: 2 }],
+    });
+    // A reserved order is fixed; payment offers no ticket/buyer editing controls.
+    await expect(page.getByRole('button', { name: 'เพิ่มจำนวน บัตร Standing Zone A' })).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'แก้ไขข้อมูล / เลือกบัตรใหม่' })).toHaveCount(0);
-
-    // 3c. Confirm Reservation -> Redirects to Step 4 Payment Page
-    const confirmReserveBtn = page.locator('#confirm-reservation-btn');
-    await expect(confirmReserveBtn).toBeEnabled();
-    await confirmReserveBtn.scrollIntoViewIfNeeded();
-    await confirmReserveBtn.click({ force: true });
 
     // =========================================================================
     // STEP 4: Payment & Ticket Issuance Page (/orders/[id]/payment)

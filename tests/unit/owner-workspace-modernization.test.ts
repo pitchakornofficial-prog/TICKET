@@ -82,7 +82,7 @@ describe('Owner Back-Office Modernization & Unified Workspace Layout (D-115)', (
   });
 
   it('defines responsive styles in globals.css without !important', () => {
-    const cssContent = readFileSync(join(rootDir, 'src/app/globals.css'), 'utf8');
+    const cssContent = (`${readFileSync(join(rootDir, 'src/app/globals.css'), 'utf8')}\n${readFileSync(join(rootDir, 'src/app/globals.css').replace("src/app/globals.css", "src/app/back-office/back-office.css"), 'utf8')}`);
     expect(cssContent).toContain('D-115: Owner Back-Office Modernization');
     expect(cssContent).toContain('.owner-subnav-bar');
     expect(cssContent).toContain('.owner-section-subtabs');

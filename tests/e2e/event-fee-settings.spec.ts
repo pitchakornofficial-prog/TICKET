@@ -54,7 +54,7 @@ test.describe('Event fee settings and reserve percentages (TASK-010, AC-23, AC-2
     await eventSelect.selectOption(eventIdValue);
 
     // Verify form is visible
-    await expect(page.getByRole('heading', { name: eventTitle })).toBeVisible();
+    await expect(page.locator('.owner-fee-settings-card').getByRole('heading', { name: eventTitle })).toBeVisible();
 
     // 4. Configure Organizer Fee (AC-23): Percentage mode, 6.5%
     await page.locator('#organizer-fee-mode').selectOption('percentage');

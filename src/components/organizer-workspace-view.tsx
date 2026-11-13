@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import dynamic from 'next/dynamic';
 import {
   SparklesIcon,
   UsersIcon,
@@ -11,16 +12,32 @@ import {
   BookOpenIcon,
 } from '@/components/icons';
 import { TicketIcon } from '@/components/ticket-icon';
-
-import { OrganizerSettingsView } from '@/components/organizer-settings-view';
-import { OrganizerNewsView } from '@/components/organizer-news-view';
-import { OrganizerContactView } from '@/components/organizer-contact-view';
-import { OrganizerGuideView } from '@/components/organizer-guide-view';
-import { OrganizerPoliciesView } from '@/components/organizer-policies-view';
-import { OrganizerScannerManager } from '@/components/organizer-scanner-manager';
-import { OrganizerEventsManager } from '@/components/organizer-events-manager';
-import { OrganizerFinanceView } from '@/components/organizer-finance-view';
 import { OrganizerOverviewView } from '@/components/organizer-overview-view';
+
+const OrganizerSettingsView = dynamic(() =>
+  import('@/components/organizer-settings-view').then(m => m.OrganizerSettingsView),
+);
+const OrganizerNewsView = dynamic(() =>
+  import('@/components/organizer-news-view').then(m => m.OrganizerNewsView),
+);
+const OrganizerContactView = dynamic(() =>
+  import('@/components/organizer-contact-view').then(m => m.OrganizerContactView),
+);
+const OrganizerGuideView = dynamic(() =>
+  import('@/components/organizer-guide-view').then(m => m.OrganizerGuideView),
+);
+const OrganizerPoliciesView = dynamic(() =>
+  import('@/components/organizer-policies-view').then(m => m.OrganizerPoliciesView),
+);
+const OrganizerScannerManager = dynamic(() =>
+  import('@/components/organizer-scanner-manager').then(m => m.OrganizerScannerManager),
+);
+const OrganizerEventsManager = dynamic(() =>
+  import('@/components/organizer-events-manager').then(m => m.OrganizerEventsManager),
+);
+const OrganizerFinanceView = dynamic(() =>
+  import('@/components/organizer-finance-view').then(m => m.OrganizerFinanceView),
+);
 
 const ORG_CHARTER_TAB_ID = ['poli', 'cies'].join('');
 const ORG_CHARTER_NAV_TEST_ID = ['organizer-nav', ORG_CHARTER_TAB_ID].join('-');

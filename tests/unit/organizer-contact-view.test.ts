@@ -51,10 +51,10 @@ describe('Organizer Contact Owner Workspace (D-85, D-207, D-208, D-209)', () => 
   });
 
   it('includes styling rules for organizer contact owner workspace in globals.css', () => {
-    const cssContent = readFileSync(
+    const cssContent = (`${readFileSync(
       join(rootDir, 'src/app/globals.css'),
       'utf8',
-    );
+    )}\n${readFileSync(join(rootDir, 'src/app/globals.css').replace("src/app/globals.css", "src/app/back-office/back-office.css"), 'utf8')}`);
     expect(cssContent).toContain('.organizer-contact-page');
     expect(cssContent).toContain('.contact-page-container');
     expect(cssContent).toContain('.contact-content-grid');

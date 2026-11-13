@@ -167,8 +167,8 @@ export function ScannerAdmissionTerminal({
           message: `ดาวน์โหลดชุดข้อมูลออฟไลน์สำเร็จเรียบร้อย (${data.totalTickets} ใบ)`,
         });
       }
-    } catch {
-      setSyncFeedback({ type: 'error', message: 'เกิดข้อผิดพลาดในการเชื่อมต่อเพื่อดาวน์โหลดชุดข้อมูล' });
+    } catch (error) {
+      setSyncFeedback({ type: 'error', message: error instanceof Error ? error.message : 'เกิดข้อผิดพลาดในการเชื่อมต่อเพื่อดาวน์โหลดชุดข้อมูล' });
     } finally {
       setSyncingDataset(false);
     }
@@ -383,8 +383,8 @@ export function ScannerAdmissionTerminal({
   }
 
   return (
-    <div className="terminal-centered-wrapper">
-      <div className="terminal-wrapper" id="admission-terminal-root">
+    <div className="terminal-centered-wrapper" style={{ minWidth: 0 }}>
+      <div className="terminal-wrapper" id="admission-terminal-root" style={{ minWidth: 0 }}>
         {/* Terminal Header Card (D-107) */}
         <header className="terminal-header-card" id="admission-terminal-header">
           <div className="terminal-top-nav">
@@ -460,7 +460,8 @@ export function ScannerAdmissionTerminal({
         </header>
 
         {/* 3-Tab Modular Sub-Navigation Bar OUTSIDE the card (D-107) */}
-        <div className="terminal-sub-tabs-bar" role="tablist" aria-label="แท็บเมนูเครื่องตรวจบัตร">
+        <div className="terminal-sub-tabs-bar" role="tablist" aria-label="แท็บเมนูเครื่องตรวจบัตร"
+          style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))' }}>
           <button
             type="button"
             role="tab"
@@ -469,6 +470,7 @@ export function ScannerAdmissionTerminal({
             aria-selected={activeTerminalTab === 'scan'}
             aria-controls="terminal-panel-scan"
             className={`terminal-tab-btn ${activeTerminalTab === 'scan' ? 'active' : ''}`}
+            style={{ minWidth: 0, whiteSpace: 'normal', scrollMarginTop: '12rem' }}
             onClick={() => setActiveTerminalTab('scan')}
           >
             <QrCodeIcon width={16} height={16} />
@@ -483,6 +485,7 @@ export function ScannerAdmissionTerminal({
             aria-selected={activeTerminalTab === 'logs'}
             aria-controls="terminal-panel-logs"
             className={`terminal-tab-btn ${activeTerminalTab === 'logs' ? 'active' : ''}`}
+            style={{ minWidth: 0, whiteSpace: 'normal', scrollMarginTop: '12rem' }}
             onClick={() => setActiveTerminalTab('logs')}
           >
             <ClockIcon width={16} height={16} />
@@ -498,8 +501,8 @@ export function ScannerAdmissionTerminal({
             aria-selected={activeTerminalTab === 'offline'}
             aria-controls="terminal-panel-offline"
             className={`terminal-tab-btn ${activeTerminalTab === 'offline' ? 'active' : ''}`}
+            style={{ minWidth: 0, whiteSpace: 'normal', scrollMarginTop: '12rem' }}
             onClick={() => setActiveTerminalTab('offline')}
-            style={!isPrimary ? { display: 'none' } : undefined}
           >
             <ShieldCheckIcon width={16} height={16} />
             <span>จัดการระบบออฟไลน์</span>
@@ -517,6 +520,8 @@ export function ScannerAdmissionTerminal({
             role="tabpanel"
             aria-labelledby="terminal-tab-scan"
             className={`terminal-tab-panel ${activeTerminalTab === 'scan' ? 'tab-panel-active' : 'tab-panel-inactive'}`}
+            hidden={activeTerminalTab !== 'scan'}
+            style={activeTerminalTab !== 'scan' ? { display: 'none' } : undefined}
           >
             {/* Unified Mode and Camera Toolbar (D-107) */}
             <div className="terminal-control-toolbar">
@@ -642,6 +647,8 @@ export function ScannerAdmissionTerminal({
             role="tabpanel"
             aria-labelledby="terminal-tab-logs"
             className={`terminal-tab-panel ${activeTerminalTab === 'logs' ? 'tab-panel-active' : 'tab-panel-inactive'}`}
+            hidden={activeTerminalTab !== 'logs'}
+            style={activeTerminalTab !== 'logs' ? { display: 'none' } : undefined}
           >
             {/* Full Statistics Grid (Unified 4-Metric) */}
             <section className="terminal-stats-section" aria-labelledby="stats-heading">
@@ -744,6 +751,8 @@ export function ScannerAdmissionTerminal({
           role="tabpanel"
           aria-labelledby="terminal-tab-offline"
           className={`terminal-tab-panel ${activeTerminalTab === 'offline' ? 'tab-panel-active' : 'tab-panel-inactive'}`}
+          hidden={activeTerminalTab !== 'offline'}
+          style={activeTerminalTab !== 'offline' ? { display: 'none' } : undefined}
         >
           <section
             className="offline-dataset-panel"

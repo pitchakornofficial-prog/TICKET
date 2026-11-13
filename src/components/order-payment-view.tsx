@@ -218,6 +218,10 @@ export function OrderPaymentView({ orderId }: OrderPaymentViewProps) {
               setIsTimeoutModalOpen(true);
               return { stop: true };
             }
+            if (data.reservation.status === 'cancelled' || data.reservation.status === 'payment_exception') {
+              setReservation(data.reservation);
+              return { stop: true };
+            }
           }
           // Gradually widen interval as reservation waiting continues
           const nextDelayMs = attempt >= 10 ? 7500 : attempt >= 4 ? 5000 : 3000;

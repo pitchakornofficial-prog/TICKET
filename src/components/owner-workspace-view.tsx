@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo, Fragment } from 'react';
+import dynamic from 'next/dynamic';
 import {
   SparklesIcon,
   ClipboardCheckIcon,
@@ -12,19 +13,40 @@ import {
   ChevronDownIcon,
   UserPlusIcon,
 } from '@/components/icons';
-import { OwnerInvitationsView } from '@/components/owner-invitations-view';
-import { OwnerSessionApprovalManager } from '@/components/owner-session-approval-manager';
-import { OwnerCustomerHub } from '@/components/owner-customer-hub';
-import { OwnerRefundApprovalManager } from '@/components/owner-refund-approval-manager';
-import { OwnerFinanceHub } from '@/components/owner-finance-hub';
-import { OwnerSystemHub } from '@/components/owner-system-hub';
-import { OwnerNewsManager } from '@/components/owner-news-manager';
-import { OwnerSyncConflictManager } from '@/components/owner-sync-conflict-manager';
-import { InviteOrganizerForm } from '@/components/invite-organizer-form';
-import { OwnerPoliciesView } from '@/components/owner-policies-view';
-// Sub-managers integrated within OwnerSystemHub: OwnerContactInfoManager, OwnerNewsManager, OwnerSyncConflictManager
 import { OwnerOverviewDashboard } from '@/components/owner-overview-dashboard';
 import { ToastNotification } from '@/components/toast-notification';
+// Sub-managers integrated within OwnerSystemHub: OwnerContactInfoManager, OwnerNewsManager, OwnerSyncConflictManager
+
+const OwnerInvitationsView = dynamic(() =>
+  import('@/components/owner-invitations-view').then(m => m.OwnerInvitationsView),
+);
+const OwnerSessionApprovalManager = dynamic(() =>
+  import('@/components/owner-session-approval-manager').then(m => m.OwnerSessionApprovalManager),
+);
+const OwnerCustomerHub = dynamic(() =>
+  import('@/components/owner-customer-hub').then(m => m.OwnerCustomerHub),
+);
+const OwnerRefundApprovalManager = dynamic(() =>
+  import('@/components/owner-refund-approval-manager').then(m => m.OwnerRefundApprovalManager),
+);
+const OwnerFinanceHub = dynamic(() =>
+  import('@/components/owner-finance-hub').then(m => m.OwnerFinanceHub),
+);
+const OwnerSystemHub = dynamic(() =>
+  import('@/components/owner-system-hub').then(m => m.OwnerSystemHub),
+);
+const OwnerNewsManager = dynamic(() =>
+  import('@/components/owner-news-manager').then(m => m.OwnerNewsManager),
+);
+const OwnerSyncConflictManager = dynamic(() =>
+  import('@/components/owner-sync-conflict-manager').then(m => m.OwnerSyncConflictManager),
+);
+const InviteOrganizerForm = dynamic(() =>
+  import('@/components/invite-organizer-form').then(m => m.InviteOrganizerForm),
+);
+const OwnerPoliciesView = dynamic(() =>
+  import('@/components/owner-policies-view').then(m => m.OwnerPoliciesView),
+);
 
 const GOV_CHARTER_TAB_ID = ['poli', 'cies'].join('');
 

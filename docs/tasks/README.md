@@ -309,3 +309,7 @@ NQ ที่มีผลภายหลังไม่ถูกซ่อนห�
 ตรวจ coverage/ID/DAG/relative links/format/checklist ก่อนส่งแผน; ผลนี้เป็นการตรวจเอกสาร ไม่ใช่ unit/integration/E2E/code-review ของแอป
 ไม่มี application code/configuration/test runner ถูกสร้างจาก to-tasks และไม่มีการ provision/deploy/ส่งอีเมลหรือโอนเงินจริง
 เมื่อเรียก to-tasks ซ้ำให้ตรวจ source spec กับ task set นี้ก่อน รักษา IDs/evidence/งานที่เสร็จแล้ว และสร้างเฉพาะงานที่ยังขาด ไม่สร้างชุดซ้ำ
+
+## Optimization verification follow-up — 2026-11-13
+
+[TASK-046](TASK-046-optimization-verification.md) บันทึกงานที่ผู้ใช้อนุญาตให้ตรวจ optimization ทั้ง 7 จุดอย่างอิสระ แก้ regression และเก็บ [benchmark ที่รันซ้ำได้](../benchmarks/README.md) โดยทวน AC เดิมด้านเงิน โควตา การค้นหา คิว และ offline admission ของ SPEC-001 ไม่เพิ่มข้อกำหนดผลิตภัณฑ์หรืออ้าง production capacity จากผล local สถานะและหลักฐานล่าสุดอยู่ใน task

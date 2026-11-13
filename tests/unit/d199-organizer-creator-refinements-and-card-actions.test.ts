@@ -11,7 +11,7 @@ describe('D-199: Organizer Concert Creator Refinements, Card Actions, and Cancel
   const eventRoutePath = path.join(rootDir, 'src/app/api/events/[id]/route.ts');
 
   const eventsManagerContent = fs.readFileSync(eventsManagerPath, 'utf8');
-  const globalsCssContent = fs.readFileSync(globalsCssPath, 'utf8');
+  const globalsCssContent = (`${fs.readFileSync(globalsCssPath, 'utf8')}\n${fs.readFileSync(globalsCssPath.replace("src/app/globals.css", "src/app/back-office/back-office.css"), 'utf8')}`);
   const requirementContent = fs.readFileSync(requirementPath, 'utf8');
   const serverEventsContent = fs.readFileSync(serverEventsPath, 'utf8');
   const eventRouteContent = fs.readFileSync(eventRoutePath, 'utf8');

@@ -11,7 +11,7 @@ describe('D-255 System & News Hub Modernization, News Approval & Authoring Hub, 
 
   const systemHubSrc = readFileSync(systemHubPath, 'utf8');
   const workspaceViewSrc = readFileSync(workspaceViewPath, 'utf8');
-  const globalsCssSrc = readFileSync(globalsCssPath, 'utf8');
+  const globalsCssSrc = (`${readFileSync(globalsCssPath, 'utf8')}\n${readFileSync(globalsCssPath.replace("src/app/globals.css", "src/app/back-office/back-office.css"), 'utf8')}`);
   const requirementDocSrc = readFileSync(requirementDocPath, 'utf8');
 
   it('verifies D-255 requirement is properly recorded in docs/requirement.md', () => {

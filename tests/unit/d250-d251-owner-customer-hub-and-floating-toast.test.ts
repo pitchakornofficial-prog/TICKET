@@ -6,7 +6,7 @@ describe('D-250 & D-251: Customer & Orders Hub Modernization & Top-Center Floati
   const rootDir = process.cwd();
 
   it('verifies D-250: Containerless flat canvas for Customer & Orders Hub', () => {
-    const cssContent = readFileSync(join(rootDir, 'src/app/globals.css'), 'utf8');
+    const cssContent = (`${readFileSync(join(rootDir, 'src/app/globals.css'), 'utf8')}\n${readFileSync(join(rootDir, 'src/app/globals.css').replace("src/app/globals.css", "src/app/back-office/back-office.css"), 'utf8')}`);
     const hubContent = readFileSync(
       join(rootDir, 'src/components/owner-customer-hub.tsx'),
       'utf8',
@@ -50,7 +50,7 @@ describe('D-250 & D-251: Customer & Orders Hub Modernization & Top-Center Floati
   });
 
   it('verifies D-250: Standard 38px Button Dimensions & Uniform 240px Action Column', () => {
-    const cssContent = readFileSync(join(rootDir, 'src/app/globals.css'), 'utf8');
+    const cssContent = (`${readFileSync(join(rootDir, 'src/app/globals.css'), 'utf8')}\n${readFileSync(join(rootDir, 'src/app/globals.css').replace("src/app/globals.css", "src/app/back-office/back-office.css"), 'utf8')}`);
     const hubContent = readFileSync(
       join(rootDir, 'src/components/owner-customer-hub.tsx'),
       'utf8',
@@ -112,7 +112,7 @@ describe('D-250 & D-251: Customer & Orders Hub Modernization & Top-Center Floati
       join(rootDir, 'src/components/toast-notification.tsx'),
       'utf8',
     );
-    const cssContent = readFileSync(join(rootDir, 'src/app/globals.css'), 'utf8');
+    const cssContent = (`${readFileSync(join(rootDir, 'src/app/globals.css'), 'utf8')}\n${readFileSync(join(rootDir, 'src/app/globals.css').replace("src/app/globals.css", "src/app/back-office/back-office.css"), 'utf8')}`);
 
     // 1. Component props and structure
     expect(toastContent).toContain('top-center-toast-notification');

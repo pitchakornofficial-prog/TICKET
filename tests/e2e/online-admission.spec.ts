@@ -1,3 +1,4 @@
+import { reserveThroughCheckout } from '../support/purchase-journey';
 import { test, expect } from '@playwright/test';
 import { fixtureAccounts, fixturePassword } from '../support/auth-fixture';
 import { testClientIp } from '../support/client-context';
@@ -9,7 +10,6 @@ test.beforeEach(async ({ context }, testInfo) => {
 test.describe('Online Admission Scanning Journey (TASK-020, AC-08, AC-39, AC-49, AC-95, AC-100, AC-101, AC-65)', () => {
   test('scanner logs in, opens terminal, scans entry, repeat entry rejected, scans exit, scans reentry, checks stats and logs without buyer PII', async ({
     page,
-    request,
   }, testInfo) => {
     test.setTimeout(120000);
 
@@ -87,30 +87,11 @@ test.describe('Online Admission Scanning Journey (TASK-020, AC-08, AC-39, AC-49,
     await page.goto(`/events/${createdEvent.id}/checkout`);
     await expect(page.getByRole('heading', { name: eventTitle })).toBeVisible();
 
-    const addBtn = page.getByRole('button', { name: 'เพิ่มจำนวน บัตรนั่ง VIP' });
-    await addBtn.click();
-
-    await page.getByLabel('ชื่อ-นามสกุล *').fill(buyerName);
-    await page.getByLabel('อีเมล *').fill(buyerEmail);
-    await page.getByLabel('เบอร์โทรศัพท์มือถือ *').fill(buyerPhone);
-    await page.getByRole('button', { name: 'ขอรหัส OTP เพื่อซื้อบัตร' }).click();
-
-    await expect(page.getByText('ส่งรหัส OTP 6 หลักไปยังอีเมลของคุณเรียบร้อยแล้ว')).toBeVisible();
-
-    const otpInspectRes = await request.get(
-      `/api/auth/test-inspect-reset-token?type=guest_otp&email=${encodeURIComponent(buyerEmail)}`,
-    );
-    expect(otpInspectRes.status()).toBe(200);
-    const otpCode = (await otpInspectRes.json()).code;
-
-    await page.getByLabel('รหัส OTP 6 หลัก *').fill(otpCode);
-    await page.getByRole('button', { name: 'ยืนยันรหัส OTP' }).click();
-    await page.getByRole('button', { name: 'ยืนยันและดำเนินการต่อ' }).click();
-    await expect(page.getByRole('heading', { name: 'ยืนยันอีเมลสำเร็จ (Guest Verified)' })).toBeVisible();
-
-    // Select 1 ticket and reserve
-    await page.locator('#confirm-reservation-btn').click();
-
+    await reserveThroughCheckout(page, {
+      eventId: createdEvent.id,
+      buyer: { name: buyerName, email: buyerEmail, phone: buyerPhone },
+      tickets: [{ name: 'บัตรนั่ง VIP', quantity: 1 }],
+    });
     await expect(page.getByText('กันบัตรสำเร็จ (Reserved)')).toBeVisible();
 
     // Create PromptPay QR
@@ -217,6 +198,8 @@ test.describe('Online Admission Scanning Journey (TASK-020, AC-08, AC-39, AC-49,
     await expect(page.locator('#stats-total-entries')).toHaveText('2');
 
     // 9. Verify recent activity log table (AC-65: no buyer PII)
+    await expect(resultCard).toBeHidden();
+    await page.getByTestId('terminal-tab-logs').click();
     const logsTable = page.locator('#admission-logs-table');
     await expect(logsTable).toBeVisible();
     await expect(logsTable.locator('tbody tr')).toHaveCount(4); // entry, repeat entry rejected, exit, reentry

@@ -680,6 +680,9 @@ export async function queryPublicEventsCatalog(
   const limit = Math.min(48, Math.max(1, Math.floor(options.limit || 12)));
   const offset = (page - 1) * limit;
   const search = options.q?.trim() ? options.q.trim() : null;
+  // Catalog input is plain text, matching the former browser includes() search.
+  // Bind LIKE metacharacters as literals rather than widening the user's query.
+  const searchPattern = search === null ? null : search.replace(/[\\%_]/g, '\\$&');
   const locationFilter =
     options.location && options.location !== 'all' ? options.location.trim() : null;
   const priceRange = options.priceRange || 'all';
@@ -693,28 +696,14 @@ export async function queryPublicEventsCatalog(
 
   const orderByClause =
     sort === 'price_asc'
-      ? '"startingPrice" ASC, "earliestStartTime" ASC'
+      ? '"startingPrice" ASC, "earliestStartTime" ASC, id ASC'
       : sort === 'price_desc'
-        ? '"startingPrice" DESC, "earliestStartTime" ASC'
-        : '"earliestStartTime" ASC';
+        ? '"startingPrice" DESC, "earliestStartTime" ASC, id ASC'
+        : '"earliestStartTime" ASC, id ASC';
 
   try {
     await ensureEventSchema(pool);
-    const catalogPromise = pool.query<{
-      id: string;
-      title: string;
-      location: string;
-      posterUrl: string | null;
-      limitPerOrder: number;
-      status: string;
-      earliestStartTime: Date;
-      latestEndTime: Date;
-      startingPrice: string | number;
-      approvedSessionCount: number;
-      totalQuota: number;
-      fullCount: number;
-    }>(
-      `WITH event_agg AS (
+    const filteredCatalogSql = `WITH event_agg AS (
          SELECT
            e.id,
            e.title,
@@ -758,12 +747,27 @@ export async function queryPublicEventsCatalog(
              OR ($4 = 'available' AND "totalQuota" > 0)
              OR ($4 = 'upcoming' AND "earliestStartTime" > now())
            )
-       )
+       )`;
+    const catalogPromise = pool.query<{
+      id: string;
+      title: string;
+      location: string;
+      posterUrl: string | null;
+      limitPerOrder: number;
+      status: string;
+      earliestStartTime: Date;
+      latestEndTime: Date;
+      startingPrice: string | number;
+      approvedSessionCount: number;
+      totalQuota: number;
+      fullCount: number;
+    }>(
+      `${filteredCatalogSql}
        SELECT *, COUNT(*) OVER()::int AS "fullCount"
        FROM filtered
        ORDER BY ${orderByClause}
        LIMIT $5 OFFSET $6`,
-      [search, locationFilter, priceRange, effectiveAvailability, limit, offset],
+      [searchPattern, locationFilter, priceRange, effectiveAvailability, limit, offset],
     );
 
     const locationsPromise =
@@ -782,12 +786,8 @@ export async function queryPublicEventsCatalog(
     const totalCount =
       catalogRes.rows[0]?.fullCount ??
       (page === 1 ? 0 : (await pool.query<{ total: number }>(
-        `SELECT COUNT(DISTINCT e.id)::int AS total
-         FROM events e
-         JOIN event_sessions s ON s."eventId" = e.id AND s.status = 'approved'
-         WHERE e.status = 'approved'
-           AND ($1::text IS NULL OR e.title ILIKE '%' || $1 || '%' OR e.location ILIKE '%' || $1 || '%' OR COALESCE(e.description, '') ILIKE '%' || $1 || '%')`,
-        [search],
+        `${filteredCatalogSql} SELECT COUNT(*)::int AS total FROM filtered`,
+        [searchPattern, locationFilter, priceRange, effectiveAvailability],
       )).rows[0]?.total ?? 0);
 
     const events: PublicEventSummary[] = catalogRes.rows.map(r => ({
@@ -858,7 +858,7 @@ export async function getPublicEventWithApprovedSessions(pool: Pool, eventId: st
 
     const sessionIds = sessRes.rows.map(s => s.id as string);
     const hasOrderTablesRes = await pool.query(
-      "SELECT to_regclass('public.orders') as orders, to_regclass('public.order_items') as items, to_regclass('public.tickets') as tickets",
+      "SELECT to_regclass('orders') as orders, to_regclass('order_items') as items, to_regclass('tickets') as tickets",
     );
     const canCheckHeld = Boolean(hasOrderTablesRes.rows[0]?.orders && hasOrderTablesRes.rows[0]?.items);
     const canCheckTickets = Boolean(hasOrderTablesRes.rows[0]?.tickets);

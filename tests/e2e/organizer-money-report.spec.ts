@@ -1,3 +1,4 @@
+import { reserveThroughCheckout } from '../support/purchase-journey';
 import { testClientIp, createIsolatedBrowserContext } from '../support/client-context';
 import { saveEventDraft } from '../support/event-draft';
 import { expect, test } from '@playwright/test';
@@ -98,29 +99,11 @@ test.describe('Organizer money report: sales, fees, payout readiness (TASK-028, 
     await buyerPage.goto(`/events/${createdEvent.id}/checkout`);
     await expect(buyerPage.getByRole('heading', { name: eventTitle })).toBeVisible();
 
-    const addBtn = buyerPage.getByRole('button', { name: 'เพิ่มจำนวน Standing VIP' });
-    await addBtn.click();
-    await addBtn.click();
-
-    await buyerPage.getByLabel('ชื่อ-นามสกุล *').fill(buyerName);
-    await buyerPage.getByLabel('อีเมล *').fill(buyerEmail);
-    await buyerPage.getByLabel('เบอร์โทรศัพท์มือถือ *').fill(buyerPhone);
-    await buyerPage.getByRole('button', { name: 'ขอรหัส OTP เพื่อซื้อบัตร' }).click();
-    await expect(buyerPage.getByText('ส่งรหัส OTP 6 หลักไปยังอีเมลของคุณเรียบร้อยแล้ว')).toBeVisible();
-
-    const otpRes = await request.get(
-      `/api/auth/test-inspect-reset-token?type=guest_otp&email=${encodeURIComponent(buyerEmail)}`,
-    );
-    expect(otpRes.status()).toBe(200);
-    const { code } = await otpRes.json();
-
-    await buyerPage.getByLabel('รหัส OTP 6 หลัก *').fill(code);
-    await buyerPage.getByRole('button', { name: 'ยืนยันรหัส OTP' }).click();
-    await buyerPage.getByRole('button', { name: 'ยืนยันและดำเนินการต่อ' }).click();
-    await expect(buyerPage.getByRole('heading', { name: 'ยืนยันอีเมลสำเร็จ (Guest Verified)' })).toBeVisible();
-
-    // Select 2 tickets
-    await buyerPage.locator('#confirm-reservation-btn').click();
+    await reserveThroughCheckout(buyerPage, {
+      eventId: createdEvent.id,
+      buyer: { name: buyerName, email: buyerEmail, phone: buyerPhone },
+      tickets: [{ name: 'Standing VIP', quantity: 2 }],
+    });
     await expect(buyerPage.getByText('กันบัตรสำเร็จ (Reserved)')).toBeVisible();
 
     // Generate PromptPay QR
@@ -173,6 +156,31 @@ test.describe('Organizer money report: sales, fees, payout readiness (TASK-028, 
     const maskedPhoneText = await maskedPhoneEl.textContent();
     expect(maskedPhoneText).toContain('***');
     expect(maskedPhoneText).not.toBe(buyerPhone);
+
+    // A failed full-data fetch must never download the visible page as a complete CSV.
+    // Keep the real paid-order response, but inject pagination and a server failure.
+    const reportPattern = `**/api/organizer/events/${createdEvent.id}/money-report*`;
+    await page.route(reportPattern, async route => {
+      const url = new URL(route.request().url());
+      if (!url.searchParams.has('ordersPage')) {
+        await route.fulfill({ status: 503, json: { message: 'Temporary export outage' } });
+        return;
+      }
+      const response = await route.fetch();
+      const data = await response.json();
+      data.report.totalOrdersCount = data.report.orders.length + 1;
+      data.report.ordersPagination = { page: 1, limit: 50, totalCount: data.report.totalOrdersCount, totalPages: 2 };
+      await route.fulfill({ response, json: data });
+    });
+    const refreshed = page.waitForResponse(response => response.url().includes(`/api/organizer/events/${createdEvent.id}/money-report?ordersPage=`));
+    await reportModal.getByRole('button', { name: 'รีเฟรช', exact: true }).click();
+    await refreshed;
+    let downloads = 0;
+    page.on('download', () => { downloads++; });
+    await reportModal.getByTestId('export-money-report-csv-btn').click();
+    await expect(reportModal.getByText('ไม่สามารถโหลดรายการคำสั่งซื้อครบทั้งหมดเพื่อส่งออก CSV กรุณาลองอีกครั้ง')).toBeVisible();
+    expect(downloads).toBe(0);
+    await page.unroute(reportPattern);
 
     // 6. Role authorization denial (AC-07, AC-82)
     // Unauthenticated GET returns 401

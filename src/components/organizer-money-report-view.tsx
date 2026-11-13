@@ -61,12 +61,15 @@ export function OrganizerMoneyReportView({
     if (report.orders.length < report.totalOrdersCount) {
       try {
         const res = await fetch(buildReportUrl(), { cache: 'no-store' });
-        if (res.ok) {
-          const data = await res.json();
-          if (data?.report) exportReport = data.report;
+        if (!res.ok) throw new Error('Full report unavailable');
+        const data = await res.json();
+        if (!data?.report || data.report.orders.length !== data.report.totalOrdersCount) {
+          throw new Error('Incomplete report');
         }
+        exportReport = data.report;
       } catch {
-        // Fallback to currently loaded orders if full fetch fails
+        setError('ไม่สามารถโหลดรายการคำสั่งซื้อครบทั้งหมดเพื่อส่งออก CSV กรุณาลองอีกครั้ง');
+        return;
       }
     }
     const lines: string[] = [];

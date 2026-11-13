@@ -6,7 +6,7 @@ describe('D-252: Finance & Weekly Payout Hub Modernization, Pre-Transfer Verific
   const rootDir = process.cwd();
 
   it('verifies D-252: Containerless flat canvas for Finance & Weekly Payout Hub', () => {
-    const cssContent = readFileSync(join(rootDir, 'src/app/globals.css'), 'utf8');
+    const cssContent = (`${readFileSync(join(rootDir, 'src/app/globals.css'), 'utf8')}\n${readFileSync(join(rootDir, 'src/app/globals.css').replace("src/app/globals.css", "src/app/back-office/back-office.css"), 'utf8')}`);
     const hubContent = readFileSync(
       join(rootDir, 'src/components/owner-finance-hub.tsx'),
       'utf8',

@@ -107,7 +107,7 @@ describe('Organizer Workspace Overview View Redesign (D-114, D-210 to D-216)', (
     expect(overviewContent).toContain('overview-borderless-icon');
     expect(overviewContent).toContain('HeaderInfoTooltip');
 
-    const cssContent = readFileSync(join(rootDir, 'src/app/globals.css'), 'utf8');
+    const cssContent = (`${readFileSync(join(rootDir, 'src/app/globals.css'), 'utf8')}\n${readFileSync(join(rootDir, 'src/app/globals.css').replace("src/app/globals.css", "src/app/back-office/back-office.css"), 'utf8')}`);
     expect(cssContent).toContain('D-210 to D-216: Organizer Overview Executive Redesign');
     expect(cssContent).toContain('.overview-workspace-container');
     expect(cssContent).toContain('.overview-5kpi-grid');

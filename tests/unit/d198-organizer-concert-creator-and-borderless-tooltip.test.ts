@@ -11,7 +11,7 @@ describe('D-198: Organizer Concert Creator Modernization, Borderless Tooltip, an
 
   const eventsManagerContent = fs.readFileSync(eventsManagerPath, 'utf8');
   const tooltipComponentContent = fs.readFileSync(tooltipComponentPath, 'utf8');
-  const globalsCssContent = fs.readFileSync(globalsCssPath, 'utf8');
+  const globalsCssContent = (`${fs.readFileSync(globalsCssPath, 'utf8')}\n${fs.readFileSync(globalsCssPath.replace("src/app/globals.css", "src/app/back-office/back-office.css"), 'utf8')}`);
   const requirementContent = fs.readFileSync(requirementPath, 'utf8');
 
   it('1. Item 1: Removed upcoming tab from organizer status filter tabs', () => {

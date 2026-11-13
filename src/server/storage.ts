@@ -10,6 +10,14 @@ export interface StorageItem {
   visibility: 'public' | 'private';
 }
 
+export interface StorageStreamItem {
+  stream: ReadableStream<Uint8Array>;
+  contentType: string;
+  visibility: 'public' | 'private';
+  contentLength?: number;
+  etag?: string;
+}
+
 export interface PresignedUploadResult {
   uploadUrl: string;
   key: string;
@@ -28,6 +36,7 @@ export interface StorageDriver {
     visibility?: 'public' | 'private',
   ): Promise<{ url: string; key: string }>;
   get(key: string): Promise<StorageItem | null>;
+  getStream?(key: string): Promise<StorageStreamItem | null>;
   delete(key: string): Promise<void>;
   createPresignedUploadUrl(
     key: string,
@@ -178,6 +187,10 @@ export const storage: StorageDriver & {
   put: (key, data, contentType, visibility) =>
     resolveDriver().put(key, data, contentType, visibility),
   get: (key) => resolveDriver().get(key),
+  getStream: (key) => {
+    const driver = resolveDriver();
+    return driver.getStream ? driver.getStream(key) : Promise.resolve(null);
+  },
   delete: (key) => resolveDriver().delete(key),
   createPresignedUploadUrl: (key, contentType, visibility, maxFileSizeBytes, expiresInSeconds) =>
     resolveDriver().createPresignedUploadUrl(

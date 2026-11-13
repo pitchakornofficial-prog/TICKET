@@ -101,7 +101,7 @@ describe('Organizer Policies & Agreements View (D-111)', () => {
   });
 
   it('includes proper CSS styling and @media print rules in globals.css', () => {
-    const cssContent = readFileSync(join(rootDir, 'src/app/globals.css'), 'utf8');
+    const cssContent = (`${readFileSync(join(rootDir, 'src/app/globals.css'), 'utf8')}\n${readFileSync(join(rootDir, 'src/app/globals.css').replace("src/app/globals.css", "src/app/back-office/back-office.css"), 'utf8')}`);
     expect(cssContent).toContain('.policies-management-container');
     expect(cssContent).toContain('.policies-print-btn');
     expect(cssContent).toContain('.policy-editorial-card');

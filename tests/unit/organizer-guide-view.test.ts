@@ -67,10 +67,10 @@ describe('Organizer User Guide Workspace (D-86)', () => {
   });
 
   it('includes styling rules for organizer guide in globals.css', () => {
-    const cssContent = readFileSync(
+    const cssContent = (`${readFileSync(
       join(rootDir, 'src/app/globals.css'),
       'utf8',
-    );
+    )}\n${readFileSync(join(rootDir, 'src/app/globals.css').replace("src/app/globals.css", "src/app/back-office/back-office.css"), 'utf8')}`);
     expect(cssContent).toContain('.organizer-guide-page');
     expect(cssContent).toContain('.guide-page-container');
     expect(cssContent).toContain('.guide-header-text');

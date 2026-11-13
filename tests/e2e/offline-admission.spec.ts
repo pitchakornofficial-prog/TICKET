@@ -1,3 +1,4 @@
+import { reserveThroughCheckout } from '../support/purchase-journey';
 import { createIsolatedBrowserContext } from '../support/client-context';
 import { saveEventDraft } from '../support/event-draft';
 import { test, expect } from '@playwright/test';
@@ -7,7 +8,6 @@ test.describe('TASK-033: Offline Admission Scanning on Primary Device (AC-40, AC
   test('Primary device operates offline admission: full entry/exit/reentry sequence, reload resilience, pending queue, and secondary stoppage', async ({
     page,
     browser,
-    request,
   }, testInfo) => {
     test.setTimeout(120000);
 
@@ -118,26 +118,12 @@ test.describe('TASK-033: Offline Admission Scanning on Primary Device (AC-40, AC
     await buyerPage.goto(`/events/${event.id}/checkout`);
     await expect(buyerPage.getByRole('heading', { name: eventTitle })).toBeVisible({ timeout: 25000 });
 
-    await buyerPage.getByRole('button', { name: 'เพิ่มจำนวน VIP Zone' }).click();
-
-    await buyerPage.getByLabel('ชื่อ-นามสกุล *').fill(buyerName);
-    await buyerPage.getByLabel('อีเมล *').fill(buyerEmail);
-    await buyerPage.getByLabel('เบอร์โทรศัพท์มือถือ *').fill(buyerPhone);
-    await buyerPage.getByRole('button', { name: 'ขอรหัส OTP เพื่อซื้อบัตร' }).click();
-    await expect(buyerPage.getByText('ส่งรหัส OTP 6 หลักไปยังอีเมลของคุณเรียบร้อยแล้ว')).toBeVisible({ timeout: 20000 });
-
-    const otpRes = await request.get(`/api/auth/test-inspect-reset-token?type=guest_otp&email=${encodeURIComponent(buyerEmail)}`);
-    const { code } = await otpRes.json();
-    await buyerPage.getByLabel('รหัส OTP 6 หลัก *').fill(code);
-    await buyerPage.getByRole('button', { name: 'ยืนยันรหัส OTP' }).click();
-    await buyerPage.getByRole('button', { name: 'ยืนยันและดำเนินการต่อ' }).click();
-    await expect(buyerPage.getByRole('heading', { name: 'ยืนยันอีเมลสำเร็จ (Guest Verified)' })).toBeVisible({ timeout: 20000 });
-
-    const confirmBtn = buyerPage.locator('#confirm-reservation-btn');
-    await expect(confirmBtn).toBeVisible({ timeout: 20000 });
-    await confirmBtn.scrollIntoViewIfNeeded();
-    await confirmBtn.click();
-    await expect(buyerPage.getByText('กันบัตรสำเร็จ (Reserved)')).toBeVisible({ timeout: 20000 });
+    await reserveThroughCheckout(buyerPage, {
+      eventId: event.id,
+      buyer: { name: buyerName, email: buyerEmail, phone: buyerPhone },
+      tickets: [{ name: 'VIP Zone', quantity: 1 }],
+    });
+    await expect(buyerPage.getByText('กันบัตรสำเร็จ (Reserved)')).toBeVisible();
 
     await expect(buyerPage.locator('#promptpay-qr-image')).toBeVisible({ timeout: 20000 });
     const simBtn = buyerPage.locator('#simulate-payment-button');
@@ -173,11 +159,11 @@ test.describe('TASK-033: Offline Admission Scanning on Primary Device (AC-40, AC
     // Scanner 2 sees secondary badge
     await expect(scanner2Page.locator('[data-testid="terminal-secondary-badge"]')).toBeVisible();
 
-    // Scanner 2 attempts to toggle offline mode -> rejected by operational rule (O1/AC-40)
+    // Secondary scanners may prepare a handover dataset but cannot scan offline.
+    await scanner2Page.getByTestId('terminal-tab-offline').click({ timeout: 10000 });
     const toggleOfflineBtn2 = scanner2Page.locator('#toggle-offline-mode-btn');
     await expect(toggleOfflineBtn2).toBeVisible();
     await toggleOfflineBtn2.click();
-
     const nonPrimaryWarning = scanner2Page.locator('[data-testid="non-primary-offline-warning"]');
     await expect(nonPrimaryWarning).toBeVisible({ timeout: 10000 });
     await expect(nonPrimaryWarning).toContainText('เครื่องนี้เป็นเครื่องรอง หากต้องการสแกนออฟไลน์ ต้องให้ผู้จัดงานกำหนดเป็นเครื่องหลักและหยุดเครื่องอื่นในงาน');
@@ -198,17 +184,19 @@ test.describe('TASK-033: Offline Admission Scanning on Primary Device (AC-40, AC
     await expect(openTerminalBtn1).toBeVisible({ timeout: 20000 });
     await openTerminalBtn1.click();
 
+    await scanner1Page.getByTestId('terminal-tab-offline').click({ timeout: 10000 });
+
     // Download offline dataset
     const downloadBtn = scanner1Page.locator('#download-offline-dataset-btn');
     await expect(downloadBtn).toBeVisible({ timeout: 20000 });
-    await downloadBtn.click({ force: true });
+    await downloadBtn.click();
     await expect(scanner1Page.getByText('ดาวน์โหลดชุดข้อมูลออฟไลน์สำเร็จเรียบร้อย')).toBeVisible({ timeout: 20000 });
     await expect(scanner1Page.locator('[data-testid="cached-tickets-count"]')).toContainText('1 ใบ');
     await expect(scanner1Page.locator('[data-testid="pending-sync-count"]').first()).toContainText('0');
 
     // Switch to offline mode
     const toggleOfflineBtn1 = scanner1Page.locator('#toggle-offline-mode-btn');
-    await toggleOfflineBtn1.click({ force: true });
+    await toggleOfflineBtn1.click();
 
     // Connectivity badge shows offline (AC-42, AC-40)
     const connBadge = scanner1Page.locator('[data-testid="connectivity-status-badge"]');
@@ -221,22 +209,24 @@ test.describe('TASK-033: Offline Admission Scanning on Primary Device (AC-40, AC
     await expect(opNotice).toBeVisible();
     await expect(opNotice).toContainText('เครื่องนี้ทำงานเป็นเครื่องหลักเพียงเครื่องเดียวของทั้งงาน กรุณาหยุดการใช้งานเครื่องสแกนอื่นทั้งหมด');
 
+    await scanner1Page.getByTestId('terminal-tab-scan').click({ timeout: 10000 });
+
     // 8. Test Missing Ticket offline (AC-41, O2): must not pass and must inform user to wait for online
     const ticketInput = scanner1Page.locator('#scanner-ticket-input');
     const submitBtn = scanner1Page.locator('#scanner-submit-btn');
 
     await ticketInput.fill('TK-NONEXISTENT-999');
-    await submitBtn.click({ force: true });
+    await submitBtn.click();
 
     await expect(scanner1Page.locator('#scan-result-card')).toBeVisible({ timeout: 15000 });
     await expect(scanner1Page.locator('#scan-result-card')).toHaveClass(/result-rejected/);
     await expect(scanner1Page.locator('#scan-result-message')).toContainText('ไม่พบข้อมูลบัตรในชุดข้อมูลออฟไลน์ กรุณารอเชื่อมต่อออนไลน์');
-    await scanner1Page.locator('#dismiss-scan-modal-btn').click({ force: true });
+    await scanner1Page.locator('#dismiss-scan-modal-btn').click();
 
     // 9. Offline State Transitions Sequence (AC-96, AC-50)
     // Step A: First Entry (outside -> inside)
     await ticketInput.fill(purchasedQrPayload);
-    await submitBtn.click({ force: true });
+    await submitBtn.click();
 
     await expect(scanner1Page.locator('#scan-result-card')).toHaveClass(/result-success-entry/);
     await expect(scanner1Page.locator('#scan-result-message')).toContainText('บันทึกเข้างานสำเร็จ (ผ่าน) [ออฟไลน์]');
@@ -244,46 +234,46 @@ test.describe('TASK-033: Offline Admission Scanning on Primary Device (AC-40, AC
     await expect(scanner1Page.locator('#scanned-ticket-admission-status')).toContainText('อยู่ในพื้นที่จัดงาน');
     // Pending sync count increases to 1 (AC-42, AC-103)
     await expect(scanner1Page.locator('[data-testid="pending-sync-count"]').first()).toHaveText('1');
-    await scanner1Page.locator('#dismiss-scan-modal-btn').click({ force: true });
+    await scanner1Page.locator('#dismiss-scan-modal-btn').click();
 
     // Step B: Repeat Entry while inside (AC-96, AC-49)
     await ticketInput.fill(purchasedQrPayload);
-    await submitBtn.click({ force: true });
+    await submitBtn.click();
 
     await expect(scanner1Page.locator('#scan-result-card')).toHaveClass(/result-rejected/);
     await expect(scanner1Page.locator('#scan-result-message')).toContainText('บัตรอยู่ในพื้นที่จัดงานแล้ว ไม่อนุญาตให้เข้าซ้ำ');
     await expect(scanner1Page.locator('[data-testid="pending-sync-count"]').first()).toHaveText('1');
-    await scanner1Page.locator('#dismiss-scan-modal-btn').click({ force: true });
+    await scanner1Page.locator('#dismiss-scan-modal-btn').click();
 
     // Step C: Exit scan (inside -> outside) (AC-96)
-    await scanner1Page.locator('#mode-exit-btn').click({ force: true });
+    await scanner1Page.locator('#mode-exit-btn').click();
     await ticketInput.fill(purchasedQrPayload);
-    await submitBtn.click({ force: true });
+    await submitBtn.click();
 
     await expect(scanner1Page.locator('#scan-result-card')).toHaveClass(/result-success-exit/);
     await expect(scanner1Page.locator('#scan-result-message')).toContainText('บันทึกออกนอกงานสำเร็จ (ผ่าน) [ออฟไลน์]');
     await expect(scanner1Page.locator('#scanned-ticket-admission-status')).toContainText('อยู่นอกพื้นที่จัดงาน');
     await expect(scanner1Page.locator('[data-testid="pending-sync-count"]').first()).toHaveText('2');
-    await scanner1Page.locator('#dismiss-scan-modal-btn').click({ force: true });
+    await scanner1Page.locator('#dismiss-scan-modal-btn').click();
 
     // Step D: Repeat Exit while outside (AC-96)
     await ticketInput.fill(purchasedQrPayload);
-    await submitBtn.click({ force: true });
+    await submitBtn.click();
 
     await expect(scanner1Page.locator('#scan-result-card')).toHaveClass(/result-rejected/);
     await expect(scanner1Page.locator('#scan-result-message')).toContainText('บัตรอยู่นอกพื้นที่จัดงาน ไม่สามารถบันทึกออกได้');
     await expect(scanner1Page.locator('[data-testid="pending-sync-count"]').first()).toHaveText('2');
-    await scanner1Page.locator('#dismiss-scan-modal-btn').click({ force: true });
+    await scanner1Page.locator('#dismiss-scan-modal-btn').click();
 
     // Step E: Reentry scan (outside -> inside) (AC-96)
-    await scanner1Page.locator('#mode-entry-btn').click({ force: true });
+    await scanner1Page.locator('#mode-entry-btn').click();
     await ticketInput.fill(purchasedQrPayload);
-    await submitBtn.click({ force: true });
+    await submitBtn.click();
 
     await expect(scanner1Page.locator('#scan-result-card')).toHaveClass(/result-success-entry/);
     await expect(scanner1Page.locator('#scan-result-message')).toContainText('บันทึกเข้างานสำเร็จ (ผ่าน) [ออฟไลน์]');
     await expect(scanner1Page.locator('[data-testid="pending-sync-count"]').first()).toHaveText('3');
-    await scanner1Page.locator('#dismiss-scan-modal-btn').click({ force: true });
+    await scanner1Page.locator('#dismiss-scan-modal-btn').click();
 
     // 10. Reload Resilience (AC-103): pending scans and admission states persist across reloads
     await scanner1Page.reload();
@@ -294,39 +284,50 @@ test.describe('TASK-033: Offline Admission Scanning on Primary Device (AC-40, AC
     await expect(scanner1Page.locator('[data-testid="pending-sync-count"]').first()).toHaveText('3', { timeout: 15000 });
 
     // Switch to offline mode again
-    await scanner1Page.locator('#toggle-offline-mode-btn').click({ force: true });
+    await scanner1Page.getByTestId('terminal-tab-offline').click({ timeout: 10000 });
+    await scanner1Page.locator('#toggle-offline-mode-btn').click();
     await expect(scanner1Page.locator('[data-testid="connectivity-status-badge"]')).toContainText('ออฟไลน์');
+
+    await scanner1Page.getByTestId('terminal-tab-scan').click({ timeout: 10000 });
 
     // Try scanning entry again: should still be rejected as 'ALREADY_INSIDE' because ticket is inside!
     await ticketInput.fill(purchasedQrPayload);
-    await submitBtn.click({ force: true });
+    await submitBtn.click();
     await expect(scanner1Page.locator('#scan-result-card')).toHaveClass(/result-rejected/);
     await expect(scanner1Page.locator('#scan-result-message')).toContainText('บัตรอยู่ในพื้นที่จัดงานแล้ว ไม่อนุญาตให้เข้าซ้ำ');
-    await scanner1Page.locator('#dismiss-scan-modal-btn').click({ force: true });
+    await scanner1Page.locator('#dismiss-scan-modal-btn').click();
 
     // 11. Storage Write Failure Handling (AC-103)
-    // Simulate quota exceeded or storage failure
+    // Abort the actual IndexedDB write boundary; localStorage is only a fallback.
     await scanner1Page.evaluate(() => {
-      const orig = localStorage.setItem.bind(localStorage);
-      (window as unknown as Record<string, unknown>).__origSetItem = orig;
-      localStorage.setItem = () => {
-        throw new Error('QuotaExceededError');
+      const orig = IDBObjectStore.prototype.put;
+      (window as unknown as Record<string, unknown>).__origIdbPut = orig;
+      IDBObjectStore.prototype.put = function (...args) {
+        const request = orig.apply(this, args);
+        if (this.name === 'tickets') this.transaction.abort();
+        return request;
       };
     });
 
     // Attempt exit scan while storage write is broken
-    await scanner1Page.locator('#mode-exit-btn').click({ force: true });
+    await scanner1Page.locator('#mode-exit-btn').click();
     await ticketInput.fill(purchasedQrPayload);
-    await submitBtn.click({ force: true });
+    await submitBtn.click();
 
     await expect(scanner1Page.locator('#scan-result-card')).toHaveClass(/result-rejected/);
     await expect(scanner1Page.locator('#scan-result-message')).toContainText('เกิดข้อผิดพลาดในการบันทึกข้อมูลลงอุปกรณ์ (Storage Error) ไม่อนุญาตให้ผ่าน');
 
-    // Restore localStorage.setItem
+    await expect(scanner1Page.locator('[data-testid="pending-sync-count"]').first()).toHaveText('3');
+    // Restore IndexedDB and retry: rollback must retain the previous inside state.
     await scanner1Page.evaluate(() => {
-      const orig = (window as unknown as Record<string, unknown>).__origSetItem as (key: string, val: string) => void;
-      if (orig) localStorage.setItem = orig;
+      const orig = (window as unknown as Record<string, unknown>).__origIdbPut as typeof IDBObjectStore.prototype.put;
+      if (orig) IDBObjectStore.prototype.put = orig;
     });
+    await scanner1Page.locator('#dismiss-scan-modal-btn').click();
+    await ticketInput.fill(purchasedQrPayload);
+    await submitBtn.click();
+    await expect(scanner1Page.locator('#scan-result-card')).toHaveClass(/result-success/);
+    await expect(scanner1Page.locator('[data-testid="pending-sync-count"]').first()).toHaveText('4');
 
     await scanner1Context.close();
   });

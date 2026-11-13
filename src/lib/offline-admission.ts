@@ -15,6 +15,7 @@ export interface OfflinePendingScanItem {
   reason: string | null;
   deviceMode: 'offline';
   scannedAt: string;
+  localSequence?: number;
 }
 
 export interface OfflineAdmissionScanInput {
@@ -107,6 +108,7 @@ export interface OfflineDatasetMeta {
   totalTickets?: number;
   isOfflineHalted?: boolean;
   offlineStatus?: 'active' | 'halted_reconciliation_required';
+  lastScanSequence?: number;
 }
 
 interface StoredOfflineTicketRecord extends OfflineTicketItem {
@@ -179,6 +181,64 @@ function openOfflineAdmissionDb(idb?: IDBFactory): Promise<IDBDatabase> {
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error || new Error('Failed to open IndexedDB'));
   });
+}
+
+function datasetMetadata(eventId: string, dataset: OfflineDataset): OfflineDatasetMeta {
+  return {
+    eventId, event: dataset.event, sessions: dataset.sessions,
+    primaryScanner: dataset.primaryScanner, lastSuccessfulSync: dataset.lastSuccessfulSync,
+    totalTickets: dataset.totalTickets ?? dataset.tickets.length,
+    isOfflineHalted: dataset.isOfflineHalted, offlineStatus: dataset.offlineStatus,
+  };
+}
+
+// Existing devices may still have unsynced scans from the localStorage release.
+// Move the snapshot and logs together before allowing the IndexedDB path to run.
+const legacyMigrationPromises = new Map<string, Promise<void>>();
+
+async function migrateLegacyOfflineEvent(db: IDBDatabase, eventId: string): Promise<void> {
+  const existing = legacyMigrationPromises.get(eventId);
+  if (existing) return existing;
+  const migration = migrateLegacyOfflineEventOnce(db, eventId);
+  legacyMigrationPromises.set(eventId, migration);
+  try {
+    await migration;
+  } finally {
+    legacyMigrationPromises.delete(eventId);
+  }
+}
+
+async function migrateLegacyOfflineEventOnce(db: IDBDatabase, eventId: string): Promise<void> {
+  if (typeof window === 'undefined') return;
+  const datasetKey = getOfflineDatasetKey(eventId);
+  const pendingKey = getOfflinePendingScansKey(eventId);
+  const raw = window.localStorage.getItem(datasetKey);
+  if (!raw) return;
+  const pendingRaw = window.localStorage.getItem(pendingKey);
+  const dataset = JSON.parse(raw) as OfflineDataset;
+  const pending = pendingRaw ? JSON.parse(pendingRaw) as OfflinePendingScanItem[] : [];
+  if (!Array.isArray(dataset.tickets) || !Array.isArray(pending)) {
+    throw new Error('Invalid legacy offline data');
+  }
+  const tx = db.transaction([STORE_DATASETS, STORE_TICKETS, STORE_PENDING_SCANS], 'readwrite');
+  const datasets = tx.objectStore(STORE_DATASETS);
+  const existing = await idbReq<OfflineDatasetMeta | undefined>(datasets.get(eventId));
+  if (!existing) {
+    datasets.put({ ...datasetMetadata(eventId, dataset), lastScanSequence: pending.length });
+    for (const ticket of dataset.tickets) tx.objectStore(STORE_TICKETS).put({ ...ticket, eventId });
+  } else if (pending.length > 0) {
+    // Two local histories need reconciliation; preserve their logs and stop
+    // admission until sync + a fresh central snapshot establishes the state.
+    datasets.put({ ...existing, isOfflineHalted: true, offlineStatus: 'halted_reconciliation_required' });
+  }
+  for (const [index, scan] of pending.entries()) {
+    tx.objectStore(STORE_PENDING_SCANS).put({
+      ...scan, localSequence: existing ? index - pending.length : index + 1,
+    });
+  }
+  await idbTxComplete(tx);
+  if (window.localStorage.getItem(datasetKey) === raw) window.localStorage.removeItem(datasetKey);
+  if (window.localStorage.getItem(pendingKey) === pendingRaw) window.localStorage.removeItem(pendingKey);
 }
 
 interface EvaluatedCandidateOk {
@@ -508,6 +568,9 @@ export async function saveOfflineDatasetAsync(
   const factory = resolveIndexedDb(idb);
   if (!factory) {
     if (typeof window !== 'undefined' && window.localStorage) {
+      if (getOfflinePendingScans(eventId).length > 0) {
+        throw new Error('กรุณาซิงก์รายการสแกนค้างก่อนดาวน์โหลดชุดข้อมูลใหม่');
+      }
       window.localStorage.setItem(getOfflineDatasetKey(eventId), JSON.stringify(dataset));
     }
     return;
@@ -515,39 +578,36 @@ export async function saveOfflineDatasetAsync(
 
   const db = await openOfflineAdmissionDb(factory);
   try {
-    const tx = db.transaction([STORE_DATASETS, STORE_TICKETS], 'readwrite');
+    await migrateLegacyOfflineEvent(db, eventId);
+    const tx = db.transaction([STORE_DATASETS, STORE_TICKETS, STORE_PENDING_SCANS], 'readwrite');
+    const pendingCount = await idbReq<number>(
+      tx.objectStore(STORE_PENDING_SCANS).index(INDEX_BY_EVENT).count(IDBKeyRange.only(eventId)),
+    );
+    if (pendingCount > 0) {
+      await idbTxComplete(tx);
+      throw new Error('กรุณาซิงก์รายการสแกนค้างก่อนดาวน์โหลดชุดข้อมูลใหม่');
+    }
     const datasetsStore = tx.objectStore(STORE_DATASETS);
     const ticketsStore = tx.objectStore(STORE_TICKETS);
 
-    const meta: OfflineDatasetMeta = {
-      eventId,
-      event: dataset.event,
-      sessions: dataset.sessions,
-      primaryScanner: dataset.primaryScanner,
-      lastSuccessfulSync: dataset.lastSuccessfulSync,
-      totalTickets: dataset.totalTickets ?? dataset.tickets.length,
-      isOfflineHalted: dataset.isOfflineHalted,
-      offlineStatus: dataset.offlineStatus,
-    };
+    const meta = datasetMetadata(eventId, dataset);
     datasetsStore.put(meta);
 
-    // Clear previous tickets for this event before writing fresh snapshot
+    // Enqueue new rows only after the deletion cursor is exhausted. Queuing puts
+    // immediately lets later cursor iterations delete the replacement rows.
     const cursorReq = ticketsStore.index(INDEX_BY_EVENT).openKeyCursor(IDBKeyRange.only(eventId));
     cursorReq.onsuccess = () => {
       const cursor = cursorReq.result;
       if (cursor) {
         ticketsStore.delete(cursor.primaryKey);
         cursor.continue();
+      } else {
+        for (const ticket of dataset.tickets) {
+          const rec: StoredOfflineTicketRecord = { ...ticket, eventId };
+          ticketsStore.put(rec);
+        }
       }
     };
-
-    for (const ticket of dataset.tickets) {
-      const rec: StoredOfflineTicketRecord = {
-        ...ticket,
-        eventId,
-      };
-      ticketsStore.put(rec);
-    }
 
     await idbTxComplete(tx);
   } finally {
@@ -586,6 +646,7 @@ export async function getOfflineDatasetMetaAsync(
 
   const db = await openOfflineAdmissionDb(factory);
   try {
+    await migrateLegacyOfflineEvent(db, eventId);
     const tx = db.transaction([STORE_DATASETS], 'readonly');
     const meta = await idbReq<OfflineDatasetMeta | undefined>(
       tx.objectStore(STORE_DATASETS).get(eventId),
@@ -611,12 +672,18 @@ export async function getOfflinePendingScansAsync(
 
   const db = await openOfflineAdmissionDb(factory);
   try {
+    await migrateLegacyOfflineEvent(db, eventId);
     const tx = db.transaction([STORE_PENDING_SCANS], 'readonly');
     const items = await idbReq<OfflinePendingScanItem[]>(
       tx.objectStore(STORE_PENDING_SCANS).index(INDEX_BY_EVENT).getAll(IDBKeyRange.only(eventId)),
     );
     await idbTxComplete(tx);
-    return Array.isArray(items) ? items : [];
+    // Secondary-index results use the random log ID as their tie breaker.
+    // Preserve admission order when multiple scans share the same millisecond.
+    return Array.isArray(items) ? items.sort((a, b) => {
+      const timeDiff = Date.parse(a.scannedAt) - Date.parse(b.scannedAt);
+      return (Number.isFinite(timeDiff) ? timeDiff : 0) || (a.localSequence ?? 0) - (b.localSequence ?? 0);
+    }) : [];
   } finally {
     db.close();
   }
@@ -660,6 +727,7 @@ export async function performOfflineAdmissionScanAsync(
   }
 
   try {
+    await migrateLegacyOfflineEvent(db, input.eventId);
     const tx = db.transaction([STORE_DATASETS, STORE_TICKETS, STORE_PENDING_SCANS], 'readwrite');
     const datasetsStore = tx.objectStore(STORE_DATASETS);
     const ticketsStore = tx.objectStore(STORE_TICKETS);
@@ -717,7 +785,9 @@ export async function performOfflineAdmissionScanAsync(
 
     const { ticketSummary, targetAdmissionStatus, pendingItem, scannedAt } = evaluated;
 
-    pendingStore.add(pendingItem);
+    const localSequence = (datasetMeta.lastScanSequence ?? 0) + 1;
+    pendingStore.add({ ...pendingItem, localSequence });
+    datasetsStore.put({ ...datasetMeta, lastScanSequence: localSequence });
     ticketsStore.put({
       ...ticket,
       eventId: input.eventId,

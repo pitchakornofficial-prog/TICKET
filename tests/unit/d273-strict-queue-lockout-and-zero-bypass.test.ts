@@ -32,13 +32,14 @@ describe('D-273: Strict Queue Lockout & Zero-Bypass Guard', () => {
       'utf-8',
     );
 
-    // Button is disabled when not ready and peopleAhead > 0
-    expect(queueComponent).toContain('isReady || peopleAhead <= 0 ?');
+    // Zero waiters ahead is not an admission grant when all active slots are full.
+    expect(queueComponent).toContain('isReady ? (');
+    expect(queueComponent).not.toContain('isReady || peopleAhead <= 0');
     expect(queueComponent).toContain('กรุณารอตามลำดับคิว (ระบบจะพาเข้าสู่หน้าซื้อบัตรอัตโนมัติเมื่อถึงคิว)');
     expect(queueComponent).toContain('disabled');
 
     // handleProceedNow prevents skipping when waiting
-    expect(queueComponent).toContain('if (!isReady && peopleAhead > 0)');
+    expect(queueComponent).toContain('if (!isReady)');
 
     // Zero Emojis (D-14)
     expect(queueComponent).not.toMatch(/\p{Extended_Pictographic}/u);
