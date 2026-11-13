@@ -8,6 +8,7 @@ import {
   recordInvitationAuditLog,
 } from '@/server/invitation';
 import { verifyPassword } from 'better-auth/crypto';
+import { extractClientIp } from '@/server/guest-otp';
 
 export const runtime = 'nodejs';
 
@@ -94,7 +95,7 @@ export async function POST(request: Request) {
       issuedByUserId: session.user.id,
       issuedByName: session.user.name,
       issuedByEmail: session.user.email,
-      ipAddress: request.headers.get('x-forwarded-for') || '127.0.0.1',
+      ipAddress: extractClientIp(request),
     });
 
     return Response.json(
