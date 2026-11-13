@@ -80,6 +80,41 @@ const thLocaleDateTimeFormatter = new Intl.DateTimeFormat('th-TH', {
   second: '2-digit',
 });
 
+function escapeHtml(value: string): string {
+  return value
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;');
+}
+
+function sanitizeEmailUrl(raw: string | null | undefined, options?: { allowDataImage?: boolean }): string {
+  const trimmed = (raw ?? '').trim();
+  if (!trimmed) return '';
+
+  if (trimmed.startsWith('/') && !trimmed.startsWith('//')) {
+    return trimmed;
+  }
+
+  if (options?.allowDataImage && /^data:image\/(png|jpeg|webp|gif|svg\+xml)[;,]/i.test(trimmed)) {
+    return trimmed;
+  }
+
+  try {
+    const parsed = new URL(trimmed);
+    const host = parsed.hostname.toLowerCase();
+    const isLoopback = host === '127.0.0.1' || host === 'localhost' || host === '[::1]';
+    if (parsed.protocol === 'https:' || (parsed.protocol === 'http:' && isLoopback)) {
+      return parsed.toString();
+    }
+  } catch {
+    return '';
+  }
+
+  return '';
+}
+
 /**
  * Builds email HTML & text content for ticket delivery (AC-20).
  * Strict adherence to D-14: zero emojis, Thai language, Kanit font / clean sans-serif.
@@ -95,23 +130,37 @@ export function buildTicketEmailContent(
 ): { subject: string; html: string; text: string } {
   const subject = `[TICKET] บัตรคอนเสิร์ตและ QR Code สำหรับเข้างาน - คำสั่งซื้อ ${orderId}`;
   const formattedSessionStart = thLocaleDateTimeFormatter.format(new Date(sessionStartTime));
+  const safeOrderId = escapeHtml(orderId);
+  const safeBuyerName = escapeHtml(buyerName);
+  const safeEventTitle = escapeHtml(eventTitle);
+  const safeLocation = escapeHtml(location);
+  const safeFormattedSessionStart = escapeHtml(formattedSessionStart);
+  const safeSubject = escapeHtml(subject);
+  const safeOrderUrl = escapeHtml(sanitizeEmailUrl(orderUrl) || '#');
 
   const ticketsHtml = tickets
-    .map(
-      (t, idx) => `
+    .map((t, idx) => {
+      const safeTicketTypeName = escapeHtml(t.ticketTypeName);
+      const safeTicketCode = escapeHtml(t.ticketCode);
+      const safeQrUrl = escapeHtml(sanitizeEmailUrl(t.qrCodeUrl, { allowDataImage: true }));
+      const qrBlock = safeQrUrl
+        ? `<div style="text-align: center; margin: 12px 0;">
+          <img src="${safeQrUrl}" alt="Ticket QR ${safeTicketCode}" width="160" height="160" style="display: inline-block; border-radius: 4px; border: 1px solid #cbd5e1;" />
+        </div>`
+        : '';
+
+      return `
       <div style="border: 1px solid #e2e8f0; border-radius: 6px; padding: 16px; margin-bottom: 16px; background-color: #ffffff;">
         <div style="font-size: 13px; color: #64748b; margin-bottom: 4px;">ใบที่ ${idx + 1} จาก ${tickets.length}</div>
-        <div style="font-size: 16px; font-weight: bold; color: #1848ed; margin-bottom: 4px;">${t.ticketTypeName}</div>
-        <div style="font-size: 14px; margin-bottom: 12px;">ราคา: ${formatBaht(t.ticketPrice)}</div>
-        <div style="text-align: center; margin: 12px 0;">
-          <img src="${t.qrCodeUrl}" alt="Ticket QR ${t.ticketCode}" width="160" height="160" style="display: inline-block; border-radius: 4px; border: 1px solid #cbd5e1;" />
-        </div>
+        <div style="font-size: 16px; font-weight: bold; color: #1848ed; margin-bottom: 4px;">${safeTicketTypeName}</div>
+        <div style="font-size: 14px; margin-bottom: 12px;">ราคา: ${escapeHtml(formatBaht(t.ticketPrice))}</div>
+        ${qrBlock}
         <div style="font-family: monospace; font-size: 14px; font-weight: bold; text-align: center; color: #0f172a;">
-          รหัสบัตร: ${t.ticketCode}
+          รหัสบัตร: ${safeTicketCode}
         </div>
       </div>
-    `,
-    )
+    `;
+    })
     .join('');
 
   const html = `
@@ -119,7 +168,7 @@ export function buildTicketEmailContent(
     <html lang="th">
     <head>
       <meta charset="utf-8">
-      <title>${subject}</title>
+      <title>${safeSubject}</title>
     </head>
     <body style="font-family: sans-serif; background-color: #f8fafc; color: #0f172a; margin: 0; padding: 24px;">
       <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 8px; border: 1px solid #e2e8f0; overflow: hidden;">
@@ -127,22 +176,22 @@ export function buildTicketEmailContent(
           <h1 style="margin: 0; font-size: 20px; font-weight: bold;">TICKET - บัตรคอนเสิร์ตของคุณ</h1>
         </div>
         <div style="padding: 24px;">
-          <p style="font-size: 15px; margin-top: 0;">เรียนคุณ <strong>${buyerName}</strong>,</p>
+          <p style="font-size: 15px; margin-top: 0;">เรียนคุณ <strong>${safeBuyerName}</strong>,</p>
           <p style="font-size: 14px; color: #334155; line-height: 1.5;">
-            การชำระเงินสำหรับคำสั่งซื้อ <strong>${orderId}</strong> เสร็จสมบูรณ์แล้ว ระบบได้ออกบัตรคอนเสิร์ตจำนวน <strong>${tickets.length} ใบ</strong> ให้ท่านเรียบร้อยแล้ว
+            การชำระเงินสำหรับคำสั่งซื้อ <strong>${safeOrderId}</strong> เสร็จสมบูรณ์แล้ว ระบบได้ออกบัตรคอนเสิร์ตจำนวน <strong>${tickets.length} ใบ</strong> ให้ท่านเรียบร้อยแล้ว
           </p>
 
           <div style="background-color: #f1f5f9; border-radius: 6px; padding: 16px; margin: 20px 0;">
-            <div style="font-size: 15px; font-weight: bold; margin-bottom: 6px;">${eventTitle}</div>
-            <div style="font-size: 13px; color: #475569; margin-bottom: 4px;">สถานที่: ${location}</div>
-            <div style="font-size: 13px; color: #475569;">รอบการแสดง: ${formattedSessionStart}</div>
+            <div style="font-size: 15px; font-weight: bold; margin-bottom: 6px;">${safeEventTitle}</div>
+            <div style="font-size: 13px; color: #475569; margin-bottom: 4px;">สถานที่: ${safeLocation}</div>
+            <div style="font-size: 13px; color: #475569;">รอบการแสดง: ${safeFormattedSessionStart}</div>
           </div>
 
           <h3 style="font-size: 16px; margin: 24px 0 12px; color: #0f172a;">รายการบัตรสำหรับเข้างาน (QR Code แยกเฉพาะใบ)</h3>
           ${ticketsHtml}
 
           <div style="text-align: center; margin: 28px 0 16px;">
-            <a href="${orderUrl}" style="background-color: #1848ed; color: #ffffff; padding: 12px 24px; text-decoration: none; border-radius: 4px; font-weight: bold; font-size: 14px; display: inline-block;">
+            <a href="${safeOrderUrl}" style="background-color: #1848ed; color: #ffffff; padding: 12px 24px; text-decoration: none; border-radius: 4px; font-weight: bold; font-size: 14px; display: inline-block;">
               เปิดดูบัตรผ่านเว็บไซต์
             </a>
           </div>

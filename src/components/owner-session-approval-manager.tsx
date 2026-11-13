@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import type { SessionAmendmentRecord, SessionCancellationRecord } from '@/server/events';
 import type { OrganizerFeeMode, CustomerFeeMode } from '@/server/fees';
 import { formatBaht, formatDateTime } from '@/lib/locale';
+import { sanitizeGoogleMapsUrl } from '@/lib/google-maps-url';
 import {
   CheckCircleIcon,
   EyeIcon,
@@ -1730,18 +1731,23 @@ export function OwnerSessionApprovalManager() {
                       <div>
                         <span className="summary-label">แผนที่ / Google Maps:</span>
                         <p className="summary-val">
-                          {reviewingSession.googleMapsUrl || reviewingEventDetails?.googleMapsUrl ? (
-                            <a
-                              href={reviewingSession.googleMapsUrl || reviewingEventDetails?.googleMapsUrl || '#'}
-                              target="_blank"
-                              rel="noreferrer"
-                              style={{ color: '#0369a1', textDecoration: 'underline' }}
-                            >
-                              เปิดดูพิกัดแผนที่
-                            </a>
-                          ) : (
-                            'ไม่ได้ระบุลิงก์แผนที่'
-                          )}
+                          {(() => {
+                            const safeMapsUrl = sanitizeGoogleMapsUrl(
+                              reviewingSession.googleMapsUrl || reviewingEventDetails?.googleMapsUrl,
+                            );
+                            return safeMapsUrl ? (
+                              <a
+                                href={safeMapsUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                style={{ color: '#0369a1', textDecoration: 'underline' }}
+                              >
+                                เปิดดูพิกัดแผนที่
+                              </a>
+                            ) : (
+                              'ไม่ได้ระบุลิงก์แผนที่'
+                            );
+                          })()}
                         </p>
                       </div>
                       <div>

@@ -413,21 +413,46 @@ describe('Issue #16: Guest OTP IP Rate Limiting and Hashed Storage', () => {
   });
 
   describe('3. extractClientIp header helper', () => {
-    it('extracts client IP from x-forwarded-for header (first address)', () => {
+    it('extracts rightmost trusted-proxy-appended IP in default alb mode and ignores spoofed cf-connecting-ip / leftmost x-forwarded-for', () => {
       const req = new Request('http://localhost/api/test', {
-        headers: { 'x-forwarded-for': '203.0.113.195, 70.41.3.18, 150.172.238.178' },
+        headers: {
+          'cf-connecting-ip': '198.51.100.1',
+          'x-forwarded-for': '203.0.113.195, 70.41.3.18, 150.172.238.178',
+        },
       });
-      expect(extractClientIp(req)).toBe('203.0.113.195');
+      expect(extractClientIp(req)).toBe('150.172.238.178');
     });
 
-    it('falls back to x-real-ip header when x-forwarded-for is missing', () => {
+    it('supports multi-hop trustedProxyHops when multiple trusted proxies append to x-forwarded-for', () => {
       const req = new Request('http://localhost/api/test', {
-        headers: { 'x-real-ip': '198.51.100.88' },
+        headers: {
+          'x-forwarded-for': '198.51.100.99, 203.0.113.195, 10.0.0.5',
+        },
+      });
+      expect(extractClientIp(req, { mode: 'alb', trustedProxyHops: 2 })).toBe('203.0.113.195');
+    });
+
+    it('reads cf-connecting-ip only when mode is cloudflare', () => {
+      const req = new Request('http://localhost/api/test', {
+        headers: {
+          'cf-connecting-ip': '198.51.100.42',
+          'x-forwarded-for': '203.0.113.195, 150.172.238.178',
+        },
+      });
+      expect(extractClientIp(req, { mode: 'cloudflare' })).toBe('198.51.100.42');
+    });
+
+    it('ignores invalid non-IP header values and falls back safely', () => {
+      const req = new Request('http://localhost/api/test', {
+        headers: {
+          'x-forwarded-for': 'spoofed-not-an-ip',
+          'x-real-ip': '198.51.100.88',
+        },
       });
       expect(extractClientIp(req)).toBe('198.51.100.88');
     });
 
-    it('defaults to 127.0.0.1 when no proxy headers are present', () => {
+    it('defaults to 127.0.0.1 when no valid proxy headers are present', () => {
       const req = new Request('http://localhost/api/test');
       expect(extractClientIp(req)).toBe('127.0.0.1');
     });

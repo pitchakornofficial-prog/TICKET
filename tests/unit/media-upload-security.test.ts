@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import { POST } from '../../src/app/api/upload/route';
+import { POST, handlePresignedRequest } from '../../src/app/api/upload/route';
+import { POST as presignedPOST } from '../../src/app/api/upload/presigned/route';
 import { GET } from '../../src/app/api/media/[...key]/route';
 import { storage } from '../../src/server/storage';
 
@@ -192,5 +193,62 @@ describe('Issue #4: Stored XSS Prevention & File Upload Security (AC-92, Issue-0
     expect(res.headers.get('Content-Disposition')).toContain('attachment;');
     expect(res.headers.get('Content-Security-Policy')).toBe("default-src 'none'; sandbox");
     expect(res.headers.get('X-Content-Type-Options')).toBe('nosniff');
+  });
+
+  it('enforces MIME allowlist in handlePresignedRequest (rejects text/html; charset=utf-8, application/xhtml+xml, text/xml)', async () => {
+    for (const mime of ['text/html; charset=utf-8', 'application/xhtml+xml', 'text/xml']) {
+      const res = await handlePresignedRequest(
+        { id: currentUserId, role: 'organizer' },
+        { filename: 'poster.png', contentType: mime, fileSize: 1024, visibility: 'public' },
+      );
+      expect(res.status).toBe(400);
+    }
+
+    const publicPdfRes = await handlePresignedRequest(
+      { id: currentUserId, role: 'organizer' },
+      { filename: 'doc.pdf', contentType: 'application/pdf', fileSize: 1024, visibility: 'public' },
+    );
+    expect(publicPdfRes.status).toBe(400);
+  });
+
+  it('rejects cross-site POST /api/upload and POST /api/upload/presigned with 403', async () => {
+    currentRole = 'organizer';
+    const uploadReq = new Request('http://localhost:3000/api/upload', {
+      method: 'POST',
+      headers: { Origin: 'https://evil.invalid', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ filename: 'poster.png', contentType: 'image/png', fileSize: 1024 }),
+    });
+    const uploadRes = await POST(uploadReq);
+    expect(uploadRes.status).toBe(403);
+
+    const presignedReq = new Request('http://localhost:3000/api/upload/presigned', {
+      method: 'POST',
+      headers: { Origin: 'https://evil.invalid', 'Content-Type': 'application/json' },
+      body: JSON.stringify({ filename: 'poster.png', contentType: 'image/png', fileSize: 1024 }),
+    });
+    const presignedRes = await presignedPOST(presignedReq);
+    expect(presignedRes.status).toBe(403);
+  });
+
+  it('blocks path traversal, disallowed prefixes, and non-owner proofs/ access in /api/media/[...key]', async () => {
+    currentRole = 'organizer';
+
+    const traversalRes = await GET(new Request('http://localhost:3000/api/media/posters/..%2Fsecret.png'), {
+      params: Promise.resolve({ key: ['posters', '..', 'secret.png'] }),
+    });
+    expect(traversalRes.status).toBe(400);
+
+    const badPrefixRes = await GET(new Request('http://localhost:3000/api/media/private-keys/secret.png'), {
+      params: Promise.resolve({ key: ['private-keys', 'secret.png'] }),
+    });
+    expect(badPrefixRes.status).toBe(403);
+
+    // Defense-in-depth: proofs/ requires owner even if visibility metadata was mistakenly public
+    const proofKey = 'proofs/defense-in-depth.png';
+    await storage.put(proofKey, validPngBuffer, 'image/png', 'public');
+    const nonOwnerProofRes = await GET(new Request(`http://localhost:3000/api/media/${proofKey}`), {
+      params: Promise.resolve({ key: proofKey.split('/') }),
+    });
+    expect(nonOwnerProofRes.status).toBe(403);
   });
 });

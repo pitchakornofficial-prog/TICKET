@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { calculateEventAccounting } from '../../src/server/reports';
+import type { Pool } from 'pg';
+import { calculateEventAccounting, recordEventPayout } from '../../src/server/reports';
 
 describe('TASK-029: Weekly Manual Payout Unit Tests (AC-27, AC-30, AC-31, AC-79, AC-87, AC-92, AC-93)', () => {
   it('1. Weekly payout cycle: E=900, H=90 yields A_pay=810; payout of 810 leaves A_pay=0 and Paid P=810 (AC-27, AC-30, AC-79)', () => {
@@ -127,5 +128,57 @@ describe('TASK-029: Weekly Manual Payout Unit Tests (AC-27, AC-30, AC-31, AC-79,
 
     expect(reportWithFailedPayout.totalPaidOut).toBe(0);
     expect(reportWithFailedPayout.payableAmount).toBe(810);
+  });
+
+  it('5. recordEventPayout rejects invalid transferProofKey/transferProofUrl and acquires pg_advisory_xact_lock in transaction', async () => {
+    const executedSql: string[] = [];
+    const client = {
+      query: async (sql: string) => {
+        executedSql.push(sql);
+        if (sql.includes('FROM events e')) {
+          return {
+            rows: [
+              {
+                id: 'evt-1',
+                title: 'Test Concert',
+                organizerId: 'org-1',
+                organizerName: 'Org',
+                organizerFeeMode: 'percentage',
+                organizerFeeRate: '10',
+                reservePercentage: '10',
+              },
+            ],
+            rowCount: 1,
+          };
+        }
+        return { rows: [], rowCount: 0 };
+      },
+      release: () => {},
+    };
+    const mockPool = {
+      query: client.query,
+      connect: async () => client,
+    } as unknown as Pool;
+
+    const badProofRes = await recordEventPayout(mockPool, {
+      eventId: 'evt-1',
+      amount: 100,
+      actorRole: 'owner',
+      transferProofKey: '../evil/key.png',
+    });
+    expect(badProofRes.success).toBe(false);
+    expect(badProofRes.code).toBe('INVALID_PROOF');
+
+    const zeroPayableRes = await recordEventPayout(mockPool, {
+      eventId: 'evt-1',
+      amount: 100,
+      actorRole: 'owner',
+      transferProofKey: 'proofs/slip-01.png',
+      transferProofUrl: '/api/media/proofs%2Fslip-01.png',
+    });
+    expect(zeroPayableRes.success).toBe(false);
+    expect(zeroPayableRes.code).toBe('CANNOT_PAY_ZERO_PAYABLE');
+    expect(executedSql).toContain('BEGIN');
+    expect(executedSql.some(s => s.includes('pg_advisory_xact_lock'))).toBe(true);
   });
 });

@@ -312,5 +312,16 @@ describe('Scanner Scope Session Binding and Expiration (Security Item 17)', () =
       expect(check.allowed).toBe(false);
       expect(check.reason).toContain('ไม่อนุญาต: เซสชันการสแกนนี้ถูกจำกัดสิทธิ์เฉพาะงานคอนเสิร์ตที่ได้รับมอบหมายเท่านั้น');
     });
+
+    it('rejects legacy 2-part scanner_event_scope cookie in production mode', () => {
+      vi.stubEnv('NODE_ENV', 'production');
+      try {
+        const legacySigned = signScannerEventScopeCookie(eventId, testSecret);
+        const cookieHeader = `ticket.session_token=${sessionToken}; scanner_event_scope=${legacySigned}`;
+        expect(getScannerEventScopeCookie(cookieHeader, testSecret, sessionToken)).toBeNull();
+      } finally {
+        vi.unstubAllEnvs();
+      }
+    });
   });
 });

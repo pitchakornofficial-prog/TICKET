@@ -76,4 +76,82 @@ describe('TASK-023: Manual Refund Transfer & Proof Unit Tests (AC-37, AC-92, AC-
       expect(res.code).toBe('FORBIDDEN');
     }
   });
+
+  it('rejects invalid transferProofKey and transferProofUrl in recordManualRefundTransfer', async () => {
+    const mockPool = {
+      query: async () => ({ rows: [], rowCount: 0 }),
+    } as unknown as Pool;
+
+    const badKeyRes = await recordManualRefundTransfer(mockPool, {
+      refundRequestId: 'REF-12345678',
+      reviewerUserId: 'owner-1',
+      reviewerName: 'Owner',
+      reviewerRole: 'owner',
+      transferProofKey: 'posters/../../secret.png',
+    });
+    expect(badKeyRes.success).toBe(false);
+    expect(badKeyRes.code).toBe('VALIDATION_ERROR');
+
+    const badUrlRes = await recordManualRefundTransfer(mockPool, {
+      refundRequestId: 'REF-12345678',
+      reviewerUserId: 'owner-1',
+      reviewerName: 'Owner',
+      reviewerRole: 'owner',
+      transferProofUrl: 'javascript:alert(1)',
+    });
+    expect(badUrlRes.success).toBe(false);
+    expect(badUrlRes.code).toBe('VALIDATION_ERROR');
+  });
+
+  it('rejects transferredAmount <= 0 or exceeding requestedAmount in recordManualRefundTransfer', async () => {
+    const client = {
+      query: async (sql: string) => {
+        if (sql === 'BEGIN' || sql === 'ROLLBACK' || sql === 'COMMIT' || sql.includes('CREATE TABLE')) {
+          return { rows: [], rowCount: 0 };
+        }
+        if (sql.includes('FROM refund_requests') && sql.includes('FOR UPDATE')) {
+          return {
+            rows: [
+              {
+                id: 'REF-12345678',
+                orderId: 'ORD-1',
+                status: 'approved',
+                requestedAmount: 500,
+                buyerEmail: 'buyer@example.com',
+                transferredAmount: null,
+                transferredAt: null,
+              },
+            ],
+            rowCount: 1,
+          };
+        }
+        return { rows: [], rowCount: 0 };
+      },
+      release: () => {},
+    };
+    const mockPool = {
+      query: client.query,
+      connect: async () => client,
+    } as unknown as Pool;
+
+    const zeroRes = await recordManualRefundTransfer(mockPool, {
+      refundRequestId: 'REF-12345678',
+      reviewerUserId: 'owner-1',
+      reviewerName: 'Owner',
+      reviewerRole: 'owner',
+      transferredAmount: 0,
+    });
+    expect(zeroRes.success).toBe(false);
+    expect(zeroRes.code).toBe('INVALID_AMOUNT');
+
+    const overRes = await recordManualRefundTransfer(mockPool, {
+      refundRequestId: 'REF-12345678',
+      reviewerUserId: 'owner-1',
+      reviewerName: 'Owner',
+      reviewerRole: 'owner',
+      transferredAmount: 500.01,
+    });
+    expect(overRes.success).toBe(false);
+    expect(overRes.code).toBe('INVALID_AMOUNT');
+  });
 });

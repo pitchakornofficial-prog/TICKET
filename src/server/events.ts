@@ -7,6 +7,7 @@ import { ensureReservationSchema } from './reservation.ts';
 import { ensureRefundSchema, processSessionCancellationRefunds } from './refunds.ts';
 import { ensureNewsSchema } from './news.ts';
 import { ensureTicketSchema } from './tickets.ts';
+import { parseSafeGoogleMapsUrl } from '../lib/google-maps-url.ts';
 import {
   ensureScannerAccessTokenSchema,
   issueScannerAccessTokenWithClient,
@@ -248,6 +249,22 @@ export async function ensureEventSchema(pool: Pool): Promise<void> {
   return promise;
 }
 
+function validateTicketTypeDraft(tt: {
+  price: number;
+  quota: number;
+  studentPrice?: number | null;
+}) {
+  if (!Number.isInteger(tt.quota) || tt.quota < 0) {
+    throw new Error('จำนวนบัตรต้องไม่ติดลบ');
+  }
+  if (!Number.isFinite(tt.price) || tt.price < 0) {
+    throw new Error('ราคาบัตรต้องไม่ติดลบ');
+  }
+  if (tt.studentPrice != null && (!Number.isFinite(Number(tt.studentPrice)) || Number(tt.studentPrice) < 0)) {
+    throw new Error('ราคาบัตรนักศึกษาต้องไม่ติดลบ');
+  }
+}
+
 export async function createEventDraft(
   pool: Pool,
   organizerId: string,
@@ -258,6 +275,7 @@ export async function createEventDraft(
   if (!eventInput.location?.trim()) throw new Error('กรุณาระบุสถานที่จัดงาน');
   const limit = eventInput.limitPerOrder ?? 4;
   if (limit <= 0) throw new Error('จำกัดการซื้อต่อคำสั่งซื้อต้องมากกว่า 0');
+  const safeGoogleMapsUrl = parseSafeGoogleMapsUrl(eventInput.googleMapsUrl);
 
   await ensureEventSchema(pool);
 
@@ -275,7 +293,7 @@ export async function createEventDraft(
         eventInput.posterUrl || null,
         eventInput.ticketTemplateUrl || null,
         eventInput.coverBannerUrl || null,
-        eventInput.googleMapsUrl || null,
+        safeGoogleMapsUrl,
         eventInput.salesStartTime ? new Date(eventInput.salesStartTime) : null,
         eventInput.salesEndTime ? new Date(eventInput.salesEndTime) : null,
         limit,
@@ -306,8 +324,7 @@ export async function createEventDraft(
       );
 
       for (const tt of session.ticketTypes) {
-        if (tt.quota < 0) throw new Error('จำนวนบัตรต้องไม่ติดลบ');
-        if (tt.price < 0) throw new Error('ราคาบัตรต้องไม่ติดลบ');
+        validateTicketTypeDraft(tt);
         const ttId = randomUUID();
         await client.query(
           `INSERT INTO ticket_types (id, "sessionId", name, price, quota, description, "isStudentPrivilege", "studentPrice", "createdAt", "updatedAt")
@@ -346,6 +363,9 @@ export async function updateEventDraft(
     if (!isOwner && check.rows[0].organizerId !== organizerId) {
       throw new Error('ไม่อนุญาต: คุณไม่ใช่ผู้จัดงานคอนเสิร์ตนี้');
     }
+    if (!isOwner && !['draft', 'rejected'].includes(check.rows[0].status)) {
+      throw new Error('ไม่อนุญาต: ไม่สามารถแก้ไขข้อมูลหลักของงานหลังจากส่งขออนุมัติหรืออนุมัติแล้ว');
+    }
 
     if (eventInput.title !== undefined) {
       await client.query('UPDATE events SET title = $1, "updatedAt" = now() WHERE id = $2', [eventInput.title.trim(), eventId]);
@@ -366,7 +386,8 @@ export async function updateEventDraft(
       await client.query('UPDATE events SET "coverBannerUrl" = $1, "updatedAt" = now() WHERE id = $2', [eventInput.coverBannerUrl, eventId]);
     }
     if (eventInput.googleMapsUrl !== undefined) {
-      await client.query('UPDATE events SET "googleMapsUrl" = $1, "updatedAt" = now() WHERE id = $2', [eventInput.googleMapsUrl, eventId]);
+      const safeGoogleMapsUrl = parseSafeGoogleMapsUrl(eventInput.googleMapsUrl);
+      await client.query('UPDATE events SET "googleMapsUrl" = $1, "updatedAt" = now() WHERE id = $2', [safeGoogleMapsUrl, eventId]);
     }
     if (eventInput.salesStartTime !== undefined) {
       await client.query('UPDATE events SET "salesStartTime" = $1, "updatedAt" = now() WHERE id = $2', [eventInput.salesStartTime ? new Date(eventInput.salesStartTime) : null, eventId]);
@@ -411,6 +432,7 @@ export async function updateEventDraft(
         );
 
         for (const tt of session.ticketTypes) {
+          validateTicketTypeDraft(tt);
           const ttId = randomUUID();
           await client.query(
             `INSERT INTO ticket_types (id, "sessionId", name, price, quota, description, "isStudentPrivilege", "studentPrice", "createdAt", "updatedAt")
@@ -442,7 +464,7 @@ export async function submitSessionForApproval(
   await ensureEventSchema(pool);
   return inTransaction(pool, async client => {
     const res = await client.query(
-      `SELECT s.id, s."eventId", e."organizerId" 
+      `SELECT s.id, s."eventId", s.status, e."organizerId" 
        FROM event_sessions s
        JOIN events e ON e.id = s."eventId"
        WHERE s.id = $1`,
@@ -452,9 +474,13 @@ export async function submitSessionForApproval(
     if (res.rows[0].organizerId !== organizerId) {
       throw new Error('ไม่อนุญาต: คุณไม่ใช่ผู้จัดงานคอนเสิร์ตนี้');
     }
+    if (!['draft', 'rejected'].includes(res.rows[0].status)) {
+      throw new Error('ส่งขออนุมัติได้เฉพาะรอบที่อยู่ในสถานะฉบับร่างหรือถูกปฏิเสธเท่านั้น');
+    }
 
     await client.query(
-      `UPDATE event_sessions SET status = 'pending_approval', "updatedAt" = now() WHERE id = $1`,
+      `UPDATE event_sessions SET status = 'pending_approval', "updatedAt" = now()
+       WHERE id = $1 AND status IN ('draft', 'rejected')`,
       [sessionId],
     );
     await client.query(
@@ -1021,6 +1047,20 @@ export async function addScannerToEvent(
   }
 
   return inTransaction(pool, async client => {
+    await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`scanner-quota:${eventId}`]);
+    const quotaRes = await client.query<{ totalCount: string; additionalCount: string }>(
+      `SELECT COUNT(*)::text AS "totalCount",
+              COUNT(*) FILTER (WHERE NOT COALESCE("isPrimary", false))::text AS "additionalCount"
+       FROM event_scanners
+       WHERE "eventId" = $1`,
+      [eventId],
+    );
+    const totalCount = Number(quotaRes.rows[0]?.totalCount ?? 0);
+    const additionalCount = Number(quotaRes.rows[0]?.additionalCount ?? 0);
+    if (additionalCount >= 3 || totalCount >= 4) {
+      throw new Error('จำกัดจำนวนทีมสแกนเพิ่มเติมไม่เกิน 3 คนต่อคอนเสิร์ต');
+    }
+
     let targetScannerId = data.scannerId;
     let targetName = data.name.trim();
     const targetEmail = data.email.trim().toLowerCase();
@@ -1487,14 +1527,24 @@ export async function submitSessionAmendment(
 
     // 2. Initial quota validation (AC-109)
     for (const item of input.ticketTypes) {
-      if (item.quota <= 0) {
+      if (!Number.isInteger(item.quota) || item.quota <= 0) {
         throw new Error(`จำนวนบัตรสำหรับประเภท "${item.name}" ต้องมากกว่า 0`);
       }
-      if (item.price < 0) {
+      if (!Number.isFinite(item.price) || item.price < 0) {
         throw new Error(`ราคาบัตรสำหรับประเภท "${item.name}" ต้องไม่ติดลบ`);
+      }
+      if (item.studentPrice != null && (!Number.isFinite(Number(item.studentPrice)) || Number(item.studentPrice) < 0)) {
+        throw new Error(`ราคาบัตรนักศึกษาสำหรับประเภท "${item.name}" ต้องไม่ติดลบ`);
       }
 
       if (item.id) {
+        const ttCheck = await client.query(
+          'SELECT id FROM ticket_types WHERE id = $1 AND "sessionId" = $2',
+          [item.id, session.id],
+        );
+        if (ttCheck.rowCount === 0) {
+          throw new Error(`ไม่พบประเภทบัตร "${item.name}" ในรอบการแสดงนี้`);
+        }
         const heldRes = await client.query<{ heldQuota: number }>(
           `SELECT GREATEST(0, COALESCE(
             (SELECT SUM(oi.quantity)::int
@@ -1802,8 +1852,14 @@ export async function approveSessionAmendment(
     // 3. Atomic quota check with locks (AC-109)
     for (const item of ticketTypes) {
       if (item.id) {
-        // Lock ticket_type row
-        await client.query('SELECT id, quota FROM ticket_types WHERE id = $1 FOR UPDATE', [item.id]);
+        // Lock ticket_type row scoped to this amendment's session
+        const ttLock = await client.query(
+          'SELECT id, quota FROM ticket_types WHERE id = $1 AND "sessionId" = $2 FOR UPDATE',
+          [item.id, amd.sessionId],
+        );
+        if (ttLock.rowCount === 0) {
+          throw new Error(`ไม่พบประเภทบัตร "${item.name}" ในรอบการแสดงที่ขอแก้ไข`);
+        }
 
         const heldRes = await client.query<{ heldQuota: number }>(
           `SELECT GREATEST(0, COALESCE(
@@ -1885,13 +1941,13 @@ export async function approveSessionAmendment(
     // 5. Update or insert ticket types (AC-67, AC-68, AC-109)
     for (const item of ticketTypes) {
       if (item.id) {
-        await client.query(
+        const updRes = await client.query(
           `UPDATE ticket_types
            SET name = $2, price = $3, quota = $4, description = COALESCE($5, description),
                "isStudentPrivilege" = COALESCE($6, "isStudentPrivilege"),
                "studentPrice" = $7,
                "updatedAt" = now()
-           WHERE id = $1`,
+           WHERE id = $1 AND "sessionId" = $8`,
           [
             item.id,
             item.name.trim(),
@@ -1900,8 +1956,12 @@ export async function approveSessionAmendment(
             item.description || null,
             item.isStudentPrivilege != null ? Boolean(item.isStudentPrivilege) : null,
             item.studentPrice != null ? Number(item.studentPrice) : null,
+            amd.sessionId,
           ],
         );
+        if (updRes.rowCount === 0) {
+          throw new Error(`ไม่พบประเภทบัตร "${item.name}" ในรอบการแสดงที่ขอแก้ไข`);
+        }
       } else {
         const newTtId = randomUUID();
         await client.query(

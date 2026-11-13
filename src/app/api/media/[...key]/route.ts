@@ -10,7 +10,31 @@ export async function GET(
   { params }: { params: Promise<{ key: string[] }> },
 ) {
   const { key } = await params;
-  const fullKey = key.map(decodeURIComponent).join('/');
+  const decodedSegments: string[] = [];
+  for (const segment of key) {
+    let decoded: string;
+    try {
+      decoded = decodeURIComponent(segment);
+    } catch {
+      return new Response('Bad Request', { status: 400 });
+    }
+    if (
+      !decoded ||
+      decoded === '.' ||
+      decoded === '..' ||
+      decoded.includes('/') ||
+      decoded.includes('\\') ||
+      decoded.includes('\0')
+    ) {
+      return new Response('Bad Request', { status: 400 });
+    }
+    decodedSegments.push(decoded);
+  }
+
+  const fullKey = decodedSegments.join('/');
+  if (!fullKey.startsWith('posters/') && !fullKey.startsWith('proofs/')) {
+    return new Response('Forbidden', { status: 403 });
+  }
 
   const streamItem = storage.getStream ? await storage.getStream(fullKey) : null;
   const bufferItem = streamItem ? null : await storage.get(fullKey);
@@ -21,7 +45,7 @@ export async function GET(
   }
 
   // AC-92: Private storage boundary - only owner can access private items (proofs, slips)
-  if (item.visibility === 'private') {
+  if (item.visibility === 'private' || fullKey.startsWith('proofs/')) {
     let reqHeaders: HeadersInit = request.headers;
     try {
       reqHeaders = await headers();

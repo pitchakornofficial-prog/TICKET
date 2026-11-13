@@ -4,6 +4,7 @@ import { ensureTicketSchema } from './tickets.ts';
 import { ensureAdmissionSchema } from './admission.ts';
 import { getVerifiedGuestSession, ensureGuestOtpSchema } from './guest-otp.ts';
 import { cleanPhoneNumber } from './guest-order-lookup.ts';
+import { validateTransferProof } from './proof-validation.ts';
 import { storage } from './storage.ts';
 
 export interface RefundRequestInput {
@@ -1436,6 +1437,16 @@ export async function recordManualRefundTransfer(
     };
   }
 
+  const proofCheck = validateTransferProof(input.transferProofKey, input.transferProofUrl);
+  if (!proofCheck.valid) {
+    return {
+      success: false,
+      status: 'error',
+      code: 'VALIDATION_ERROR',
+      error: proofCheck.error,
+    };
+  }
+
   await ensureRefundSchema(pool);
 
   const client = await pool.connect();
@@ -1503,9 +1514,19 @@ export async function recordManualRefundTransfer(
       };
     }
 
+    const requestedAmount = Number(req.requestedAmount);
     const transferAmount = input.transferredAmount !== undefined
       ? Number(input.transferredAmount)
-      : Number(req.requestedAmount);
+      : requestedAmount;
+    if (!Number.isFinite(transferAmount) || transferAmount <= 0 || transferAmount > requestedAmount) {
+      await client.query('ROLLBACK');
+      return {
+        success: false,
+        status: 'error',
+        code: 'INVALID_AMOUNT',
+        error: `จำนวนเงินที่โอนคืน (${transferAmount}) ต้องมากกว่า 0 และไม่เกินยอดที่ขอคืน (฿${requestedAmount.toLocaleString('th-TH')})`,
+      };
+    }
     const transferTime = input.transferredAt ?? new Date();
 
     // Settle liability in refund_liabilities (AC-37, G-36)
@@ -1531,8 +1552,8 @@ export async function recordManualRefundTransfer(
         req.id,
         transferTime,
         transferAmount,
-        input.transferProofKey ?? null,
-        input.transferProofUrl ?? null,
+        proofCheck.transferProofKey,
+        proofCheck.transferProofUrl,
         input.transferNote ?? null,
       ],
     );
@@ -1544,7 +1565,7 @@ export async function recordManualRefundTransfer(
       status: 'completed',
       transferredAmount: transferAmount,
       transferredAt: transferTime.toISOString(),
-      transferProofKey: input.transferProofKey,
+      transferProofKey: proofCheck.transferProofKey ?? undefined,
     };
   } catch (err) {
     await client.query('ROLLBACK');

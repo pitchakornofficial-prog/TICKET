@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { Pool } from 'pg';
 import { getAuth } from '@/server/auth';
 import { validateUploadedFile } from '@/server/file-validator';
+import { assertSameOrigin } from '@/server/origin';
 import { storage } from '@/server/storage';
 import {
   MAX_FILE_SIZE,
@@ -57,15 +58,18 @@ export async function handlePresignedRequest(
     return Response.json({ message: 'ประเภทไฟล์ไม่ถูกต้องตามที่ได้รับอนุญาต' }, { status: 400 });
   }
 
-  const normalizedContentType = contentType.trim().toLowerCase();
-  const dangerousTypes = [
-    'text/html',
-    'image/svg+xml',
-    'text/javascript',
-    'application/javascript',
-    'application/x-sh',
-  ];
-  if (dangerousTypes.includes(normalizedContentType)) {
+  const rawMime = contentType.split(';')[0].trim().toLowerCase();
+  const normalizedContentType = rawMime === 'image/jpg' ? 'image/jpeg' : rawMime;
+  const ALLOWED_PUBLIC_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
+  const ALLOWED_PRIVATE_MIME_TYPES = new Set([
+    'image/jpeg',
+    'image/png',
+    'image/webp',
+    'application/pdf',
+  ]);
+  const allowedMimeSet =
+    visibility === 'private' ? ALLOWED_PRIVATE_MIME_TYPES : ALLOWED_PUBLIC_MIME_TYPES;
+  if (!allowedMimeSet.has(normalizedContentType)) {
     return Response.json({ message: 'ประเภทไฟล์ไม่ถูกต้อง ไม่อนุญาตให้ใช้ไฟล์ประเภทนี้' }, { status: 400 });
   }
 
@@ -109,6 +113,9 @@ export async function handlePresignedRequest(
 }
 
 export async function POST(request: Request) {
+  const originError = assertSameOrigin(request);
+  if (originError) return originError;
+
   const auth = getAuth();
   const session = await auth.api.getSession({ headers: request.headers });
   if (!session || (session.user.role !== 'organizer' && session.user.role !== 'owner')) {

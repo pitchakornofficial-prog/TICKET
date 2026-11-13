@@ -77,7 +77,15 @@ export function getScannerEventScopeCookie(
     }
   }
 
-  // Backward compatibility: legacy format ${eventId}.${signature}
+  // Legacy 2-part format (${eventId}.${signature}) is disallowed in production
+  if (
+    process.env.NODE_ENV === 'production' ||
+    process.env.ALLOW_LEGACY_SCANNER_SCOPE_COOKIE === 'false'
+  ) {
+    return null;
+  }
+
+  // Backward compatibility (non-production tests): legacy format ${eventId}.${signature}
   const lastDot = scopeVal.lastIndexOf('.');
   if (lastDot === -1) return null;
   const eventId = scopeVal.slice(0, lastDot);

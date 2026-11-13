@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useId } from 'react';
 import Link from 'next/link';
+import { sanitizeGoogleMapsUrl } from '@/lib/google-maps-url';
 import {
   CheckCircleIcon,
   ClockIcon,
@@ -1341,7 +1342,7 @@ export function OrganizerEventsManager({
                     </div>
                     <a
                       href={
-                        googleMapsUrl.trim() ||
+                        sanitizeGoogleMapsUrl(googleMapsUrl) ||
                         (location.trim()
                           ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(location.trim())}`
                           : '#')
@@ -1353,8 +1354,8 @@ export function OrganizerEventsManager({
                         padding: '0.4rem 0.85rem',
                         fontSize: '0.82rem',
                         textDecoration: 'none',
-                        opacity: location.trim() || googleMapsUrl.trim() ? 1 : 0.5,
-                        pointerEvents: location.trim() || googleMapsUrl.trim() ? 'auto' : 'none',
+                        opacity: location.trim() || sanitizeGoogleMapsUrl(googleMapsUrl) ? 1 : 0.5,
+                        pointerEvents: location.trim() || sanitizeGoogleMapsUrl(googleMapsUrl) ? 'auto' : 'none',
                       }}
                       data-testid="test-map-pin-btn"
                     >

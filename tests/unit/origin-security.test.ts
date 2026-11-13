@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { assertSameOrigin, isAllowedOrigin } from '../../src/server/origin';
 
 describe('CSRF and Origin protection (assertSameOrigin)', () => {
@@ -150,6 +150,27 @@ describe('CSRF and Origin protection (assertSameOrigin)', () => {
       });
       expect(res.status).toBe(403);
     });
+  });
+
+  it('fails closed in production when both Origin and Referer are missing on state-changing requests', async () => {
+    vi.stubEnv('NODE_ENV', 'production');
+    vi.stubEnv('BETTER_AUTH_URL', 'https://tickets.example.com');
+    try {
+      const noHeadersReq = new Request('https://tickets.example.com/api/owner/invitations', {
+        method: 'POST',
+      });
+      const res = assertSameOrigin(noHeadersReq);
+      expect(res).not.toBeNull();
+      expect(res?.status).toBe(403);
+
+      const withOriginReq = new Request('https://tickets.example.com/api/owner/invitations', {
+        method: 'POST',
+        headers: { Origin: 'https://tickets.example.com' },
+      });
+      expect(assertSameOrigin(withOriginReq)).toBeNull();
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 });
 

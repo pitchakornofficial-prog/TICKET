@@ -1,4 +1,5 @@
 import { createHmac, randomInt, randomUUID, timingSafeEqual } from 'node:crypto';
+import { isIP } from 'node:net';
 import type { Pool } from 'pg';
 import { emailTransport, isNonRoutableEmailAddress } from './email.ts';
 import { inTransaction } from './database.ts';
@@ -28,22 +29,65 @@ export function hashOtpCode(code: string, salt: string): string {
   return createHmac('sha256', salt).update(code.trim()).digest('hex');
 }
 
-export function extractClientIp(request: Request): string {
-  const cfIp = request.headers.get('cf-connecting-ip');
-  if (cfIp) {
-    const trimmed = cfIp.trim();
-    if (trimmed) return trimmed;
+export type TrustedProxyMode = 'alb' | 'cloudflare';
+
+function getTrustedProxyMode(): TrustedProxyMode {
+  const mode = (process.env.TRUSTED_PROXY_MODE || 'alb').trim().toLowerCase();
+  return mode === 'cloudflare' ? 'cloudflare' : 'alb';
+}
+
+function getTrustedProxyHops(): number {
+  const raw = Number(process.env.TRUSTED_PROXY_HOPS || '1');
+  if (!Number.isInteger(raw) || raw < 1) return 1;
+  return raw;
+}
+
+function normalizeValidIp(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+  // Strip optional port on IPv4 (e.g. 203.0.113.1:12345) or brackets on IPv6
+  const withoutBrackets = trimmed.startsWith('[') && trimmed.includes(']')
+    ? trimmed.slice(1, trimmed.indexOf(']'))
+    : trimmed;
+  if (isIP(withoutBrackets) !== 0) return withoutBrackets;
+  const colonIdx = withoutBrackets.lastIndexOf(':');
+  if (colonIdx > 0 && !withoutBrackets.includes('::')) {
+    const maybeIpv4 = withoutBrackets.slice(0, colonIdx);
+    if (isIP(maybeIpv4) === 4) return maybeIpv4;
   }
+  return null;
+}
+
+export function extractClientIp(
+  request: Request,
+  options?: { mode?: TrustedProxyMode; trustedProxyHops?: number },
+): string {
+  const mode = options?.mode ?? getTrustedProxyMode();
+  const trustedProxyHops = options?.trustedProxyHops ?? getTrustedProxyHops();
+
+  if (mode === 'cloudflare') {
+    const cfIp = normalizeValidIp(request.headers.get('cf-connecting-ip'));
+    if (cfIp) return cfIp;
+  }
+
   const forwardedFor = request.headers.get('x-forwarded-for');
   if (forwardedFor) {
-    const first = forwardedFor.split(',')[0].trim();
-    if (first) return first;
+    const validIps = forwardedFor
+      .split(',')
+      .map(part => normalizeValidIp(part))
+      .filter((ip): ip is string => ip !== null);
+    if (validIps.length > 0) {
+      // Behind trusted proxy hops (e.g. AWS ALB = 1 hop), the rightmost IP before
+      // internal proxy hops is appended by the trusted proxy and cannot be spoofed.
+      const idx = Math.max(0, validIps.length - trustedProxyHops);
+      return validIps[idx];
+    }
   }
-  const realIp = request.headers.get('x-real-ip');
-  if (realIp) {
-    const trimmed = realIp.trim();
-    if (trimmed) return trimmed;
-  }
+
+  const realIp = normalizeValidIp(request.headers.get('x-real-ip'));
+  if (realIp) return realIp;
+
   return '127.0.0.1';
 }
 
