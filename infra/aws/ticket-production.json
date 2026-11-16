@@ -208,8 +208,8 @@
           "FARGATE"
         ],
         "NetworkMode": "awsvpc",
-        "Cpu": "512",
-        "Memory": "1024",
+        "Cpu": "1024",
+        "Memory": "2048",
         "RuntimePlatform": {
           "CpuArchitecture": "ARM64",
           "OperatingSystemFamily": "LINUX"
@@ -253,6 +253,10 @@
               {
                 "Name": "DATABASE_POOL_MAX",
                 "Value": "15"
+              },
+              {
+                "Name": "TRUST_PROXY",
+                "Value": "cloudflare"
               }
             ],
             "Secrets": [
@@ -266,6 +270,12 @@
                 "Name": "BETTER_AUTH_SECRET",
                 "ValueFrom": {
                   "Fn::Sub": "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/ticket/production/BETTER_AUTH_SECRET"
+                }
+              },
+              {
+                "Name": "GUEST_OTP_PEPPER",
+                "ValueFrom": {
+                  "Fn::Sub": "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/ticket/production/GUEST_OTP_PEPPER"
                 }
               },
               {

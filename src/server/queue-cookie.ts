@@ -10,7 +10,7 @@ interface QueueCookieClaims {
 }
 
 function signingKey(): string {
-  const secret = process.env.QUEUE_TOKEN_SECRET || process.env.BETTER_AUTH_SECRET;
+  const secret = process.env.QUEUE_TOKEN_SECRET?.trim() || process.env.BETTER_AUTH_SECRET?.trim();
   if (secret && secret.length >= 32) return secret;
   if (process.env.NODE_ENV === 'production') {
     throw new Error('QUEUE_TOKEN_SECRET or BETTER_AUTH_SECRET must contain at least 32 characters');

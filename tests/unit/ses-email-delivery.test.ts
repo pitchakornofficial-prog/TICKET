@@ -230,6 +230,8 @@ describe('Amazon SES Email Delivery Contract (TASK-045, AC-126, AC-127, AC-128)'
         DATABASE_URL: 'postgresql://user:password@database.internal/ticket',
         BETTER_AUTH_URL: 'https://ticket.phatysd.me',
         BETTER_AUTH_SECRET: 'x'.repeat(48),
+        GUEST_OTP_PEPPER: 'p'.repeat(32),
+        TRUST_PROXY: 'cloudflare',
         EMAIL_FROM: 'TICKET <tickets@ticket.phatysd.me>',
         SES_ACCESS_KEY_ID: 'AKIA_PRODUCTION_KEY',
         SES_SECRET_ACCESS_KEY: 's'.repeat(40),

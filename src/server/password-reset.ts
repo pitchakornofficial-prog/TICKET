@@ -13,7 +13,7 @@ export const RESET_WINDOW_SECONDS = 15 * 60; // 900 seconds
 export const RESET_MAX_REQUESTS_IN_WINDOW = 3;
 export const RESET_TOKEN_EXPIRATION_SECONDS = 30 * 60; // 1800 seconds
 
-async function ensurePasswordResetTokenSchema(pool: Pool): Promise<void> {
+export async function ensurePasswordResetTokenSchema(pool: Pool): Promise<void> {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS auth_password_reset_tokens (
       "userId" TEXT PRIMARY KEY,

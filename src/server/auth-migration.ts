@@ -37,6 +37,19 @@ export async function migrateAuth(pool: Pool): Promise<void> {
     await ensurePrimaryScannerSchema(pool);
     const { ensureUploadQuotaSchema } = await import('./upload-quota.ts');
     await ensureUploadQuotaSchema(pool);
+    const { ensureQueueSchema } = await import('./queue.ts');
+    await ensureQueueSchema(pool);
+    const { ensureGuestOtpSchema } = await import('./guest-otp.ts');
+    await ensureGuestOtpSchema(pool);
+    const { ensurePaymentSchema, ensureStripeWebhookInboxSchema } = await import('./payment.ts');
+    await ensurePaymentSchema(pool);
+    await ensureStripeWebhookInboxSchema(pool);
+    const { ensureUploadFinalizeSchema } = await import('./upload-finalization.ts');
+    await ensureUploadFinalizeSchema(pool);
+    const { ensurePasswordResetTokenSchema } = await import('./password-reset.ts');
+    await ensurePasswordResetTokenSchema(pool);
+    const { ensureOwnerContactInfoSchema } = await import('./owner-contact-info.ts');
+    await ensureOwnerContactInfoSchema(pool);
   } finally {
     try { await lock.query('SELECT pg_advisory_unlock($1)', [945162001]); }
     finally { lock.release(); }

@@ -2,6 +2,8 @@ import { describe, expect, it, vi } from 'vitest';
 import { csvCell, csvRow } from '../../src/lib/csv';
 import { validateTransferProof } from '../../src/server/proof-validation';
 import { createUploadFinalizeToken, readStorageItemBounded } from '../../src/server/upload-finalization';
+import { createOfflineAssignmentToken } from '../../src/server/offline-assignment-token';
+import { serializeQueueCookie } from '../../src/server/queue-cookie';
 import { destructiveDatabaseGuardErrors } from '../../scripts/destructive-db-guard';
 
 describe('Phase 4 security hardening', () => {
@@ -82,6 +84,27 @@ describe('Phase 4 security hardening', () => {
         maxFileSizeBytes: 1024,
         expiresAt: Date.now() + 60_000,
       })).toThrow(/at least 32 characters/);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it('trims optional signing secret overrides before fallback and length validation in production', () => {
+    vi.stubEnv('NODE_ENV', 'production');
+    vi.stubEnv('BETTER_AUTH_SECRET', 'b'.repeat(32));
+    try {
+      vi.stubEnv('OFFLINE_ASSIGNMENT_SECRET', '   ');
+      vi.stubEnv('QUEUE_TOKEN_SECRET', '   ');
+      expect(() => createOfflineAssignmentToken({ eventId: 'ev-1', scannerId: 'sc-1', assignmentEpoch: 1 })).not.toThrow();
+      expect(() => serializeQueueCookie('ev-1', 'qtok_1', 'sess-1')).not.toThrow();
+
+      vi.stubEnv('OFFLINE_ASSIGNMENT_SECRET', '  short  ');
+      expect(() => createOfflineAssignmentToken({ eventId: 'ev-1', scannerId: 'sc-1', assignmentEpoch: 1 })).toThrow(
+        /at least 32 characters/,
+      );
+
+      vi.stubEnv('QUEUE_TOKEN_SECRET', '  short  ');
+      expect(() => serializeQueueCookie('ev-1', 'qtok_1', 'sess-1')).toThrow(/at least 32 characters/);
     } finally {
       vi.unstubAllEnvs();
     }

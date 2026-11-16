@@ -22,9 +22,17 @@ export function productionConfigErrors(env) {
     const url = new URL(env.BETTER_AUTH_URL);
     if (url.protocol !== 'https:' || url.username || url.password || url.pathname !== '/' || url.search || url.hash) throw new Error();
   } catch { errors.push('BETTER_AUTH_URL must be an HTTPS origin'); }
-  if ((env.BETTER_AUTH_SECRET?.length || 0) < 32) errors.push('BETTER_AUTH_SECRET must have at least 32 characters');
-  for (const name of ['OFFLINE_ASSIGNMENT_SECRET', 'UPLOAD_FINALIZE_SECRET']) {
-    if (env[name] && env[name].length < 32) errors.push(`${name} must have at least 32 characters when set`);
+  if ((env.BETTER_AUTH_SECRET?.trim().length || 0) < 32) errors.push('BETTER_AUTH_SECRET must have at least 32 characters');
+  const guestOtpPepper = env.GUEST_OTP_PEPPER?.trim();
+  if (!guestOtpPepper) errors.push('GUEST_OTP_PEPPER is required');
+  else if (guestOtpPepper.length < 32) errors.push('GUEST_OTP_PEPPER must have at least 32 characters');
+  for (const name of ['OFFLINE_ASSIGNMENT_SECRET', 'UPLOAD_FINALIZE_SECRET', 'QUEUE_TOKEN_SECRET']) {
+    const value = env[name]?.trim();
+    if (value && value.length < 32) errors.push(`${name} must have at least 32 characters when set`);
+  }
+  const trustProxy = env.TRUST_PROXY?.trim().toLowerCase();
+  if (!(trustProxy === 'cloudflare' || /^[1-9]\d*$/.test(trustProxy || ''))) {
+    errors.push('TRUST_PROXY must be cloudflare or a positive integer proxy hop count');
   }
   const sesAccessKey = env.SES_ACCESS_KEY_ID?.trim() || env.AWS_ACCESS_KEY_ID?.trim();
   const sesSecretKey = env.SES_SECRET_ACCESS_KEY?.trim() || env.AWS_SECRET_ACCESS_KEY?.trim();

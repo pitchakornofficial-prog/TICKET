@@ -12,9 +12,12 @@ export const INVITATION_EXPIRATION_HOURS = 48;
 export const INVITATION_EXPIRATION_SECONDS = INVITATION_EXPIRATION_HOURS * 60 * 60; // 172800 seconds
 
 export class InvitationSecurityError extends Error {
-  constructor(message: string, readonly status: 400 | 401 | 403) {
+  readonly status: 400 | 401 | 403;
+
+  constructor(message: string, status: 400 | 401 | 403) {
     super(message);
     this.name = 'InvitationSecurityError';
+    this.status = status;
   }
 }
 

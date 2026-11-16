@@ -7,7 +7,7 @@ export interface OfflineAssignmentClaims {
 }
 
 function assignmentSecret(): string {
-  const secret = process.env.OFFLINE_ASSIGNMENT_SECRET || process.env.BETTER_AUTH_SECRET;
+  const secret = process.env.OFFLINE_ASSIGNMENT_SECRET?.trim() || process.env.BETTER_AUTH_SECRET?.trim();
   if (secret && secret.length >= 32) return secret;
   if (process.env.NODE_ENV !== 'production') return 'ticket-offline-assignment-local-test-only-secret';
   throw new Error('OFFLINE_ASSIGNMENT_SECRET or BETTER_AUTH_SECRET must contain at least 32 characters');

@@ -29,7 +29,7 @@ export class QueueRateLimitedError extends Error {
 const queueSchemaPromises = new WeakMap<Pool, Promise<void>>();
 
 function queueHash(value: string): string {
-  const secret = process.env.QUEUE_TOKEN_SECRET || process.env.BETTER_AUTH_SECRET;
+  const secret = process.env.QUEUE_TOKEN_SECRET?.trim() || process.env.BETTER_AUTH_SECRET?.trim();
   if (secret && secret.length >= 32) {
     return createHmac('sha256', secret).update(value).digest('hex');
   }
