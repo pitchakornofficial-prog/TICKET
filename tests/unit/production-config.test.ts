@@ -59,6 +59,14 @@ describe('production configuration gate', () => {
     expect(errors.join('\n')).toContain('STRIPE_SECRET_KEY');
     expect(errors.join('\n')).toContain('SES_ACCESS_KEY_ID');
   });
+  it.each(['OFFLINE_ASSIGNMENT_SECRET', 'UPLOAD_FINALIZE_SECRET'])(
+    'rejects %s when a configured signing override is shorter than 32 characters',
+    name => {
+      expect(productionConfigErrors({ ...valid, [name]: 'short' }).join('\n')).toContain(
+        `${name} must have at least 32 characters when set`,
+      );
+    },
+  );
   it('accepts only matching test keys in explicitly selected staging', () => {
     const staging = {
       ...valid,

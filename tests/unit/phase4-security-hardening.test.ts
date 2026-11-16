@@ -1,7 +1,7 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { csvCell, csvRow } from '../../src/lib/csv';
 import { validateTransferProof } from '../../src/server/proof-validation';
-import { readStorageItemBounded } from '../../src/server/upload-finalization';
+import { createUploadFinalizeToken, readStorageItemBounded } from '../../src/server/upload-finalization';
 import { destructiveDatabaseGuardErrors } from '../../scripts/destructive-db-guard';
 
 describe('Phase 4 security hardening', () => {
@@ -62,5 +62,28 @@ describe('Phase 4 security hardening', () => {
         visibility: 'public',
       }),
     })).rejects.toThrow('UPLOAD_TOO_LARGE');
+  });
+
+  it.each([
+    { UPLOAD_FINALIZE_SECRET: 'short', BETTER_AUTH_SECRET: 'b'.repeat(32) },
+    { UPLOAD_FINALIZE_SECRET: '', BETTER_AUTH_SECRET: 'short' },
+  ])('fails closed in production when the selected upload signing secret is shorter than 32 characters', env => {
+    vi.stubEnv('NODE_ENV', 'production');
+    vi.stubEnv('UPLOAD_FINALIZE_SECRET', env.UPLOAD_FINALIZE_SECRET);
+    vi.stubEnv('BETTER_AUTH_SECRET', env.BETTER_AUTH_SECRET);
+    try {
+      expect(() => createUploadFinalizeToken({
+        intentId: '123e4567-e89b-12d3-a456-426614174000',
+        actorId: 'owner-1',
+        uploadKey: 'pending/123e4567-e89b-12d3-a456-426614174000.png',
+        key: 'posters/123e4567-e89b-12d3-a456-426614174000.png',
+        contentType: 'image/png',
+        visibility: 'public',
+        maxFileSizeBytes: 1024,
+        expiresAt: Date.now() + 60_000,
+      })).toThrow(/at least 32 characters/);
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 });

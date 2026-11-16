@@ -23,6 +23,9 @@ export function productionConfigErrors(env) {
     if (url.protocol !== 'https:' || url.username || url.password || url.pathname !== '/' || url.search || url.hash) throw new Error();
   } catch { errors.push('BETTER_AUTH_URL must be an HTTPS origin'); }
   if ((env.BETTER_AUTH_SECRET?.length || 0) < 32) errors.push('BETTER_AUTH_SECRET must have at least 32 characters');
+  for (const name of ['OFFLINE_ASSIGNMENT_SECRET', 'UPLOAD_FINALIZE_SECRET']) {
+    if (env[name] && env[name].length < 32) errors.push(`${name} must have at least 32 characters when set`);
+  }
   const sesAccessKey = env.SES_ACCESS_KEY_ID?.trim() || env.AWS_ACCESS_KEY_ID?.trim();
   const sesSecretKey = env.SES_SECRET_ACCESS_KEY?.trim() || env.AWS_SECRET_ACCESS_KEY?.trim();
   if (!sesAccessKey) errors.push('SES_ACCESS_KEY_ID or AWS_ACCESS_KEY_ID is required for Amazon SES');

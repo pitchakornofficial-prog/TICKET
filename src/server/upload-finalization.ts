@@ -50,9 +50,9 @@ export async function ensureUploadFinalizeSchema(pool: Pool): Promise<void> {
 
 function tokenSecret(): string {
   const configured = process.env.UPLOAD_FINALIZE_SECRET?.trim() || process.env.BETTER_AUTH_SECRET?.trim();
-  if (configured) return configured;
+  if (configured && configured.length >= 32) return configured;
   if (process.env.NODE_ENV !== 'production') return 'ticket-local-upload-finalize-token-v1';
-  throw new Error('Upload finalization signing secret is not configured');
+  throw new Error('UPLOAD_FINALIZE_SECRET or BETTER_AUTH_SECRET must contain at least 32 characters');
 }
 
 function signature(payload: string): Buffer {
