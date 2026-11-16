@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { headers } from 'next/headers';
 import { getAuth, readActor } from '@/server/auth';
 import { storage } from '@/server/storage';
+import { parseImageVariant, transformPublicImage } from '@/server/image-variants';
 
 export const runtime = 'nodejs';
 
@@ -18,17 +19,14 @@ export async function GET(
     } catch {
       return new Response('Bad Request', { status: 400 });
     }
-    if (
-      !decoded ||
-      decoded === '.' ||
-      decoded === '..' ||
-      decoded.includes('/') ||
-      decoded.includes('\\') ||
-      decoded.includes('\0')
-    ) {
-      return new Response('Bad Request', { status: 400 });
+    // Existing storage URLs encode the whole key, including separators. Validate
+    // every decoded component so those URLs remain usable without traversal.
+    for (const part of decoded.split('/')) {
+      if (!part || part === '.' || part === '..' || part.includes('\\') || part.includes('\0')) {
+        return new Response('Bad Request', { status: 400 });
+      }
+      decodedSegments.push(part);
     }
-    decodedSegments.push(decoded);
   }
 
   const fullKey = decodedSegments.join('/');
@@ -37,7 +35,7 @@ export async function GET(
   }
 
   const streamItem = storage.getStream ? await storage.getStream(fullKey) : null;
-  const bufferItem = streamItem ? null : await storage.get(fullKey);
+  let bufferItem = streamItem ? null : await storage.get(fullKey);
   const item = streamItem ?? bufferItem;
 
   if (!item) {
@@ -45,7 +43,8 @@ export async function GET(
   }
 
   // AC-92: Private storage boundary - only owner can access private items (proofs, slips)
-  if (item.visibility === 'private' || fullKey.startsWith('proofs/')) {
+  const isPrivate = item.visibility === 'private' || fullKey.startsWith('proofs/');
+  if (isPrivate) {
     let reqHeaders: HeadersInit = request.headers;
     try {
       reqHeaders = await headers();
@@ -75,21 +74,38 @@ export async function GET(
     contentDisposition = `attachment; filename="${safeFilename}"`;
   }
 
-  const etag =
+  let etag =
     streamItem?.etag ||
     (bufferItem
       ? `"${createHash('sha256').update(bufferItem.data).digest('hex').slice(0, 16)}"`
       : undefined);
 
   const cacheControl =
-    item.visibility === 'private'
+    isPrivate
       ? 'private, no-cache, no-store, must-revalidate'
       : 'public, max-age=31536000, immutable';
 
-  if (item.visibility === 'public' && etag) {
+  let variantData: Buffer | null = null;
+  const variant = !isPrivate && SAFE_INLINE_IMAGE_TYPES.has(item.contentType) ? parseImageVariant(request.url) : null;
+  if (variant) {
+    // Originals keep the streaming path. Only requested public image variants
+    // are buffered; proof bytes are never transformed or publicly cached.
+    const source = bufferItem?.data ?? Buffer.from(await new Response(streamItem?.stream).arrayBuffer());
+    bufferItem = { data: source, contentType: item.contentType, visibility: item.visibility };
+    try {
+      const transformed = await transformPublicImage(fullKey, source, item.contentType, variant);
+      variantData = transformed.data;
+      effectiveContentType = transformed.contentType;
+    } catch {
+      variantData = source;
+    }
+    etag = `"${createHash('sha256').update(variantData).digest('hex').slice(0, 16)}"`;
+  }
+
+  if (!isPrivate && etag) {
     const ifNoneMatch = request.headers.get('if-none-match');
     if (ifNoneMatch && (ifNoneMatch === etag || ifNoneMatch === '*')) {
-      await streamItem?.stream.cancel().catch(() => {});
+      if (!variant) await streamItem?.stream.cancel().catch(() => {});
       return new Response(null, {
         status: 304,
         headers: {
@@ -112,12 +128,12 @@ export async function GET(
   if (etag) {
     responseHeaders.ETag = etag;
   }
-  const contentLength = streamItem?.contentLength ?? bufferItem?.data.byteLength;
+  const contentLength = variantData?.byteLength ?? streamItem?.contentLength ?? bufferItem?.data.byteLength;
   if (contentLength !== undefined) {
     responseHeaders['Content-Length'] = String(contentLength);
   }
 
-  const body: BodyInit | null = streamItem
+  const body: BodyInit | null = variantData ? new Uint8Array(variantData) : streamItem
     ? streamItem.stream
     : bufferItem
       ? new Uint8Array(bufferItem.data)

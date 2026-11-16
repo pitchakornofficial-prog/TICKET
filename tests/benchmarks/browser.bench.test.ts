@@ -14,12 +14,12 @@ it('measures real HTTP polling/images and native Chromium IndexedDB', async () =
 });
 
 it('does not serve a stale transformed poster after source-key replacement', async () => {
-  const key = 'benchmark-overwritten-poster.jpg';
+  const key = 'posters/benchmark-overwritten-poster.jpg';
   const image = async (background: string) => sharp({ create: {
     width: 640, height: 800, channels: 3, background,
   } }).jpeg().toBuffer();
   const get = () => GET(new Request(`http://127.0.0.1/api/media/${key}?w=360&fm=webp`), {
-    params: Promise.resolve({ key: [key] }),
+    params: Promise.resolve({ key: key.split('/') }),
   });
   try {
     await storage.put(key, await image('#ff0000'), 'image/jpeg', 'public');

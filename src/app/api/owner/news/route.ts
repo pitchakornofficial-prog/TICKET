@@ -2,6 +2,7 @@ import { createSafeErrorResponse } from '@/server/api-error';
 import { assertSameOrigin } from '@/server/origin';
 import { getAuth } from '@/server/auth';
 import { listOwnerNews, createNews } from '@/server/news';
+import { safeRevalidateTag } from '@/server/cache';
 import type { Pool } from 'pg';
 
 export const runtime = 'nodejs';
@@ -55,6 +56,7 @@ export async function POST(request: Request) {
       coverUrl: body.coverUrl,
       authorId: session.user.id,
     });
+    if (newsItem.status === 'published') safeRevalidateTag('public-news');
     return Response.json({ message: 'บันทึกข่าวสารสำเร็จ', newsItem }, { status: 201 });
   } catch (error: unknown) {
     return createSafeErrorResponse(error, 'เกิดข้อผิดพลาดในการบันทึกข่าว', { defaultStatus: 500 });

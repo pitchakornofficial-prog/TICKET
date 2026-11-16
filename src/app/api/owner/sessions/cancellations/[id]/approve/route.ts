@@ -4,6 +4,7 @@ import { headers } from 'next/headers';
 import { getAuth, readActor } from '@/server/auth';
 import { getDatabasePool } from '@/server/database';
 import { approveSessionCancellation } from '@/server/events';
+import { safeRevalidateTag } from '@/server/cache';
 
 export const runtime = 'nodejs';
 
@@ -30,6 +31,7 @@ export async function POST(
       ownerId: actor.id,
     });
 
+    safeRevalidateTag('public-events');
     return Response.json(result, { status: 200 });
   } catch (error: unknown) {
     return createSafeErrorResponse(error, 'เกิดข้อผิดพลาดในการอนุมัติการยกเลิกรอบการแสดง', { defaultStatus: 400 });

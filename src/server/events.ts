@@ -1050,9 +1050,12 @@ export async function addScannerToEvent(
     await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`scanner-quota:${eventId}`]);
     const quotaRes = await client.query<{ totalCount: string; additionalCount: string }>(
       `SELECT COUNT(*)::text AS "totalCount",
-              COUNT(*) FILTER (WHERE NOT COALESCE("isPrimary", false))::text AS "additionalCount"
-       FROM event_scanners
-       WHERE "eventId" = $1`,
+              COUNT(*) FILTER (WHERE primary_scanner."scannerId" IS NULL)::text AS "additionalCount"
+       FROM event_scanners assigned
+       LEFT JOIN event_primary_scanners primary_scanner
+         ON primary_scanner."eventId" = assigned."eventId"
+        AND primary_scanner."scannerId" = assigned."scannerId"
+       WHERE assigned."eventId" = $1`,
       [eventId],
     );
     const totalCount = Number(quotaRes.rows[0]?.totalCount ?? 0);

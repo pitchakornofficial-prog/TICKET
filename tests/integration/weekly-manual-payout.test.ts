@@ -133,7 +133,7 @@ describe('TASK-029: Weekly Manual Payout Integration Tests (AC-27, AC-30, AC-31,
 
     // Put a dummy proof slip in private storage
     const proofFile = Buffer.from('PDF_SLIP_PROOF_TASK_029');
-    const uploadResult = await storage.put('payout-proof-test-1.pdf', proofFile, 'application/pdf', 'private');
+    const uploadResult = await storage.put('proofs/payout-proof-test-1.pdf', proofFile, 'application/pdf', 'private');
 
     // Owner records weekly manual payout of 1710 THB
     const payoutResult = await recordEventPayout(fixture.pool, {
@@ -173,7 +173,7 @@ describe('TASK-029: Weekly Manual Payout Integration Tests (AC-27, AC-30, AC-31,
     await purchaseTickets(event.id, sessionId, ticketTypeId, 1); // 1000 THB -> fee 50 -> E 950 -> H 95 -> payable 855
 
     const proofFile = Buffer.from('CONFIDENTIAL_BANK_SLIP_AC_92');
-    const upload = await storage.put('slip-private-ac92.png', proofFile, 'image/png', 'private');
+    const upload = await storage.put('proofs/slip-private-ac92.png', proofFile, 'image/png', 'private');
 
     const payout = await recordEventPayout(fixture.pool, {
       eventId: event.id,

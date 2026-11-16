@@ -487,14 +487,23 @@ export function parseMoneyReportQueryOptions(requestUrl: string): GetEventMoneyR
  * Aggregates order/session/event totals in PostgreSQL and supports optional order pagination or summary-only mode.
  */
 export async function getEventMoneyReport(
+  pool: Pool,
+  eventId: string,
+  actor: ActorContext,
+  options?: GetEventMoneyReportOptions,
+): Promise<EventMoneyReportDetail> {
+  await ensureReportSchema(pool);
+  return readEventMoneyReport(pool, eventId, actor, options);
+}
+
+// Transaction callers initialize schema on the pool before BEGIN, then read
+// through the checked-out client without reconnecting or running nested DDL.
+async function readEventMoneyReport(
   pool: Pool | PoolClient,
   eventId: string,
   actor: ActorContext,
   options?: GetEventMoneyReportOptions,
 ): Promise<EventMoneyReportDetail> {
-  if ('connect' in pool) {
-    await ensureReportSchema(pool);
-  }
 
   // 1. Role enforcement (AC-82): Scanners are strictly rejected
   if (actor.role === 'scanner') {
@@ -1143,7 +1152,7 @@ export async function recordEventPayout(
       );
 
       if (recentDup.rowCount && recentDup.rowCount > 0) {
-        const report = await getEventMoneyReport(
+        const report = await readEventMoneyReport(
           client,
           input.eventId,
           { id: input.recordedBy || '', role: 'owner' },
@@ -1161,7 +1170,7 @@ export async function recordEventPayout(
 
     // 2. For completed payouts, verify current payable readiness before insert (AC-27, AC-30, AC-79)
     if (status === 'completed') {
-      const currentReport = await getEventMoneyReport(
+      const currentReport = await readEventMoneyReport(
         client,
         input.eventId,
         { id: input.recordedBy || '', role: 'owner' },
@@ -1211,7 +1220,7 @@ export async function recordEventPayout(
       ],
     );
 
-    const updatedReport = await getEventMoneyReport(
+    const updatedReport = await readEventMoneyReport(
       client,
       input.eventId,
       { id: input.recordedBy || '', role: 'owner' },

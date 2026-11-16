@@ -6,7 +6,9 @@ import { revalidateTag } from 'next/cache';
  */
 export function safeRevalidateTag(tag: string): void {
   try {
-    revalidateTag(tag, 'max');
+    // Mutations must be visible on the very next read. 'max' permits one stale
+    // response while refreshing, which is incorrect after approval/publication.
+    revalidateTag(tag, { expire: 0 });
   } catch {
     // No-op outside Next.js server request context
   }

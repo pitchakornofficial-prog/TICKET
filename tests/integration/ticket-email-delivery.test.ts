@@ -125,7 +125,8 @@ describe('Ticket Email Delivery & Failure Recovery (TASK-017, AC-20, AC-75)', ()
     expect(ticketEmail?.html).toContain('คอนเสิร์ต ส่งอีเมลบัตร AC-20');
     expect(ticketEmail?.html).toContain(processRes.tickets?.[0].ticketCode);
     expect(ticketEmail?.html).toContain(processRes.tickets?.[1].ticketCode);
-    expect(ticketEmail?.html).toContain(`https://tickets.example.com/orders/${reservation.id}/success?tab=tickets&token=ordtok_`);
+    expect(ticketEmail?.html).toContain(`https://tickets.example.com/orders/${reservation.id}/success?tab=tickets&amp;token=ordtok_`);
+    expect(ticketEmail?.text).toContain(`https://tickets.example.com/orders/${reservation.id}/success?tab=tickets&token=ordtok_`);
     expect(ticketEmail?.text).not.toContain('127.0.0.1');
 
     // Verify the direct link from the email enforces OTP before reading order or tickets (AC-63, G-17)
@@ -303,6 +304,7 @@ describe('Ticket Email Delivery & Failure Recovery (TASK-017, AC-20, AC-75)', ()
     expect(captured).toHaveLength(1);
     expect(captured[0].to).toBe(buyerEmail);
     expect(captured[0].subject).toContain(reservation.id);
-    expect(captured[0].html).toContain(`https://tickets.example.com/orders/${reservation.id}/success?tab=tickets&token=ordtok_`);
+    expect(captured[0].html).toContain(`https://tickets.example.com/orders/${reservation.id}/success?tab=tickets&amp;token=ordtok_`);
+    expect(captured[0].text).toContain(`https://tickets.example.com/orders/${reservation.id}/success?tab=tickets&token=ordtok_`);
   });
 });
