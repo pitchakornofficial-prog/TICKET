@@ -1,8 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { POST as presignedUploadPost } from '../../src/app/api/upload/presigned/route';
 import { POST as uploadPost } from '../../src/app/api/upload/route';
+import { POST as uploadFinalizePost } from '../../src/app/api/upload/finalize/route';
+import { GET as mediaGet } from '../../src/app/api/media/[...key]/route';
 import { R2StorageDriver } from '../../src/server/storage-r2';
 import { storage } from '../../src/server/storage';
+import sharp from 'sharp';
 import {
   MAX_REQUEST_BODY_SIZE,
   MAX_UPLOADS_PER_WINDOW,
@@ -13,6 +16,9 @@ import {
 
 let currentRole = 'organizer';
 let currentUserId = 'user-org-1';
+const validPngBuffer = await sharp({
+  create: { width: 2, height: 2, channels: 4, background: { r: 240, g: 60, b: 30, alpha: 1 } },
+}).png().toBuffer();
 
 vi.mock('@/server/auth', () => ({
   getAuth: () => ({
@@ -43,10 +49,6 @@ vi.mock('@/server/auth', () => ({
 }));
 
 describe('Issue #10: Upload DoS Prevention, Quota & Presigned URL Direct Upload', () => {
-  const validPngBuffer = Buffer.from([
-    0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52,
-  ]);
-
   function createUploadRequest(
     fileBuffer: Buffer,
     fileName: string,
@@ -268,6 +270,11 @@ describe('Issue #10: Upload DoS Prevention, Quota & Presigned URL Direct Upload'
       expect(body.headers['Content-Type']).toBe('image/webp');
       expect(body.headers['Content-Length']).toBe(String(2 * 1024 * 1024));
       expect(body.headers['x-amz-meta-visibility']).toBe('public');
+      expect(body.uploadKey).toMatch(/^pending\//);
+      expect(body.finalizeUrl).toBe('/api/upload/finalize');
+      expect(body.finalizeToken).toBeTruthy();
+      expect(body.url).toBeUndefined();
+      expect(body.publicUrl).toBeUndefined();
     });
 
     it('supports presigned URL mode via POST /api/upload when Content-Type is application/json', async () => {
@@ -286,6 +293,108 @@ describe('Issue #10: Upload DoS Prevention, Quota & Presigned URL Direct Upload'
       const body = await res.json();
       expect(body.uploadUrl).toBeDefined();
       expect(body.key).toMatch(/^posters\/.*\.png$/);
+    });
+
+    it('keeps a presigned object inactive until bounded magic-byte validation and finalization succeed', async () => {
+      const intentRes = await uploadPost(new Request('http://localhost:3000/api/upload', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          filename: 'poster.png',
+          contentType: 'image/png',
+          fileSize: 1024 * 1024,
+          visibility: 'public',
+        }),
+      }));
+      expect(intentRes.status).toBe(200);
+      const intent = await intentRes.json();
+      expect(intent.url).toBeUndefined();
+      expect(intent.publicUrl).toBeUndefined();
+
+      const { PUT } = await import('../../src/app/api/media/direct-upload/route');
+      const trailingPayload = Buffer.concat([validPngBuffer, Buffer.from('untrusted trailing data')]);
+      const uploadRes = await PUT(new Request(`http://localhost:3000${intent.uploadUrl}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'image/png' },
+        body: new Uint8Array(trailingPayload),
+      }));
+      expect(uploadRes.status).toBe(200);
+      expect(await storage.get(intent.key)).toBeNull();
+      expect(await storage.get(intent.uploadKey)).toBeTruthy();
+
+      const finalizeRes = await uploadFinalizePost(new Request('http://localhost:3000/api/upload/finalize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: intent.finalizeToken }),
+      }));
+      expect(finalizeRes.status).toBe(200);
+      const finalized = await finalizeRes.json();
+      expect(finalized.key).toBe(intent.key);
+      expect(finalized.url).toMatch(/^\/api\/media\//);
+      const stored = await storage.get(intent.key);
+      expect(stored).toBeTruthy();
+      if (!stored) throw new Error('Finalized poster was not moved to active storage');
+      expect(stored.data.includes(Buffer.from('untrusted trailing data'))).toBe(false);
+      expect(await sharp(stored.data).metadata()).toMatchObject({ format: 'png', width: 2, height: 2 });
+      expect(await storage.get(intent.uploadKey)).toBeNull();
+      const replay = await uploadFinalizePost(new Request('http://localhost:3000/api/upload/finalize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: intent.finalizeToken }),
+      }));
+      expect(replay.status).toBe(409);
+    });
+
+    it('finalizes private proofs only to the owner-checked media route', async () => {
+      currentRole = 'owner';
+      const intentRes = await presignedUploadPost(new Request('http://localhost:3000/api/upload/presigned', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          filename: 'transfer-proof.pdf',
+          contentType: 'application/pdf',
+          fileSize: 1024,
+          visibility: 'private',
+        }),
+      }));
+      expect(intentRes.status).toBe(200);
+      const intent = await intentRes.json();
+      expect(intent.key).toMatch(/^proofs\//);
+      expect(intent.url).toBeUndefined();
+      expect(intent.publicUrl).toBeUndefined();
+
+      const { PUT } = await import('../../src/app/api/media/direct-upload/route');
+      const pdf = Buffer.from('%PDF-1.4\n1 0 obj\n<<>>\nendobj\ntrailer\n<<>>\n%%EOF');
+      const uploadRes = await PUT(new Request(`http://localhost:3000${intent.uploadUrl}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/pdf' },
+        body: new Uint8Array(pdf),
+      }));
+      expect(uploadRes.status).toBe(200);
+
+      const finalizeRes = await uploadFinalizePost(new Request('http://localhost:3000/api/upload/finalize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: intent.finalizeToken }),
+      }));
+      expect(finalizeRes.status).toBe(200);
+      const finalized = await finalizeRes.json();
+      expect(finalized.url).toBe(`/api/media/${encodeURIComponent(intent.key)}`);
+      expect(finalized.url).not.toContain('r2');
+
+      currentRole = 'organizer';
+      const proofKey = intent.key as string;
+      const forbidden = await mediaGet(new Request(`http://localhost:3000${finalized.url}`), {
+        params: Promise.resolve({ key: proofKey.split('/') }),
+      });
+      expect(forbidden.status).toBe(403);
+
+      currentRole = 'owner';
+      const allowed = await mediaGet(new Request(`http://localhost:3000${finalized.url}`), {
+        params: Promise.resolve({ key: proofKey.split('/') }),
+      });
+      expect(allowed.status).toBe(200);
+      expect(allowed.headers.get('Content-Type')).toBe('application/pdf');
     });
 
     it('rejects presigned URL request for private files by non-owner (AC-92)', async () => {
@@ -386,7 +495,7 @@ describe('Issue #10: Upload DoS Prevention, Quota & Presigned URL Direct Upload'
 
       // Request presigned URL with max 10 bytes allowed
       const presigned = await storage.createPresignedUploadUrl(
-        'posters/direct-upload-size-test.png',
+        'pending/direct-upload-size-test.png',
         'image/png',
         'public',
         10, // max 10 bytes
@@ -410,7 +519,7 @@ describe('Issue #10: Upload DoS Prevention, Quota & Presigned URL Direct Upload'
 
     it('executes direct upload via presigned token and verifies content in storage', async () => {
       const presigned = await storage.createPresignedUploadUrl(
-        'posters/direct-upload-test.png',
+        'pending/direct-upload-test.png',
         'image/png',
         'public',
         validPngBuffer.length,
@@ -431,12 +540,14 @@ describe('Issue #10: Upload DoS Prevention, Quota & Presigned URL Direct Upload'
       expect(uploadRes.status).toBe(200);
       const uploadBody = await uploadRes.json();
       expect(uploadBody.success).toBe(true);
+      expect(uploadBody.requiresFinalize).toBe(true);
 
       // Verify item exists in storage
       const storedItem = await storage.get(presigned.key);
       expect(storedItem).toBeDefined();
+      if (!storedItem) throw new Error('Uploaded file was not stored');
       expect(storedItem?.contentType).toBe('image/png');
-      expect(storedItem?.data.equals(validPngBuffer)).toBe(true);
+      expect(await sharp(storedItem.data).metadata()).toMatchObject({ format: 'png', width: 2, height: 2 });
 
       // Token should now be consumed and cannot be reused
       const replayReq = new Request(`http://localhost:3000${presigned.uploadUrl}`, {
@@ -452,7 +563,7 @@ describe('Issue #10: Upload DoS Prevention, Quota & Presigned URL Direct Upload'
       const { PUT } = await import('../../src/app/api/media/direct-upload/route');
 
       const presigned = await storage.createPresignedUploadUrl(
-        'posters/concurrent-race-test.png',
+        'pending/concurrent-race-test.png',
         'image/png',
         'public',
         validPngBuffer.length,
@@ -480,7 +591,7 @@ describe('Issue #10: Upload DoS Prevention, Quota & Presigned URL Direct Upload'
       const { PUT } = await import('../../src/app/api/media/direct-upload/route');
 
       const presigned = await storage.createPresignedUploadUrl(
-        'posters/content-type-mismatch.png',
+        'pending/content-type-mismatch.png',
         'image/png',
         'public',
         validPngBuffer.length,
@@ -507,7 +618,7 @@ describe('Issue #10: Upload DoS Prevention, Quota & Presigned URL Direct Upload'
 
       // Presigned for image/jpeg
       const presigned = await storage.createPresignedUploadUrl(
-        'posters/magic-bytes-mismatch.jpg',
+        'pending/magic-bytes-mismatch.jpg',
         'image/jpeg',
         'public',
         validPngBuffer.length,

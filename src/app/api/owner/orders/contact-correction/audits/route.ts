@@ -22,7 +22,7 @@ export async function GET() {
   try {
     const pool = getDatabasePool();
     const audits = await getAllOrderContactAuditLogs(pool, actor);
-    return Response.json({ audits }, { status: 200, headers: { 'Cache-Control': 'no-store' } });
+    return Response.json({ audits }, { status: 200, headers: { 'Cache-Control': 'private, no-store, no-cache, must-revalidate' } });
   } catch (error: unknown) {
     return createSafeErrorResponse(error, 'เกิดข้อผิดพลาดในการดึงประวัติการแก้ไขข้อมูลติดต่อ', { defaultStatus: 500 });
   }

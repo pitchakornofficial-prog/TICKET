@@ -74,11 +74,6 @@ export function GuestCheckoutEntry({
   const [verifiedBuyer, setVerifiedBuyer] = useState<VerifiedBuyerInfo | null>(null);
   const [isPending, startTransition] = useTransition();
 
-  function getQueueToken(): string | null {
-    if (typeof window === 'undefined' || !eventId) return null;
-    return sessionStorage.getItem(`ticket_queue_token_${eventId}`);
-  }
-
   // Cooldown countdown timer
   useEffect(() => {
     if (cooldownSeconds <= 0) return;
@@ -112,7 +107,6 @@ export function GuestCheckoutEntry({
             purpose: 'checkout',
             eventId,
             requestedQuantity: totalTickets,
-            queueToken: getQueueToken(),
           }),
         });
 
@@ -140,9 +134,9 @@ export function GuestCheckoutEntry({
         if (!isResend) {
           setStep('otp');
           if (onStepChange) onStepChange('otp');
-          setSuccessMsg('ส่งรหัส OTP 6 หลักไปยังอีเมลของคุณเรียบร้อยแล้ว');
+          setSuccessMsg(data.message || 'หากคำขอนี้ผ่านเงื่อนไข รหัส OTP จะถูกส่งไปยังอีเมล');
         } else {
-          setSuccessMsg('ส่งรหัส OTP ใหม่ไปยังอีเมลเรียบร้อยแล้ว (รหัสเดิมถูกยกเลิกแล้ว)');
+          setSuccessMsg(data.message || 'หากคำขอนี้ผ่านเงื่อนไข รหัส OTP ใหม่จะถูกส่งไปยังอีเมล');
         }
         setTimeout(() => {
           inputRefs.current[0]?.focus();
@@ -293,7 +287,6 @@ export function GuestCheckoutEntry({
             purpose: 'checkout',
             eventId,
             buyer: cleanBuyer,
-            queueToken: getQueueToken(),
           }),
         });
 

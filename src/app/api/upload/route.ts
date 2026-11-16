@@ -2,6 +2,8 @@ import { randomUUID } from 'node:crypto';
 import type { Pool } from 'pg';
 import { getAuth } from '@/server/auth';
 import { validateUploadedFile } from '@/server/file-validator';
+import { createUploadFinalizeToken, persistUploadFinalizeIntent } from '@/server/upload-finalization';
+import { sanitizePublicImage } from '@/server/upload-image';
 import { assertSameOrigin } from '@/server/origin';
 import { storage } from '@/server/storage';
 import {
@@ -73,7 +75,9 @@ export async function handlePresignedRequest(
     return Response.json({ message: 'ประเภทไฟล์ไม่ถูกต้อง ไม่อนุญาตให้ใช้ไฟล์ประเภทนี้' }, { status: 400 });
   }
 
-  const size = typeof fileSize === 'number' && fileSize > 0 ? fileSize : 1024 * 1024;
+  const size = typeof fileSize === 'number' && Number.isInteger(fileSize) && fileSize > 0
+    ? fileSize
+    : 1024 * 1024;
   if (size > MAX_FILE_SIZE) {
     return Response.json({ message: 'ขนาดไฟล์เกินขีดจำกัด (สูงสุด 15MB)' }, { status: 400 });
   }
@@ -93,23 +97,51 @@ export async function handlePresignedRequest(
   }
 
   const prefix = visibility === 'private' ? 'proofs' : 'posters';
-  const key = `${prefix}/${randomUUID()}.${ext}`;
+  const fileId = randomUUID();
+  const normalizedExt = ext === 'jpeg' ? 'jpg' : ext;
+  const key = `${prefix}/${fileId}.${normalizedExt}`;
+  const uploadKey = `pending/${fileId}.${normalizedExt}`;
 
   // Bound the presigned upload URL strictly to the reserved size
-  const presigned = await storage.createPresignedUploadUrl(
-    key,
-    normalizedContentType,
-    visibility,
-    size,
-  );
+  try {
+    const presigned = await storage.createPresignedUploadUrl(
+      uploadKey,
+      normalizedContentType,
+      visibility,
+      size,
+    );
+    const finalizeClaims = {
+      intentId: randomUUID(),
+      actorId: user.id,
+      uploadKey,
+      key,
+      contentType: normalizedContentType,
+      visibility,
+      maxFileSizeBytes: size,
+      reservationId: quota.reservationId,
+      expiresAt: Date.now() + presigned.expiresInSeconds * 1000,
+    } as const;
+    await persistUploadFinalizeIntent(pool, finalizeClaims);
+    const finalizeToken = createUploadFinalizeToken(finalizeClaims);
 
-  return Response.json(
-    {
-      ...presigned,
-      url: presigned.publicUrl,
-    },
-    { status: 200 },
-  );
+    return Response.json(
+      {
+        uploadUrl: presigned.uploadUrl,
+        uploadKey,
+        key,
+        method: presigned.method,
+        headers: presigned.headers,
+        maxFileSizeBytes: presigned.maxFileSizeBytes,
+        expiresInSeconds: presigned.expiresInSeconds,
+        finalizeUrl: '/api/upload/finalize',
+        finalizeToken,
+      },
+      { status: 200 },
+    );
+  } catch {
+    await releaseUploadQuota(pool, quota.reservationId);
+    return Response.json({ message: 'ไม่สามารถเตรียมการอัปโหลดไฟล์ได้' }, { status: 502 });
+  }
 }
 
 export async function POST(request: Request) {
@@ -219,12 +251,30 @@ export async function POST(request: Request) {
     return Response.json({ message: validation.error }, { status: 400 });
   }
 
+  const normalizedClaimedContentType = claimedContentType.split(';')[0].trim().toLowerCase()
+    .replace(/^image\/jpg$/, 'image/jpeg');
+  if (validation.detectedContentType !== normalizedClaimedContentType) {
+    await releaseUploadQuota(pool, quota.reservationId);
+    return Response.json({ message: 'ชนิดไฟล์จริงไม่ตรงกับชนิดที่ส่งมา' }, { status: 400 });
+  }
+
   const finalContentType = validation.detectedContentType || 'application/octet-stream';
   const finalExt = validation.normalizedExtension || 'png';
   const prefix = visibility === 'private' ? 'proofs' : 'posters';
   const key = `${prefix}/${randomUUID()}.${finalExt}`;
 
-  const { url } = await storage.put(key, buffer, finalContentType, visibility);
+  let finalBuffer: Buffer = buffer;
+  if (visibility === 'public') {
+    try {
+      finalBuffer = await sanitizePublicImage(buffer, finalContentType);
+    } catch {
+      await releaseUploadQuota(pool, quota.reservationId);
+      return Response.json({ message: 'ไฟล์ภาพเสียหายหรือไม่สามารถแปลงเป็นภาพที่ปลอดภัยได้' }, { status: 400 });
+    }
+  }
+
+  const stored = await storage.put(key, finalBuffer, finalContentType, visibility);
+  const url = visibility === 'private' ? `/api/media/${encodeURIComponent(key)}` : stored.url;
 
   return Response.json({ url, key }, { status: 201 });
 }

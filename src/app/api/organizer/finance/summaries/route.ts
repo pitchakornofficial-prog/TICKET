@@ -37,7 +37,7 @@ export async function GET(request: Request) {
       organizerId,
     );
 
-    return Response.json({ summaries }, { status: 200, headers: { 'Cache-Control': 'no-store' } });
+    return Response.json({ summaries }, { status: 200, headers: { 'Cache-Control': 'private, no-store, no-cache, must-revalidate' } });
   } catch (error: unknown) {
     return createSafeErrorResponse(error, 'เกิดข้อผิดพลาดในการดึงสรุปข้อมูลการเงิน', {
       defaultStatus: 500,

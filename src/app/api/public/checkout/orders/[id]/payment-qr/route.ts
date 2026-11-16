@@ -37,7 +37,7 @@ export async function POST(
     }
 
     const charge = await createPaymentQr(pool, { orderId, verifiedToken });
-    return Response.json({ charge }, { status: 200, headers: { 'Cache-Control': 'no-store' } });
+    return Response.json({ charge }, { status: 200, headers: { 'Cache-Control': 'private, no-store, no-cache, must-revalidate' } });
   } catch (error: unknown) {
     return createSafeErrorResponse(error, 'เกิดข้อผิดพลาดในการสร้าง QR ชำระเงิน', {
       defaultStatus: 400,
@@ -66,7 +66,7 @@ export async function GET(
     if (!charge) {
       return Response.json({ message: 'ยังไม่มีข้อมูลการชำระเงินสำหรับคำสั่งซื้อนี้' }, { status: 404 });
     }
-    return Response.json({ charge }, { status: 200, headers: { 'Cache-Control': 'no-store' } });
+    return Response.json({ charge }, { status: 200, headers: { 'Cache-Control': 'private, no-store, no-cache, must-revalidate' } });
   } catch (error: unknown) {
     return createSafeErrorResponse(error, 'เกิดข้อผิดพลาดในการดึงข้อมูล QR ชำระเงิน', {
       defaultStatus: 500,

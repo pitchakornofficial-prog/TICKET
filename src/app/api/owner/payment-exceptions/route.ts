@@ -15,7 +15,7 @@ export async function GET(request: Request) {
   const pool = getDatabasePool();
   try {
     const cases = await listPaymentRecoveryCases(pool);
-    return Response.json({ cases }, { status: 200, headers: { 'Cache-Control': 'no-store' } });
+    return Response.json({ cases }, { status: 200, headers: { 'Cache-Control': 'private, no-store, no-cache, must-revalidate' } });
   } catch (error: unknown) {
     return createSafeErrorResponse(error, 'เกิดข้อผิดพลาดในการโหลดรายการตรวจสอบ', { defaultStatus: 500 });
   }

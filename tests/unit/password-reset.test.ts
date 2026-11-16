@@ -8,6 +8,9 @@ import {
 import { handleAuthRequest } from '../../src/server/auth-http';
 import type { TicketAuth } from '../../src/server/auth';
 import type { Pool } from 'pg';
+import { authOptions } from '../../src/server/auth-options';
+import { recordPasswordResetTokenIdentifier } from '../../src/server/password-reset';
+import { hashPasswordResetIdentifier } from '../../src/server/password-reset-hash';
 
 describe('password reset security constants under G-18/ADR-0004', () => {
   it('enforces 30-minute token expiration and 60-second cooldown', () => {
@@ -48,5 +51,39 @@ describe('password reset security constants under G-18/ADR-0004', () => {
 
     expect(mockPool.query).not.toHaveBeenCalled();
     expect(mockAuth.handler).not.toHaveBeenCalled();
+  });
+});
+
+describe('password reset token storage hardening', () => {
+  it('configures Better Auth to hash password-reset identifiers in the database', async () => {
+    const pool = { query: vi.fn() } as unknown as Pool;
+    const options = authOptions(pool, {
+      baseURL: 'http://127.0.0.1:3000',
+      secret: 'local-test-secret-with-at-least-32-characters',
+    });
+    const verification = options.verification as unknown as {
+      storeIdentifier: {
+        default: string;
+        overrides: Record<string, { hash: (identifier: string) => Promise<string> }>;
+      };
+    };
+    const storage = verification.storeIdentifier;
+    const resetStrategy = storage.overrides['reset-password:'];
+    const identifier = 'reset-password:raw-reset-token';
+
+    expect(storage.default).toBe('plain');
+    expect(await resetStrategy.hash(identifier)).toBe(hashPasswordResetIdentifier(identifier));
+    expect(await resetStrategy.hash(identifier)).not.toContain('raw-reset-token');
+  });
+
+  it('records only a deterministic hash for the latest reset identifier', async () => {
+    const pool = { query: vi.fn().mockResolvedValue({ rowCount: 1, rows: [] }) } as unknown as Pool;
+    const identifier = 'reset-password:secret-reset-token';
+
+    await recordPasswordResetTokenIdentifier(pool, 'user-1', identifier);
+
+    const stored = vi.mocked(pool.query).mock.calls.at(-1);
+    expect(stored?.[1]).toEqual(['user-1', hashPasswordResetIdentifier(identifier)]);
+    expect(stored?.[1]?.[1]).not.toBe(identifier);
   });
 });

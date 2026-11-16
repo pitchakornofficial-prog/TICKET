@@ -39,7 +39,7 @@ export async function POST(request: Request) {
           maskedEmail: result.maskedEmail,
           cooldownSeconds: result.cooldownSeconds,
         },
-        { status, headers: { 'Cache-Control': 'no-store' } },
+        { status, headers: { 'Cache-Control': 'private, no-store, no-cache, must-revalidate' } },
       );
     }
 
@@ -51,7 +51,7 @@ export async function POST(request: Request) {
         cooldownSeconds: result.cooldownSeconds,
         expiresInSeconds: result.expiresInSeconds,
       },
-      { status: 200, headers: { 'Cache-Control': 'no-store' } },
+      { status: 200, headers: { 'Cache-Control': 'private, no-store, no-cache, must-revalidate' } },
     );
   } catch (error: unknown) {
     return createSafeErrorResponse(error, 'เกิดข้อผิดพลาดในการขอรหัส OTP', { defaultStatus: 500 });

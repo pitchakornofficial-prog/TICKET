@@ -100,7 +100,7 @@ export async function POST(
       result.status === 'cancelled_session_refund_face_value' ||
       result.status === 'cancelled_session_refund_full';
     const status = isProcessed ? 200 : 400;
-    return Response.json(result, { status, headers: { 'Cache-Control': 'no-store' } });
+    return Response.json(result, { status, headers: { 'Cache-Control': 'private, no-store, no-cache, must-revalidate' } });
   } catch (error: unknown) {
     return createSafeErrorResponse(error, 'เกิดข้อผิดพลาดในการประมวลผลการชำระเงิน', {
       defaultStatus: 500,

@@ -41,7 +41,7 @@ export async function GET(
     }
 
     const data = await getEventOfflineControl(pool, eventId);
-    return Response.json(data, { status: 200, headers: { 'Cache-Control': 'no-store' } });
+    return Response.json(data, { status: 200, headers: { 'Cache-Control': 'private, no-store, no-cache, must-revalidate' } });
   } catch (error: unknown) {
     return createSafeErrorResponse(error, 'เกิดข้อผิดพลาดในการดึงสถานะออฟไลน์', { defaultStatus: 500 });
   }

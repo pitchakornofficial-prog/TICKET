@@ -18,7 +18,7 @@ export async function POST(request: Request) {
     if (!orderId || !linkToken || !code || !requestId) {
       return Response.json(
         { message: 'กรุณากรอกข้อมูลการยืนยัน OTP ให้ครบถ้วน' },
-        { status: 400, headers: { 'Cache-Control': 'no-store' } },
+        { status: 400, headers: { 'Cache-Control': 'private, no-store, no-cache, must-revalidate' } },
       );
     }
 
@@ -45,7 +45,7 @@ export async function POST(request: Request) {
           message: result.error,
           code: result.code,
         },
-        { status, headers: { 'Cache-Control': 'no-store' } },
+        { status, headers: { 'Cache-Control': 'private, no-store, no-cache, must-revalidate' } },
       );
     }
 
@@ -54,7 +54,7 @@ export async function POST(request: Request) {
         success: true,
         token: result.verifiedToken,
       },
-      { status: 200, headers: { 'Cache-Control': 'no-store' } },
+      { status: 200, headers: { 'Cache-Control': 'private, no-store, no-cache, must-revalidate' } },
     );
   } catch (error: unknown) {
     return createSafeErrorResponse(error, 'เกิดข้อผิดพลาดในการยืนยัน OTP', { defaultStatus: 500 });

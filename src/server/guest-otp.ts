@@ -26,20 +26,31 @@ export const OTP_IP_WINDOW_SECONDS = 15 * 60; // 900s (15 minutes)
 export const OTP_IP_MAX_REQUESTS_IN_WINDOW = 20; // 20 requests per IP per 15 minutes
 
 export function hashOtpCode(code: string, salt: string): string {
-  return createHmac('sha256', salt).update(code.trim()).digest('hex');
+  const configuredPepper = process.env.GUEST_OTP_PEPPER?.trim();
+  if (configuredPepper && configuredPepper.length < 32) {
+    throw new Error('GUEST_OTP_PEPPER must contain at least 32 characters');
+  }
+  if (process.env.NODE_ENV === 'production' && !configuredPepper) {
+    throw new Error('GUEST_OTP_PEPPER is required in production');
+  }
+  const pepper = configuredPepper
+    || process.env.BETTER_AUTH_SECRET?.trim()
+    || `ticket-local-guest-otp-pepper-${process.env.NODE_ENV || 'development'}`;
+  return createHmac('sha256', pepper).update(`${salt}:${code.trim()}`, 'utf8').digest('hex');
 }
 
 export type TrustedProxyMode = 'alb' | 'cloudflare';
 
 function getTrustedProxyMode(): TrustedProxyMode {
-  const mode = (process.env.TRUSTED_PROXY_MODE || 'alb').trim().toLowerCase();
-  return mode === 'cloudflare' ? 'cloudflare' : 'alb';
+  return process.env.TRUST_PROXY?.trim().toLowerCase() === 'cloudflare' ? 'cloudflare' : 'alb';
 }
 
-function getTrustedProxyHops(): number {
-  const raw = Number(process.env.TRUSTED_PROXY_HOPS || '1');
-  if (!Number.isInteger(raw) || raw < 1) return 1;
-  return raw;
+function getTrustedProxyHops(): number | null {
+  const raw = process.env.TRUST_PROXY?.trim().toLowerCase();
+  if (!raw) return null;
+  if (raw === 'cloudflare') return 1;
+  const hops = Number(raw);
+  return Number.isInteger(hops) && hops > 0 ? hops : null;
 }
 
 function normalizeValidIp(raw: string | null | undefined): string | null {
@@ -63,8 +74,12 @@ export function extractClientIp(
   request: Request,
   options?: { mode?: TrustedProxyMode; trustedProxyHops?: number },
 ): string {
+  const envTrustedHops = getTrustedProxyHops();
+  const explicitlyTrusted = options?.mode !== undefined || options?.trustedProxyHops !== undefined || envTrustedHops !== null;
+  if (!explicitlyTrusted) return '127.0.0.1';
+
   const mode = options?.mode ?? getTrustedProxyMode();
-  const trustedProxyHops = options?.trustedProxyHops ?? getTrustedProxyHops();
+  const trustedProxyHops = options?.trustedProxyHops ?? envTrustedHops ?? 1;
 
   if (mode === 'cloudflare') {
     const cfIp = normalizeValidIp(request.headers.get('cf-connecting-ip'));
@@ -73,26 +88,30 @@ export function extractClientIp(
 
   const forwardedFor = request.headers.get('x-forwarded-for');
   if (forwardedFor) {
-    const validIps = forwardedFor
-      .split(',')
-      .map(part => normalizeValidIp(part))
-      .filter((ip): ip is string => ip !== null);
-    if (validIps.length > 0) {
-      // Behind trusted proxy hops (e.g. AWS ALB = 1 hop), the rightmost IP before
-      // internal proxy hops is appended by the trusted proxy and cannot be spoofed.
-      const idx = Math.max(0, validIps.length - trustedProxyHops);
-      return validIps[idx];
+    const forwardedIps = forwardedFor.split(',').map(part => part.trim());
+    if (forwardedIps.length >= trustedProxyHops) {
+      // Select from the right by the explicitly trusted proxy count. Do not
+      // discard malformed hops first, since that could shift an attacker value.
+      const idx = forwardedIps.length - trustedProxyHops;
+      const clientIp = normalizeValidIp(forwardedIps[idx]);
+      if (clientIp) return clientIp;
     }
   }
-
-  const realIp = normalizeValidIp(request.headers.get('x-real-ip'));
-  if (realIp) return realIp;
 
   return '127.0.0.1';
 }
 
 export const ALLOWED_OTP_PURPOSES = ['checkout', 'order_lookup'] as const;
-export type OtpPurpose = (typeof ALLOWED_OTP_PURPOSES)[number];
+export type OtpPurpose = (typeof ALLOWED_OTP_PURPOSES)[number] | `order_lookup:${string}`;
+
+function isAllowedOtpPurpose(purpose: string): purpose is OtpPurpose {
+  return ALLOWED_OTP_PURPOSES.includes(purpose as (typeof ALLOWED_OTP_PURPOSES)[number])
+    || /^order_lookup:[A-Za-z0-9_-]{1,128}$/.test(purpose);
+}
+
+export function isOrderLookupPurposeForOrder(purpose: string, orderId: string): boolean {
+  return purpose === 'order_lookup' || purpose === `order_lookup:${orderId}`;
+}
 
 export interface GuestBuyerDetails {
   name: string;
@@ -413,11 +432,7 @@ export async function ensureGuestOtpSchema(pool: Pool): Promise<void> {
                 RETURN;
               END IF;
 
-              IF v_otp.code IS NOT NULL AND length(v_otp.code) = 64 THEN
-                v_match := (v_otp.code = p_expected_hash);
-              ELSE
-                v_match := (v_otp.code = p_submitted_code);
-              END IF;
+              v_match := COALESCE(v_otp.code = p_expected_hash, FALSE);
 
               IF NOT v_match THEN
                 v_fail_count := v_fail_count + 1;
@@ -533,7 +548,7 @@ export async function requestGuestOtp(
   const now = input.now ?? new Date();
   const nowMs = now.getTime();
   const rawPurpose = input.purpose?.trim() || 'checkout';
-  if (!ALLOWED_OTP_PURPOSES.includes(rawPurpose as OtpPurpose)) {
+  if (!isAllowedOtpPurpose(rawPurpose)) {
     return {
       success: false,
       error: 'วัตถุประสงค์ (purpose) ในการขอรหัส OTP ไม่ถูกต้อง',
@@ -879,7 +894,7 @@ export async function verifyGuestOtp(
   const nowMs = now.getTime();
   const email = input.email?.trim().toLowerCase();
   const rawPurpose = input.purpose?.trim() || 'checkout';
-  if (!ALLOWED_OTP_PURPOSES.includes(rawPurpose as OtpPurpose)) {
+  if (!isAllowedOtpPurpose(rawPurpose)) {
     return {
       success: false,
       error: 'วัตถุประสงค์ (purpose) ในการตรวจสอบรหัส OTP ไม่ถูกต้อง',
@@ -1015,16 +1030,12 @@ export async function verifyGuestOtp(
     }
 
     // Code match check with timing-safe comparison (Issue #16)
-    let isCodeMatch = false;
-    if (otpRow.code && otpRow.code.length === 64) {
-      const expectedHash = hashOtpCode(submittedCode, requestId);
-      const storedBuf = Buffer.from(otpRow.code, 'hex');
-      const expectedBuf = Buffer.from(expectedHash, 'hex');
-      isCodeMatch = storedBuf.length === expectedBuf.length && timingSafeEqual(storedBuf, expectedBuf);
-    } else {
-      // Fallback for legacy plaintext codes
-      isCodeMatch = otpRow.code === submittedCode;
-    }
+    const expectedHash = hashOtpCode(submittedCode, requestId);
+    const storedBuf = typeof otpRow.code === 'string' && /^[0-9a-f]{64}$/i.test(otpRow.code)
+      ? Buffer.from(otpRow.code, 'hex')
+      : Buffer.alloc(0);
+    const expectedBuf = Buffer.from(expectedHash, 'hex');
+    const isCodeMatch = storedBuf.length === expectedBuf.length && timingSafeEqual(storedBuf, expectedBuf);
 
     if (!isCodeMatch) {
       failCount += 1;
@@ -1126,7 +1137,7 @@ export async function getVerifiedGuestSession(
 
   if (expectedPurpose) {
     const allowed = Array.isArray(expectedPurpose) ? expectedPurpose : [expectedPurpose];
-    if (!allowed.includes(row.purpose as OtpPurpose)) {
+    if (!allowed.some(purpose => purpose === row.purpose || (purpose === 'order_lookup' && typeof row.purpose === 'string' && row.purpose.startsWith('order_lookup:')))) {
       return null;
     }
   }

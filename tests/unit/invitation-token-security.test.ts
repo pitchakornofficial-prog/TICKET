@@ -54,6 +54,7 @@ describe('Invitation Token Hashing & Exposure Prevention (Item 10)', () => {
       'http://127.0.0.1:3000',
       new Date(),
       'organizer',
+      { userId: 'owner-1', name: 'Owner', email: 'owner@example.com' },
     );
 
     // Raw token is generated and returned to internal caller
@@ -82,15 +83,15 @@ describe('Invitation Token Hashing & Exposure Prevention (Item 10)', () => {
         if (queryText.includes('CREATE TABLE') || queryText.includes('ALTER TABLE') || queryText.includes('CREATE INDEX')) {
           return { rowCount: 0, rows: [] };
         }
-        if (queryText.includes('FROM organizer_invitations WHERE token = $1 OR token = $2')) {
+        if (queryText.includes('FROM organizer_invitations WHERE token_hash = $1')) {
           expect(params[0]).toBe(expectedHash);
-          expect(params[1]).toBe(rawToken);
           return {
             rowCount: 1,
             rows: [
               {
                 id: 'inv-1',
                 email: 'invited@example.com',
+                token_hash: expectedHash,
                 role: 'owner',
                 status: 'pending',
                 expiresAt: new Date(Date.now() + 100000),
@@ -106,6 +107,26 @@ describe('Invitation Token Hashing & Exposure Prevention (Item 10)', () => {
     expect(verification.valid).toBe(true);
     expect(verification.email).toBe('invited@example.com');
     expect(verification.role).toBe('owner');
+  });
+
+  it('does not accept a database token hash as the raw invitation token', async () => {
+    const rawToken = 'only-the-raw-token-is-accepted';
+    const storedHash = hashInvitationToken(rawToken);
+    const mockPool = {
+      query: vi.fn().mockImplementation((queryText: string, params: unknown[]) => {
+        if (queryText.includes('CREATE TABLE') || queryText.includes('ALTER TABLE') || queryText.includes('CREATE INDEX')) {
+          return { rowCount: 0, rows: [] };
+        }
+        if (queryText.includes('FROM organizer_invitations WHERE token_hash = $1')) {
+          expect(params[0]).toBe(hashInvitationToken(storedHash));
+          return { rowCount: 0, rows: [] };
+        }
+        return { rowCount: 0, rows: [] };
+      }),
+    } as unknown as Pool;
+
+    const verification = await verifyInvitation(mockPool, storedHash);
+    expect(verification).toEqual({ valid: false, reason: 'not_found' });
   });
 
   it('listOrganizerInvitations does not leak tokens', async () => {

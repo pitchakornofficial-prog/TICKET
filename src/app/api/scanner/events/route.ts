@@ -48,7 +48,7 @@ export async function GET(request: Request) {
           role: session.user.role,
         },
       },
-      { status: 200, headers: { 'Cache-Control': 'no-store' } },
+      { status: 200, headers: { 'Cache-Control': 'private, no-store, no-cache, must-revalidate' } },
     );
   } catch (error: unknown) {
     return createSafeErrorResponse(error, 'เกิดข้อผิดพลาดในการดึงรายการงานที่ได้รับมอบหมาย', { defaultStatus: 500 });

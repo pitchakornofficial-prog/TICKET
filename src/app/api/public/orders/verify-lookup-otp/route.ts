@@ -7,7 +7,7 @@ export const runtime = 'nodejs';
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { email, phone, code, requestId } = body || {};
+    const { email, phone, code, requestId, orderId } = body || {};
 
     if (!email || !phone || !code || !requestId) {
       return Response.json({ message: 'กรุณากรอกข้อมูลให้ครบถ้วน' }, { status: 400 });
@@ -19,6 +19,7 @@ export async function POST(request: Request) {
       phone,
       code,
       requestId,
+      orderId,
     });
 
     if (!result.success) {
@@ -37,7 +38,7 @@ export async function POST(request: Request) {
         success: true,
         token: result.verifiedToken,
       },
-      { status: 200, headers: { 'Cache-Control': 'no-store' } },
+      { status: 200, headers: { 'Cache-Control': 'private, no-store, no-cache, must-revalidate' } },
     );
   } catch (error: unknown) {
     return createSafeErrorResponse(error, 'เกิดข้อผิดพลาดในการยืนยัน OTP', { defaultStatus: 500 });

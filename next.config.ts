@@ -37,6 +37,13 @@ const securityHeaders = [
   },
 ];
 
+const privateNoStoreHeaders = [
+  {
+    key: 'Cache-Control',
+    value: 'private, no-store, no-cache, must-revalidate',
+  },
+];
+
 const nextConfig: NextConfig = {
   distDir: process.env.NEXT_DIST_DIR || '.next',
   output: 'standalone',
@@ -48,6 +55,14 @@ const nextConfig: NextConfig = {
   },
   async headers() {
     return [
+      ...[
+        '/api/auth/:path*',
+        '/api/owner/:path*',
+        '/api/organizer/:path*',
+        '/api/scanner/:path*',
+        '/api/public/checkout/:path*',
+        '/api/public/orders/:path*',
+      ].map(source => ({ source, headers: privateNoStoreHeaders })),
       {
         source: '/:path*',
         headers: securityHeaders,

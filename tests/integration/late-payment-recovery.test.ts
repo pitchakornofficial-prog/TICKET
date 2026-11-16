@@ -6,11 +6,13 @@ import { requestGuestOtp, verifyGuestOtp } from '../../src/server/guest-otp';
 import { createReservation } from '../../src/server/reservation';
 import {
   createPaymentQr,
+  processStripeSuccessEvent,
   verifyAndProcessPayment,
   listPaymentRecoveryCases,
 } from '../../src/server/payment';
 import { getOrderTickets } from '../../src/server/tickets';
 import { getCapturedEmails, clearCapturedEmails } from '../../src/server/email';
+import { getStripeClient, type StripeContractDouble } from '../../src/server/stripe';
 
 describe('Late Payment Recovery & Quota Reallocation (TASK-016, AC-72, AC-73, AC-74, G-23, G-35)', () => {
   let fixture: Awaited<ReturnType<typeof authFixture>>;
@@ -328,5 +330,85 @@ describe('Late Payment Recovery & Quota Reallocation (TASK-016, AC-72, AC-73, AC
     expect(c?.reason).toBe('insufficient_quota');
     expect(c?.orderId).toBe(reservation1.id);
     expect(c?.amount).toBe(reservation1.total); // Full paid amount, including customer fee
+  });
+
+  it('aggregates duplicate order items before checking late-payment quota', async () => {
+    const t0 = new Date('2026-12-10T10:00:00.000Z');
+    const event = await createEventDraft(
+      fixture.pool,
+      fixture.ids.organizer,
+      { title: 'Late Payment Aggregated Quota', location: 'Test venue', limitPerOrder: 4 },
+      [{
+        startTime: '2026-12-10T19:00:00.000Z',
+        endTime: '2026-12-10T22:00:00.000Z',
+        ticketTypes: [{ name: 'Limited', price: 1000, quota: 4 }],
+      }],
+    );
+    const sessionId = event.sessions[0].id;
+    await approveSession(fixture.pool, sessionId, fixture.ids.owner);
+    const ticketTypeId = event.sessions[0].ticketTypes[0].id;
+
+    const lateToken = await getVerifiedToken('late-aggregate@example.com', 'Late buyer', t0);
+    const lateReservation = await createReservation(
+      fixture.pool,
+      {
+        verifiedToken: lateToken,
+        eventId: event.id,
+        sessionId,
+        items: [
+          { ticketTypeId, quantity: 2 },
+          { ticketTypeId, quantity: 2 },
+        ],
+      },
+      t0,
+    );
+    const lateCharge = await createPaymentQr(fixture.pool, {
+      orderId: lateReservation.id,
+      verifiedToken: lateToken,
+    }, t0);
+
+    const expiredAt = new Date(t0.getTime() + 16 * 60 * 1000);
+    await fixture.pool.query(
+      `UPDATE orders SET status = 'expired', "updatedAt" = $2 WHERE id = $1`,
+      [lateReservation.id, expiredAt],
+    );
+
+    const buyerToken = await getVerifiedToken('winner-aggregate@example.com', 'Quota winner', expiredAt);
+    const winner = await createReservation(
+      fixture.pool,
+      {
+        verifiedToken: buyerToken,
+        eventId: event.id,
+        sessionId,
+        items: [{ ticketTypeId, quantity: 1 }],
+      },
+      expiredAt,
+    );
+    const winnerCharge = await createPaymentQr(fixture.pool, {
+      orderId: winner.id,
+      verifiedToken: buyerToken,
+    }, expiredAt);
+    await verifyAndProcessPayment(fixture.pool, {
+      chargeId: winnerCharge.id,
+      providerPaidAt: expiredAt,
+      actualAmount: winnerCharge.amount,
+      actualCurrency: 'thb',
+    }, expiredAt);
+
+    const stripe = getStripeClient() as StripeContractDouble;
+    const lateEvent = stripe.createSuccessEvent({
+      intentId: lateCharge.id,
+      created: Math.floor((t0.getTime() + 10 * 60 * 1000) / 1000),
+    });
+    const lateResult = await processStripeSuccessEvent(
+      fixture.pool,
+      { event: lateEvent },
+      new Date(expiredAt.getTime() + 60_000),
+    );
+
+    expect(lateResult.status).toBe('insufficient_quota');
+    expect(lateResult.caseId).toBeDefined();
+    expect(await getOrderTickets(fixture.pool, lateReservation.id)).toHaveLength(0);
+    expect(await getOrderTickets(fixture.pool, winner.id)).toHaveLength(1);
   });
 });

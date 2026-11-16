@@ -1,6 +1,7 @@
 import { randomBytes, randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import { ensureReservationSchema } from './reservation.ts';
+import { createTicketQrMatrix } from './qr-code.ts';
 
 export interface TicketDetail {
   id: string;
@@ -47,122 +48,25 @@ export async function ensureTicketSchema(pool: Pool): Promise<void> {
   return promise;
 }
 
-const QR_SIZE = 25;
-const QR_STATIC_MATRIX = new Uint8Array(QR_SIZE * QR_SIZE);
-const QR_IS_FUNCTION = new Uint8Array(QR_SIZE * QR_SIZE);
-
-(() => {
-  function setFinder(row: number, col: number) {
-    for (let r = -1; r <= 7; r++) {
-      for (let c = -1; c <= 7; c++) {
-        const nr = row + r;
-        const nc = col + c;
-        if (nr >= 0 && nr < QR_SIZE && nc >= 0 && nc < QR_SIZE) {
-          const idx = nr * QR_SIZE + nc;
-          QR_IS_FUNCTION[idx] = 1;
-          if (r >= 0 && r <= 6 && c >= 0 && c <= 6) {
-            QR_STATIC_MATRIX[idx] =
-              r === 0 || r === 6 || c === 0 || c === 6 || (r >= 2 && r <= 4 && c >= 2 && c <= 4) ? 1 : 0;
-          }
-        }
-      }
-    }
-  }
-  setFinder(0, 0);
-  setFinder(0, QR_SIZE - 7);
-  setFinder(QR_SIZE - 7, 0);
-
-  for (let r = -2; r <= 2; r++) {
-    for (let c = -2; c <= 2; c++) {
-      const idx = (18 + r) * QR_SIZE + (18 + c);
-      QR_IS_FUNCTION[idx] = 1;
-      if (Math.abs(r) === 2 || Math.abs(c) === 2 || (r === 0 && c === 0)) {
-        QR_STATIC_MATRIX[idx] = 1;
-      }
-    }
-  }
-
-  for (let i = 8; i < QR_SIZE - 8; i++) {
-    const bit = i % 2 === 0 ? 1 : 0;
-    QR_IS_FUNCTION[6 * QR_SIZE + i] = 1;
-    QR_STATIC_MATRIX[6 * QR_SIZE + i] = bit;
-    QR_IS_FUNCTION[i * QR_SIZE + 6] = 1;
-    QR_STATIC_MATRIX[i * QR_SIZE + 6] = bit;
-  }
-
-  QR_IS_FUNCTION[(QR_SIZE - 8) * QR_SIZE + 8] = 1;
-  QR_STATIC_MATRIX[(QR_SIZE - 8) * QR_SIZE + 8] = 1;
-
-  for (let i = 0; i < 9; i++) {
-    QR_IS_FUNCTION[8 * QR_SIZE + i] = 1;
-    QR_IS_FUNCTION[i * QR_SIZE + 8] = 1;
-  }
-  for (let i = QR_SIZE - 8; i < QR_SIZE; i++) {
-    QR_IS_FUNCTION[8 * QR_SIZE + i] = 1;
-    QR_IS_FUNCTION[i * QR_SIZE + 8] = 1;
-  }
-})();
-
 /**
- * Generates an authentic black-and-white 2D QR matrix SVG derived directly from ticketCode (D-165).
- * Free of artificial color blocks or center circles, rendering genuine dark modules (#0f172a) on white.
+ * Generates a scannable QR Code Model 2 SVG containing the actual ticket payload.
+ * The four-module quiet zone and correction level M make the matrix suitable for print.
  */
 export function generateTicketQrSvg(ticketCode: string, qrPayload: string): string {
-  const size = QR_SIZE;
-  const matrix = new Uint8Array(QR_STATIC_MATRIX);
-
-  // Fill data modules deterministically directly from ticketCode bytes
-  const code = ticketCode || 'TK-000000-0000-00';
-  const codeLen = code.length;
-  let seed = 0x811c9dc5;
-  for (let i = 0; i < codeLen; i++) {
-    seed ^= code.charCodeAt(i);
-    seed = Math.imul(seed, 0x01000193) >>> 0;
-  }
-  function nextByte(): number {
-    seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
-    return (seed >>> 16) & 0xff;
-  }
-
-  let bitIndex = 0;
-  let byteIdx = 0;
-  let currentByte = codeLen > 0 ? code.charCodeAt(0) : nextByte();
-
-  for (let right = size - 1; right > 0; right -= 2) {
-    if (right === 6) right--;
-    const upward = ((size - 1 - right) / 2) % 2 === 0;
-    for (let vert = 0; vert < size; vert++) {
-      const r = upward ? size - 1 - vert : vert;
-      const rowOff = r * size;
-      for (let c = right; c >= right - 1; c--) {
-        const idx = rowOff + c;
-        if (QR_IS_FUNCTION[idx] === 0) {
-          const bit = (currentByte >> (7 - (bitIndex & 7))) & 1;
-          const mask = ((r + c) & 1) === 0 ? 1 : 0;
-          matrix[idx] = bit ^ mask;
-          bitIndex++;
-          if ((bitIndex & 7) === 0) {
-            byteIdx++;
-            currentByte = byteIdx < codeLen ? code.charCodeAt(byteIdx) : nextByte();
-          }
-        }
-      }
-    }
-  }
-
+  const matrix = createTicketQrMatrix(qrPayload);
+  const size = matrix.length;
   const moduleSize = 8;
-  const padding = 16;
+  const padding = 4 * moduleSize;
   const totalSize = size * moduleSize + padding * 2;
   let pathD = '';
   for (let r = 0; r < size; r++) {
     const y = padding + r * moduleSize;
-    const rowOff = r * size;
     let c = 0;
     while (c < size) {
-      if (matrix[rowOff + c] === 1) {
+      if (matrix[r][c] === 1) {
         const startC = c;
         c++;
-        while (c < size && matrix[rowOff + c] === 1) c++;
+        while (c < size && matrix[r][c] === 1) c++;
         pathD += `M${padding + startC * moduleSize} ${y}h${(c - startC) * moduleSize}v${moduleSize}h-${(c - startC) * moduleSize}z`;
       } else {
         c++;
@@ -170,7 +74,13 @@ export function generateTicketQrSvg(ticketCode: string, qrPayload: string): stri
     }
   }
 
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${totalSize} ${totalSize}" width="${totalSize}" height="${totalSize}" style="background:#ffffff"><desc>${qrPayload}</desc><rect width="${totalSize}" height="${totalSize}" fill="#ffffff"/><path fill="#0f172a" d="${pathD}"/><text x="${totalSize / 2}" y="${totalSize - 4}" font-family="monospace" font-size="7" fill="#64748b" text-anchor="middle" style="display:none">${ticketCode}</text></svg>`;
+  const escapeXml = (value: string) => value
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&apos;');
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${totalSize} ${totalSize}" width="${totalSize}" height="${totalSize}" role="img" aria-label="Ticket QR code"><desc>${escapeXml(qrPayload)}</desc><rect width="${totalSize}" height="${totalSize}" fill="#ffffff"/><path fill="#0f172a" d="${pathD}"/><text x="${totalSize / 2}" y="${totalSize - 4}" font-family="monospace" font-size="7" fill="#64748b" text-anchor="middle" style="display:none">${escapeXml(ticketCode || 'TK-000000-0000-00')}</text></svg>`;
 
   return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
 }

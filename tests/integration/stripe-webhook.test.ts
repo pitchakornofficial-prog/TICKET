@@ -548,6 +548,33 @@ describe('Stripe Verified Webhook Ticket Issuance Integration (TASK-043, AC-119,
     expect(validData.status).toBe('paid');
     expect(validData.ticketCount).toBe(1);
 
+    const inboxRes = await fixture.pool.query<{
+      status: string;
+      rawBody: string;
+      attempts: number;
+    }>(
+      `SELECT status, "rawBody", attempts FROM stripe_webhook_inbox WHERE id = $1`,
+      [testEvent.id],
+    );
+    expect(inboxRes.rows[0]?.status).toBe('processed');
+    expect(inboxRes.rows[0]?.rawBody).toBe(rawBody);
+    expect(Number(inboxRes.rows[0]?.attempts)).toBe(1);
+
+    const replayRes = await handleStripeWebhook(
+      new Request('http://localhost/api/webhooks/stripe', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'stripe-signature': validHeader },
+        body: rawBody,
+      }),
+    );
+    expect(replayRes.status).toBe(200);
+    expect((await replayRes.json()).duplicate).toBe(true);
+    const retryInboxRes = await fixture.pool.query<{ attempts: number }>(
+      `SELECT attempts FROM stripe_webhook_inbox WHERE id = $1`,
+      [testEvent.id],
+    );
+    expect(Number(retryInboxRes.rows[0]?.attempts)).toBe(2);
+
     // Tickets are indeed in DB
     const dbTickets = await getOrderTickets(fixture.pool, reservation.id);
     expect(dbTickets).toHaveLength(1);

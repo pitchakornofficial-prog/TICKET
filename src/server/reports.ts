@@ -1,9 +1,10 @@
 import { randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import { inTransaction } from './database.ts';
+import { lockEventFinancial } from './event-lock.ts';
 import { storage } from './storage.ts';
 import { ensureTicketSchema } from './tickets.ts';
-import { validateTransferProof } from './proof-validation.ts';
+import { transferProofMediaUrl, validateTransferProof } from './proof-validation.ts';
 import {
   roundHalfUp,
   type OrganizerFeeMode,
@@ -454,7 +455,7 @@ function mapPayoutRow(p: PayoutRow, isOwner: boolean): PayoutHistoryItem {
     paidAt: p.paidAt instanceof Date ? p.paidAt.toISOString() : String(p.paidAt),
     // AC-31, AC-92: Organizer CANNOT see transferProofKey or transferProofUrl
     transferProofKey: isOwner ? p.transferProofKey : null,
-    transferProofUrl: isOwner ? p.transferProofUrl : null,
+    transferProofUrl: isOwner ? transferProofMediaUrl(p.transferProofKey) : null,
     transferNote: p.transferNote,
     transferFailureReason: p.transferFailureReason,
     transferFailedAt:
@@ -1138,8 +1139,7 @@ export async function recordEventPayout(
   }
 
   return inTransaction(pool, async client => {
-    // Serialize payout checks and inserts per eventId to prevent concurrent overpayment
-    await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`payout:${input.eventId}`]);
+    await lockEventFinancial(client, input.eventId);
 
     // 1. Concurrency / duplicate submission protection (AC-87)
     // Check if an identical completed payout was submitted in the last 15 seconds
@@ -1344,78 +1344,69 @@ export async function recordEventDebtRepayment(
 
   const checkTime = input.now || new Date();
 
-  // 2. 15-second duplicate check (G-39, AC-86 idempotency)
-  const dupCheck = await pool.query<{ id: string; amount: string }>(
-    `SELECT id, amount::text
-     FROM event_debt_repayments
-     WHERE "eventId" = $1
-       AND ABS(amount - $2) < 0.001
-       AND "createdAt" >= ($3::timestamptz - interval '15 seconds')
-     ORDER BY "createdAt" DESC
-     LIMIT 1`,
-    [input.eventId, numAmount, checkTime],
-  );
+  return inTransaction(pool, async client => {
+    await lockEventFinancial(client, input.eventId);
 
-  if (dupCheck.rows.length > 0) {
-    const existing = dupCheck.rows[0];
-    const currentReport = await getEventMoneyReport(pool, input.eventId, { id: input.recordedBy || 'system', role: 'owner' }, { includeOrders: false });
+    const dupCheck = await client.query<{ id: string; amount: string }>(
+      `SELECT id, amount::text
+       FROM event_debt_repayments
+       WHERE "eventId" = $1
+         AND ABS(amount - $2) < 0.001
+         AND "createdAt" >= ($3::timestamptz - interval '15 seconds')
+       ORDER BY "createdAt" DESC
+       LIMIT 1`,
+      [input.eventId, numAmount, checkTime],
+    );
+
+    if (dupCheck.rows.length > 0) {
+      const existing = dupCheck.rows[0];
+      const currentReport = await readEventMoneyReport(client, input.eventId, { id: input.recordedBy || 'system', role: 'owner' }, { includeOrders: false });
+      return {
+        success: true,
+        repaymentId: existing.id,
+        amount: roundHalfUp(Number(existing.amount)),
+        alreadyRecorded: true,
+        remainingDebt: currentReport.debtAmount,
+        newLiability: currentReport.netLiability,
+        newPayableAmount: currentReport.payableAmount,
+      };
+    }
+
+    const reportBefore = await readEventMoneyReport(client, input.eventId, { id: input.recordedBy || 'system', role: 'owner' }, { includeOrders: false });
+    if (!reportBefore.isDebt || reportBefore.debtAmount <= 0) {
+      return {
+        success: false,
+        code: 'NO_DEBT_TO_REPAY',
+        error: 'คอนเสิร์ตนี้ไม่มียอดหนี้ค้างชำระที่ต้องรับคืน',
+      };
+    }
+
+    if (numAmount > reportBefore.debtAmount) {
+      return {
+        success: false,
+        code: 'AMOUNT_EXCEEDS_DEBT',
+        error: `จำนวนเงินที่ระบุ (฿${numAmount.toFixed(2)}) เกินยอดหนี้ค้างชำระ (฿${reportBefore.debtAmount.toFixed(2)})`,
+      };
+    }
+
+    const id = `DR-${randomUUID().slice(0, 8).toUpperCase()}`;
+    await client.query(
+      `INSERT INTO event_debt_repayments (
+         id, "eventId", amount, "repaidAt", notes, "recordedBy", "createdAt"
+       ) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      [id, input.eventId, numAmount, input.repaidAt || checkTime, input.notes || null, input.recordedBy || null, checkTime],
+    );
+
+    const updatedReport = await readEventMoneyReport(client, input.eventId, { id: input.recordedBy || 'system', role: 'owner' }, { includeOrders: false });
     return {
       success: true,
-      repaymentId: existing.id,
-      amount: roundHalfUp(Number(existing.amount)),
-      alreadyRecorded: true,
-      remainingDebt: currentReport.debtAmount,
-      newLiability: currentReport.netLiability,
-      newPayableAmount: currentReport.payableAmount,
+      repaymentId: id,
+      amount: numAmount,
+      remainingDebt: updatedReport.debtAmount,
+      newLiability: updatedReport.netLiability,
+      newPayableAmount: updatedReport.payableAmount,
     };
-  }
-
-  // 3. Inspect current accounting before recording
-  const reportBefore = await getEventMoneyReport(pool, input.eventId, { id: input.recordedBy || 'system', role: 'owner' }, { includeOrders: false });
-  if (!reportBefore.isDebt || reportBefore.debtAmount <= 0) {
-    return {
-      success: false,
-      code: 'NO_DEBT_TO_REPAY',
-      error: 'คอนเสิร์ตนี้ไม่มียอดหนี้ค้างชำระที่ต้องรับคืน',
-    };
-  }
-
-  if (numAmount > reportBefore.debtAmount) {
-    return {
-      success: false,
-      code: 'AMOUNT_EXCEEDS_DEBT',
-      error: `จำนวนเงินที่ระบุ (฿${numAmount.toFixed(2)}) เกินยอดหนี้ค้างชำระ (฿${reportBefore.debtAmount.toFixed(2)})`,
-    };
-  }
-
-  // 4. Insert debt repayment record
-  const id = `DR-${randomUUID().slice(0, 8).toUpperCase()}`;
-  await pool.query(
-    `INSERT INTO event_debt_repayments (
-       id, "eventId", amount, "repaidAt", notes, "recordedBy", "createdAt"
-     ) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-    [
-      id,
-      input.eventId,
-      numAmount,
-      input.repaidAt || checkTime,
-      input.notes || null,
-      input.recordedBy || null,
-      checkTime,
-    ],
-  );
-
-  // 5. Return updated accounting
-  const updatedReport = await getEventMoneyReport(pool, input.eventId, { id: input.recordedBy || 'system', role: 'owner' }, { includeOrders: false });
-
-  return {
-    success: true,
-    repaymentId: id,
-    amount: numAmount,
-    remainingDebt: updatedReport.debtAmount,
-    newLiability: updatedReport.netLiability,
-    newPayableAmount: updatedReport.payableAmount,
-  };
+  });
 }
 
 export interface RecordReserveReleaseInput {
@@ -1460,8 +1451,11 @@ export async function recordEventReserveRelease(
 
   const nowTime = input.now || new Date();
 
+  return inTransaction(pool, async client => {
+  await lockEventFinancial(client, input.eventId);
+
   // 2. 15-second duplicate submission window check
-  const recentRes = await pool.query<{
+  const recentRes = await client.query<{
     id: string;
     amount: string;
     releasedAt: Date;
@@ -1479,7 +1473,7 @@ export async function recordEventReserveRelease(
     const existingAmount = roundHalfUp(Number(existing.amount));
     // If input amount matches or is omitted, return existing release idempotently
     if (!input.amount || Math.abs(roundHalfUp(input.amount) - existingAmount) < 0.01) {
-      const currentReport = await getEventMoneyReport(pool, input.eventId, {
+      const currentReport = await readEventMoneyReport(client, input.eventId, {
         id: input.recordedBy || 'system',
         role: 'owner',
       }, { includeOrders: false });
@@ -1495,7 +1489,7 @@ export async function recordEventReserveRelease(
   }
 
   // 3. Final session end check (AC-83, G-31)
-  const sessRes = await pool.query<{
+  const sessRes = await client.query<{
     id: string;
     endTime: Date;
     status: string;
@@ -1534,7 +1528,7 @@ export async function recordEventReserveRelease(
   }
 
   // 4. Retrieve current accounting and validate held reserve
-  const report = await getEventMoneyReport(pool, input.eventId, {
+  const report = await readEventMoneyReport(client, input.eventId, {
     id: input.recordedBy || 'system',
     role: 'owner',
   }, { includeOrders: false });
@@ -1571,7 +1565,7 @@ export async function recordEventReserveRelease(
   const id = `RR-${randomUUID().slice(0, 8).toUpperCase()}`;
   const releasedAt = input.releasedAt || nowTime;
 
-  await pool.query(
+  await client.query(
     `INSERT INTO event_reserve_releases (
        id, "eventId", amount, "releasedAt", notes, "recordedBy"
      ) VALUES ($1, $2, $3, $4, $5, $6)`,
@@ -1586,7 +1580,7 @@ export async function recordEventReserveRelease(
   );
 
   // 6. Recalculate accounting to report updated payable and remaining held reserve
-  const updatedReport = await getEventMoneyReport(pool, input.eventId, {
+  const updatedReport = await readEventMoneyReport(client, input.eventId, {
     id: input.recordedBy || 'system',
     role: 'owner',
   }, { includeOrders: false });
@@ -1598,4 +1592,5 @@ export async function recordEventReserveRelease(
     remainingHeldReserve: updatedReport.actualHeldReserve,
     newPayableAmount: updatedReport.payableAmount,
   };
+  });
 }

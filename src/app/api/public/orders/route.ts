@@ -30,7 +30,7 @@ export async function GET(request: Request) {
         orders: result.orders,
         buyer: result.buyer,
       },
-      { status: 200, headers: { 'Cache-Control': 'no-store' } },
+      { status: 200, headers: { 'Cache-Control': 'private, no-store, no-cache, must-revalidate' } },
     );
   } catch (error: unknown) {
     return createSafeErrorResponse(error, 'เกิดข้อผิดพลาดในการค้นหาคำสั่งซื้อ', { defaultStatus: 500 });

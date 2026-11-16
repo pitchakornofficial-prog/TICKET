@@ -1,5 +1,6 @@
 import type { Pool } from 'pg';
 import { inTransaction } from './database.ts';
+import { lockEventFeeReservation } from './event-lock.ts';
 
 export type OrganizerFeeMode = 'percentage' | 'per_ticket' | 'flat_fee';
 export type CustomerFeeMode = 'per_ticket' | 'per_order' | 'percentage';
@@ -224,12 +225,6 @@ export async function saveEventFeeSettings(
 ): Promise<EventFeeSettings> {
   await ensureFeeSchema(pool);
 
-  // Validate event existence
-  const eventCheck = await pool.query('SELECT id FROM events WHERE id = $1', [eventId]);
-  if (eventCheck.rowCount === 0) {
-    throw new Error('ไม่พบคอนเสิร์ตที่ระบุ');
-  }
-
   // Validate organizer fee mode
   const validOrganizerModes: OrganizerFeeMode[] = ['percentage', 'per_ticket', 'flat_fee'];
   if (!validOrganizerModes.includes(input.organizerFeeMode)) {
@@ -257,22 +252,47 @@ export async function saveEventFeeSettings(
     throw new Error('เปอร์เซ็นต์เงินสำรองต้องอยู่ระหว่าง 0 ถึง 100');
   }
 
-  // Check if organizer fee is locked
-  const existing = await getEventFeeSettings(pool, eventId);
-  if (existing.organizerFeeLocked) {
-    if (
+  return inTransaction(pool, async client => {
+    await lockEventFeeReservation(client, eventId);
+
+    const eventCheck = await client.query('SELECT id FROM events WHERE id = $1', [eventId]);
+    if (eventCheck.rowCount === 0) {
+      throw new Error('ไม่พบคอนเสิร์ตที่ระบุ');
+    }
+
+    const existingRes = await client.query(
+      `SELECT "eventId", "organizerFeeMode", "organizerFeeRate", "organizerFeePrivilegeRate", "ubuPrivilegeMode",
+              "customerFeeMode", "customerFeeRate", "reservePercentage", "organizerFeeLocked"
+       FROM event_fee_settings WHERE "eventId" = $1 FOR UPDATE`,
+      [eventId],
+    );
+    const existingRow = existingRes.rows[0];
+    const existing = existingRow ? {
+      organizerFeeMode: existingRow.organizerFeeMode as OrganizerFeeMode,
+      organizerFeeRate: Number(existingRow.organizerFeeRate),
+      organizerFeePrivilegeRate: Number(existingRow.organizerFeePrivilegeRate ?? 0),
+      ubuPrivilegeMode: Boolean(existingRow.ubuPrivilegeMode),
+      organizerFeeLocked: Boolean(existingRow.organizerFeeLocked),
+    } : {
+      organizerFeeMode: 'percentage' as OrganizerFeeMode,
+      organizerFeeRate: 0,
+      organizerFeePrivilegeRate: 0,
+      ubuPrivilegeMode: false,
+      organizerFeeLocked: false,
+    };
+
+    if (existing.organizerFeeLocked && (
       existing.organizerFeeMode !== input.organizerFeeMode ||
       roundHalfUp(existing.organizerFeeRate) !== roundHalfUp(input.organizerFeeRate) ||
-      roundHalfUp(existing.organizerFeePrivilegeRate ?? 0) !== roundHalfUp(input.organizerFeePrivilegeRate ?? 0) ||
-      Boolean(existing.ubuPrivilegeMode) !== Boolean(input.ubuPrivilegeMode)
-    ) {
+      roundHalfUp(existing.organizerFeePrivilegeRate) !== roundHalfUp(input.organizerFeePrivilegeRate ?? 0) ||
+      existing.ubuPrivilegeMode !== Boolean(input.ubuPrivilegeMode)
+    )) {
       throw new Error(
         'ค่าบริการฝั่งผู้จัดงานถูกล็อกแล้วเนื่องจากมีคำสั่งซื้อหรือการกันบัตรแล้ว ไม่สามารถเปลี่ยนแปลงได้',
       );
     }
-  }
 
-  const res = await pool.query(
+    const res = await client.query(
     `INSERT INTO event_fee_settings (
        "eventId", "organizerFeeMode", "organizerFeeRate", "organizerFeePrivilegeRate", "ubuPrivilegeMode",
        "customerFeeMode", "customerFeeRate", "reservePercentage", "organizerFeeLocked", "updatedAt", "updatedBy"
@@ -303,35 +323,39 @@ export async function saveEventFeeSettings(
       existing.organizerFeeLocked,
       updatedBy,
     ],
-  );
+    );
 
-  const row = res.rows[0];
-  return {
-    eventId: row.eventId,
-    organizerFeeMode: row.organizerFeeMode as OrganizerFeeMode,
-    organizerFeeRate: Number(row.organizerFeeRate),
-    organizerFeePrivilegeRate: row.organizerFeePrivilegeRate != null ? Number(row.organizerFeePrivilegeRate) : 0,
-    ubuPrivilegeMode: Boolean(row.ubuPrivilegeMode),
-    customerFeeMode: row.customerFeeMode as CustomerFeeMode,
-    customerFeeRate: Number(row.customerFeeRate),
-    reservePercentage: Number(row.reservePercentage),
-    organizerFeeLocked: Boolean(row.organizerFeeLocked),
-    createdAt: row.createdAt?.toISOString(),
-    updatedAt: row.updatedAt?.toISOString(),
-    updatedBy: row.updatedBy,
-  };
+    const row = res.rows[0];
+    return {
+      eventId: row.eventId,
+      organizerFeeMode: row.organizerFeeMode as OrganizerFeeMode,
+      organizerFeeRate: Number(row.organizerFeeRate),
+      organizerFeePrivilegeRate: row.organizerFeePrivilegeRate != null ? Number(row.organizerFeePrivilegeRate) : 0,
+      ubuPrivilegeMode: Boolean(row.ubuPrivilegeMode),
+      customerFeeMode: row.customerFeeMode as CustomerFeeMode,
+      customerFeeRate: Number(row.customerFeeRate),
+      reservePercentage: Number(row.reservePercentage),
+      organizerFeeLocked: Boolean(row.organizerFeeLocked),
+      createdAt: row.createdAt?.toISOString(),
+      updatedAt: row.updatedAt?.toISOString(),
+      updatedBy: row.updatedBy,
+    };
+  });
 }
 
 export async function lockOrganizerFee(pool: Pool, eventId: string): Promise<void> {
   await ensureFeeSchema(pool);
-  await pool.query(
-    `INSERT INTO event_fee_settings ("eventId", "organizerFeeLocked", "updatedAt")
-     VALUES ($1, TRUE, now())
-     ON CONFLICT ("eventId") DO UPDATE SET
-       "organizerFeeLocked" = TRUE,
-       "updatedAt" = now()`,
-    [eventId],
-  );
+  await inTransaction(pool, async client => {
+    await lockEventFeeReservation(client, eventId);
+    await client.query(
+      `INSERT INTO event_fee_settings ("eventId", "organizerFeeLocked", "updatedAt")
+       VALUES ($1, TRUE, now())
+       ON CONFLICT ("eventId") DO UPDATE SET
+         "organizerFeeLocked" = TRUE,
+         "updatedAt" = now()`,
+      [eventId],
+    );
+  });
 }
 
 export interface OwnerEventWithFeeSettings {

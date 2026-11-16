@@ -91,6 +91,9 @@ describe('POST /api/webhooks/stripe Route Security (Fail-Closed)', () => {
   it('processes event (200) when signature matches configured secret', async () => {
     process.env.STRIPE_WEBHOOK_SECRET = mockSecret;
 
+    vi.spyOn(paymentModule, 'recordStripeWebhookDelivery').mockResolvedValue('pending_review');
+    vi.spyOn(paymentModule, 'updateStripeWebhookDelivery').mockResolvedValue();
+
     const mockEvent = {
       id: 'evt_1',
       type: 'payment_intent.succeeded' as const,

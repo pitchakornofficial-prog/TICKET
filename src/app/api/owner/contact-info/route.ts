@@ -11,7 +11,7 @@ export async function GET(request: Request) {
   const session = await getAuth().api.getSession({ headers: request.headers });
   if (!session || !['owner', 'organizer'].includes(session.user.role)) return Response.json({ message: 'ไม่มีสิทธิ์เข้าถึง' }, { status: 403 });
   try {
-    return Response.json({ contact: await readOwnerContactInfo(getDatabasePool()) }, { headers: { 'Cache-Control': 'no-store' } });
+    return Response.json({ contact: await readOwnerContactInfo(getDatabasePool()) }, { headers: { 'Cache-Control': 'private, no-store, no-cache, must-revalidate' } });
   } catch (error) {
     return createSafeErrorResponse(error, 'โหลดข้อมูลติดต่อไม่สำเร็จ', { defaultStatus: 500 });
   }
@@ -33,7 +33,7 @@ export async function PUT(request: Request) {
   if (!contact) return Response.json({ message: 'ข้อมูลติดต่อไม่ถูกต้อง' }, { status: 400 });
   try {
     await writeOwnerContactInfo(getDatabasePool(), contact);
-    return Response.json({ contact }, { headers: { 'Cache-Control': 'no-store' } });
+    return Response.json({ contact }, { headers: { 'Cache-Control': 'private, no-store, no-cache, must-revalidate' } });
   } catch (error) {
     return createSafeErrorResponse(error, 'บันทึกข้อมูลติดต่อไม่สำเร็จ', { defaultStatus: 500 });
   }

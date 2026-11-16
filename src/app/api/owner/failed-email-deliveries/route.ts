@@ -16,7 +16,7 @@ export async function GET(request: Request) {
   const pool = getDatabasePool();
   try {
     const failedDeliveries = await listFailedEmailDeliveries(pool);
-    return Response.json({ deliveries: failedDeliveries }, { status: 200, headers: { 'Cache-Control': 'no-store' } });
+    return Response.json({ deliveries: failedDeliveries }, { status: 200, headers: { 'Cache-Control': 'private, no-store, no-cache, must-revalidate' } });
   } catch (error: unknown) {
     return createSafeErrorResponse(error, 'เกิดข้อผิดพลาดในการโหลดรายการจัดส่งที่ล้มเหลว', { defaultStatus: 500 });
   }
@@ -40,7 +40,7 @@ export async function POST(request: Request) {
     }
 
     const result = await retryTicketEmailDelivery(pool, body.deliveryId);
-    return Response.json({ result }, { status: 200, headers: { 'Cache-Control': 'no-store' } });
+    return Response.json({ result }, { status: 200, headers: { 'Cache-Control': 'private, no-store, no-cache, must-revalidate' } });
   } catch (error: unknown) {
     return createSafeErrorResponse(error, 'เกิดข้อผิดพลาดในการลองส่งอีเมลใหม่', { defaultStatus: 500 });
   }

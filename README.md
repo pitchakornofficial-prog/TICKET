@@ -32,6 +32,25 @@ Integration test ใช้ `TEST_DATABASE_URL` จาก `.env.test.local` ถ�
 ยอมรับเฉพาะ loopback/ฐาน `ticket_test` ไม่มี URL options และสร้าง/ลบ schema เฉพาะรอบทดสอบด้วยชื่อสุ่ม
 TASK-002 เพิ่ม auth schema เท่านั้น ยังไม่มี schema สำหรับวงจรบัตร
 
+## Environment variables
+
+`.env.example` เป็น template สำหรับ local เท่านั้น ใช้ค่าฐานข้อมูล loopback จาก `compose.yaml`
+และเว้น secret/provider credentials ว่างไว้ หลัง copy เป็น `.env.local` ให้รัน
+`npm run auth:local` เพื่อสร้าง `BETTER_AUTH_SECRET` (อย่างน้อย 32 ตัวอักษร)
+ค่า `DATABASE_POOL_MAX` ที่ไม่ได้ตั้งจะใช้ 25 ในโค้ด; production task กำหนด 15 ตาม budget ใน ADR-0002
+และต้องรักษาเพดานรวมของทุก pool/process ใน task เดียวกัน
+
+Local ไม่จำเป็นต้องมี Stripe, SES หรือ R2 credentials: Stripe ใช้ contract double,
+อีเมลถูก capture ในเครื่อง และ storage ใช้ in-memory double เมื่อไม่ได้ตั้ง provider
+ถ้าจะเปิดปุ่มจำลองการชำระเงิน ให้เปิดทั้ง `ENABLE_PAY_TEST` และ
+`NEXT_PUBLIC_ENABLE_PAY_TEST`; การเปิด preview อีเมลต้องตั้ง server/client flags ของตัวเอง
+อย่าใส่ production credentials หรือ secret ใน `.env.example` หรือ commit `.env.local`
+
+การทดสอบ integration ใช้ `.env.test.local` แยกจาก `.env.local`; ตั้ง `TEST_DATABASE_URL`
+ผ่าน `.env.test.example` เท่านั้น เพื่อไม่ให้ URL ของ test database กลายเป็นค่าแอปโดยไม่ตั้งใจ
+Production ใช้ environment ที่ inject จาก SSM และตรวจรูปแบบก่อน start; ค่า OTP pepper,
+proxy trust และ pool limit ต้องสอดคล้องกับการตั้งค่าจริงของ production topology
+
 ใช้ `createDatabasePool` และ `inTransaction` ใน `src/server/database.ts` เป็น data-access boundary
 transaction ต้องใช้ client ที่ส่งให้ callback เดียวกันทุก statement ไม่ใช้ `pool.query` สลับ connection
 ไม่มี in-memory critical store; ยังไม่ใช่หลักฐานปิด AC-105 ซึ่งต้องตรวจพฤติกรรม domain หลาย instance ใน TASK-037
@@ -57,9 +76,11 @@ Playwright ใช้ Chromium ใน `.cache/ms-playwright`, เปิด Next d
 หากเครื่องขาด system libraries สำหรับ Chromium ให้ติดตั้งผ่านวิธีที่เหมาะกับเครื่องก่อนรัน ไม่ข้าม E2E gate
 ผล browser อยู่ `test-results/` (รวมภาพ shell); รายงาน gate ที่ยืนยันแล้วอยู่ใน task
 
-`tests/support/scripted-provider.ts` เป็น double แบบควบคุมผลทีละคำขอสำหรับขอบเขต Omise/Resend/R2
-ใช้เฉพาะ tests, บันทึก request และจำลอง success/failure ได้ ไม่ส่ง HTTP/อีเมล/เงินจริง/ไฟล์ production
-ไม่ได้รับรอง provider contract และไม่ได้เลือก provider ใหม่ งาน integration จริงอยู่ task ถัดไป
+`tests/support/scripted-provider.ts` เป็น double แบบควบคุมผลทีละคำขอ ใช้เฉพาะ tests
+และบันทึก request/จำลอง success-failure โดยไม่เรียก provider จริง ข้อความ Omise/Resend
+ใน test helper และ `createResendTransport` เป็นชื่อ compatibility จากการตัดสินใจเดิม;
+runtime ปัจจุบันใช้ Stripe, SES และ R2 ตาม ADR-0003; application runtime ไม่อ่าน `OMISE_*`
+หรือ `RESEND_API_KEY` แต่ test isolation ยังล้าง/deny-list `RESEND_API_KEY` เพื่อกัน provider call
 
 ## Build
 

@@ -7,9 +7,15 @@ export interface TransferProofValidationResult {
   error?: string;
 }
 
+export function transferProofMediaUrl(key: string | null | undefined): string | null {
+  const cleanKey = key?.trim() || null;
+  if (!cleanKey || !PROOF_KEY_PATTERN.test(cleanKey) || cleanKey.includes('..')) return null;
+  return `/api/media/${encodeURIComponent(cleanKey)}`;
+}
+
 /**
  * Validates transfer proof key and URL for payouts and manual refunds.
- * Keys must live under proofs/ with safe characters; URLs must be /api/media/... or https://.
+ * Proofs must use the owner-authorized media route; external storage URLs are never accepted.
  */
 export function validateTransferProof(
   rawKey?: string | null,
@@ -27,18 +33,21 @@ export function validateTransferProof(
     };
   }
 
+  let urlKey: string | null = null;
   if (url) {
-    const isMediaPath = url.startsWith('/api/media/') && !url.startsWith('//') && !url.includes('..');
-    let isSafeHttps = false;
-    if (!isMediaPath) {
-      try {
-        const parsed = new URL(url);
-        isSafeHttps = parsed.protocol === 'https:';
-      } catch {
-        isSafeHttps = false;
-      }
+    if (!url.startsWith('/api/media/') || url.startsWith('//') || url.includes('..') || url.includes('?') || url.includes('#')) {
+      return {
+        valid: false,
+        transferProofKey: null,
+        transferProofUrl: null,
+        error: 'รูปแบบลิงก์หลักฐานการโอน (transferProofUrl) ไม่ถูกต้อง',
+      };
     }
-    if (!isMediaPath && !isSafeHttps) {
+    try {
+      const decodedKey = decodeURIComponent(url.slice('/api/media/'.length));
+      if (!PROOF_KEY_PATTERN.test(decodedKey) || decodedKey.includes('..')) throw new Error('invalid key');
+      urlKey = decodedKey;
+    } catch {
       return {
         valid: false,
         transferProofKey: null,
@@ -48,9 +57,20 @@ export function validateTransferProof(
     }
   }
 
+  if (key && urlKey && key !== urlKey) {
+    return {
+      valid: false,
+      transferProofKey: null,
+      transferProofUrl: null,
+      error: 'รหัสไฟล์และลิงก์หลักฐานการโอนไม่ตรงกัน',
+    };
+  }
+
+  const proofKey = key || urlKey;
+
   return {
     valid: true,
-    transferProofKey: key,
-    transferProofUrl: url,
+    transferProofKey: proofKey,
+    transferProofUrl: transferProofMediaUrl(proofKey),
   };
 }

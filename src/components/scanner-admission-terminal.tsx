@@ -233,11 +233,12 @@ export function ScannerAdmissionTerminal({
           );
         }
         setSyncFeedback({
-          type: res.conflictsCount > 0 ? 'error' : 'success',
+          type: res.conflictsCount > 0 || (res.securityRejectionsCount ?? 0) > 0 ? 'error' : 'success',
           message: res.message || 'ซิงก์ข้อมูลค้างสำเร็จ',
         });
         fetchStats();
       } else {
+        setPendingSyncCount(res.remainingCount);
         setSyncFeedback({
           type: 'error',
           message: res.message || 'การซิงก์ข้อมูลล้มเหลว',

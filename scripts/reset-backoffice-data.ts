@@ -1,5 +1,7 @@
+import { pathToFileURL } from 'node:url';
 import { createDatabasePool } from '../src/server/database.ts';
 import { ensureEventSchema, seedUbuFreshyFest } from '../src/server/events.ts';
+import { assertDestructiveDatabaseTarget } from './destructive-db-guard.ts';
 
 // D-185: Back-Office Data Integrity Reset
 // Preserves only owner@ticket.local and organizer.freshy@ubu.ac.th
@@ -201,4 +203,17 @@ async function resetBackOfficeData(): Promise<void> {
   }
 }
 
-await resetBackOfficeData();
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  try {
+    assertDestructiveDatabaseTarget({
+      databaseUrl: process.env.DATABASE_URL,
+      nodeEnv: process.env.NODE_ENV,
+      args: process.argv.slice(2),
+      confirmationFlag: '--confirm-reset-backoffice',
+    });
+    await resetBackOfficeData();
+  } catch (error) {
+    console.error((error as Error).message);
+    process.exitCode = 1;
+  }
+}

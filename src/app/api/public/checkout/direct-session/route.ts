@@ -4,6 +4,7 @@ import { getDatabasePool } from '@/server/database';
 import { ensureGuestOtpSchema } from '@/server/guest-otp';
 import { verifyQueueAccess } from '@/server/queue';
 import { getBuyerTicketCountForEvent } from '@/server/reservation';
+import { readQueueCookie } from '@/server/queue-cookie';
 
 export const runtime = 'nodejs';
 
@@ -25,11 +26,6 @@ export async function POST(request: Request) {
     const phone = (body.phone || '').trim();
     const eventId = body.eventId;
     const totalTickets = Number(body.totalTickets) || 1;
-    const rawQueueToken =
-      typeof body.queueToken === 'string'
-        ? body.queueToken
-        : request.headers.get('x-queue-token') || '';
-    const queueToken = rawQueueToken.trim() || null;
 
     if (!name || name.length < 2) {
       return NextResponse.json({ message: 'กรุณากรอกชื่อ-นามสกุลให้ถูกต้อง' }, { status: 400 });
@@ -62,6 +58,7 @@ export async function POST(request: Request) {
 
     if (pool) {
       if (eventId) {
+        const queueToken = readQueueCookie(request, eventId)?.entryToken ?? null;
         const queueAllowed = await verifyQueueAccess(pool, eventId, queueToken);
         if (!queueAllowed) {
           return NextResponse.json(

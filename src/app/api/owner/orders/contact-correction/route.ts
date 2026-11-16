@@ -26,7 +26,7 @@ export async function GET(request: Request) {
   try {
     const pool = getDatabasePool();
     const orders = await listPaidOrdersForOwner(pool, search);
-    return Response.json({ orders }, { status: 200, headers: { 'Cache-Control': 'no-store' } });
+    return Response.json({ orders }, { status: 200, headers: { 'Cache-Control': 'private, no-store, no-cache, must-revalidate' } });
   } catch (error: unknown) {
     return createSafeErrorResponse(error, 'เกิดข้อผิดพลาดในการดึงข้อมูลคำสั่งซื้อ', { defaultStatus: 500 });
   }

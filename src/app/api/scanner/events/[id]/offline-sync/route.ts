@@ -52,7 +52,10 @@ export async function POST(
       { scans },
     );
 
-    return Response.json(result, { status: 200, headers: { 'Cache-Control': 'no-store' } });
+    return Response.json(result, {
+      status: result.authorizationLost ? 409 : 200,
+      headers: { 'Cache-Control': 'private, no-store, no-cache, must-revalidate' },
+    });
   } catch (error: unknown) {
     return createSafeErrorResponse(error, 'เกิดข้อผิดพลาดในการซิงก์ข้อมูลออฟไลน์', {
       defaultStatus: 500,

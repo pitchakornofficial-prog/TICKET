@@ -45,7 +45,7 @@ export async function GET(
     }
 
     const primary = await getEventPrimaryScanner(pool, eventId);
-    return Response.json({ primaryScanner: primary }, { status: 200, headers: { 'Cache-Control': 'no-store' } });
+    return Response.json({ primaryScanner: primary }, { status: 200, headers: { 'Cache-Control': 'private, no-store, no-cache, must-revalidate' } });
   } catch (error: unknown) {
     return createSafeErrorResponse(error, 'เกิดข้อผิดพลาดในการดึงข้อมูลเครื่องหลัก', { defaultStatus: 500 });
   }

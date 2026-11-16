@@ -41,7 +41,7 @@ export async function GET(
     }
 
     const tickets = await getOrderTickets(pool, orderId);
-    return Response.json({ tickets }, { status: 200, headers: { 'Cache-Control': 'no-store' } });
+    return Response.json({ tickets }, { status: 200, headers: { 'Cache-Control': 'private, no-store, no-cache, must-revalidate' } });
   } catch (error: unknown) {
     return createSafeErrorResponse(error, 'เกิดข้อผิดพลาด', { defaultStatus: 500 });
   }

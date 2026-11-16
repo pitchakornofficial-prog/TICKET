@@ -40,7 +40,7 @@ export async function GET(
       [eventId],
     );
 
-    return Response.json({ logs: res.rows }, { status: 200, headers: { 'Cache-Control': 'no-store' } });
+    return Response.json({ logs: res.rows }, { status: 200, headers: { 'Cache-Control': 'private, no-store, no-cache, must-revalidate' } });
   } catch (error: unknown) {
     return createSafeErrorResponse(error, 'เกิดข้อผิดพลาดในการดึงประวัติการสแกน', { defaultStatus: 500 });
   }

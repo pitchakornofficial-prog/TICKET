@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import { inTransaction } from './database.ts';
+import { EVENT_FEE_RESERVATION_LOCK_NAMESPACE, lockEventFeeReservation } from './event-lock.ts';
 import { isRealPgPool } from './pg-pool-utils.ts';
 import {
   calculateCustomerFee,
@@ -10,7 +11,7 @@ import {
   ensureFeeSchema,
 } from './fees.ts';
 import { getVerifiedGuestSession, type GuestVerifiedSession } from './guest-otp.ts';
-import { ensureQueueSchema, QUEUE_CAPACITY, verifyQueueAccess } from './queue.ts';
+import { ensureQueueSchema, QUEUE_ADMISSION_LOCK_NAMESPACE, QUEUE_CAPACITY, verifyQueueAccess } from './queue.ts';
 
 export class QueueLockedError extends Error {
   constructor(message = 'ขณะนี้มีผู้ใช้งานเต็มจำนวน 200 คิวแล้ว กรุณารอตามลำดับคิวในห้องรอคิว') {
@@ -352,7 +353,24 @@ export async function ensureReservationSchema(pool: Pool): Promise<void> {
       v_held INT;
       v_avail INT;
     BEGIN
+      PERFORM pg_advisory_xact_lock(hashtext(p_event_id), ${EVENT_FEE_RESERVATION_LOCK_NAMESPACE});
+      PERFORM pg_advisory_xact_lock(hashtext(p_event_id), ${QUEUE_ADMISSION_LOCK_NAMESPACE});
       PERFORM pg_advisory_xact_lock(hashtext(p_event_id), hashtext(p_buyer_email_norm));
+
+      IF p_queue_capacity > 0 THEN
+        IF p_queue_token IS NULL OR NOT EXISTS (
+            SELECT 1 FROM event_queue_entries q
+            WHERE q.id = p_queue_token
+              AND q."eventId" = p_event_id
+              AND q.status = 'active'
+              AND q."expiresAt" > now()
+          ) THEN
+          outcome := 'ERROR';
+          err_message := 'QUEUE_LOCKED';
+          RETURN NEXT;
+          RETURN;
+        END IF;
+      END IF;
 
       SELECT "limitPerOrder", status, "salesStartTime", "salesEndTime"
       INTO v_ev
@@ -1215,7 +1233,7 @@ async function createReservationFast(
         pricing.orderItemsToInsert.map(i => i.unitPrice),
         pricing.orderItemsToInsert.map(i => i.subtotal),
         queueToken,
-        QUEUE_CAPACITY,
+        checkQueue ? QUEUE_CAPACITY : 0,
       ],
     );
 
@@ -1243,6 +1261,10 @@ async function createReservationFast(
 
     if (row?.outcome === 'RETRY') {
       continue;
+    }
+
+    if (row?.err_message === 'QUEUE_LOCKED') {
+      throw new QueueLockedError();
     }
 
     throw new Error(row?.err_message || 'เกิดข้อผิดพลาดในการกันบัตร');
@@ -1286,6 +1308,8 @@ export async function createReservation(
 
   return inTransaction(pool, async (client: PoolClient) => {
     const emailNorm = verifiedSession.email.trim().toLowerCase();
+
+    await lockEventFeeReservation(client, input.eventId);
 
     // D-59, AC-10: Acquire transaction-level advisory lock on (eventId, buyerEmail)
     // to serialize concurrent reservation requests for the same buyer and event.

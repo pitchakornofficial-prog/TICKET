@@ -1,4 +1,12 @@
 import { createDatabasePool } from '../src/server/database.ts';
+import { assertDestructiveDatabaseTarget } from './destructive-db-guard.ts';
+
+assertDestructiveDatabaseTarget({
+  databaseUrl: process.env.DATABASE_URL,
+  nodeEnv: process.env.NODE_ENV,
+  args: process.argv.slice(2),
+  confirmationFlag: '--confirm-token-revocation',
+});
 
 const pool = createDatabasePool();
 

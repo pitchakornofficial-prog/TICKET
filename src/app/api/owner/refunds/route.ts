@@ -20,7 +20,7 @@ export async function GET(request: Request) {
     const refundRequests = await listAllRefundRequests(pool, { status: statusParam });
     return Response.json(
       { requests: refundRequests },
-      { status: 200, headers: { 'Cache-Control': 'no-store' } },
+      { status: 200, headers: { 'Cache-Control': 'private, no-store, no-cache, must-revalidate' } },
     );
   } catch (error: unknown) {
     return createSafeErrorResponse(error, 'เกิดข้อผิดพลาดในการโหลดรายการคำขอคืนเงิน', { defaultStatus: 500 });

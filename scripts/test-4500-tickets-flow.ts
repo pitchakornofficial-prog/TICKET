@@ -16,6 +16,7 @@ import { StripeContractDouble, resetStripeClient, setStripeClient } from '../src
 import { ensureTicketDeliverySchema } from '../src/server/ticket-delivery.ts';
 import { ensureTicketSchema, getOrderTickets } from '../src/server/tickets.ts';
 import { testDatabaseUrl } from '../tests/support/test-database.ts';
+import { assertDestructiveDatabaseTarget } from './destructive-db-guard.ts';
 
 // Configure Doubles for fast local test execution
 const stripeDouble = new StripeContractDouble();
@@ -76,6 +77,13 @@ export async function runTicketSaleSimulation(config: FlowSimulationConfig) {
   console.log('='.repeat(70));
 
   const databaseUrl = testDatabaseUrl();
+  assertDestructiveDatabaseTarget({
+    databaseUrl,
+    nodeEnv: process.env.NODE_ENV,
+    args: process.argv.slice(2),
+    confirmationFlag: '--confirm-test-schema-cleanup',
+    allowedDatabases: ['ticket_test'],
+  });
   const schema = `sim_flow_${randomUUID().replaceAll('-', '')}`;
   const control = new Pool({ connectionString: databaseUrl, max: 2 });
 

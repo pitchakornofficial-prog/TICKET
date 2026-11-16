@@ -1,6 +1,8 @@
 import type { BetterAuthOptions } from 'better-auth';
 import type { Pool } from 'pg';
 import { maximumPasswordLength, minimumPasswordLength } from '../lib/bootstrap-input.ts';
+import { recordPasswordResetTokenIdentifier } from './password-reset.ts';
+import { hashPasswordResetIdentifier } from './password-reset-hash.ts';
 
 export function authOptions(pool: Pool, settings: { baseURL: string; secret: string }) {
   if (settings.secret.length < 32) throw new Error('BETTER_AUTH_SECRET must contain at least 32 characters');
@@ -22,7 +24,8 @@ export function authOptions(pool: Pool, settings: { baseURL: string; secret: str
       minPasswordLength: minimumPasswordLength,
       maxPasswordLength: maximumPasswordLength,
       resetPasswordTokenExpiresIn: 30 * 60,
-      sendResetPassword: async ({ user, url }) => {
+      sendResetPassword: async ({ user, url, token }) => {
+        await recordPasswordResetTokenIdentifier(pool, user.id, `reset-password:${token}`);
         const { emailTransport } = await import('./email.ts');
         await emailTransport.send({
           from: 'noreply@ticket.invalid',
@@ -32,6 +35,17 @@ export function authOptions(pool: Pool, settings: { baseURL: string; secret: str
         });
       },
     },
+    verification: {
+      modelName: 'auth_verification',
+      storeIdentifier: {
+        default: 'plain',
+        overrides: {
+          'reset-password:': {
+            hash: async (identifier: string) => hashPasswordResetIdentifier(identifier),
+          },
+        },
+      },
+    },
     user: {
       modelName: 'auth_user',
       additionalFields: {
@@ -39,7 +53,6 @@ export function authOptions(pool: Pool, settings: { baseURL: string; secret: str
       },
     },
     account: { modelName: 'auth_account' },
-    verification: { modelName: 'auth_verification' },
     session: {
       modelName: 'auth_session',
       expiresIn: 8 * 60 * 60,

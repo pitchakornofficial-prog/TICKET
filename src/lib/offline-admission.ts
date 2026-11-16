@@ -15,6 +15,9 @@ export interface OfflinePendingScanItem {
   reason: string | null;
   deviceMode: 'offline';
   scannedAt: string;
+  qrHash?: string;
+  assignmentEpoch?: number;
+  assignmentToken?: string;
   localSequence?: number;
 }
 
@@ -261,8 +264,10 @@ function evaluateOfflineTicketCandidate(params: {
   input: OfflineAdmissionScanInput;
   ticket: OfflineTicketItem;
   eventTitle: string;
+  assignmentEpoch: number;
+  assignmentToken: string;
 }): EvaluatedCandidateOk | EvaluatedCandidateRejected {
-  const { input, ticket, eventTitle } = params;
+  const { input, ticket, eventTitle, assignmentEpoch, assignmentToken } = params;
 
   // 5. Session matching (AC-100)
   if (ticket.sessionId !== input.sessionId) {
@@ -414,6 +419,9 @@ function evaluateOfflineTicketCandidate(params: {
     reason: null,
     deviceMode: 'offline',
     scannedAt,
+    qrHash: hashOfflineQrPayload(input.eventId, input.qrPayloadOrCode.trim()),
+    assignmentEpoch,
+    assignmentToken,
   };
 
   return {
@@ -495,6 +503,16 @@ export function performOfflineAdmissionScan(
   // 4. Ticket lookup in cached dataset (AC-41, O2)
   const cleanInput = input.qrPayloadOrCode.trim();
   const inputHash = hashOfflineQrPayload(input.eventId, cleanInput);
+  const assignment = dataset.primaryScanner;
+  if (!assignment || assignment.scannerId !== input.scannerId || !assignment.assignmentEpoch || !assignment.assignmentToken) {
+    return {
+      success: false,
+      status: 'rejected',
+      action: input.action,
+      reason: 'STALE_PRIMARY_ASSIGNMENT',
+      message: 'ชุดข้อมูลออฟไลน์ไม่มีหลักฐานการมอบหมายเครื่องหลักปัจจุบัน กรุณาดาวน์โหลดชุดข้อมูลใหม่',
+    };
+  }
   const ticketIndex = dataset.tickets.findIndex(
     (t: OfflineTicketItem) => typeof t.qrHash === 'string' && t.qrHash === inputHash,
   );
@@ -514,6 +532,8 @@ export function performOfflineAdmissionScan(
     input,
     ticket,
     eventTitle: dataset.event?.title || '',
+    assignmentEpoch: assignment.assignmentEpoch,
+    assignmentToken: assignment.assignmentToken,
   });
   if (evaluated.rejected) {
     return evaluated.rejected;
@@ -758,6 +778,17 @@ export async function performOfflineAdmissionScanAsync(
       };
     }
 
+    const assignment = datasetMeta.primaryScanner;
+    if (!assignment || assignment.scannerId !== input.scannerId || !assignment.assignmentEpoch || !assignment.assignmentToken) {
+      return {
+        success: false,
+        status: 'rejected',
+        action: input.action,
+        reason: 'STALE_PRIMARY_ASSIGNMENT',
+        message: 'ชุดข้อมูลออฟไลน์ไม่มีหลักฐานการมอบหมายเครื่องหลักปัจจุบัน กรุณาดาวน์โหลดชุดข้อมูลใหม่',
+      };
+    }
+
     const cleanInput = input.qrPayloadOrCode.trim();
     const inputHash = hashOfflineQrPayload(input.eventId, cleanInput);
     const ticket = await idbReq<StoredOfflineTicketRecord | undefined>(
@@ -778,6 +809,8 @@ export async function performOfflineAdmissionScanAsync(
       input,
       ticket,
       eventTitle: datasetMeta.event?.title || '',
+      assignmentEpoch: assignment.assignmentEpoch,
+      assignmentToken: assignment.assignmentToken,
     });
     if (evaluated.rejected) {
       return evaluated.rejected;
@@ -832,6 +865,7 @@ export interface SyncOfflineScansResult {
   acknowledgedCount: number;
   remainingCount: number;
   conflictsCount: number;
+  securityRejectionsCount?: number;
   lastSuccessfulSync?: string;
   message?: string;
 }
@@ -840,8 +874,8 @@ async function postOfflineSyncBatch(
   eventId: string,
   pendingScans: OfflinePendingScanItem[],
 ): Promise<
-  | { ok: true; acknowledgedIds: string[]; conflictsCount: number; lastSuccessfulSync?: string }
-  | { ok: false; message: string }
+  | { ok: true; acknowledgedIds: string[]; conflictsCount: number; securityRejectionsCount: number; lastSuccessfulSync?: string }
+  | { ok: false; acknowledgedIds: string[]; conflictsCount: number; securityRejectionsCount: number; lastSuccessfulSync?: string; message: string }
 > {
   try {
     const res = await fetch(`/api/scanner/events/${eventId}/offline-sync`, {
@@ -850,19 +884,33 @@ async function postOfflineSyncBatch(
       body: JSON.stringify({ scans: pendingScans }),
     });
     const data = await res.json();
-    if (!res.ok) {
-      return { ok: false, message: data.message || 'การซิงก์ข้อมูลล้มเหลว' };
-    }
     const acknowledgedIds: string[] = Array.isArray(data.acknowledgedIds) ? data.acknowledgedIds : [];
+    const conflictsCount = Number(data.conflictsCount) || 0;
+    const securityRejectionsCount = Number(data.securityRejectionsCount) || 0;
+    const lastSuccessfulSync = typeof data.lastSuccessfulSync === 'string' ? data.lastSuccessfulSync : undefined;
+    if (!res.ok) {
+      return {
+        ok: false,
+        acknowledgedIds,
+        conflictsCount,
+        securityRejectionsCount,
+        lastSuccessfulSync,
+        message: data.message || 'การซิงก์ข้อมูลล้มเหลว',
+      };
+    }
     return {
       ok: true,
       acknowledgedIds,
-      conflictsCount: data.conflictsCount || 0,
-      lastSuccessfulSync: data.lastSuccessfulSync,
+      conflictsCount,
+      securityRejectionsCount,
+      lastSuccessfulSync,
     };
   } catch (err: unknown) {
     return {
       ok: false,
+      acknowledgedIds: [],
+      conflictsCount: 0,
+      securityRejectionsCount: 0,
       message: err instanceof Error ? err.message : 'เกิดข้อผิดพลาดในการเชื่อมต่อเพื่อซิงก์ข้อมูล',
     };
   }
@@ -899,16 +947,6 @@ export async function syncPendingOfflineScans(
   }
 
   const postRes = await postOfflineSyncBatch(eventId, pendingScans);
-  if (!postRes.ok) {
-    return {
-      success: false,
-      acknowledgedCount: 0,
-      remainingCount: pendingScans.length,
-      conflictsCount: 0,
-      message: postRes.message,
-    };
-  }
-
   const remaining = pendingScans.filter(p => !postRes.acknowledgedIds.includes(p.id));
   if (remaining.length === 0) {
     clearOfflinePendingScans(eventId, store);
@@ -930,12 +968,15 @@ export async function syncPendingOfflineScans(
   }
 
   return {
-    success: true,
+    success: postRes.ok,
     acknowledgedCount: postRes.acknowledgedIds.length,
     remainingCount: remaining.length,
     conflictsCount: postRes.conflictsCount,
+    securityRejectionsCount: postRes.securityRejectionsCount,
     lastSuccessfulSync: postRes.lastSuccessfulSync,
-    message: `ซิงก์สำเร็จ ${postRes.acknowledgedIds.length} รายการ${postRes.conflictsCount > 0 ? ` (พบข้อขัดแย้ง ${postRes.conflictsCount} รายการ)` : ''}`,
+    message: postRes.ok
+      ? `ซิงก์สำเร็จ ${postRes.acknowledgedIds.length} รายการ${postRes.conflictsCount > 0 ? ` (พบข้อขัดแย้ง ${postRes.conflictsCount} รายการ)` : ''}${postRes.securityRejectionsCount > 0 ? ` (ส่ง ${postRes.securityRejectionsCount} รายการให้เจ้าของเว็บตรวจสอบ)` : ''}`
+      : postRes.message,
   };
 }
 
@@ -964,16 +1005,6 @@ export async function syncPendingOfflineScansAsync(
   }
 
   const postRes = await postOfflineSyncBatch(eventId, pendingScans);
-  if (!postRes.ok) {
-    return {
-      success: false,
-      acknowledgedCount: 0,
-      remainingCount: pendingScans.length,
-      conflictsCount: 0,
-      message: postRes.message,
-    };
-  }
-
   const db = await openOfflineAdmissionDb(factory);
   try {
     const tx = db.transaction([STORE_PENDING_SCANS, STORE_DATASETS], 'readwrite');
@@ -998,12 +1029,15 @@ export async function syncPendingOfflineScansAsync(
     await idbTxComplete(tx);
 
     return {
-      success: true,
+      success: postRes.ok,
       acknowledgedCount: postRes.acknowledgedIds.length,
       remainingCount,
       conflictsCount: postRes.conflictsCount,
+      securityRejectionsCount: postRes.securityRejectionsCount,
       lastSuccessfulSync: postRes.lastSuccessfulSync,
-      message: `ซิงก์สำเร็จ ${postRes.acknowledgedIds.length} รายการ${postRes.conflictsCount > 0 ? ` (พบข้อขัดแย้ง ${postRes.conflictsCount} รายการ)` : ''}`,
+      message: postRes.ok
+        ? `ซิงก์สำเร็จ ${postRes.acknowledgedIds.length} รายการ${postRes.conflictsCount > 0 ? ` (พบข้อขัดแย้ง ${postRes.conflictsCount} รายการ)` : ''}${postRes.securityRejectionsCount > 0 ? ` (ส่ง ${postRes.securityRejectionsCount} รายการให้เจ้าของเว็บตรวจสอบ)` : ''}`
+        : postRes.message,
     };
   } catch (err: unknown) {
     return {

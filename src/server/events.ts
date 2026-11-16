@@ -2,6 +2,7 @@ import { randomBytes, randomUUID } from 'node:crypto';
 import type { Pool } from 'pg';
 import { hashPassword, verifyPassword } from 'better-auth/crypto';
 import { inTransaction } from './database.ts';
+import { lockEventFinancial } from './event-lock.ts';
 import { ensureFeeSchema } from './fees.ts';
 import { ensureReservationSchema } from './reservation.ts';
 import { ensureRefundSchema, processSessionCancellationRefunds } from './refunds.ts';
@@ -2353,6 +2354,15 @@ export async function approveSessionCancellation(
       throw new Error('ไม่อนุญาต: เฉพาะเจ้าของเว็บ (Owner) เท่านั้นที่สามารถอนุมัติการยกเลิกรอบได้');
     }
     const owner = userRes.rows[0];
+
+    const eventScopeRes = await client.query<{ eventId: string }>(
+      'SELECT "eventId" FROM session_cancellations WHERE id = $1',
+      [input.cancellationId],
+    );
+    if (eventScopeRes.rowCount === 0) {
+      throw new Error('ไม่พบคำขอยกเลิกรอบการแสดงที่ระบุ');
+    }
+    await lockEventFinancial(client, eventScopeRes.rows[0].eventId);
 
     // 2. Lock cancellation request FOR UPDATE
     const cancelRes = await client.query<{

@@ -34,7 +34,7 @@ export async function GET(
 
     return Response.json(
       { reservation: authResult.reservation },
-      { status: 200, headers: { 'Cache-Control': 'no-store' } },
+      { status: 200, headers: { 'Cache-Control': 'private, no-store, no-cache, must-revalidate' } },
     );
   } catch (error: unknown) {
     return createSafeErrorResponse(error, 'เกิดข้อผิดพลาด', { defaultStatus: 500 });

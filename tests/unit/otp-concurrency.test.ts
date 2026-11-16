@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { verifyGuestOtp } from '../../src/server/guest-otp';
+import { hashOtpCode, verifyGuestOtp } from '../../src/server/guest-otp';
 import type { Pool } from 'pg';
 
 describe('Issue #7: OTP Verification Concurrency & Race Condition Prevention (AC-57, AC-59)', () => {
@@ -26,7 +26,7 @@ describe('Issue #7: OTP Verification Concurrency & Race Condition Prevention (AC
             rowCount: 1,
             rows: [{
               id: 'otp-uuid-1',
-              code: '123456',
+              code: hashOtpCode('123456', 'req-uuid'),
               expiresAt: new Date(Date.now() + 300000),
               consumedAt: isConsumed ? new Date() : null,
             }],

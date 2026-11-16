@@ -7,6 +7,12 @@ vi.mock('@/server/database', () => ({
 }));
 
 describe('POST /api/public/orders/[id]/refund-request Route Security', () => {
+  it('masks the refund destination account number before returning buyer-facing data', () => {
+    expect(refundsModule.maskBankAccountNumber('123-4-56789-0')).toBe('******7890');
+    expect(refundsModule.maskBankAccountNumber('1234')).toBe('****1234');
+    expect(refundsModule.maskBankAccountNumber(null)).toBeNull();
+  });
+
   it('does not forward client-supplied "now" timestamp to submitRefundRequest', async () => {
     let capturedInput: refundsModule.RefundRequestInput | null = null;
     vi.spyOn(refundsModule, 'submitRefundRequest').mockImplementation(async (_pool, input) => {

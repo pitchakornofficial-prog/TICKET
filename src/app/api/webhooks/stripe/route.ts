@@ -1,5 +1,9 @@
 import { getDatabasePool } from '@/server/database';
-import { processStripeSuccessEvent } from '@/server/payment';
+import {
+  processStripeSuccessEvent,
+  recordStripeWebhookDelivery,
+  updateStripeWebhookDelivery,
+} from '@/server/payment';
 import {
   verifyStripeWebhookSignature,
   type StripeEvent,
@@ -9,9 +13,8 @@ import {
 export const runtime = 'nodejs';
 
 export async function POST(request: Request) {
-  const pool = getDatabasePool();
-
   try {
+    const pool = getDatabasePool();
     const rawBody = await request.text();
     const signatureHeader = request.headers.get('stripe-signature');
     const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
@@ -40,8 +43,43 @@ export async function POST(request: Request) {
       return Response.json({ error: 'Invalid JSON payload' }, { status: 400 });
     }
 
+    // Persist the verified delivery independently so processing failures remain retryable.
+    const priorStatus = await recordStripeWebhookDelivery(pool, event, rawBody);
+    if (priorStatus === 'processed' || priorStatus === 'ignored') {
+      return Response.json({ received: true, status: priorStatus, duplicate: true }, { status: 200 });
+    }
+    if (priorStatus === 'rejected') {
+      return Response.json({ received: true, status: priorStatus, duplicate: true }, { status: 400 });
+    }
+
     // 3. Process Stripe event
-    const result = await processStripeSuccessEvent(pool, { event, rawBody });
+    let result: Awaited<ReturnType<typeof processStripeSuccessEvent>>;
+    try {
+      result = await processStripeSuccessEvent(pool, { event, rawBody });
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Stripe event processing failed';
+      await updateStripeWebhookDelivery(pool, event.id, 'pending_review', message).catch(() => undefined);
+      console.error('Stripe webhook processing error:', error);
+      return Response.json(
+        { received: true, status: 'pending_review', retry: true },
+        { status: 503 },
+      );
+    }
+
+    if (result.status === 'pending_review') {
+      await updateStripeWebhookDelivery(pool, event.id, 'pending_review', result.message);
+      return Response.json(
+        { received: true, status: 'pending_review', retry: true },
+        { status: 503 },
+      );
+    }
+
+    const inboxStatus = result.status === 'ignored'
+      ? 'ignored'
+      : result.status === 'mismatch'
+        ? 'rejected'
+        : 'processed';
+    await updateStripeWebhookDelivery(pool, event.id, inboxStatus);
 
     if (result.status === 'ignored') {
       return Response.json(
@@ -72,6 +110,6 @@ export async function POST(request: Request) {
     );
   } catch (error: unknown) {
     console.error('Stripe webhook error:', error);
-    return Response.json({ error: 'Internal server error in webhook handler' }, { status: 500 });
+    return Response.json({ error: 'Stripe webhook is temporarily unavailable; retry delivery' }, { status: 503 });
   }
 }

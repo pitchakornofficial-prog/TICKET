@@ -78,7 +78,7 @@ describe('TASK-018: Guest Order Lookup Unit Tests', () => {
       expect(serverSource).toContain('...(otpResult.devOtpCode ? { devOtpCode: otpResult.devOtpCode } : {})');
 
       // 2. API route returns devOtpCode in JSON payload
-      expect(routeSource).toContain('...(result.devOtpCode ? { devOtpCode: result.devOtpCode } : {})');
+      expect(routeSource).toContain('...(result.success && result.devOtpCode ? { devOtpCode: result.devOtpCode } : {})');
 
       // 3. View handles devOtpCode and renders dev-otp-helper-banner
       expect(viewSource).toContain('devOtpCode');

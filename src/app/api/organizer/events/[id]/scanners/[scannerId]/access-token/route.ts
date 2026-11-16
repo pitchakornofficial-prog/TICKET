@@ -43,7 +43,7 @@ export async function POST(
         accessUrl: issued.accessUrl,
         expiresAt: issued.expiresAt,
       },
-      { status: 201, headers: { 'Cache-Control': 'no-store' } },
+      { status: 201, headers: { 'Cache-Control': 'private, no-store, no-cache, must-revalidate' } },
     );
   } catch (error: unknown) {
     return createSafeErrorResponse(error, 'เกิดข้อผิดพลาดในการออกลิงก์เข้าใช้งานทีมสแกน', {
@@ -94,7 +94,7 @@ export async function DELETE(
         message: 'เพิกถอนลิงก์เข้าใช้งานที่ยังไม่ได้เปิดใช้เรียบร้อยแล้ว',
         revokedCount,
       },
-      { status: 200, headers: { 'Cache-Control': 'no-store' } },
+      { status: 200, headers: { 'Cache-Control': 'private, no-store, no-cache, must-revalidate' } },
     );
   } catch (error: unknown) {
     return createSafeErrorResponse(error, 'เกิดข้อผิดพลาดในการเพิกถอนลิงก์เข้าใช้งาน', {

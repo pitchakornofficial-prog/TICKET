@@ -3,6 +3,7 @@ import { getDatabasePool } from '@/server/database';
 import { verifyGuestOtp } from '@/server/guest-otp';
 import { verifyQueueAccess } from '@/server/queue';
 import { getEventLimitAndBuyerTicketCount } from '@/server/reservation';
+import { readQueueCookie } from '@/server/queue-cookie';
 
 export const runtime = 'nodejs';
 
@@ -14,7 +15,6 @@ export async function POST(request: Request) {
     purpose?: string;
     eventId?: string;
     buyer?: { name?: string; email?: string; phone?: string };
-    queueToken?: string | null;
   } = {};
 
   try {
@@ -35,15 +35,10 @@ export async function POST(request: Request) {
     );
   }
 
-  const rawQueueToken =
-    typeof body.queueToken === 'string'
-      ? body.queueToken
-      : request.headers.get('x-queue-token') || '';
-  const queueToken = rawQueueToken.trim() || null;
-
   const pool = getDatabasePool();
   try {
     if (body.eventId) {
+      const queueToken = readQueueCookie(request, body.eventId)?.entryToken ?? null;
       const queueAllowed = await verifyQueueAccess(pool, body.eventId, queueToken);
       if (!queueAllowed) {
         return Response.json(

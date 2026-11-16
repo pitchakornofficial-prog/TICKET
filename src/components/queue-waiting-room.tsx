@@ -107,10 +107,7 @@ export function QueueWaitingRoom({
       jitterRatio: 0.2,
       step: async ({ signal }) => {
         try {
-          const savedToken = typeof window !== 'undefined'
-            ? sessionStorage.getItem(`ticket_queue_token_${eventId}`)
-            : null;
-          const res = await fetch(`/api/events/${eventId}/queue/status?token=${savedToken || ''}`, {
+          const res = await fetch(`/api/events/${eventId}/queue/status`, {
             signal,
           });
           if (res.status === 503) {
@@ -121,10 +118,6 @@ export function QueueWaitingRoom({
           const data = await res.json();
 
           if (!isMounted || signal.aborted) return { stop: true };
-
-          if (data.token && typeof window !== 'undefined') {
-            sessionStorage.setItem(`ticket_queue_token_${eventId}`, data.token);
-          }
 
           if (data.queueNumber) {
             setQueueNumber(`A-${data.queueNumber}`);
@@ -146,8 +139,8 @@ export function QueueWaitingRoom({
             ahead > 200 ? 8000 : ahead > 50 ? 5000 : 3000;
           return { nextDelayMs: adaptiveDelayMs };
         } catch {
-          // A network failure cannot grant admission. Keep the server token and
-          // retry with backoff until the server explicitly allows checkout.
+          // A network failure cannot grant admission. Retry with backoff until
+          // the server explicitly allows checkout.
           if (!isMounted || signal.aborted) return { stop: true };
           return { backoff: true };
         }

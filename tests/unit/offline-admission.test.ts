@@ -6,6 +6,7 @@ import {
 } from '../../src/lib/offline-admission';
 import { hashOfflineQrPayload } from '../../src/lib/offline-qr-hash';
 import type { OfflineDataset, OfflineTicketItem } from '../../src/server/primary-scanner';
+import { createOfflineAssignmentToken } from '../../src/server/offline-assignment-token';
 
 function createMockStorage(initialData: Record<string, string> = {}) {
   const store = new Map<string, string>(Object.entries(initialData));
@@ -116,6 +117,8 @@ describe('TASK-033: Offline Admission Engine Unit Tests (AC-40, AC-41, AC-50, AC
       scannerName: 'ทีมสแกน 1',
       scannerEmail: 'scanner1@ticket.invalid',
       assignedAt: new Date().toISOString(),
+      assignmentEpoch: 1,
+      assignmentToken: createOfflineAssignmentToken({ eventId, scannerId: 'SCAN-PRI', assignmentEpoch: 1 }),
     },
     isCurrentScannerPrimary: true,
     sessions: [

@@ -147,7 +147,7 @@ export async function requestOrderLookupOtp(
 
   const otpResult = await requestGuestOtp(pool, {
     buyer,
-    purpose: 'order_lookup',
+    purpose: input.orderId ? `order_lookup:${matchingOrder.id}` : 'order_lookup',
     clientIp: input.clientIp,
     now: input.now,
   });
@@ -180,6 +180,7 @@ export async function verifyOrderLookupOtp(
     phone: string;
     code: string;
     requestId: string;
+    orderId?: string;
     now?: Date;
   },
 ): Promise<{
@@ -191,7 +192,7 @@ export async function verifyOrderLookupOtp(
   const email = input.email?.trim().toLowerCase();
   const phone = input.phone?.trim();
 
-  const matchingOrder = await findMatchingOrderByContact(pool, email, phone);
+  const matchingOrder = await findMatchingOrderByContact(pool, email, phone, input.orderId);
   const buyerName = matchingOrder?.buyerName || 'ผู้ซื้อ';
 
   const buyer: GuestBuyerDetails = {
@@ -204,7 +205,9 @@ export async function verifyOrderLookupOtp(
     email,
     code: input.code,
     requestId: input.requestId,
-    purpose: 'order_lookup',
+    purpose: input.orderId && matchingOrder
+      ? `order_lookup:${matchingOrder.id}`
+      : 'order_lookup',
     buyer,
     now: input.now,
   });
@@ -267,8 +270,9 @@ export async function lookupGuestOrders(
      JOIN event_sessions es ON o."sessionId" = es.id
      WHERE LOWER(o."buyerEmail") = $1
        AND REPLACE(REPLACE(o."buyerPhone", '-', ''), ' ', '') = $2
+       AND ($3::text IS NULL OR o.id = $3)
      ORDER BY o."createdAt" DESC`,
-    [cleanEmail, cleanPhone],
+    [cleanEmail, cleanPhone, session.purpose.startsWith('order_lookup:') ? session.purpose.slice('order_lookup:'.length) : null],
   );
 
   const orders: GuestOrderSummary[] = [];
@@ -403,7 +407,14 @@ export async function getGuestOrderDetail(
   const sessionPhone = cleanPhoneNumber(session.phone);
   const orderPhone = cleanPhoneNumber(row.buyerPhone);
 
-  if (sessionEmail !== orderEmail || sessionPhone !== orderPhone) {
+  const sessionBoundOrderId = session.purpose.startsWith('order_lookup:')
+    ? session.purpose.slice('order_lookup:'.length)
+    : null;
+  if (
+    sessionEmail !== orderEmail
+    || sessionPhone !== orderPhone
+    || (sessionBoundOrderId !== null && sessionBoundOrderId !== input.orderId)
+  ) {
     return {
       success: false,
       error: 'ไม่มีสิทธิ์เข้าถึงคำสั่งซื้อนี้',
@@ -508,7 +519,7 @@ async function resolveOrderForLinkToken(
   }
 
   const order = res.rows[0];
-  if (!verifyOrderTicketAccessToken(cleanToken, order.id, order.buyerEmail)) {
+  if (!verifyOrderTicketAccessToken(cleanToken, order.id, order.buyerEmail, order.buyerPhone)) {
     return {
       ok: false,
       code: 'INVALID_LINK',
@@ -566,7 +577,7 @@ export async function requestOrderLinkOtp(
       email: order.buyerEmail,
       phone: cleanPhoneNumber(order.buyerPhone),
     },
-    purpose: 'order_lookup',
+    purpose: `order_lookup:${order.id}`,
     clientIp: input.clientIp,
     now: input.now,
   });
@@ -632,7 +643,7 @@ export async function verifyOrderLinkOtp(
     email: cleanEmail,
     code: input.code,
     requestId: input.requestId,
-    purpose: 'order_lookup',
+    purpose: `order_lookup:${order.id}`,
     buyer: {
       name: order.buyerName,
       email: cleanEmail,

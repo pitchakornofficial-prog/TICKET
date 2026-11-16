@@ -1,6 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import type { Pool } from 'pg';
 import { ensureTicketSchema } from './tickets.ts';
+import { hashOfflineQrPayload, sha256Hex } from '../lib/offline-qr-hash.ts';
+import { verifyOfflineAssignmentToken } from './offline-assignment-token.ts';
 
 export interface ScannedTicketSummary {
   ticketId: string;
@@ -92,6 +94,9 @@ export interface SyncOfflineAdmissionInput {
     reason: string | null;
     deviceMode: 'offline';
     scannedAt: string;
+    qrHash?: string;
+    assignmentEpoch?: number;
+    assignmentToken?: string;
   }>;
 }
 
@@ -100,7 +105,28 @@ export interface SyncOfflineAdmissionResult {
   acknowledgedIds: string[];
   conflictsCount: number;
   syncedCount: number;
+  securityRejectionsCount: number;
   lastSuccessfulSync: string;
+  authorizationLost?: boolean;
+  message?: string;
+}
+
+export interface AdmissionSecurityRejectionItem {
+  id: string;
+  eventId: string;
+  eventTitle: string;
+  scannerId: string;
+  scannerName: string;
+  offlineScanId: string;
+  action: 'entry' | 'exit';
+  scannedAt: string;
+  reason: string;
+  details: string;
+  status: 'pending_review' | 'resolved';
+  resolvedBy?: string | null;
+  resolvedAt?: string | null;
+  resolutionNotes?: string | null;
+  createdAt: string;
 }
 
 const admissionSchemaPromises = new WeakMap<Pool, Promise<void>>();
@@ -153,6 +179,30 @@ export async function ensureAdmissionSchema(pool: Pool): Promise<void> {
         );
         CREATE INDEX IF NOT EXISTS idx_admission_conflicts_event ON admission_sync_conflicts("eventId");
         CREATE INDEX IF NOT EXISTS idx_admission_conflicts_status ON admission_sync_conflicts(status);
+
+        CREATE TABLE IF NOT EXISTS admission_security_rejections (
+          id TEXT PRIMARY KEY,
+          "eventId" TEXT NOT NULL REFERENCES events(id) ON DELETE CASCADE,
+          "scannerId" TEXT NOT NULL,
+          "scannerName" TEXT NOT NULL,
+          "offlineScanId" TEXT NOT NULL,
+          action TEXT NOT NULL,
+          "scannedAt" TIMESTAMPTZ NOT NULL,
+          reason TEXT NOT NULL,
+          "ticketReferenceHash" TEXT NOT NULL,
+          details TEXT NOT NULL,
+          status TEXT NOT NULL DEFAULT 'pending_review',
+          "resolvedBy" TEXT,
+          "resolvedAt" TIMESTAMPTZ,
+          "resolutionNotes" TEXT,
+          "createdAt" TIMESTAMPTZ NOT NULL DEFAULT now(),
+          UNIQUE ("eventId", "offlineScanId")
+        );
+        ALTER TABLE admission_security_rejections ADD COLUMN IF NOT EXISTS "resolvedBy" TEXT;
+        ALTER TABLE admission_security_rejections ADD COLUMN IF NOT EXISTS "resolvedAt" TIMESTAMPTZ;
+        ALTER TABLE admission_security_rejections ADD COLUMN IF NOT EXISTS "resolutionNotes" TEXT;
+        CREATE INDEX IF NOT EXISTS idx_admission_security_rejections_event ON admission_security_rejections("eventId");
+        CREATE INDEX IF NOT EXISTS idx_admission_security_rejections_status ON admission_security_rejections(status);
       `);
     } catch (err) {
       admissionSchemaPromises.delete(pool);
@@ -711,8 +761,8 @@ export async function syncOfflineAdmissionScans(
     throw new Error('ไม่อนุญาต: คุณไม่มีสิทธิ์จัดการข้อมูลของคอนเสิร์ตนี้');
   }
 
-  const priRes = await pool.query<{ scannerId: string }>(
-    `SELECT "scannerId" FROM event_primary_scanners WHERE "eventId" = $1`,
+  const priRes = await pool.query<{ scannerId: string; assignmentEpoch: number | string }>(
+    `SELECT "scannerId", "assignmentEpoch" FROM event_primary_scanners WHERE "eventId" = $1`,
     [eventId],
   );
   if ((priRes.rowCount ?? 0) === 0 || priRes.rows[0].scannerId !== actor.id) {
@@ -733,6 +783,35 @@ export async function syncOfflineAdmissionScans(
   const acknowledgedIds: string[] = [];
   let conflictsCount = 0;
   let syncedCount = 0;
+  let securityRejectionsCount = 0;
+
+  const recordSecurityRejection = async (
+    client: import('pg').PoolClient,
+    scan: SyncOfflineAdmissionInput['scans'][number],
+    scannedDate: Date,
+    reason: string,
+    details: string,
+  ) => {
+    await client.query(
+      `INSERT INTO admission_security_rejections (
+         id, "eventId", "scannerId", "scannerName", "offlineScanId", action,
+         "scannedAt", reason, "ticketReferenceHash", details, status, "createdAt"
+       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'pending_review', now())
+       ON CONFLICT ("eventId", "offlineScanId") DO NOTHING`,
+      [
+        `security-${randomUUID()}`,
+        eventId,
+        effectiveScannerId,
+        effectiveScannerName,
+        scan.id,
+        scan.action,
+        scannedDate,
+        reason,
+        sha256Hex(`${scan.ticketId || ''}:${scan.ticketCode || ''}:${scan.qrHash || ''}`),
+        details,
+      ],
+    );
+  };
 
   // Process scans in chronological order so multi-step offline sequences (entry -> exit -> entry) validate properly
   const orderedScans = (Array.isArray(input.scans) ? input.scans : [])
@@ -758,8 +837,12 @@ export async function syncOfflineAdmissionScans(
 
     // 1. Idempotency check (AC-102): If this offline scan ID was already stored, acknowledge immediately
     const existRes = await pool.query(
-      `SELECT id FROM ticket_admission_logs WHERE id = $1`,
-      [scan.id],
+      `SELECT id FROM ticket_admission_logs WHERE id = $1
+       UNION ALL
+       SELECT "offlineScanId" AS id FROM admission_security_rejections
+       WHERE "eventId" = $2 AND "offlineScanId" = $1
+       LIMIT 1`,
+      [scan.id, eventId],
     );
     if ((existRes.rowCount ?? 0) > 0) {
       acknowledgedIds.push(scan.id);
@@ -783,11 +866,91 @@ export async function syncOfflineAdmissionScans(
     try {
       await client.query('BEGIN');
 
+      // Serialize each scan with assignment changes, then recheck the signed
+      // dataset epoch before touching a ticket.
+      await client.query('SELECT id FROM events WHERE id = $1 FOR UPDATE', [eventId]);
+      const assignmentRes = await client.query<{
+        scannerId: string;
+        assignmentEpoch: number | string;
+      }>(
+        `SELECT p."scannerId", p."assignmentEpoch"
+         FROM event_primary_scanners p
+         JOIN event_scanners es ON es."eventId" = p."eventId" AND es."scannerId" = p."scannerId"
+         WHERE p."eventId" = $1
+         FOR UPDATE OF p
+         FOR KEY SHARE OF es`,
+        [eventId],
+      );
+      const currentAssignment = assignmentRes.rows[0];
+      if (!currentAssignment || currentAssignment.scannerId !== effectiveScannerId ||
+          Number(currentAssignment.assignmentEpoch) !== Number(scan.assignmentEpoch)) {
+        await client.query('ROLLBACK');
+        return {
+          success: false,
+          acknowledgedIds,
+          conflictsCount,
+          syncedCount,
+          securityRejectionsCount,
+          authorizationLost: true,
+          message: 'เครื่องหลักหรือเวอร์ชันการมอบหมายเปลี่ยนระหว่างซิงก์ ระบบหยุดรายการที่เหลือแล้ว',
+          lastSuccessfulSync: new Date().toISOString(),
+        };
+      }
+
+      const controlRes = await client.query<{ offlineStatus: string }>(
+        'SELECT "offlineStatus" FROM event_offline_controls WHERE "eventId" = $1 FOR UPDATE',
+        [eventId],
+      );
+      if (controlRes.rows[0]?.offlineStatus === 'halted_reconciliation_required') {
+        await client.query('ROLLBACK');
+        return {
+          success: false,
+          acknowledgedIds,
+          conflictsCount,
+          syncedCount,
+          securityRejectionsCount,
+          authorizationLost: true,
+          message: 'การใช้งานออฟไลน์ถูกระงับระหว่างซิงก์ ระบบหยุดรายการที่เหลือแล้ว',
+          lastSuccessfulSync: new Date().toISOString(),
+        };
+      }
+
+      const scannedEpoch = Number(scan.assignmentEpoch);
+      if (!verifyOfflineAssignmentToken(scan.assignmentToken || '', {
+        eventId,
+        scannerId: effectiveScannerId,
+        assignmentEpoch: scannedEpoch,
+      })) {
+        await recordSecurityRejection(client, scan, scannedDate, 'INVALID_ASSIGNMENT_PROOF', 'Offline scan does not carry a valid signed primary assignment.');
+        await client.query('COMMIT');
+        securityRejectionsCount++;
+        acknowledgedIds.push(scan.id);
+        continue;
+      }
+
+      if (scan.eventId !== eventId || scan.scannerId !== effectiveScannerId) {
+        await recordSecurityRejection(client, scan, scannedDate, 'OFFLINE_SCAN_SCOPE_MISMATCH', 'Submitted event or scanner identity does not match the authenticated sync scope.');
+        await client.query('COMMIT');
+        securityRejectionsCount++;
+        acknowledgedIds.push(scan.id);
+        continue;
+      }
+
+      if (typeof scan.qrHash !== 'string' || !/^[a-f0-9]{64}$/.test(scan.qrHash)) {
+        await recordSecurityRejection(client, scan, scannedDate, 'MISSING_QR_EVIDENCE', 'Offline scan is missing a valid event-scoped QR payload digest.');
+        await client.query('COMMIT');
+        securityRejectionsCount++;
+        acknowledgedIds.push(scan.id);
+        continue;
+      }
+
       const tRes = await client.query<{
         id: string;
         ticketCode: string;
         sessionId: string;
         eventId: string;
+        sessionEventId: string;
+        qrPayload: string;
         status: string;
         admissionStatus: string;
         sessionStatus?: string;
@@ -796,7 +959,8 @@ export async function syncOfflineAdmissionScans(
         admissionStartTime?: Date | string | null;
         admissionEndTime?: Date | string | null;
       }>(
-        `SELECT t.id, t."ticketCode", t."sessionId", t."eventId", t.status, t."admissionStatus",
+        `SELECT t.id, t."ticketCode", t."qrPayload", t."sessionId", t."eventId", s."eventId" AS "sessionEventId",
+                t.status, t."admissionStatus",
                 s.status AS "sessionStatus",
                 s."startTime" AS "sessionStartTime",
                 s."endTime" AS "sessionEndTime",
@@ -810,17 +974,48 @@ export async function syncOfflineAdmissionScans(
       );
 
       if ((tRes.rowCount ?? 0) === 0) {
-        // Ticket unknown centrally in this event scope, still acknowledge to clear unresolvable pending
-        await client.query('ROLLBACK');
+        const globalTicketRes = await client.query<{
+          id: string;
+          eventId: string;
+          ticketCode: string;
+        }>(
+          `SELECT id, "eventId", "ticketCode" FROM tickets
+           WHERE id = $1 OR "ticketCode" = $2
+           ORDER BY CASE WHEN id = $1 THEN 0 ELSE 1 END
+           LIMIT 1`,
+          [scan.ticketId, scan.ticketCode],
+        );
+        const crossEvent = globalTicketRes.rows[0]?.eventId !== undefined && globalTicketRes.rows[0].eventId !== eventId;
+        await recordSecurityRejection(
+          client,
+          scan,
+          scannedDate,
+          crossEvent ? 'CROSS_EVENT_TICKET' : 'UNMATCHED_QR_EVIDENCE',
+          crossEvent
+            ? 'The scanned ticket belongs to another event; its session and ticket state were not attached to this event.'
+            : 'No ticket in this event matches the submitted ticket reference and QR digest.',
+        );
+        await client.query('COMMIT');
+        securityRejectionsCount++;
         acknowledgedIds.push(scan.id);
         continue;
       }
 
       const ticket = tRes.rows[0];
 
-      // Scope validation: verify ticket belongs to this event and matching session if specified
-      if (ticket.eventId !== eventId || (scan.sessionId && ticket.sessionId !== scan.sessionId)) {
-        await client.query('ROLLBACK');
+      if (hashOfflineQrPayload(eventId, ticket.qrPayload) !== scan.qrHash) {
+        await recordSecurityRejection(client, scan, scannedDate, 'INVALID_QR_EVIDENCE', 'Submitted digest does not prove possession of this ticket QR payload.');
+        await client.query('COMMIT');
+        securityRejectionsCount++;
+        acknowledgedIds.push(scan.id);
+        continue;
+      }
+
+      // Do not allow a ticket's session to be logged under another event.
+      if (ticket.eventId !== eventId || ticket.sessionEventId !== eventId || ticket.sessionId !== scan.sessionId) {
+        await recordSecurityRejection(client, scan, scannedDate, 'CROSS_EVENT_SESSION', 'Ticket and submitted session do not belong to the same event scope.');
+        await client.query('COMMIT');
+        securityRejectionsCount++;
         acknowledgedIds.push(scan.id);
         continue;
       }
@@ -883,14 +1078,20 @@ export async function syncOfflineAdmissionScans(
 
       // 4. Validate session approval & admission window (AC-100)
       if (ticket.sessionStatus !== 'approved') {
-        await client.query('ROLLBACK');
+        await recordSecurityRejection(client, scan, scannedDate, 'SESSION_NOT_APPROVED', 'Offline scan refers to a session that was not approved at sync time.');
+        await client.query('COMMIT');
+        securityRejectionsCount++;
+        acknowledgedIds.push(scan.id);
         continue;
       }
 
       const rawWindowStart = ticket.admissionStartTime || ticket.sessionStartTime;
       const rawWindowEnd = ticket.admissionEndTime || ticket.sessionEndTime;
       if (!rawWindowStart || !rawWindowEnd) {
-        await client.query('ROLLBACK');
+        await recordSecurityRejection(client, scan, scannedDate, 'SESSION_WINDOW_MISSING', 'The scheduled session admission window is incomplete.');
+        await client.query('COMMIT');
+        securityRejectionsCount++;
+        acknowledgedIds.push(scan.id);
         continue;
       }
       const windowStart = new Date(rawWindowStart);
@@ -901,7 +1102,10 @@ export async function syncOfflineAdmissionScans(
         scannedDate < windowStart ||
         scannedDate > windowEnd
       ) {
-        await client.query('ROLLBACK');
+        await recordSecurityRejection(client, scan, scannedDate, 'OUTSIDE_SESSION_WINDOW', 'Offline scan timestamp falls outside the scheduled admission window.');
+        await client.query('COMMIT');
+        securityRejectionsCount++;
+        acknowledgedIds.push(scan.id);
         continue;
       }
 
@@ -956,6 +1160,7 @@ export async function syncOfflineAdmissionScans(
     acknowledgedIds,
     conflictsCount,
     syncedCount,
+    securityRejectionsCount,
     lastSuccessfulSync: new Date().toISOString(),
   };
 }
@@ -1016,6 +1221,49 @@ export async function listAdmissionSyncConflicts(
   }));
 }
 
+export async function listAdmissionSecurityRejections(
+  pool: Pool,
+  eventId?: string,
+): Promise<AdmissionSecurityRejectionItem[]> {
+  await ensureAdmissionSchema(pool);
+  const params: unknown[] = [];
+  let sql = `
+    SELECT r.id, r."eventId", e.title AS "eventTitle", r."scannerId", r."scannerName",
+           r."offlineScanId", r.action, r."scannedAt", r.reason, r.details, r.status,
+           r."resolvedBy", r."resolvedAt", r."resolutionNotes", r."createdAt"
+    FROM admission_security_rejections r
+    JOIN events e ON e.id = r."eventId"
+  `;
+  if (eventId) {
+    sql += ' WHERE r."eventId" = $1';
+    params.push(eventId);
+  }
+  sql += ' ORDER BY r."createdAt" DESC';
+  const result = await pool.query<{
+    id: string;
+    eventId: string;
+    eventTitle: string;
+    scannerId: string;
+    scannerName: string;
+    offlineScanId: string;
+    action: 'entry' | 'exit';
+    scannedAt: Date;
+    reason: string;
+    details: string;
+    status: 'pending_review' | 'resolved';
+    resolvedBy: string | null;
+    resolvedAt: Date | null;
+    resolutionNotes: string | null;
+    createdAt: Date;
+  }>(sql, params);
+  return result.rows.map(row => ({
+    ...row,
+    scannedAt: row.scannedAt.toISOString(),
+    resolvedAt: row.resolvedAt?.toISOString() ?? null,
+    createdAt: row.createdAt.toISOString(),
+  }));
+}
+
 export async function resolveAdmissionSyncConflict(
   pool: Pool,
   conflictId: string,
@@ -1032,7 +1280,14 @@ export async function resolveAdmissionSyncConflict(
      WHERE id = $3`,
     [actor.name, resolutionNotes || 'เจ้าของเว็บตรวจสอบและรับทราบข้อขัดแย้งแล้ว', conflictId],
   );
-  return (res.rowCount ?? 0) > 0;
+  if ((res.rowCount ?? 0) > 0) return true;
+  const rejectionRes = await pool.query(
+    `UPDATE admission_security_rejections
+     SET status = 'resolved', "resolvedBy" = $1, "resolvedAt" = now(), "resolutionNotes" = $2
+     WHERE id = $3`,
+    [actor.name, resolutionNotes || 'เจ้าของเว็บตรวจสอบและรับทราบรายการสแกนผิดปกติแล้ว', conflictId],
+  );
+  return (rejectionRes.rowCount ?? 0) > 0;
 }
 
 
