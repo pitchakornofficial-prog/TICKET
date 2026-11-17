@@ -75,7 +75,7 @@ export default function AboutPage() {
           ทีมงาน TICKET พร้อมให้ความช่วยเหลือและตอบข้อซักถามเกี่ยวกับการซื้อบัตรและบริการ:
         </p>
         <ul className="info-list">
-          <li><strong>อีเมลสนับสนุน:</strong> support@ticket.invalid</li>
+          <li><strong>อีเมลสนับสนุน:</strong> support@phatysd.me</li>
           <li><strong>เวลาทำการ:</strong> จันทร์ – ศุกร์ 09:00 – 18:00 น. (เวลาประเทศไทย Asia/Bangkok)</li>
           <li><strong>รายละเอียดเพิ่มเติม:</strong> ดูได้ที่หน้า <Link href="/contact" className="text-link">ติดต่อเรา</Link></li>
         </ul>

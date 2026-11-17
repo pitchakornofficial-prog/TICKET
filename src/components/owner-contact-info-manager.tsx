@@ -126,7 +126,7 @@ export function OwnerContactInfoManager() {
                 id="owner-contact-email"
                 type="email"
                 className="text-input"
-                placeholder="เช่น organizer-support@ticket.co.th"
+                placeholder="เช่น organizer-support@phatysd.me"
                 value={info.email}
                 onChange={e => setInfo({ ...info, email: e.target.value })}
                 required

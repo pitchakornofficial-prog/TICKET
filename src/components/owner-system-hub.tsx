@@ -1277,7 +1277,7 @@ export function OwnerSystemHub() {
                     id="owner-contact-email"
                     type="email"
                     className="text-input"
-                    placeholder="เช่น organizer-support@ticket.co.th"
+                    placeholder="เช่น organizer-support@phatysd.me"
                     value={contactInfo.email}
                     onChange={e => setContactInfo({ ...contactInfo, email: e.target.value })}
                     required

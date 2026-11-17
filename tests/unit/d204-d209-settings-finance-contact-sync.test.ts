@@ -72,7 +72,7 @@ describe('D-204 to D-209: Settings, Finance, and Contact Refinements & Real-Time
     // 1. Helper library tests
     const defaultInfo = loadOwnerContactInfo();
     expect(defaultInfo.hotline).toContain('02-123-4567');
-    expect(defaultInfo.email).toBe('organizer-support@ticket.co.th');
+    expect(defaultInfo.email).toBe('organizer-support@phatysd.me');
     expect(defaultInfo.lineId).toBe('@ticket-organizer');
     expect(defaultInfo.operatingHours).toContain('09:00 - 18:00');
     expect(defaultInfo.address).toContain('สุขุมวิท');

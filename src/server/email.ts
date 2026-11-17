@@ -7,6 +7,9 @@ export type EmailMessage = {
   subject: string;
   html?: string;
   text?: string;
+  replyTo?: string;
+  headers?: Array<{ name: string; value: string }>;
+  preferMessageFrom?: boolean;
 };
 
 export type EmailTransport = {
@@ -141,6 +144,7 @@ export function createSesTransport(config?: SesConfig | string): EmailTransport 
 
       // SES v2 SendEmail REST API: POST https://email.{region}.amazonaws.com/v2/email/outbound-emails
       const fromAddress =
+        (message.preferMessageFrom && message.from) ||
         process.env.EMAIL_FROM ||
         (typeof config === 'object' ? config?.from : undefined) ||
         message.from;
@@ -164,11 +168,23 @@ export function createSesTransport(config?: SesConfig | string): EmailTransport 
         bodyObj.Text = { Data: '', Charset: 'UTF-8' };
       }
 
-      const payload = {
+      const payload: {
+        FromEmailAddress: string;
+        Destination: { ToAddresses: string[] };
+        ReplyToAddresses?: string[];
+        Content: {
+          Simple: {
+            Subject: { Data: string; Charset: string };
+            Body: Record<string, { Data: string; Charset: string }>;
+            Headers?: Array<{ Name: string; Value: string }>;
+          };
+        };
+      } = {
         FromEmailAddress: fromAddress,
         Destination: {
           ToAddresses: [message.to],
         },
+        ...(message.replyTo ? { ReplyToAddresses: [message.replyTo] } : {}),
         Content: {
           Simple: {
             Subject: {
@@ -176,6 +192,9 @@ export function createSesTransport(config?: SesConfig | string): EmailTransport 
               Charset: 'UTF-8',
             },
             Body: bodyObj,
+            ...(message.headers?.length
+              ? { Headers: message.headers.map((h) => ({ Name: h.name, Value: h.value })) }
+              : {}),
           },
         },
       };
