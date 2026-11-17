@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { createOrderTicketAccessToken } from '../../src/server/order-access-token';
+import { createOrderTicketAccessToken, verifyOrderTicketAccessToken } from '../../src/server/order-access-token';
 
 const mockQuery = vi.fn();
 vi.mock('@/server/database', () => ({
@@ -45,6 +45,13 @@ describe('Order Email Link One-Step OTP Flow (AC-63, G-17)', () => {
     vi.clearAllMocks();
   });
 
+  it('signs order links with the order ID, buyer email, and buyer phone', () => {
+    const token = createOrderTicketAccessToken(orderId, buyerEmail, '081-234-5678');
+    expect(verifyOrderTicketAccessToken(token, orderId, buyerEmail, '0812345678')).toBe(true);
+    expect(verifyOrderTicketAccessToken(token, 'ORD-OTHER-999', buyerEmail, '0812345678')).toBe(false);
+    expect(verifyOrderTicketAccessToken(token, orderId, buyerEmail, '0899999999')).toBe(false);
+  });
+
   it('requests OTP for a valid paid order link without exposing full email, phone, or devOtpCode', async () => {
     mockQuery.mockResolvedValueOnce({
       rowCount: 1,
@@ -66,7 +73,7 @@ describe('Order Email Link One-Step OTP Flow (AC-63, G-17)', () => {
       devOtpCode: '654321',
     });
 
-    const linkToken = createOrderTicketAccessToken(orderId, buyerEmail);
+    const linkToken = createOrderTicketAccessToken(orderId, buyerEmail, '0812345678');
     const req = new Request('http://localhost/api/public/orders/link-otp/request', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -83,6 +90,13 @@ describe('Order Email Link One-Step OTP Flow (AC-63, G-17)', () => {
     expect(JSON.stringify(data)).not.toContain(buyerEmail);
     expect(JSON.stringify(data)).not.toContain('0812345678');
     expect(JSON.stringify(data)).not.toContain('654321');
+    expect(mockRequestGuestOtp).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        purpose: `order_lookup:${orderId}`,
+        buyer: expect.objectContaining({ email: buyerEmail, phone: '0812345678' }),
+      }),
+    );
   });
 
   it('rejects forged or mismatched order link tokens with 401', async () => {
@@ -99,7 +113,7 @@ describe('Order Email Link One-Step OTP Flow (AC-63, G-17)', () => {
       ],
     });
 
-    const wrongToken = createOrderTicketAccessToken('ORD-OTHER-999', buyerEmail);
+    const wrongToken = createOrderTicketAccessToken('ORD-OTHER-999', buyerEmail, '0812345678');
     const req = new Request('http://localhost/api/public/orders/link-otp/request', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -125,7 +139,7 @@ describe('Order Email Link One-Step OTP Flow (AC-63, G-17)', () => {
       ],
     });
 
-    const linkToken = createOrderTicketAccessToken(orderId, buyerEmail);
+    const linkToken = createOrderTicketAccessToken(orderId, buyerEmail, '0812345678');
     const req = new Request('http://localhost/api/public/orders/link-otp/request', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -155,7 +169,7 @@ describe('Order Email Link One-Step OTP Flow (AC-63, G-17)', () => {
       verifiedToken: 'verified-session-uuid',
     });
 
-    const linkToken = createOrderTicketAccessToken(orderId, buyerEmail);
+    const linkToken = createOrderTicketAccessToken(orderId, buyerEmail, '0812345678');
     const req = new Request('http://localhost/api/public/orders/link-otp/verify', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -178,7 +192,7 @@ describe('Order Email Link One-Step OTP Flow (AC-63, G-17)', () => {
         email: buyerEmail,
         code: '654321',
         requestId: 'req-link-1',
-        purpose: 'order_lookup',
+        purpose: `order_lookup:${orderId}`,
       }),
     );
   });

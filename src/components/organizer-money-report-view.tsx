@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import type { EventMoneyReportDetail } from '@/server/reports';
 import { formatDate, formatTime } from '@/lib/locale';
+import { csvRow } from '@/lib/csv';
 import { RefreshIcon, DownloadIcon } from './icons';
 import { AlertIcon } from './alert-icon';
 
@@ -73,36 +74,55 @@ export function OrganizerMoneyReportView({
       }
     }
     const lines: string[] = [];
-    lines.push(`"รายงานสรุปการเงิน TICKET - ${exportReport.eventTitle}"`);
-    lines.push(`"รหัสคอนเสิร์ต: ${exportReport.eventId}"`);
-    lines.push(`"วันที่ออกรายงาน: ${formatDate(new Date())}"`);
+    lines.push(csvRow(`รายงานสรุปการเงิน TICKET - ${exportReport.eventTitle}`));
+    lines.push(csvRow(`รหัสคอนเสิร์ต: ${exportReport.eventId}`));
+    lines.push(csvRow(`วันที่ออกรายงาน: ${formatDate(new Date())}`));
     lines.push('');
-    lines.push('"หัวข้อสรุปการเงิน","จำนวนเงิน (บาท)","รายละเอียด / หมายเหตุ"');
-    lines.push(`"ยอดขายบัตรทั้งหมด (Gross)",${exportReport.grossSales.toFixed(2)},"ออกบัตรแล้ว ${exportReport.totalTicketsIssuedCount} ใบ"`);
-    lines.push(`"ยอดคืนเงินที่อนุมัติ (Refunds)",${(-exportReport.approvedRefundDeductions).toFixed(2)},"คืนแล้ว ${exportReport.totalTicketsRefundedCount} ใบ"`);
-    lines.push(`"ยอดขายสุทธิ (Net Sales)",${exportReport.netSales.toFixed(2)},"บัตรใช้งานได้ ${exportReport.totalTicketsValidCount} ใบ"`);
-    lines.push(`"ค่าบริการระบบ (Organizer Fee)",${(-exportReport.organizerFee).toFixed(2)},"หักค่าบริการแพลตฟอร์ม"`);
-    lines.push(`"สิทธิ์สุทธิผู้จัดงาน (E)",${exportReport.netEntitlement.toFixed(2)},"ยอดขายสุทธิหักค่าบริการ"`);
-    lines.push(`"เงินสำรองที่กันไว้จริง (Held H)",${exportReport.actualHeldReserve.toFixed(2)},"เป้าหมายสำรอง ${exportReport.reserveTarget.toFixed(2)}"`);
-    lines.push(`"ยอดที่โอนจ่ายแล้ว (Paid P)",${exportReport.totalPaidOut.toFixed(2)},"โอนจ่ายตามรอบสำเร็จ"`);
-    lines.push(`"ยอดพร้อมจ่าย (Payable)",${(exportReport.isDebt ? -exportReport.debtAmount : exportReport.payableAmount).toFixed(2)},"${exportReport.isDebt ? 'หนี้ค้างชำระ' : 'ยอดที่โอนได้ทันที'}"`);
+    lines.push(csvRow('หัวข้อสรุปการเงิน', 'จำนวนเงิน (บาท)', 'รายละเอียด / หมายเหตุ'));
+    lines.push(csvRow('ยอดขายบัตรทั้งหมด (Gross)', exportReport.grossSales.toFixed(2), `ออกบัตรแล้ว ${exportReport.totalTicketsIssuedCount} ใบ`));
+    lines.push(csvRow('ยอดคืนเงินที่อนุมัติ (Refunds)', (-exportReport.approvedRefundDeductions).toFixed(2), `คืนแล้ว ${exportReport.totalTicketsRefundedCount} ใบ`));
+    lines.push(csvRow('ยอดขายสุทธิ (Net Sales)', exportReport.netSales.toFixed(2), `บัตรใช้งานได้ ${exportReport.totalTicketsValidCount} ใบ`));
+    lines.push(csvRow('ค่าบริการระบบ (Organizer Fee)', (-exportReport.organizerFee).toFixed(2), 'หักค่าบริการแพลตฟอร์ม'));
+    lines.push(csvRow('สิทธิ์สุทธิผู้จัดงาน (E)', exportReport.netEntitlement.toFixed(2), 'ยอดขายสุทธิหักค่าบริการ'));
+    lines.push(csvRow('เงินสำรองที่กันไว้จริง (Held H)', exportReport.actualHeldReserve.toFixed(2), `เป้าหมายสำรอง ${exportReport.reserveTarget.toFixed(2)}`));
+    lines.push(csvRow('ยอดที่โอนจ่ายแล้ว (Paid P)', exportReport.totalPaidOut.toFixed(2), 'โอนจ่ายตามรอบสำเร็จ'));
+    lines.push(csvRow('ยอดพร้อมจ่าย (Payable)', (exportReport.isDebt ? -exportReport.debtAmount : exportReport.payableAmount).toFixed(2), exportReport.isDebt ? 'หนี้ค้างชำระ' : 'ยอดที่โอนได้ทันที'));
     lines.push('');
 
     if (exportReport.sessions.length > 0) {
-      lines.push('"สรุปตามรอบการแสดง"');
-      lines.push('"รอบการแสดง","สถานะ","ออกบัตร (ใบ)","บัตรคงเหลือ (ใบ)","คืนบัตร (ใบ)","ยอดขายรวม (บาท)","ยอดคืนเงิน (บาท)","ยอดสุทธิ (บาท)"');
+      lines.push(csvRow('สรุปตามรอบการแสดง'));
+      lines.push(csvRow('รอบการแสดง', 'สถานะ', 'ออกบัตร (ใบ)', 'บัตรคงเหลือ (ใบ)', 'คืนบัตร (ใบ)', 'ยอดขายรวม (บาท)', 'ยอดคืนเงิน (บาท)', 'ยอดสุทธิ (บาท)'));
       for (const s of exportReport.sessions) {
         const sDate = `${formatDate(new Date(s.sessionStartTime))} ${formatTime(new Date(s.sessionStartTime))}`;
-        lines.push(`"${sDate}","${s.sessionStatus === 'approved' ? 'เปิดขายปกติ' : s.sessionStatus === 'cancelled' ? 'ยกเลิกรอบ' : s.sessionStatus}",${s.issuedTicketsCount},${s.validTicketsCount},${s.refundedTicketsCount},${s.grossSales.toFixed(2)},${s.approvedRefunds.toFixed(2)},${s.netSales.toFixed(2)}`);
+        lines.push(csvRow(
+          sDate,
+          s.sessionStatus === 'approved' ? 'เปิดขายปกติ' : s.sessionStatus === 'cancelled' ? 'ยกเลิกรอบ' : s.sessionStatus,
+          s.issuedTicketsCount,
+          s.validTicketsCount,
+          s.refundedTicketsCount,
+          s.grossSales.toFixed(2),
+          s.approvedRefunds.toFixed(2),
+          s.netSales.toFixed(2),
+        ));
       }
       lines.push('');
     }
 
     if (exportReport.orders.length > 0) {
-      lines.push('"รายการคำสั่งซื้อ"');
-      lines.push('"หมายเลขคำสั่งซื้อ","ผู้ซื้อ","อีเมล","เบอร์โทร","บัตรคงเหลือ / ทั้งหมด","ยอดขายรวม (บาท)","ยอดคืนเงิน (บาท)","ยอดสุทธิ (บาท)","ค่าบริการ (บาท)"');
+      lines.push(csvRow('รายการคำสั่งซื้อ'));
+      lines.push(csvRow('หมายเลขคำสั่งซื้อ', 'ผู้ซื้อ', 'อีเมล', 'เบอร์โทร', 'บัตรคงเหลือ / ทั้งหมด', 'ยอดขายรวม (บาท)', 'ยอดคืนเงิน (บาท)', 'ยอดสุทธิ (บาท)', 'ค่าบริการ (บาท)'));
       for (const o of exportReport.orders) {
-        lines.push(`"${o.orderId}","${o.buyerName}","${o.buyerEmail}","${o.buyerPhone}","${o.validTicketsCount} / ${o.totalTicketsCount}",${o.grossSubtotal.toFixed(2)},${o.refundDeductions.toFixed(2)},${o.netSubtotal.toFixed(2)},${o.orderFeeAdjusted.toFixed(2)}`);
+        lines.push(csvRow(
+          o.orderId,
+          o.buyerName,
+          o.buyerEmail,
+          o.buyerPhone,
+          `${o.validTicketsCount} / ${o.totalTicketsCount}`,
+          o.grossSubtotal.toFixed(2),
+          o.refundDeductions.toFixed(2),
+          o.netSubtotal.toFixed(2),
+          o.orderFeeAdjusted.toFixed(2),
+        ));
       }
       lines.push('');
     }

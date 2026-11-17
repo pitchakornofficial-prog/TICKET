@@ -12,12 +12,15 @@ import { createPaymentQr, verifyAndProcessPayment } from '../../src/server/payme
 import {
   setEventPrimaryScanner,
   getOfflineDataset,
+  handoverEventPrimaryScanner,
 } from '../../src/server/primary-scanner';
 import {
   syncOfflineAdmissionScans,
   listAdmissionSyncConflicts,
+  listAdmissionSecurityRejections,
   resolveAdmissionSyncConflict,
 } from '../../src/server/admission';
+import { hashOfflineQrPayload } from '../../src/lib/offline-qr-hash';
 import {
   submitRefundRequest,
   approveRefundRequest,
@@ -410,6 +413,12 @@ describe('TASK-034: Offline Sync Integration Tests (AC-99, AC-102)', () => {
 
     // Primary scanner of Event A attempts to sync a scan for ticketB under eventId (Event A)
     const maliciousScanId = `scan-cross-${randomUUID()}`;
+    const datasetA = await getOfflineDataset(
+      fixture.pool,
+      { id: primaryScannerId, role: 'scanner' },
+      eventId,
+    );
+    if (!datasetA.primaryScanner) throw new Error('Event A has no current primary scanner');
     const syncRes = await syncOfflineAdmissionScans(
       fixture.pool,
       { id: primaryScannerId, role: 'scanner', name: 'หัวหน้าสแกน 1' },
@@ -422,8 +431,11 @@ describe('TASK-034: Offline Sync Integration Tests (AC-99, AC-102)', () => {
             ticketCode: ticketB.ticketCode,
             sessionId: sessionIdB,
             eventId: eventId,
-            scannerId: 'attacker-spoofed-id',
-            scannerName: 'Attacker Fake Name',
+            scannerId: primaryScannerId,
+            scannerName: 'หัวหน้าสแกน 1',
+            qrHash: hashOfflineQrPayload(eventId, ticketB.qrPayload),
+            assignmentEpoch: datasetA.primaryScanner.assignmentEpoch,
+            assignmentToken: datasetA.primaryScanner.assignmentToken,
             action: 'entry',
             status: 'success',
             reason: null,
@@ -436,6 +448,7 @@ describe('TASK-034: Offline Sync Integration Tests (AC-99, AC-102)', () => {
 
     // Should NOT mutate or count as synced
     expect(syncRes.syncedCount).toBe(0);
+    expect(syncRes.securityRejectionsCount).toBe(1);
 
     // Verify ticket in Event B remains outside
     const ticketCheckB = await fixture.pool.query('SELECT "admissionStatus" FROM tickets WHERE id = $1', [ticketB.id]);
@@ -444,5 +457,63 @@ describe('TASK-034: Offline Sync Integration Tests (AC-99, AC-102)', () => {
     // Verify no admission log was created for ticketB
     const logCheck = await fixture.pool.query('SELECT * FROM ticket_admission_logs WHERE "ticketId" = $1', [ticketB.id]);
     expect(logCheck.rows).toHaveLength(0);
+
+    const securityRejections = await listAdmissionSecurityRejections(fixture.pool, eventId);
+    const crossEventRejection = securityRejections.find(row => row.offlineScanId === maliciousScanId);
+    expect(crossEventRejection?.reason).toBe('CROSS_EVENT_TICKET');
+    expect(crossEventRejection?.eventId).toBe(eventId);
+    expect(crossEventRejection?.status).toBe('pending_review');
+    if (!crossEventRejection) throw new Error('Cross-event security rejection was not recorded');
+    await resolveAdmissionSyncConflict(
+      fixture.pool,
+      crossEventRejection.id,
+      { id: fixture.ids.owner, role: 'owner', name: 'เจ้าของเว็บ' },
+      'ตรวจสอบรายการบัตรข้ามงานแล้ว',
+    );
+    const reviewedRejections = await listAdmissionSecurityRejections(fixture.pool, eventId);
+    expect(reviewedRejections.find(row => row.id === crossEventRejection.id)?.status).toBe('resolved');
+  });
+
+  it('rejects a cached primary assignment after handover before changing ticket state', async () => {
+    const purchase = await purchaseTicket('ผู้ซื้อก่อนสลับเครื่อง', `handover-offline-${randomUUID().slice(0, 8)}@ticket.invalid`);
+    const dataset = await getOfflineDataset(fixture.pool, { id: primaryScannerId, role: 'scanner' }, eventId);
+    const storage = createMockStorage({ [getOfflineDatasetKey(eventId)]: JSON.stringify(dataset) });
+    const scan = performOfflineAdmissionScan(
+      {
+        eventId,
+        sessionId,
+        scannerId: primaryScannerId,
+        scannerName: 'หัวหน้าสแกน 1',
+        isPrimary: true,
+        qrPayloadOrCode: purchase.ticket.qrPayload,
+        action: 'entry',
+        now: new Date(sessionStartTimeMs + 60 * 60 * 1000),
+      },
+      storage,
+    );
+    expect(scan.success).toBe(true);
+    const pending = getOfflinePendingScans(eventId, storage);
+
+    await getOfflineDataset(fixture.pool, { id: secondaryScannerId, role: 'scanner' }, eventId);
+    const handover = await handoverEventPrimaryScanner(
+      fixture.pool,
+      { id: fixture.ids.organizer, role: 'organizer', name: 'ผู้จัดงานทดสอบ' },
+      eventId,
+      secondaryScannerId,
+      { oldScannerPendingCount: 0 },
+    );
+    expect(handover.primaryScanner.assignmentEpoch).toBeGreaterThan(dataset.primaryScanner?.assignmentEpoch ?? 0);
+
+    await expect(syncOfflineAdmissionScans(
+      fixture.pool,
+      { id: primaryScannerId, role: 'scanner', name: 'หัวหน้าสแกน 1' },
+      eventId,
+      { scans: pending },
+    )).rejects.toThrow(/เฉพาะเครื่องหลักประจำงานเท่านั้น/);
+
+    const ticketState = await fixture.pool.query('SELECT "admissionStatus" FROM tickets WHERE id = $1', [purchase.ticket.id]);
+    expect(ticketState.rows[0].admissionStatus).toBe('outside');
+    const admissionLogs = await fixture.pool.query('SELECT id FROM ticket_admission_logs WHERE "ticketId" = $1', [purchase.ticket.id]);
+    expect(admissionLogs.rows).toHaveLength(0);
   });
 });

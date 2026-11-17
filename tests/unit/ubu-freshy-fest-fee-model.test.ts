@@ -129,7 +129,32 @@ describe('D-181: UBU Freshy Music Fest 2026, 6% Customer Fee, 150B/99B UBU Email
     let capturedValues: unknown[] = [];
     const mockPool = {
       connect: async () => ({
-        query: async () => ({ rowCount: 0, rows: [] }),
+        query: async (queryText: string, values?: unknown[]) => {
+          if (queryText.includes('SELECT id FROM events')) {
+            return { rowCount: 1, rows: [{ id: 'event-ubu-freshy-2026' }] };
+          }
+          if (queryText.includes('INSERT INTO event_fee_settings')) {
+            capturedQuery = queryText;
+            capturedValues = values || [];
+            return {
+              rowCount: 1,
+              rows: [{
+                eventId: capturedValues[0],
+                organizerFeeMode: capturedValues[1],
+                organizerFeeRate: capturedValues[2],
+                organizerFeePrivilegeRate: capturedValues[3],
+                ubuPrivilegeMode: capturedValues[4],
+                customerFeeMode: capturedValues[5],
+                customerFeeRate: capturedValues[6],
+                reservePercentage: capturedValues[7],
+                organizerFeeLocked: capturedValues[8],
+                createdAt: new Date(),
+                updatedAt: new Date(),
+              }],
+            };
+          }
+          return { rowCount: 0, rows: [] };
+        },
         release: () => {},
       }),
       query: async (queryText: string, values?: unknown[]) => {

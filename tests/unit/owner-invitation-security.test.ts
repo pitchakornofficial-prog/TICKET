@@ -149,4 +149,46 @@ describe('Item 11: Owner Invitation Step-Up Authentication & Audit Trail', () =>
     expect(body.token).toBeUndefined();
     expect(body.inviteUrl).toBeUndefined();
   });
+
+  it('enforces the same current-password check and audit path through the Better Auth endpoint', async () => {
+    const { handleAuthRequest } = await import('../../src/server/auth-http');
+    const validPassword = 'CorrectOwnerPassword!123';
+    const hashedPassword = await hashPassword(validPassword);
+    const auth = {
+      options: { database: mockPoolInstance, baseURL: 'http://127.0.0.1:3000' },
+      api: { getSession: async () => ({ session: { id: 's-1' }, user: mockSession.user }) },
+      handler: vi.fn(),
+    };
+    mockQueryResult = async queryText => {
+      if (queryText.includes('SELECT password FROM auth_account')) {
+        return { rowCount: 1, rows: [{ password: hashedPassword }] };
+      }
+      if (queryText.includes('FROM auth_user WHERE email =')) {
+        return { rowCount: 0, rows: [] };
+      }
+      return { rowCount: 1, rows: [] };
+    };
+
+    const request = (confirmPassword?: string) => new Request('http://127.0.0.1:3000/api/auth/invite-organizer', {
+      method: 'POST',
+      headers: { Origin: 'http://127.0.0.1:3000', 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email: `auth-http-owner-${confirmPassword ? 'valid' : 'missing'}@example.com`,
+        role: 'owner',
+        ...(confirmPassword ? { confirmPassword } : {}),
+      }),
+    });
+
+    const missing = await handleAuthRequest(auth as never, request());
+    expect(missing.status).toBe(400);
+    const wrong = await handleAuthRequest(auth as never, request('WrongPassword!123'));
+    expect(wrong.status).toBe(403);
+    const valid = await handleAuthRequest(auth as never, request(validPassword));
+    expect(valid.status).toBe(200);
+    const logs = await mockPoolInstance.query(
+      'SELECT "invitationId" FROM invitation_audit_logs WHERE "invitedEmail" = $1',
+      ['auth-http-owner-valid@example.com'],
+    );
+    expect(logs.rowCount).toBe(1);
+  });
 });

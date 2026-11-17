@@ -1,5 +1,6 @@
 import type { Pool } from 'pg';
 import { inTransaction } from './database.ts';
+import { hashPasswordResetIdentifier } from './password-reset-hash.ts';
 
 // ADR-0004 security parameters:
 // - Password-reset link valid for 30 minutes
@@ -12,6 +13,30 @@ export const RESET_WINDOW_SECONDS = 15 * 60; // 900 seconds
 export const RESET_MAX_REQUESTS_IN_WINDOW = 3;
 export const RESET_TOKEN_EXPIRATION_SECONDS = 30 * 60; // 1800 seconds
 
+export async function ensurePasswordResetTokenSchema(pool: Pool): Promise<void> {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS auth_password_reset_tokens (
+      "userId" TEXT PRIMARY KEY,
+      "identifierHash" TEXT NOT NULL,
+      "createdAt" TIMESTAMPTZ NOT NULL DEFAULT now()
+    )
+  `);
+}
+
+export async function recordPasswordResetTokenIdentifier(
+  pool: Pool,
+  userId: string,
+  identifier: string,
+): Promise<void> {
+  await ensurePasswordResetTokenSchema(pool);
+  await pool.query(
+    `INSERT INTO auth_password_reset_tokens ("userId", "identifierHash", "createdAt")
+     VALUES ($1, $2, now())
+     ON CONFLICT ("userId") DO UPDATE SET "identifierHash" = EXCLUDED."identifierHash", "createdAt" = EXCLUDED."createdAt"`,
+    [userId, hashPasswordResetIdentifier(identifier)],
+  );
+}
+
 export async function checkAndRecordResetRequest(
   pool: Pool,
   email: string,
@@ -19,6 +44,8 @@ export async function checkAndRecordResetRequest(
 ): Promise<{ allowed: boolean; reason?: 'cooldown' | 'max_limit' }> {
   const normalizedEmail = email.trim().toLowerCase();
   const nowMs = now.getTime();
+
+  await ensurePasswordResetTokenSchema(pool);
 
   return inTransaction(pool, async client => {
     // Check if user exists first to decide if tracking applies (without revealing to client)
@@ -70,7 +97,20 @@ export async function checkAndRecordResetRequest(
       );
     }
 
-    // Invalidate any older active verification tokens for this user
+    // Invalidate the latest hashed reset token issued by this app.
+    const latestToken = await client.query<{ identifierHash: string }>(
+      'SELECT "identifierHash" FROM auth_password_reset_tokens WHERE "userId" = $1 FOR UPDATE',
+      [userId],
+    );
+    if (latestToken.rowCount) {
+      await client.query(
+        'DELETE FROM auth_verification WHERE identifier = $1 AND value = $2',
+        [latestToken.rows[0].identifierHash, userId],
+      );
+      await client.query('DELETE FROM auth_password_reset_tokens WHERE "userId" = $1', [userId]);
+    }
+
+    // Remove any legacy plaintext identifiers for this user's reset flow.
     await client.query(
       'DELETE FROM auth_verification WHERE identifier LIKE $1 AND value = $2',
       ['reset-password:%', userId],

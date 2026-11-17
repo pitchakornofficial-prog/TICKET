@@ -1,12 +1,20 @@
 import { createSafeErrorResponse } from '@/server/api-error';
 import { getDatabasePool } from '@/server/database';
 import { verifyOrderLinkOtp } from '@/server/guest-order-lookup';
+import { isPayloadTooLargeError, readBoundedJson } from '@/server/http-body';
 
 export const runtime = 'nodejs';
 
 export async function POST(request: Request) {
   try {
-    const body = await request.json().catch(() => ({}));
+    let body: { orderId?: string; linkToken?: string; code?: string; requestId?: string } = {};
+    try {
+      body = await readBoundedJson<typeof body>(request, 32 * 1024);
+    } catch (error) {
+      if (isPayloadTooLargeError(error)) {
+        return Response.json({ message: 'Payload too large' }, { status: 413 });
+      }
+    }
     const orderId = typeof body?.orderId === 'string' ? body.orderId : '';
     const linkToken =
       typeof body?.linkToken === 'string'
@@ -18,7 +26,7 @@ export async function POST(request: Request) {
     if (!orderId || !linkToken || !code || !requestId) {
       return Response.json(
         { message: 'กรุณากรอกข้อมูลการยืนยัน OTP ให้ครบถ้วน' },
-        { status: 400, headers: { 'Cache-Control': 'no-store' } },
+        { status: 400, headers: { 'Cache-Control': 'private, no-store, no-cache, must-revalidate' } },
       );
     }
 
@@ -45,7 +53,7 @@ export async function POST(request: Request) {
           message: result.error,
           code: result.code,
         },
-        { status, headers: { 'Cache-Control': 'no-store' } },
+        { status, headers: { 'Cache-Control': 'private, no-store, no-cache, must-revalidate' } },
       );
     }
 
@@ -54,7 +62,7 @@ export async function POST(request: Request) {
         success: true,
         token: result.verifiedToken,
       },
-      { status: 200, headers: { 'Cache-Control': 'no-store' } },
+      { status: 200, headers: { 'Cache-Control': 'private, no-store, no-cache, must-revalidate' } },
     );
   } catch (error: unknown) {
     return createSafeErrorResponse(error, 'เกิดข้อผิดพลาดในการยืนยัน OTP', { defaultStatus: 500 });

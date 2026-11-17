@@ -3,8 +3,13 @@ import { NextResponse } from 'next/server';
 import { getAuth, readActor } from '@/server/auth';
 import { getDatabasePool } from '@/server/database';
 import { recordAdmissionScan } from '@/server/admission';
+import { assertSameOrigin } from '@/server/origin';
+import { isPayloadTooLargeError, readBoundedJson } from '@/server/http-body';
 
 export async function POST(req: Request) {
+  const originError = assertSameOrigin(req);
+  if (originError) return originError;
+
   let requestHeaders: Headers;
   try {
     requestHeaders = await headers();
@@ -24,7 +29,16 @@ export async function POST(req: Request) {
   }
 
   try {
-    const body = await req.json();
+    let body: { sessionId?: unknown; qrPayloadOrCode?: unknown; action?: unknown };
+    try {
+      body = await readBoundedJson(req, 16 * 1024);
+    } catch (error) {
+      const tooLarge = isPayloadTooLargeError(error);
+      return NextResponse.json(
+        { error: tooLarge ? 'PAYLOAD_TOO_LARGE' : 'INVALID_INPUT', message: tooLarge ? 'คำขอมีขนาดใหญ่เกินกำหนด' : 'ข้อมูล JSON ไม่ถูกต้อง' },
+        { status: tooLarge ? 413 : 400 },
+      );
+    }
     const { sessionId, qrPayloadOrCode, action } = body;
 
     if (!sessionId || typeof sessionId !== 'string') {

@@ -1,7 +1,8 @@
 import { createSafeErrorResponse } from '@/server/api-error';
 import { getDatabasePool } from '@/server/database';
-import { getOrderRefundEligibility, getOrderRefundRequests } from '@/server/refunds';
-import { getVerifiedGuestSession } from '@/server/guest-otp';
+import { getOrderRefundEligibility, getOrderRefundRequests, maskBankAccountNumber } from '@/server/refunds';
+import { getVerifiedGuestSession, isOrderLookupPurposeForOrder } from '@/server/guest-otp';
+import { cleanPhoneNumber } from '@/server/guest-order-lookup';
 
 export const runtime = 'nodejs';
 
@@ -34,14 +35,18 @@ export async function GET(
       );
     }
 
-    const orderCheck = await pool.query<{ buyerEmail: string }>(
-      `SELECT "buyerEmail" FROM orders WHERE id = $1`,
+    const orderCheck = await pool.query<{ id: string; buyerEmail: string; buyerPhone: string }>(
+      `SELECT id, "buyerEmail", "buyerPhone" FROM orders WHERE id = $1`,
       [orderId],
     );
     if (orderCheck.rowCount === 0) {
       return Response.json({ message: 'ไม่พบคำสั่งซื้อ' }, { status: 404 });
     }
-    if (orderCheck.rows[0].buyerEmail.toLowerCase() !== session.email.toLowerCase()) {
+    if (
+      orderCheck.rows[0].buyerEmail.trim().toLowerCase() !== session.email.trim().toLowerCase()
+      || cleanPhoneNumber(orderCheck.rows[0].buyerPhone) !== cleanPhoneNumber(session.phone)
+      || !isOrderLookupPurposeForOrder(session.purpose, orderId)
+    ) {
       return Response.json({ message: 'ท่านไม่มีสิทธิ์ในการเข้าถึงคำสั่งซื้อนี้' }, { status: 403 });
     }
 
@@ -51,9 +56,12 @@ export async function GET(
     return Response.json(
       {
         eligibility,
-        requests,
+        requests: requests.map(request => ({
+          ...request,
+          bankAccountNo: maskBankAccountNumber(request.bankAccountNo),
+        })),
       },
-      { status: 200, headers: { 'Cache-Control': 'no-store' } },
+      { status: 200, headers: { 'Cache-Control': 'private, no-store, no-cache, must-revalidate' } },
     );
   } catch (error: unknown) {
     return createSafeErrorResponse(error, 'เกิดข้อผิดพลาดในการตรวจสอบสิทธิ์การคืนเงิน', {

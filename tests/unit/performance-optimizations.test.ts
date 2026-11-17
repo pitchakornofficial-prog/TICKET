@@ -12,6 +12,7 @@ import {
 } from '../../src/components/responsive-image';
 import { parseMoneyReportQueryOptions } from '../../src/server/reports';
 import { hashOfflineQrPayload } from '../../src/lib/offline-qr-hash';
+import { createOfflineAssignmentToken } from '../../src/server/offline-assignment-token';
 import {
   getOfflineDatasetMetaAsync,
   getOfflinePendingScansAsync,
@@ -314,6 +315,12 @@ describe('Performance Optimizations Verification (#1-#7)', () => {
           scannerName: 'Gate 1',
           scannerEmail: 'gate1@example.com',
           assignedAt: new Date().toISOString(),
+          assignmentEpoch: 1,
+          assignmentToken: createOfflineAssignmentToken({
+            eventId,
+            scannerId: 'sc-1',
+            assignmentEpoch: 1,
+          }),
         },
         isCurrentScannerPrimary: true,
         admissionLogs: [],

@@ -13,6 +13,8 @@ import { submitRefundRequest, approveRefundRequest, ensureRefundSchema } from '.
 import { getEventMoneyReport } from '../../src/server/reports';
 import { setEventPrimaryScanner, getEventPrimaryScanner, ensurePrimaryScannerSchema } from '../../src/server/primary-scanner';
 import { syncOfflineAdmissionScans, ensureAdmissionSchema } from '../../src/server/admission';
+import { getOfflineDataset } from '../../src/server/primary-scanner';
+import { hashOfflineQrPayload } from '../../src/lib/offline-qr-hash';
 import { getCapturedEmails, clearCapturedEmails } from '../../src/server/email';
 
 describe('Shared Instance Contract across Multiple Web Processes (TASK-037, AC-105)', () => {
@@ -366,6 +368,12 @@ describe('Shared Instance Contract across Multiple Web Processes (TASK-037, AC-1
       event.id,
       sc1.scannerId,
     );
+    const offlineDataset = await getOfflineDataset(
+      instanceA,
+      { id: sc1.scannerId, role: 'scanner' },
+      event.id,
+    );
+    if (!offlineDataset.primaryScanner) throw new Error('Primary scanner assignment was not included in offline dataset');
 
     const primaryOnB = await getEventPrimaryScanner(instanceB, event.id);
     expect(primaryOnB?.scannerId).toBe(sc1.scannerId);
@@ -392,6 +400,9 @@ describe('Shared Instance Contract across Multiple Web Processes (TASK-037, AC-1
             reason: null,
             deviceMode: 'offline',
             scannedAt: validOfflineScanAt,
+            qrHash: hashOfflineQrPayload(event.id, tickets[1].qrPayload),
+            assignmentEpoch: offlineDataset.primaryScanner.assignmentEpoch,
+            assignmentToken: offlineDataset.primaryScanner.assignmentToken,
           },
         ],
       },
@@ -420,6 +431,9 @@ describe('Shared Instance Contract across Multiple Web Processes (TASK-037, AC-1
             reason: null,
             deviceMode: 'offline',
             scannedAt: validOfflineScanAt,
+            qrHash: hashOfflineQrPayload(event.id, tickets[1].qrPayload),
+            assignmentEpoch: offlineDataset.primaryScanner.assignmentEpoch,
+            assignmentToken: offlineDataset.primaryScanner.assignmentToken,
           },
         ],
       },

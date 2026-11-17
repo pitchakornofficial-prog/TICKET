@@ -22,11 +22,17 @@ vi.mock('@/server/guest-otp', () => ({
     expectedPurpose?: string | readonly string[],
   ) => {
     if (token === 'valid-token') {
+      const session = mockSession;
+      if (!session) return null;
       if (expectedPurpose) {
         const allowed = Array.isArray(expectedPurpose) ? expectedPurpose : [expectedPurpose];
-        if (!mockSession || !allowed.includes(mockSession.purpose)) return null;
+        const purposeAllowed = allowed.some(purpose =>
+          purpose === session.purpose
+          || (purpose === 'order_lookup' && session.purpose.startsWith('order_lookup:')),
+        );
+        if (!purposeAllowed) return null;
       }
-      return mockSession;
+      return session;
     }
     return null;
   },
@@ -257,7 +263,7 @@ describe('Checkout Orders & Tickets Authorization Security Gate', () => {
       if (mockReservation) {
         mockReservation.status = 'paid';
       }
-      const token = createOrderTicketAccessToken('ORD-SEC-001', 'buyer@ticket.invalid');
+      const token = createOrderTicketAccessToken('ORD-SEC-001', 'buyer@ticket.invalid', '0812345678');
 
       const orderRes = await getOrderHandler(
         new Request(`http://localhost/api/public/checkout/orders/ORD-SEC-001?token=${encodeURIComponent(token)}`),
@@ -305,6 +311,20 @@ describe('Checkout Orders & Tickets Authorization Security Gate', () => {
       expect(ticketsRes.status).toBe(200);
       const ticketsData = await ticketsRes.json();
       expect(ticketsData.tickets).toHaveLength(1);
+    });
+
+    it('rejects an order-bound OTP session when it is reused for a different order', async () => {
+      if (mockReservation) mockReservation.status = 'paid';
+      if (mockSession) mockSession.purpose = 'order_lookup:ORD-SEC-001';
+
+      const response = await getOrderHandler(
+        new Request('http://localhost/api/public/checkout/orders/ORD-SEC-002', {
+          headers: { 'x-guest-token': 'valid-token' },
+        }),
+        { params: Promise.resolve({ id: 'ORD-SEC-002' }) },
+      );
+
+      expect(response.status).toBe(403);
     });
 
     it('rejects forged ordtok_ token with 401', async () => {

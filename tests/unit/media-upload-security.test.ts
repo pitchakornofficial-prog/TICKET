@@ -3,9 +3,15 @@ import { POST, handlePresignedRequest } from '../../src/app/api/upload/route';
 import { POST as presignedPOST } from '../../src/app/api/upload/presigned/route';
 import { GET } from '../../src/app/api/media/[...key]/route';
 import { storage } from '../../src/server/storage';
+import sharp from 'sharp';
 
 let currentRole = 'organizer';
 const currentUserId = 'user-org-1';
+const validPngBuffer = await sharp({
+  create: { width: 2, height: 2, channels: 4, background: { r: 40, g: 120, b: 220, alpha: 1 } },
+}).png().toBuffer();
+const validJpgBuffer = await sharp(validPngBuffer).jpeg().toBuffer();
+const validWebpBuffer = await sharp(validPngBuffer).webp().toBuffer();
 
 vi.mock('@/server/auth', () => ({
   getAuth: () => ({
@@ -24,16 +30,6 @@ vi.mock('@/server/auth', () => ({
 }));
 
 describe('Issue #4: Stored XSS Prevention & File Upload Security (AC-92, Issue-04)', () => {
-  const validPngBuffer = Buffer.from([
-    0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52,
-  ]);
-  const validJpgBuffer = Buffer.from([
-    0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46, 0x00, 0x01,
-  ]);
-  const validWebpBuffer = Buffer.from(
-    'RIFF\x20\x00\x00\x00WEBPVP8 \x14\x00\x00\x00',
-    'binary',
-  );
   const validPdfBuffer = Buffer.from(
     '%PDF-1.4\n1 0 obj\n<<>>\nendobj\ntrailer\n<<>>\n%%EOF',
   );
@@ -88,6 +84,14 @@ describe('Issue #4: Stored XSS Prevention & File Upload Security (AC-92, Issue-0
     expect(body.message).toContain('เนื้อหาไฟล์ไม่ตรงกับรูปแบบที่ได้รับอนุญาต');
   });
 
+  it('rejects a file with PNG magic bytes that sharp cannot decode as an image', async () => {
+    currentRole = 'organizer';
+    const truncatedPng = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52]);
+    const response = await POST(createUploadRequest(truncatedPng, 'broken.png', 'image/png'));
+    expect(response.status).toBe(400);
+    expect((await response.json()).message).toContain('เสียหาย');
+  });
+
   it('rejects polyglot image containing script tags', async () => {
     currentRole = 'organizer';
     const polyglot = Buffer.concat([
@@ -121,6 +125,10 @@ describe('Issue #4: Stored XSS Prevention & File Upload Security (AC-92, Issue-0
     expect(pngRes.status).toBe(201);
     const pngBody = await pngRes.json();
     expect(pngBody.key).toMatch(/^posters\/.*\.png$/);
+    const storedPoster = await storage.get(pngBody.key);
+    expect(storedPoster).toBeTruthy();
+    if (!storedPoster) throw new Error('Sanitized poster was not stored');
+    expect(await sharp(storedPoster.data).metadata()).toMatchObject({ format: 'png', width: 2, height: 2 });
 
     // JPG
     const jpgReq = createUploadRequest(validJpgBuffer, 'poster.jpg', 'image/jpeg', 'public');
@@ -161,6 +169,18 @@ describe('Issue #4: Stored XSS Prevention & File Upload Security (AC-92, Issue-0
     expect(res.headers.get('X-Content-Type-Options')).toBe('nosniff');
     expect(res.headers.get('X-Frame-Options')).toBe('DENY');
     expect(res.headers.get('Content-Disposition')).toContain('inline;');
+  });
+
+  it('rejects an image source larger than 15 MiB before creating a transformed variant', async () => {
+    const key = 'posters/oversized-source.png';
+    await storage.put(key, Buffer.alloc(15 * 1024 * 1024 + 1), 'image/png', 'public');
+
+    const response = await GET(
+      new Request(`http://localhost:3000/api/media/${key}?w=320`),
+      { params: Promise.resolve({ key: key.split('/') }) },
+    );
+
+    expect(response.status).toBe(413);
   });
 
   it('forces attachment download disposition for PDF documents', async () => {

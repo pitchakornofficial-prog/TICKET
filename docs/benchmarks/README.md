@@ -26,3 +26,5 @@ These are newly reproducible fixtures, not the unavailable scratch script from t
 Independent regression coverage lives in `tests/integration/performance-optimizations.test.ts`, `tests/unit/optimization-regressions.test.ts`, and `tests/e2e/performance-optimizations.spec.ts`, plus the updated existing critical journeys. Full test commands remain `npm run test:unit`, `npm run test:integration`, `npm run test:e2e`.
 
 Known reproduced issues and fixes are recorded in [TASK-046](../tasks/TASK-046-optimization-verification.md). The report distinguishes real HTTP/browser/DB measurements from modeled request rates, provider doubles and production claims.
+
+The November 15 continuation's application, test and evidence changes are listed in [CHANGES.md](CHANGES.md). It preserves the later streaming/security/integrity work while restoring responsive variants and correcting scanner/payout regressions found during independent verification.

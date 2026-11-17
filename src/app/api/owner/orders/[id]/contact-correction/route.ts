@@ -56,7 +56,7 @@ export async function POST(
       return Response.json({ message: result.error, code: result.code }, { status });
     }
 
-    return Response.json(result, { status: 200, headers: { 'Cache-Control': 'no-store' } });
+    return Response.json(result, { status: 200, headers: { 'Cache-Control': 'private, no-store, no-cache, must-revalidate' } });
   } catch (error: unknown) {
     return createSafeErrorResponse(error, 'เกิดข้อผิดพลาดในการแก้ไขข้อมูลติดต่อ', { defaultStatus: 500 });
   }
@@ -83,7 +83,7 @@ export async function GET(
   try {
     const pool = getDatabasePool();
     const auditLogs = await getOrderContactAuditLogs(pool, orderId, actor);
-    return Response.json({ auditLogs }, { status: 200, headers: { 'Cache-Control': 'no-store' } });
+    return Response.json({ auditLogs }, { status: 200, headers: { 'Cache-Control': 'private, no-store, no-cache, must-revalidate' } });
   } catch (error: unknown) {
     return createSafeErrorResponse(error, 'เกิดข้อผิดพลาดในการดึงประวัติการแก้ไข', { defaultStatus: 500 });
   }

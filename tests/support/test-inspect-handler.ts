@@ -5,7 +5,17 @@ import { ensureQueueSchema } from '../../src/server/queue.ts';
 export async function handleTestInspectRequest(
   pool: Pool,
   requestUrl: string,
+  options?: {
+    getEmails?: () => Promise<Array<{ to: string; subject?: string; text?: string }>>;
+  },
 ): Promise<{ status: number; body: unknown }> {
+  const readCapturedEmails = async () => {
+    if (options?.getEmails) {
+      return options.getEmails();
+    }
+    const { getCapturedEmails } = await import('../../src/server/email.ts');
+    return getCapturedEmails();
+  };
   const url = new URL(requestUrl, 'http://127.0.0.1:3100');
   const email = url.searchParams.get('email') || '';
   const clearCooldown = url.searchParams.get('clearCooldown') === 'true';
@@ -84,8 +94,7 @@ export async function handleTestInspectRequest(
       return { status: 404, body: { code: null } };
     }
 
-    const { getCapturedEmails } = await import('../../src/server/email.ts');
-    const emails = getCapturedEmails().filter((e) => e.to === email);
+    const emails = (await readCapturedEmails()).filter((e) => e.to === email);
     const lastEmail = emails.at(-1);
     const match = lastEmail?.text?.match(/\b(\d{6})\b/) || lastEmail?.subject?.match(/\b(\d{6})\b/);
     let code = match ? match[1] : otpRes.rows[0].code;
@@ -110,8 +119,7 @@ export async function handleTestInspectRequest(
   }
 
   if (type === 'invitation') {
-    const { getCapturedEmails } = await import('../../src/server/email.ts');
-    const captured = getCapturedEmails().filter((e) => e.to === email);
+    const captured = (await readCapturedEmails()).filter((e) => e.to === email);
     const lastEmail = captured[captured.length - 1];
     if (lastEmail?.text) {
       const match = lastEmail.text.match(/accept-invitation\?token=([a-zA-Z0-9_-]+)/);
@@ -127,6 +135,15 @@ export async function handleTestInspectRequest(
       return { status: 404, body: { token: null } };
     }
     return { status: 200, body: { token: invRes.rows[0].token } };
+  }
+
+  const capturedReset = (await readCapturedEmails()).filter((e) => e.to === email);
+  const lastResetEmail = capturedReset.at(-1);
+  const resetMatch =
+    lastResetEmail?.text?.match(/\/api\/auth\/reset-password\/([A-Za-z0-9_-]+)/) ||
+    lastResetEmail?.text?.match(/reset-password\?token=([A-Za-z0-9_-]+)/);
+  if (resetMatch) {
+    return { status: 200, body: { token: resetMatch[1] } };
   }
 
   const userRes = await pool.query('SELECT id FROM auth_user WHERE email = $1', [email]);

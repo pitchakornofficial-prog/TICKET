@@ -12,6 +12,7 @@ import {
   MenuIcon,
   ChevronDownIcon,
   UserPlusIcon,
+  MailIcon,
 } from '@/components/icons';
 import { OwnerOverviewDashboard } from '@/components/owner-overview-dashboard';
 import { ToastNotification } from '@/components/toast-notification';
@@ -47,6 +48,9 @@ const InviteOrganizerForm = dynamic(() =>
 const OwnerPoliciesView = dynamic(() =>
   import('@/components/owner-policies-view').then(m => m.OwnerPoliciesView),
 );
+const OwnerInboundMailbox = dynamic(() =>
+  import('@/components/owner-inbound-mailbox').then(m => m.OwnerInboundMailbox),
+);
 
 const GOV_CHARTER_TAB_ID = ['poli', 'cies'].join('');
 
@@ -56,6 +60,7 @@ export type OwnerSectionId =
   | 'refunds'
   | 'finance'
   | 'customer'
+  | 'inbox'
   | 'invitations'
   | 'system'
   | string;
@@ -116,6 +121,12 @@ const SECTIONS: SectionConfig[] = [
     description: 'นโยบายและกฎบัตรการกำกับดูแลแพลตฟอร์ม',
     icon: ClipboardCheckIcon,
   },
+  {
+    id: 'inbox',
+    label: 'กล่องจดหมาย',
+    description: 'กล่องจดหมายขาเข้าและตอบกลับอีเมลฝ่ายสนับสนุนและผู้จัดงาน',
+    icon: MailIcon,
+  },
 ];
 
 interface SectionGroupConfig {
@@ -139,7 +150,7 @@ const SECTION_GROUPS: SectionGroupConfig[] = [
   {
     id: 'commerce-finance',
     name: 'การเงินและลูกค้า',
-    sections: [SECTIONS[3], SECTIONS[4]], // finance, customer
+    sections: [SECTIONS[3], SECTIONS[4], SECTIONS[8]], // finance, customer, inbox
   },
   {
     id: 'governance-system',
@@ -163,6 +174,8 @@ const HASH_TO_SECTION: Record<string, OwnerSectionId> = {
   customer: 'customer',
   'owner-contact-correction-manager': 'customer',
   'owner-email-deliveries-manager': 'customer',
+  inbox: 'inbox',
+  'owner-inbound-mailbox': 'inbox',
   invitations: 'invitations',
   invitation: 'invitations',
   'owner-invitations-view': 'invitations',
@@ -344,9 +357,9 @@ export function OwnerWorkspaceView({ initialSection }: OwnerWorkspaceViewProps) 
             {activeSection !== 'approval' && (
               <div
                 className="owner-section-header"
-                style={activeSection === 'refunds' || activeSection === 'customer' || activeSection === 'finance' || activeSection === 'invitations' || activeSection === 'system' ? { display: 'none' } : undefined}
+                style={activeSection === 'refunds' || activeSection === 'customer' || activeSection === 'inbox' || activeSection === 'finance' || activeSection === 'invitations' || activeSection === 'system' ? { display: 'none' } : undefined}
               >
-                {activeSection !== 'refunds' && activeSection !== 'customer' && activeSection !== 'finance' && activeSection !== 'invitations' && activeSection !== 'system' && (
+                {activeSection !== 'refunds' && activeSection !== 'customer' && activeSection !== 'inbox' && activeSection !== 'finance' && activeSection !== 'invitations' && activeSection !== 'system' && (
                   <>
                     <div className="owner-section-header-titles">
                       <h2 className="owner-section-title">{currentSection.label}</h2>
@@ -520,6 +533,10 @@ export function OwnerWorkspaceView({ initialSection }: OwnerWorkspaceViewProps) 
 
               {activeSection === 'customer' && (
                 <OwnerCustomerHub />
+              )}
+
+              {activeSection === 'inbox' && (
+                <OwnerInboundMailbox />
               )}
 
               {activeSection === 'invitations' && (

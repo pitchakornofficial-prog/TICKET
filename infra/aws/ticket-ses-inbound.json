@@ -1,0 +1,196 @@
+{
+  "AWSTemplateFormatVersion": "2010-09-09",
+  "Description": "TICKET Amazon SES Inbound Email Receiving (S3 + SNS) for phatysd.me in ap-southeast-1",
+  "Parameters": {
+    "RuleSetName": {
+      "Type": "String",
+      "Default": "ticket-inbound-rules",
+      "Description": "SES Receipt Rule Set name (must be activated after deployment)"
+    },
+    "SnsTopicName": {
+      "Type": "String",
+      "Default": "ticket-ses-inbound",
+      "Description": "SNS Topic name for SES inbound receipt notifications"
+    },
+    "RetentionDays": {
+      "Type": "Number",
+      "Default": 90,
+      "MinValue": 7,
+      "MaxValue": 3650,
+      "Description": "Days before raw MIME objects in S3 expire automatically"
+    }
+  },
+  "Resources": {
+    "InboundEmailBucket": {
+      "Type": "AWS::S3::Bucket",
+      "Properties": {
+        "BucketName": {
+          "Fn::Sub": "ticket-ses-inbound-${AWS::AccountId}-${AWS::Region}"
+        },
+        "BucketEncryption": {
+          "ServerSideEncryptionConfiguration": [
+            {
+              "ServerSideEncryptionByDefault": {
+                "SSEAlgorithm": "AES256"
+              }
+            }
+          ]
+        },
+        "PublicAccessBlockConfiguration": {
+          "BlockPublicAcls": true,
+          "BlockPublicPolicy": true,
+          "IgnorePublicAcls": true,
+          "RestrictPublicBuckets": true
+        },
+        "LifecycleConfiguration": {
+          "Rules": [
+            {
+              "Id": "ExpireInboundRawMime",
+              "Prefix": "inbound/",
+              "Status": "Enabled",
+              "ExpirationInDays": {
+                "Ref": "RetentionDays"
+              }
+            }
+          ]
+        }
+      }
+    },
+    "InboundEmailBucketPolicy": {
+      "Type": "AWS::S3::BucketPolicy",
+      "Properties": {
+        "Bucket": {
+          "Ref": "InboundEmailBucket"
+        },
+        "PolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Sid": "AllowSESPuts",
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "ses.amazonaws.com"
+              },
+              "Action": "s3:PutObject",
+              "Resource": {
+                "Fn::Sub": "${InboundEmailBucket.Arn}/inbound/*"
+              },
+              "Condition": {
+                "StringEquals": {
+                  "AWS:SourceAccount": {
+                    "Ref": "AWS::AccountId"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "InboundEmailTopic": {
+      "Type": "AWS::SNS::Topic",
+      "Properties": {
+        "TopicName": {
+          "Ref": "SnsTopicName"
+        }
+      }
+    },
+    "InboundEmailTopicPolicy": {
+      "Type": "AWS::SNS::TopicPolicy",
+      "Properties": {
+        "Topics": [
+          {
+            "Ref": "InboundEmailTopic"
+          }
+        ],
+        "PolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Sid": "AllowSESPublish",
+              "Effect": "Allow",
+              "Principal": {
+                "Service": "ses.amazonaws.com"
+              },
+              "Action": "sns:Publish",
+              "Resource": {
+                "Ref": "InboundEmailTopic"
+              },
+              "Condition": {
+                "StringEquals": {
+                  "AWS:SourceAccount": {
+                    "Ref": "AWS::AccountId"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "InboundReceiptRuleSet": {
+      "Type": "AWS::SES::ReceiptRuleSet",
+      "Properties": {
+        "RuleSetName": {
+          "Ref": "RuleSetName"
+        }
+      }
+    },
+    "InboundReceiptRule": {
+      "Type": "AWS::SES::ReceiptRule",
+      "DependsOn": [
+        "InboundEmailBucketPolicy",
+        "InboundEmailTopicPolicy"
+      ],
+      "Properties": {
+        "RuleSetName": {
+          "Ref": "InboundReceiptRuleSet"
+        },
+        "Rule": {
+          "Name": "ticket-support-inbound",
+          "Enabled": true,
+          "TlsPolicy": "Require",
+          "ScanEnabled": true,
+          "Recipients": [
+            "support@phatysd.me",
+            "organizer@phatysd.me",
+            "organizer-support@phatysd.me"
+          ],
+          "Actions": [
+            {
+              "S3Action": {
+                "BucketName": {
+                  "Ref": "InboundEmailBucket"
+                },
+                "ObjectKeyPrefix": "inbound/",
+                "TopicArn": {
+                  "Ref": "InboundEmailTopic"
+                }
+              }
+            }
+          ]
+        }
+      }
+    }
+  },
+  "Outputs": {
+    "InboundEmailBucketName": {
+      "Value": {
+        "Ref": "InboundEmailBucket"
+      },
+      "Description": "Set this value in SES_INBOUND_S3_BUCKET"
+    },
+    "InboundEmailTopicArn": {
+      "Value": {
+        "Ref": "InboundEmailTopic"
+      },
+      "Description": "Set this value in SES_INBOUND_SNS_TOPIC_ARN"
+    },
+    "InboundRuleSetName": {
+      "Value": {
+        "Ref": "InboundReceiptRuleSet"
+      },
+      "Description": "Activate with: aws ses set-active-receipt-rule-set --rule-set-name <value>"
+    }
+  }
+}

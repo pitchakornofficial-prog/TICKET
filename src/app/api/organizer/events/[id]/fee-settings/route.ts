@@ -27,7 +27,7 @@ export async function GET(
 
   try {
     const feeSettings = await getEventFeeSettings(pool, eventId);
-    return Response.json({ feeSettings }, { status: 200, headers: { 'Cache-Control': 'no-store' } });
+    return Response.json({ feeSettings }, { status: 200, headers: { 'Cache-Control': 'private, no-store, no-cache, must-revalidate' } });
   } catch (error: unknown) {
     return createSafeErrorResponse(error, 'เกิดข้อผิดพลาด', { defaultStatus: 500 });
   }

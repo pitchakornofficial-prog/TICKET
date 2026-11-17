@@ -1,8 +1,10 @@
 import { createSafeErrorResponse } from '@/server/api-error';
 import { getDatabasePool } from '@/server/database';
 import { verifyGuestOtp } from '@/server/guest-otp';
+import { isPayloadTooLargeError, readBoundedJson } from '@/server/http-body';
 import { verifyQueueAccess } from '@/server/queue';
 import { getEventLimitAndBuyerTicketCount } from '@/server/reservation';
+import { readQueueCookie } from '@/server/queue-cookie';
 
 export const runtime = 'nodejs';
 
@@ -14,13 +16,15 @@ export async function POST(request: Request) {
     purpose?: string;
     eventId?: string;
     buyer?: { name?: string; email?: string; phone?: string };
-    queueToken?: string | null;
   } = {};
 
   try {
-    body = await request.json();
-  } catch {
-    return Response.json({ message: 'Invalid JSON body' }, { status: 400 });
+    body = await readBoundedJson<typeof body>(request, 32 * 1024);
+  } catch (error) {
+    return Response.json(
+      { message: isPayloadTooLargeError(error) ? 'Payload too large' : 'Invalid JSON body' },
+      { status: isPayloadTooLargeError(error) ? 413 : 400 },
+    );
   }
 
   if (!body.email || !body.code || !body.requestId || !body.buyer) {
@@ -35,15 +39,10 @@ export async function POST(request: Request) {
     );
   }
 
-  const rawQueueToken =
-    typeof body.queueToken === 'string'
-      ? body.queueToken
-      : request.headers.get('x-queue-token') || '';
-  const queueToken = rawQueueToken.trim() || null;
-
   const pool = getDatabasePool();
   try {
     if (body.eventId) {
+      const queueToken = readQueueCookie(request, body.eventId)?.entryToken ?? null;
       const queueAllowed = await verifyQueueAccess(pool, body.eventId, queueToken);
       if (!queueAllowed) {
         return Response.json(

@@ -5,6 +5,8 @@ const valid = {
   DATABASE_URL: 'postgresql://user:password@database.internal/ticket',
   BETTER_AUTH_URL: 'https://tickets.company.com',
   BETTER_AUTH_SECRET: 'a'.repeat(48),
+  GUEST_OTP_PEPPER: 'p'.repeat(32),
+  TRUST_PROXY: 'cloudflare',
   SES_ACCESS_KEY_ID: 'AKIA_PRODUCTION_FIXTURE',
   SES_SECRET_ACCESS_KEY: 'a'.repeat(40),
   SES_REGION: 'ap-southeast-1',
@@ -58,6 +60,42 @@ describe('production configuration gate', () => {
     expect(errors.join('\n')).not.toContain('private-invalid-key');
     expect(errors.join('\n')).toContain('STRIPE_SECRET_KEY');
     expect(errors.join('\n')).toContain('SES_ACCESS_KEY_ID');
+  });
+  it.each(['OFFLINE_ASSIGNMENT_SECRET', 'UPLOAD_FINALIZE_SECRET', 'QUEUE_TOKEN_SECRET'])(
+    'rejects %s when a configured signing override is shorter than 32 characters',
+    name => {
+      expect(productionConfigErrors({ ...valid, [name]: 'short' }).join('\n')).toContain(
+        `${name} must have at least 32 characters when set`,
+      );
+      expect(productionConfigErrors({ ...valid, [name]: `  ${'s'.repeat(10)}  ` }).join('\n')).toContain(
+        `${name} must have at least 32 characters when set`,
+      );
+      expect(productionConfigErrors({ ...valid, [name]: '   ' })).toEqual([]);
+      expect(productionConfigErrors({ ...valid, [name]: 's'.repeat(32) })).toEqual([]);
+    },
+  );
+  it('requires GUEST_OTP_PEPPER with at least 32 characters after trimming', () => {
+    expect(productionConfigErrors({ ...valid, GUEST_OTP_PEPPER: '' }).join('\n')).toContain(
+      'GUEST_OTP_PEPPER is required',
+    );
+    expect(productionConfigErrors({ ...valid, GUEST_OTP_PEPPER: '   ' }).join('\n')).toContain(
+      'GUEST_OTP_PEPPER is required',
+    );
+    expect(productionConfigErrors({ ...valid, GUEST_OTP_PEPPER: `  ${'p'.repeat(31)}  ` }).join('\n')).toContain(
+      'GUEST_OTP_PEPPER must have at least 32 characters',
+    );
+    expect(productionConfigErrors({ ...valid, GUEST_OTP_PEPPER: `  ${'p'.repeat(32)}  ` })).toEqual([]);
+  });
+  it('requires TRUST_PROXY to be cloudflare or a positive integer proxy hop count', () => {
+    expect(productionConfigErrors({ ...valid, TRUST_PROXY: 'cloudflare' })).toEqual([]);
+    expect(productionConfigErrors({ ...valid, TRUST_PROXY: 'CLOUDFLARE' })).toEqual([]);
+    expect(productionConfigErrors({ ...valid, TRUST_PROXY: '1' })).toEqual([]);
+    expect(productionConfigErrors({ ...valid, TRUST_PROXY: '2' })).toEqual([]);
+    for (const invalidProxy of ['', '   ', '0', '-1', '1.5', 'alb', 'true']) {
+      expect(productionConfigErrors({ ...valid, TRUST_PROXY: invalidProxy }).join('\n')).toContain(
+        'TRUST_PROXY must be cloudflare or a positive integer proxy hop count',
+      );
+    }
   });
   it('accepts only matching test keys in explicitly selected staging', () => {
     const staging = {

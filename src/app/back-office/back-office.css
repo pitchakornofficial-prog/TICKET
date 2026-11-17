@@ -10165,7 +10165,7 @@ button.reject-btn:hover:not(:disabled),
 }
 
 /* Universal Back-Office Enterprise Soft Floating Cards (D-223, D-247, D-250, D-252) */
-.owner-section-body > div:not(.owner-concert-management-hub):not(.owner-refund-management-hub):not(.owner-customer-management-hub):not(.owner-finance-management-hub):not(.owner-invitations-management-hub):not(.owner-system-management-hub),
+.owner-section-body > div:not(.owner-concert-management-hub):not(.owner-refund-management-hub):not(.owner-customer-management-hub):not(.owner-finance-management-hub):not(.owner-invitations-management-hub):not(.owner-system-management-hub):not(.owner-inbound-mailbox-hub),
 .owner-approvals-section,
 .owner-fee-settings-card,
 .form-card {
@@ -11414,7 +11414,9 @@ button.reject-btn:hover:not(:disabled),
 .owner-section-body > div.owner-invitations-management-hub,
 .owner-invitations-management-hub,
 .owner-section-body > div.owner-system-management-hub,
-.owner-system-management-hub {
+.owner-system-management-hub,
+.owner-section-body > div.owner-inbound-mailbox-hub,
+.owner-inbound-mailbox-hub {
   display: flex;
   flex-direction: column;
   gap: 1.25rem;

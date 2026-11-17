@@ -14,7 +14,7 @@ export function parseContactInfo(input: unknown): SharedContactInfo | null {
   return Object.fromEntries(CONTACT_FIELDS.map(key => [key, (data[key] as string).trim()])) as SharedContactInfo;
 }
 
-async function ensureSchema(pool: Pool) {
+export async function ensureOwnerContactInfoSchema(pool: Pool): Promise<void> {
   await inTransaction(pool, async client => {
     await client.query('SELECT pg_advisory_xact_lock($1)', [945162032]);
     await client.query('CREATE TABLE IF NOT EXISTS owner_contact_info (id BOOLEAN PRIMARY KEY DEFAULT TRUE CHECK (id), data JSONB NOT NULL, "updatedAt" TIMESTAMPTZ NOT NULL DEFAULT now())');
@@ -22,12 +22,12 @@ async function ensureSchema(pool: Pool) {
 }
 
 export async function readOwnerContactInfo(pool: Pool): Promise<SharedContactInfo | null> {
-  await ensureSchema(pool);
+  await ensureOwnerContactInfoSchema(pool);
   const result = await pool.query('SELECT data FROM owner_contact_info WHERE id = TRUE');
   return result.rows[0] ? parseContactInfo(result.rows[0].data) : null;
 }
 
 export async function writeOwnerContactInfo(pool: Pool, data: SharedContactInfo): Promise<void> {
-  await ensureSchema(pool);
+  await ensureOwnerContactInfoSchema(pool);
   await pool.query('INSERT INTO owner_contact_info (id, data) VALUES (TRUE, $1::jsonb) ON CONFLICT (id) DO UPDATE SET data = EXCLUDED.data, "updatedAt" = now()', [JSON.stringify(data)]);
 }

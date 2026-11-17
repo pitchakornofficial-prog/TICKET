@@ -20,7 +20,7 @@ export const DEFAULT_OWNER_CONTACT_INFO: OwnerContactInfo = {
   hotline: '02-123-4567, 089-999-8888',
   hotlineBadge: '24 ชม. วันแสดงงาน',
   hotlineNote: 'สำหรับกรณีฉุกเฉิน ระบบหน้างาน และการสแกนบัตรขัดข้อง',
-  email: 'organizer-support@ticket.co.th',
+  email: 'organizer-support@phatysd.me',
   emailBadge: 'ตอบใน 2-4 ชม.',
   emailNote: 'ส่งเอกสารการเงิน บัญชีรับเงิน และคำขอแก้ไขงาน',
   lineId: '@ticket-organizer',

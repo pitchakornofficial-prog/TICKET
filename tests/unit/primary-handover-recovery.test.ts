@@ -5,6 +5,7 @@ import {
 } from '../../src/lib/offline-admission';
 import { hashOfflineQrPayload } from '../../src/lib/offline-qr-hash';
 import type { OfflineDataset, OfflineTicketItem } from '../../src/server/primary-scanner';
+import { createOfflineAssignmentToken } from '../../src/server/offline-assignment-token';
 
 function createMockStorage(initialData: Record<string, string> = {}) {
   const store = new Map<string, string>(Object.entries(initialData));
@@ -54,6 +55,8 @@ describe('TASK-035: Primary Handover & Emergency Recovery Unit Tests (AC-97, AC-
       scannerName: 'เครื่องหลักเดิม',
       scannerEmail: 'pri1@ticket.invalid',
       assignedAt: '2026-11-01T08:00:00.000Z',
+      assignmentEpoch: 1,
+      assignmentToken: createOfflineAssignmentToken({ eventId, scannerId: 'SCAN-PRI-1', assignmentEpoch: 1 }),
     },
     isCurrentScannerPrimary: true,
     sessions: [

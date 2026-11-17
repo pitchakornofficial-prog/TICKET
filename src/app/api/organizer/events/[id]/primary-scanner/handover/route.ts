@@ -49,7 +49,7 @@ export async function GET(
     }
 
     const readiness = await checkHandoverReadiness(pool, eventId, scannerId, oldPendingCount);
-    return Response.json({ readiness }, { status: 200, headers: { 'Cache-Control': 'no-store' } });
+    return Response.json({ readiness }, { status: 200, headers: { 'Cache-Control': 'private, no-store, no-cache, must-revalidate' } });
   } catch (error: unknown) {
     return createSafeErrorResponse(error, 'เกิดข้อผิดพลาดในการตรวจสอบความพร้อมการสลับเครื่อง', { defaultStatus: 500 });
   }

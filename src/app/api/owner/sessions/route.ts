@@ -17,7 +17,7 @@ export async function GET(request: Request) {
 
   const pool = auth.options.database as Pool;
   const pendingSessions = await listPendingSessionsForOwner(pool);
-  return Response.json({ pendingSessions }, { status: 200, headers: { 'Cache-Control': 'no-store' } });
+  return Response.json({ pendingSessions }, { status: 200, headers: { 'Cache-Control': 'private, no-store, no-cache, must-revalidate' } });
 }
 
 export async function POST(request: Request) {

@@ -1,6 +1,6 @@
 import { reserveThroughCheckout } from '../support/purchase-journey';
 import { testClientIp, createIsolatedBrowserContext } from '../support/client-context';
-import { saveEventDraft } from '../support/event-draft';
+import { saveEventDraft, refreshOrganizerEvents } from '../support/event-draft';
 import { expect, test } from '@playwright/test';
 import { fixtureAccounts, fixturePassword } from '../support/auth-fixture';
 
@@ -116,6 +116,7 @@ test.describe('Weekly manual payout: calculation, recording, history, and privat
 
     // 4. Organizer checks initial money report: Payable = 1,710 THB, Paid = 0
     await page.goto('/back-office/organizer#events');
+    await refreshOrganizerEvents(page, [createdEvent.id]);
     const openReportBtn = page.locator(`[data-testid="open-money-report-btn-${createdEvent.id}"]`);
     await expect(openReportBtn).toBeVisible();
     await openReportBtn.click({ force: true });

@@ -1,6 +1,7 @@
 import { createSafeErrorResponse } from '@/server/api-error';
 import { getDatabasePool } from '@/server/database';
 import { createPaymentQr, getPaymentChargeForOrder } from '@/server/payment';
+import { isPayloadTooLargeError, readBoundedJson } from '@/server/http-body';
 
 export const runtime = 'nodejs';
 
@@ -26,7 +27,14 @@ export async function POST(
   const pool = getDatabasePool();
 
   try {
-    const body = await request.json().catch(() => ({}));
+    let body: { verifiedToken?: string } = {};
+    try {
+      body = await readBoundedJson<typeof body>(request, 32 * 1024);
+    } catch (error) {
+      if (isPayloadTooLargeError(error)) {
+        return Response.json({ message: 'Payload too large' }, { status: 413 });
+      }
+    }
     const verifiedToken = extractVerifiedToken(request, body);
 
     if (!verifiedToken) {
@@ -37,7 +45,7 @@ export async function POST(
     }
 
     const charge = await createPaymentQr(pool, { orderId, verifiedToken });
-    return Response.json({ charge }, { status: 200, headers: { 'Cache-Control': 'no-store' } });
+    return Response.json({ charge }, { status: 200, headers: { 'Cache-Control': 'private, no-store, no-cache, must-revalidate' } });
   } catch (error: unknown) {
     return createSafeErrorResponse(error, 'เกิดข้อผิดพลาดในการสร้าง QR ชำระเงิน', {
       defaultStatus: 400,
@@ -66,7 +74,7 @@ export async function GET(
     if (!charge) {
       return Response.json({ message: 'ยังไม่มีข้อมูลการชำระเงินสำหรับคำสั่งซื้อนี้' }, { status: 404 });
     }
-    return Response.json({ charge }, { status: 200, headers: { 'Cache-Control': 'no-store' } });
+    return Response.json({ charge }, { status: 200, headers: { 'Cache-Control': 'private, no-store, no-cache, must-revalidate' } });
   } catch (error: unknown) {
     return createSafeErrorResponse(error, 'เกิดข้อผิดพลาดในการดึงข้อมูล QR ชำระเงิน', {
       defaultStatus: 500,

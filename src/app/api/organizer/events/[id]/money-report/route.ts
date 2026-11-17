@@ -41,7 +41,7 @@ export async function GET(
       options,
     );
 
-    return Response.json({ report }, { status: 200, headers: { 'Cache-Control': 'no-store' } });
+    return Response.json({ report }, { status: 200, headers: { 'Cache-Control': 'private, no-store, no-cache, must-revalidate' } });
   } catch (error: unknown) {
     return createSafeErrorResponse(error, 'เกิดข้อผิดพลาดในการดึงรายงานการเงิน', {
       defaultStatus: 500,

@@ -2,12 +2,20 @@ import { createSafeErrorResponse } from '@/server/api-error';
 import { getDatabasePool } from '@/server/database';
 import { requestOrderLinkOtp } from '@/server/guest-order-lookup';
 import { extractClientIp } from '@/server/guest-otp';
+import { isPayloadTooLargeError, readBoundedJson } from '@/server/http-body';
 
 export const runtime = 'nodejs';
 
 export async function POST(request: Request) {
   try {
-    const body = await request.json().catch(() => ({}));
+    let body: { orderId?: string; linkToken?: string } = {};
+    try {
+      body = await readBoundedJson<typeof body>(request, 32 * 1024);
+    } catch (error) {
+      if (isPayloadTooLargeError(error)) {
+        return Response.json({ message: 'Payload too large' }, { status: 413 });
+      }
+    }
     const orderId = typeof body?.orderId === 'string' ? body.orderId : '';
     const linkToken =
       typeof body?.linkToken === 'string'
@@ -39,7 +47,7 @@ export async function POST(request: Request) {
           maskedEmail: result.maskedEmail,
           cooldownSeconds: result.cooldownSeconds,
         },
-        { status, headers: { 'Cache-Control': 'no-store' } },
+        { status, headers: { 'Cache-Control': 'private, no-store, no-cache, must-revalidate' } },
       );
     }
 
@@ -51,7 +59,7 @@ export async function POST(request: Request) {
         cooldownSeconds: result.cooldownSeconds,
         expiresInSeconds: result.expiresInSeconds,
       },
-      { status: 200, headers: { 'Cache-Control': 'no-store' } },
+      { status: 200, headers: { 'Cache-Control': 'private, no-store, no-cache, must-revalidate' } },
     );
   } catch (error: unknown) {
     return createSafeErrorResponse(error, 'เกิดข้อผิดพลาดในการขอรหัส OTP', { defaultStatus: 500 });

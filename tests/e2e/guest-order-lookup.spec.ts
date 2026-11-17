@@ -101,11 +101,17 @@ test.describe('Guest Order Lookup flow (TASK-018, AC-21, AC-22, AC-62, AC-63, AC
     await page.goto('/my-tickets');
     await expect(page.getByRole('heading', { name: 'ค้นหาบัตรคอนเสิร์ตของฉัน' })).toBeVisible();
 
-    // Case 4A: Incorrect phone number is rejected (AC-62)
+    // Case 4A: Incorrect phone number gives generic anti-enumeration response without issuing an OTP (AC-62)
     await page.locator('#lookup-email').fill(guestEmail);
     await page.locator('#lookup-phone').fill('0899999999');
     await page.getByRole('button', { name: 'ขอรหัส OTP เพื่อเปิดดูบัตร' }).click();
-    await expect(page.getByText('ไม่พบรายการคำสั่งซื้อที่ตรงกับอีเมลและเบอร์โทรศัพท์ที่ระบุ')).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'ยืนยันรหัส OTP' })).toBeVisible();
+    await expect(page.getByText('ไม่พบรายการคำสั่งซื้อที่ตรงกับอีเมลและเบอร์โทรศัพท์ที่ระบุ')).toHaveCount(0);
+    const rejectedOtpRes = await request.get(
+      `/api/auth/test-inspect-reset-token?type=guest_otp&email=${encodeURIComponent(guestEmail)}`,
+    );
+    expect(rejectedOtpRes.status()).toBe(404);
+    await page.getByRole('button', { name: 'แก้ไขอีเมลหรือเบอร์โทร' }).click();
 
     // Case 4B: Correct email and phone number succeeds
     await page.locator('#lookup-phone').fill(guestPhone);

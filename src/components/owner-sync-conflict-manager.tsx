@@ -1,12 +1,13 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import type { AdmissionSyncConflictItem } from '@/server/admission';
+import type { AdmissionSecurityRejectionItem, AdmissionSyncConflictItem } from '@/server/admission';
 import { formatTime, formatDate } from '@/lib/locale';
 import { RefreshIcon, CheckCircleIcon, ClockIcon } from './icons';
 
 export function OwnerSyncConflictManager() {
   const [conflicts, setConflicts] = useState<AdmissionSyncConflictItem[]>([]);
+  const [securityRejections, setSecurityRejections] = useState<AdmissionSecurityRejectionItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [actionMessage, setActionMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
@@ -20,6 +21,7 @@ export function OwnerSyncConflictManager() {
       if (res.ok) {
         const data = await res.json();
         setConflicts(data.conflicts || []);
+        setSecurityRejections(data.securityRejections || []);
       } else {
         const data = await res.json();
         setError(data.message || 'ไม่สามารถดึงรายการข้อขัดแย้งการซิงก์ได้');
@@ -58,7 +60,8 @@ export function OwnerSyncConflictManager() {
     }
   }
 
-  const pendingCount = conflicts.filter(c => c.status === 'pending_review').length;
+  const pendingCount = conflicts.filter(c => c.status === 'pending_review').length +
+    securityRejections.filter(row => row.status === 'pending_review').length;
 
   return (
     <section
@@ -74,7 +77,7 @@ export function OwnerSyncConflictManager() {
             รายการข้อขัดแย้งการซิงก์ออฟไลน์ (Offline Admission Conflicts)
           </h2>
           <p className="card-caption">
-            รายการบัตรที่ถูกสแกนออฟไลน์ แต่ถูกเพิกถอนหรือคืนเงินในระบบกลางระหว่างที่เครื่องหลักออฟไลน์
+            ตรวจสอบบัตรที่ถูกเพิกถอนระหว่างออฟไลน์และรายการสแกนที่ผิดหลักฐาน เวลา หรือขอบเขตงาน
           </p>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
@@ -82,7 +85,7 @@ export function OwnerSyncConflictManager() {
             data-testid="pending-conflicts-badge"
             className={`status-badge ${pendingCount > 0 ? 'pending' : 'approved'}`}
           >
-            {pendingCount > 0 ? `รอตรวจสอบ ${pendingCount} รายการ` : 'ไม่มีข้อขัดแย้งค้างตรวจ'}
+            {pendingCount > 0 ? `รอตรวจสอบ ${pendingCount} รายการ` : 'ไม่มีรายการค้างตรวจ'}
           </span>
           <button
             type="button"
@@ -112,7 +115,7 @@ export function OwnerSyncConflictManager() {
       {conflicts.length === 0 ? (
         <div className="empty-sub-card">
           <CheckCircleIcon />
-          <p>ยังไม่มีข้อขัดแย้งการซิงก์ออฟไลน์ในระบบ</p>
+          <p>ยังไม่มีข้อขัดแย้งบัตรจากการซิงก์ออฟไลน์</p>
         </div>
       ) : (
         <div className="table-responsive">
@@ -184,6 +187,57 @@ export function OwnerSyncConflictManager() {
           </table>
         </div>
       )}
+
+      <div style={{ marginTop: '24px' }}>
+        <h3 style={{ fontSize: '16px', fontWeight: 600, color: '#1e293b', marginBottom: '8px' }}>
+          รายการสแกนที่ต้องตรวจสอบ
+        </h3>
+        <p className="card-caption" style={{ marginBottom: '12px' }}>
+          ระบบหยุดการเปลี่ยนสถานะบัตรและเก็บเหตุการณ์ไว้ในงานของเครื่องหลักที่ส่งข้อมูล
+        </p>
+        {securityRejections.length === 0 ? (
+          <div className="empty-sub-card"><p>ยังไม่มีรายการสแกนที่ผิดปกติ</p></div>
+        ) : (
+          <div className="table-responsive">
+            <table className="logs-table" id="sync-security-rejections-table">
+              <thead><tr><th>เวลาสแกน</th><th>งาน</th><th>รหัสรายการ</th><th>ผู้สแกน</th><th>เหตุผล</th><th>สถานะ</th><th>จัดการ</th></tr></thead>
+              <tbody>
+                {securityRejections.map(row => (
+                  <tr key={row.id} className={row.status === 'pending_review' ? 'log-rejected' : ''}>
+                    <td className="font-mono text-xs whitespace-nowrap">
+                      <ClockIcon className="inline-icon" />{formatDate(new Date(row.scannedAt))} {formatTime(new Date(row.scannedAt))}
+                    </td>
+                    <td>{row.eventTitle}</td>
+                    <td className="font-mono text-xs">{row.offlineScanId}</td>
+                    <td className="text-xs">{row.scannerName}</td>
+                    <td className="text-xs"><strong style={{ color: '#b91c1c' }}>{row.reason}</strong><div style={{ color: '#475569' }}>{row.details}</div></td>
+                    <td>
+                      <span className={`status-badge mini ${row.status === 'resolved' ? 'approved' : 'pending'}`}>
+                        {row.status === 'resolved' ? `รับทราบแล้ว (${row.resolvedBy || '-'})` : 'รอตรวจสอบ'}
+                      </span>
+                    </td>
+                    <td>
+                      {row.status === 'pending_review' ? (
+                        <button
+                          type="button"
+                          className="button button-primary mini-btn"
+                          onClick={() => handleResolve(row.id)}
+                          disabled={resolvingId === row.id}
+                          style={{ fontSize: '12px', padding: '3px 8px' }}
+                        >
+                          {resolvingId === row.id ? 'กำลังบันทึก...' : 'รับทราบและปิดรายการ'}
+                        </button>
+                      ) : (
+                        <span className="text-xs text-slate-400">{row.resolutionNotes || 'ตรวจสอบแล้ว'}</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
     </section>
   );
 }

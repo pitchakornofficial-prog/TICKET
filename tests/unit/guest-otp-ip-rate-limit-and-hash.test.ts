@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { Pool, PoolClient } from 'pg';
 import {
   requestGuestOtp,
@@ -209,7 +209,19 @@ describe('Issue #16: Guest OTP IP Rate Limiting and Hashed Storage', () => {
   }
 
   describe('1. Hashed OTP storage in database', () => {
-    it('stores HMAC-SHA256 hash (64 hex characters) in guest_otp.code, not plaintext', async () => {
+    it('uses a separate server-side pepper in the HMAC key', () => {
+      vi.stubEnv('NODE_ENV', 'test');
+      vi.stubEnv('GUEST_OTP_PEPPER', 'a'.repeat(32));
+      const firstHash = hashOtpCode('123456', 'request-1');
+      vi.stubEnv('GUEST_OTP_PEPPER', 'b'.repeat(32));
+      const secondHash = hashOtpCode('123456', 'request-1');
+      vi.unstubAllEnvs();
+
+      expect(firstHash).toMatch(/^[0-9a-f]{64}$/);
+      expect(secondHash).not.toBe(firstHash);
+    });
+
+    it('stores HMAC-SHA256 with the server pepper and request ID in guest_otp.code', async () => {
       clearCapturedEmails();
       const { pool, state } = createMockPool();
 
@@ -232,9 +244,25 @@ describe('Issue #16: Guest OTP IP Rate Limiting and Hashed Storage', () => {
       const emailCode = emails[0]?.text?.match(/\b(\d{6})\b/)?.[1];
       expect(emailCode).toBeDefined();
 
-      // Verify that hashing the sent code with requestId matches the stored hash
+      // Verify that hashing the sent code with the server pepper and requestId matches the stored hash
       const computedHash = hashOtpCode(emailCode ?? '', storedOtp.requestId);
       expect(storedOtp.code).toBe(computedHash);
+    });
+
+    it('strips control characters and HTML-escapes the buyer name in OTP email markup', async () => {
+      clearCapturedEmails();
+      const { pool } = createMockPool();
+      const result = await requestGuestOtp(pool, {
+        buyer: { name: 'A&B <script>"\'\r\n', email: 'escaped_name@example.com', phone: '0812345678' },
+        purpose: 'checkout',
+      });
+
+      expect(result.success).toBe(true);
+      const email = getCapturedEmails().at(-1);
+      expect(email?.html).toContain('A&amp;B &lt;script&gt;&quot;&#39;');
+      expect(email?.html).not.toContain('<script>');
+      expect(email?.text).not.toContain('\r');
+      expect(email?.text).not.toContain('\n\n Lovelace');
     });
 
     it('verifies successfully with correct 6-digit code using hash verification', async () => {
@@ -295,7 +323,7 @@ describe('Issue #16: Guest OTP IP Rate Limiting and Hashed Storage', () => {
       expect(fifthRes.code).toBe('BLOCKED');
     });
 
-    it('supports backward compatibility with legacy plaintext OTP code', async () => {
+    it('rejects legacy plaintext OTP rows instead of accepting database-leaked codes', async () => {
       const { pool, state } = createMockPool();
       const now = new Date();
 
@@ -320,8 +348,8 @@ describe('Issue #16: Guest OTP IP Rate Limiting and Hashed Storage', () => {
         now,
       });
 
-      expect(verifyRes.success).toBe(true);
-      expect(verifyRes.verifiedToken).toBeDefined();
+      expect(verifyRes.success).toBe(false);
+      expect(verifyRes.code).toBe('INVALID_CODE');
     });
   });
 
@@ -413,14 +441,23 @@ describe('Issue #16: Guest OTP IP Rate Limiting and Hashed Storage', () => {
   });
 
   describe('3. extractClientIp header helper', () => {
-    it('extracts rightmost trusted-proxy-appended IP in default alb mode and ignores spoofed cf-connecting-ip / leftmost x-forwarded-for', () => {
+    it('ignores forwarded headers when TRUST_PROXY is not configured', () => {
       const req = new Request('http://localhost/api/test', {
         headers: {
           'cf-connecting-ip': '198.51.100.1',
           'x-forwarded-for': '203.0.113.195, 70.41.3.18, 150.172.238.178',
         },
       });
-      expect(extractClientIp(req)).toBe('150.172.238.178');
+      expect(extractClientIp(req)).toBe('127.0.0.1');
+    });
+
+    it('uses only the configured right-to-left trusted proxy hops', () => {
+      const req = new Request('http://localhost/api/test', {
+        headers: {
+          'x-forwarded-for': '203.0.113.195, 70.41.3.18, 150.172.238.178',
+        },
+      });
+      expect(extractClientIp(req, { trustedProxyHops: 1 })).toBe('150.172.238.178');
     });
 
     it('supports multi-hop trustedProxyHops when multiple trusted proxies append to x-forwarded-for', () => {
@@ -432,14 +469,14 @@ describe('Issue #16: Guest OTP IP Rate Limiting and Hashed Storage', () => {
       expect(extractClientIp(req, { mode: 'alb', trustedProxyHops: 2 })).toBe('203.0.113.195');
     });
 
-    it('reads cf-connecting-ip only when mode is cloudflare', () => {
+    it('reads cf-connecting-ip only when Cloudflare is explicitly trusted', () => {
       const req = new Request('http://localhost/api/test', {
         headers: {
           'cf-connecting-ip': '198.51.100.42',
           'x-forwarded-for': '203.0.113.195, 150.172.238.178',
         },
       });
-      expect(extractClientIp(req, { mode: 'cloudflare' })).toBe('198.51.100.42');
+      expect(extractClientIp(req, { mode: 'cloudflare', trustedProxyHops: 1 })).toBe('198.51.100.42');
     });
 
     it('ignores invalid non-IP header values and falls back safely', () => {
@@ -449,7 +486,7 @@ describe('Issue #16: Guest OTP IP Rate Limiting and Hashed Storage', () => {
           'x-real-ip': '198.51.100.88',
         },
       });
-      expect(extractClientIp(req)).toBe('198.51.100.88');
+      expect(extractClientIp(req, { trustedProxyHops: 1 })).toBe('127.0.0.1');
     });
 
     it('defaults to 127.0.0.1 when no valid proxy headers are present', () => {

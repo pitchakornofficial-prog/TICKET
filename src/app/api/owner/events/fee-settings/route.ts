@@ -15,7 +15,7 @@ export async function GET(request: Request) {
   const pool = auth.options.database as Pool;
   try {
     const events = await listAllEventsWithFeeSettings(pool);
-    return Response.json({ events }, { status: 200, headers: { 'Cache-Control': 'no-store' } });
+    return Response.json({ events }, { status: 200, headers: { 'Cache-Control': 'private, no-store, no-cache, must-revalidate' } });
   } catch (error: unknown) {
     return createSafeErrorResponse(error, 'เกิดข้อผิดพลาด', { defaultStatus: 500 });
   }

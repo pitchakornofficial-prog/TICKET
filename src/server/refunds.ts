@@ -2,10 +2,11 @@ import { randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import { ensureTicketSchema } from './tickets.ts';
 import { ensureAdmissionSchema } from './admission.ts';
-import { getVerifiedGuestSession, ensureGuestOtpSchema } from './guest-otp.ts';
+import { getVerifiedGuestSession, ensureGuestOtpSchema, isOrderLookupPurposeForOrder } from './guest-otp.ts';
 import { cleanPhoneNumber } from './guest-order-lookup.ts';
-import { validateTransferProof } from './proof-validation.ts';
+import { transferProofMediaUrl, validateTransferProof } from './proof-validation.ts';
 import { storage } from './storage.ts';
+import { lockEventFinancial } from './event-lock.ts';
 
 export interface RefundRequestInput {
   verifiedToken: string;
@@ -16,6 +17,13 @@ export interface RefundRequestInput {
   bankAccountNo?: string;
   bankAccountName?: string;
   now?: Date;
+}
+
+export function maskBankAccountNumber(value: string | null | undefined): string | null {
+  if (!value) return null;
+  const digits = value.replace(/\D/g, '');
+  if (!digits) return null;
+  return `${'*'.repeat(Math.max(4, digits.length - 4))}${digits.slice(-4)}`;
 }
 
 export interface TicketRefundEligibility {
@@ -405,7 +413,11 @@ export async function submitRefundRequest(
     const sessionPhone = cleanPhoneNumber(session.phone);
     const orderPhone = cleanPhoneNumber(order.buyerPhone);
 
-    if (sessionEmail !== orderEmail || sessionPhone !== orderPhone) {
+    if (
+      sessionEmail !== orderEmail
+      || sessionPhone !== orderPhone
+      || !isOrderLookupPurposeForOrder(session.purpose, order.id)
+    ) {
       await client.query('ROLLBACK');
       return {
         success: false,
@@ -761,6 +773,27 @@ export async function approveRefundRequest(
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+
+    const scopeRes = await client.query<{ eventId: string }>(
+      `SELECT o."eventId"
+       FROM refund_requests rr JOIN orders o ON o.id = rr."orderId"
+       WHERE rr.id = $1`,
+      [input.refundRequestId],
+    );
+    if (scopeRes.rowCount === 0) {
+      await client.query('ROLLBACK');
+      return {
+        success: false,
+        refundRequestId: input.refundRequestId,
+        status: 'not_found',
+        revokedTicketCount: 0,
+        liabilityAmount: 0,
+        quotaReturned: false,
+        error: 'ไม่พบคำขอคืนเงินที่ระบุ',
+        code: 'NOT_FOUND',
+      };
+    }
+    await lockEventFinancial(client, scopeRes.rows[0].eventId);
 
     // 1. Lock refund request
     const reqRes = await client.query<{
@@ -1379,7 +1412,7 @@ export async function listAllRefundRequests(
       transferredAt: r.transferredAt instanceof Date ? r.transferredAt.toISOString() : r.transferredAt ? String(r.transferredAt) : null,
       transferredAmount: r.transferredAmount !== null && r.transferredAmount !== undefined ? Number(r.transferredAmount) : null,
       transferProofKey: r.transferProofKey,
-      transferProofUrl: r.transferProofUrl,
+      transferProofUrl: transferProofMediaUrl(r.transferProofKey),
       transferNote: r.transferNote,
       transferFailureReason: r.transferFailureReason,
       transferFailedAt: r.transferFailedAt instanceof Date ? r.transferFailedAt.toISOString() : r.transferFailedAt ? String(r.transferFailedAt) : null,
@@ -1452,6 +1485,23 @@ export async function recordManualRefundTransfer(
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+
+    const scopeRes = await client.query<{ eventId: string }>(
+      `SELECT o."eventId"
+       FROM refund_requests rr JOIN orders o ON o.id = rr."orderId"
+       WHERE rr.id = $1`,
+      [input.refundRequestId],
+    );
+    if (scopeRes.rowCount === 0) {
+      await client.query('ROLLBACK');
+      return {
+        success: false,
+        status: 'error',
+        code: 'NOT_FOUND',
+        error: 'ไม่พบคำขอคืนเงินที่ระบุ',
+      };
+    }
+    await lockEventFinancial(client, scopeRes.rows[0].eventId);
 
     const reqRes = await client.query<{
       id: string;

@@ -131,7 +131,7 @@ test.describe('Guest checkout email verification and details entry (TASK-011, AC
     await page.getByRole('button', { name: 'ขอรหัส OTP เพื่อซื้อบัตร' }).click();
 
     // 6. Arrive at OTP step
-    await expect(page.getByText('ส่งรหัส OTP 6 หลักไปยังอีเมลของคุณเรียบร้อยแล้ว')).toBeVisible();
+    await expect(page.getByText(/หากคำขอนี้ผ่านเงื่อนไข รหัส OTP จะถูกส่งไปยังอีเมล/)).toBeVisible();
     await expect(page.getByLabel('รหัส OTP 6 หลัก *')).toBeVisible();
 
     // Inspect generated OTP code from loopback test endpoint

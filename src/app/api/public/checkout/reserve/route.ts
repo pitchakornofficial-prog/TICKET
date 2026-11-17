@@ -2,27 +2,28 @@ import { createSafeErrorResponse } from '@/server/api-error';
 import { getDatabasePool } from '@/server/database';
 import { isRealPgPool } from '@/server/pg-pool-utils';
 import { completeQueueEntry, verifyQueueAccess } from '@/server/queue';
+import { readQueueCookie } from '@/server/queue-cookie';
 import { createReservation, QueueLockedError, type CreateReservationInput } from '@/server/reservation';
+import { isPayloadTooLargeError, readBoundedJson } from '@/server/http-body';
 
 export const runtime = 'nodejs';
 
 export async function POST(request: Request) {
-  let body: Partial<CreateReservationInput> & { queueToken?: string | null } = {};
+  let body: Partial<CreateReservationInput> = {};
   try {
-    body = await request.json();
-  } catch {
-    return Response.json({ message: 'Invalid JSON body' }, { status: 400 });
+    body = await readBoundedJson<typeof body>(request, 32 * 1024);
+  } catch (error) {
+    return Response.json(
+      { message: isPayloadTooLargeError(error) ? 'Payload too large' : 'Invalid JSON body' },
+      { status: isPayloadTooLargeError(error) ? 413 : 400 },
+    );
   }
 
   if (!body.verifiedToken || !body.eventId || !body.sessionId || !body.items) {
     return Response.json({ message: 'กรุณาระบุข้อมูลการกันบัตรให้ครบถ้วน' }, { status: 400 });
   }
 
-  const rawQueueToken =
-    typeof body.queueToken === 'string'
-      ? body.queueToken
-      : request.headers.get('x-queue-token') || '';
-  const queueToken = rawQueueToken.trim() || null;
+  const queueToken = readQueueCookie(request, body.eventId)?.entryToken ?? null;
 
   const pool = getDatabasePool();
   const useFastPg = isRealPgPool(pool);

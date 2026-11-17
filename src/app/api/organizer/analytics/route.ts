@@ -31,7 +31,7 @@ export async function GET(request: Request) {
     const analytics = await getOrganizerAnalytics(pool, session.user.id, eventId);
     return Response.json(analytics, {
       status: 200,
-      headers: { 'Cache-Control': 'no-store' },
+      headers: { 'Cache-Control': 'private, no-store, no-cache, must-revalidate' },
     });
   } catch (error: unknown) {
     return createSafeErrorResponse(error, 'เกิดข้อผิดพลาดในการโหลดข้อมูลสถิติภาพรวม', { defaultStatus: 500 });

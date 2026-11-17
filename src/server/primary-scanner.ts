@@ -1,9 +1,10 @@
 import { randomUUID } from 'node:crypto';
-import type { Pool } from 'pg';
+import type { Pool, PoolClient } from 'pg';
 import { hashOfflineQrPayload } from '../lib/offline-qr-hash.ts';
 import { ensureEventSchema } from './events.ts';
 import { ensureTicketSchema } from './tickets.ts';
 import { ensureAdmissionSchema } from './admission.ts';
+import { createOfflineAssignmentToken } from './offline-assignment-token.ts';
 
 export interface PrimaryScannerRecord {
   eventId: string;
@@ -13,6 +14,7 @@ export interface PrimaryScannerRecord {
   deviceId?: string | null;
   assignedAt: string;
   assignedBy: string;
+  assignmentEpoch: number;
 }
 
 export interface EventOfflineControl {
@@ -107,6 +109,8 @@ export interface OfflineDataset {
     scannerName: string;
     scannerEmail: string;
     assignedAt: string;
+    assignmentEpoch: number;
+    assignmentToken: string;
   } | null;
   isCurrentScannerPrimary: boolean;
   sessions: OfflineSessionItem[];
@@ -139,10 +143,17 @@ export async function ensurePrimaryScannerSchema(pool: Pool): Promise<void> {
           "scannerName" TEXT NOT NULL,
           "scannerEmail" TEXT NOT NULL,
           "deviceId" TEXT,
+          "assignmentEpoch" BIGINT NOT NULL DEFAULT 1,
           "assignedAt" TIMESTAMPTZ NOT NULL DEFAULT now(),
           "assignedBy" TEXT NOT NULL
         );
+        ALTER TABLE event_primary_scanners ADD COLUMN IF NOT EXISTS "assignmentEpoch" BIGINT NOT NULL DEFAULT 1;
         CREATE INDEX IF NOT EXISTS idx_event_primary_scanner ON event_primary_scanners("scannerId");
+
+        CREATE TABLE IF NOT EXISTS event_primary_scanner_epochs (
+          "eventId" TEXT PRIMARY KEY REFERENCES events(id) ON DELETE CASCADE,
+          epoch BIGINT NOT NULL DEFAULT 0
+        );
 
         CREATE TABLE IF NOT EXISTS event_offline_controls (
           "eventId" TEXT PRIMARY KEY REFERENCES events(id) ON DELETE CASCADE,
@@ -189,6 +200,21 @@ export async function ensurePrimaryScannerSchema(pool: Pool): Promise<void> {
   return promise;
 }
 
+async function advancePrimaryScannerEpoch(client: PoolClient, eventId: string): Promise<number> {
+  await client.query('SELECT id FROM events WHERE id = $1 FOR UPDATE', [eventId]);
+  const result = await client.query<{ epoch: number | string }>(
+    `INSERT INTO event_primary_scanner_epochs ("eventId", epoch)
+     SELECT $1, COALESCE((
+       SELECT "assignmentEpoch" FROM event_primary_scanners WHERE "eventId" = $1
+     ), 0) + 1
+     ON CONFLICT ("eventId") DO UPDATE
+       SET epoch = GREATEST(event_primary_scanner_epochs.epoch + 1, EXCLUDED.epoch)
+     RETURNING epoch`,
+    [eventId],
+  );
+  return Number(result.rows[0].epoch);
+}
+
 /**
  * Get current primary scanner for an event.
  */
@@ -206,8 +232,9 @@ export async function getEventPrimaryScanner(
     deviceId: string | null;
     assignedAt: Date;
     assignedBy: string;
+    assignmentEpoch: number | string;
   }>(
-    `SELECT "eventId", "scannerId", "scannerName", "scannerEmail", "deviceId", "assignedAt", "assignedBy"
+    `SELECT "eventId", "scannerId", "scannerName", "scannerEmail", "deviceId", "assignedAt", "assignedBy", "assignmentEpoch"
      FROM event_primary_scanners
      WHERE "eventId" = $1`,
     [eventId],
@@ -223,6 +250,7 @@ export async function getEventPrimaryScanner(
     deviceId: row.deviceId,
     assignedAt: row.assignedAt.toISOString(),
     assignedBy: row.assignedBy,
+    assignmentEpoch: Number(row.assignmentEpoch ?? 1),
   };
 }
 
@@ -239,74 +267,77 @@ export async function setEventPrimaryScanner(
   deviceId?: string,
 ): Promise<PrimaryScannerRecord> {
   await ensurePrimaryScannerSchema(pool);
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const evRes = await client.query<{ organizerId: string }>(
+      'SELECT "organizerId" FROM events WHERE id = $1 FOR UPDATE',
+      [eventId],
+    );
+    if (evRes.rowCount === 0) throw new Error('ไม่พบคอนเสิร์ตที่ระบุ');
+    if (actor.role !== 'owner' && actor.id !== evRes.rows[0].organizerId) {
+      throw new Error('ไม่อนุญาต: คุณไม่มีสิทธิ์จัดการเครื่องหลักของคอนเสิร์ตนี้');
+    }
 
-  // 1. Verify event exists and check organizer authorization
-  const evRes = await pool.query<{ organizerId: string }>(
-    'SELECT "organizerId" FROM events WHERE id = $1',
-    [eventId],
-  );
-  if (evRes.rowCount === 0) {
-    throw new Error('ไม่พบคอนเสิร์ตที่ระบุ');
+    const scannerCheck = await client.query<{
+      scannerId: string;
+      name: string;
+      email: string;
+    }>(
+      `SELECT es."scannerId", u.name, u.email
+       FROM event_scanners es
+       JOIN auth_user u ON u.id = es."scannerId"
+       WHERE es."eventId" = $1 AND es."scannerId" = $2`,
+      [eventId, scannerId],
+    );
+    if (scannerCheck.rowCount === 0) {
+      throw new Error('ทีมสแกนที่ระบุไม่ได้อยู่ในรายชื่อทีมสแกนของคอนเสิร์ตนี้');
+    }
+
+    const scanner = scannerCheck.rows[0];
+    const assignmentEpoch = await advancePrimaryScannerEpoch(client, eventId);
+    const upsertRes = await client.query<{
+      eventId: string;
+      scannerId: string;
+      scannerName: string;
+      scannerEmail: string;
+      deviceId: string | null;
+      assignedAt: Date;
+      assignedBy: string;
+      assignmentEpoch: number | string;
+    }>(
+      `INSERT INTO event_primary_scanners (
+         "eventId", "scannerId", "scannerName", "scannerEmail", "deviceId", "assignmentEpoch", "assignedAt", "assignedBy"
+       ) VALUES ($1, $2, $3, $4, $5, $6, now(), $7)
+       ON CONFLICT ("eventId") DO UPDATE SET
+         "scannerId" = EXCLUDED."scannerId",
+         "scannerName" = EXCLUDED."scannerName",
+         "scannerEmail" = EXCLUDED."scannerEmail",
+         "deviceId" = EXCLUDED."deviceId",
+         "assignmentEpoch" = EXCLUDED."assignmentEpoch",
+         "assignedAt" = now(),
+         "assignedBy" = EXCLUDED."assignedBy"
+       RETURNING "eventId", "scannerId", "scannerName", "scannerEmail", "deviceId", "assignedAt", "assignedBy", "assignmentEpoch"`,
+      [eventId, scanner.scannerId, scanner.name, scanner.email, deviceId || null, assignmentEpoch, actor.id],
+    );
+    await client.query('COMMIT');
+    const row = upsertRes.rows[0];
+    return {
+      eventId: row.eventId,
+      scannerId: row.scannerId,
+      scannerName: row.scannerName,
+      scannerEmail: row.scannerEmail,
+      deviceId: row.deviceId,
+      assignedAt: row.assignedAt.toISOString(),
+      assignedBy: row.assignedBy,
+      assignmentEpoch: Number(row.assignmentEpoch),
+    };
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
   }
-
-  const eventOrganizerId = evRes.rows[0].organizerId;
-  if (actor.role !== 'owner' && actor.id !== eventOrganizerId) {
-    throw new Error('ไม่อนุญาต: คุณไม่มีสิทธิ์จัดการเครื่องหลักของคอนเสิร์ตนี้');
-  }
-
-  // 2. Verify that target scanner belongs to event_scanners for this event
-  const scannerCheck = await pool.query<{
-    scannerId: string;
-    name: string;
-    email: string;
-  }>(
-    `SELECT es."scannerId", u.name, u.email
-     FROM event_scanners es
-     JOIN auth_user u ON u.id = es."scannerId"
-     WHERE es."eventId" = $1 AND es."scannerId" = $2`,
-    [eventId, scannerId],
-  );
-
-  if (scannerCheck.rowCount === 0) {
-    throw new Error('ทีมสแกนที่ระบุไม่ได้อยู่ในรายชื่อทีมสแกนของคอนเสิร์ตนี้');
-  }
-
-  const scanner = scannerCheck.rows[0];
-
-  // 3. Atomically upsert primary scanner (exactly ONE per event)
-  const upsertRes = await pool.query<{
-    eventId: string;
-    scannerId: string;
-    scannerName: string;
-    scannerEmail: string;
-    deviceId: string | null;
-    assignedAt: Date;
-    assignedBy: string;
-  }>(
-    `INSERT INTO event_primary_scanners (
-       "eventId", "scannerId", "scannerName", "scannerEmail", "deviceId", "assignedAt", "assignedBy"
-     ) VALUES ($1, $2, $3, $4, $5, now(), $6)
-     ON CONFLICT ("eventId") DO UPDATE SET
-       "scannerId" = EXCLUDED."scannerId",
-       "scannerName" = EXCLUDED."scannerName",
-       "scannerEmail" = EXCLUDED."scannerEmail",
-       "deviceId" = EXCLUDED."deviceId",
-       "assignedAt" = now(),
-       "assignedBy" = EXCLUDED."assignedBy"
-     RETURNING "eventId", "scannerId", "scannerName", "scannerEmail", "deviceId", "assignedAt", "assignedBy"`,
-    [eventId, scanner.scannerId, scanner.name, scanner.email, deviceId || null, actor.id],
-  );
-
-  const row = upsertRes.rows[0];
-  return {
-    eventId: row.eventId,
-    scannerId: row.scannerId,
-    scannerName: row.scannerName,
-    scannerEmail: row.scannerEmail,
-    deviceId: row.deviceId,
-    assignedAt: row.assignedAt.toISOString(),
-    assignedBy: row.assignedBy,
-  };
 }
 
 /**
@@ -319,21 +350,28 @@ export async function removeEventPrimaryScanner(
 ): Promise<boolean> {
   await ensurePrimaryScannerSchema(pool);
 
-  const evRes = await pool.query<{ organizerId: string }>(
-    'SELECT "organizerId" FROM events WHERE id = $1',
-    [eventId],
-  );
-  if (evRes.rowCount === 0) {
-    throw new Error('ไม่พบคอนเสิร์ตที่ระบุ');
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const evRes = await client.query<{ organizerId: string }>(
+      'SELECT "organizerId" FROM events WHERE id = $1 FOR UPDATE',
+      [eventId],
+    );
+    if (evRes.rowCount === 0) throw new Error('ไม่พบคอนเสิร์ตที่ระบุ');
+    if (actor.role !== 'owner' && actor.id !== evRes.rows[0].organizerId) {
+      throw new Error('ไม่อนุญาต: คุณไม่มีสิทธิ์จัดการเครื่องหลักของคอนเสิร์ตนี้');
+    }
+    const current = await client.query('SELECT 1 FROM event_primary_scanners WHERE "eventId" = $1 FOR UPDATE', [eventId]);
+    if ((current.rowCount ?? 0) > 0) await advancePrimaryScannerEpoch(client, eventId);
+    const del = await client.query('DELETE FROM event_primary_scanners WHERE "eventId" = $1', [eventId]);
+    await client.query('COMMIT');
+    return (del.rowCount ?? 0) > 0;
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
   }
-
-  const eventOrganizerId = evRes.rows[0].organizerId;
-  if (actor.role !== 'owner' && actor.id !== eventOrganizerId) {
-    throw new Error('ไม่อนุญาต: คุณไม่มีสิทธิ์จัดการเครื่องหลักของคอนเสิร์ตนี้');
-  }
-
-  const del = await pool.query('DELETE FROM event_primary_scanners WHERE "eventId" = $1', [eventId]);
-  return (del.rowCount ?? 0) > 0;
 }
 
 /**
@@ -526,6 +564,12 @@ export async function getOfflineDataset(
           scannerName: primaryRecord.scannerName,
           scannerEmail: primaryRecord.scannerEmail,
           assignedAt: primaryRecord.assignedAt,
+          assignmentEpoch: primaryRecord.assignmentEpoch,
+          assignmentToken: createOfflineAssignmentToken({
+            eventId,
+            scannerId: primaryRecord.scannerId,
+            assignmentEpoch: primaryRecord.assignmentEpoch,
+          }),
         }
       : null,
     isCurrentScannerPrimary,
@@ -688,6 +732,32 @@ export async function handoverEventPrimaryScanner(
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+    await client.query('SELECT id FROM events WHERE id = $1 FOR UPDATE', [eventId]);
+    const currentPrimaryRes = await client.query<{ scannerId: string; assignmentEpoch: number | string }>(
+      'SELECT "scannerId", "assignmentEpoch" FROM event_primary_scanners WHERE "eventId" = $1 FOR UPDATE',
+      [eventId],
+    );
+    const lockedPrimary = currentPrimaryRes.rows[0];
+    if ((lockedPrimary?.scannerId ?? null) !== (oldPrimary?.scannerId ?? null) ||
+        Number(lockedPrimary?.assignmentEpoch ?? 0) !== Number(oldPrimary?.assignmentEpoch ?? 0)) {
+      throw new Error('เครื่องหลักเปลี่ยนแปลงระหว่างตรวจสอบความพร้อม กรุณาโหลดข้อมูลใหม่');
+    }
+
+    // Recheck and lock the candidate membership. A scanner removed after the
+    // readiness check must not be installed as the new primary.
+    const lockedCandidateRes = await client.query<{ scannerId: string; name: string; email: string }>(
+      `SELECT es."scannerId", u.name, u.email
+       FROM event_scanners es
+       JOIN auth_user u ON u.id = es."scannerId"
+       WHERE es."eventId" = $1 AND es."scannerId" = $2
+       FOR KEY SHARE OF es`,
+      [eventId, candidate.id],
+    );
+    const lockedCandidate = lockedCandidateRes.rows[0];
+    if (!lockedCandidate) {
+      throw new Error('ทีมสแกนเป้าหมายไม่ได้อยู่ในรายชื่อทีมสแกนของคอนเสิร์ตนี้แล้ว กรุณาโหลดข้อมูลใหม่');
+    }
+    const assignmentEpoch = await advancePrimaryScannerEpoch(client, eventId);
 
     const upsertRes = await client.query<{
       eventId: string;
@@ -697,18 +767,20 @@ export async function handoverEventPrimaryScanner(
       deviceId: string | null;
       assignedAt: Date;
       assignedBy: string;
+      assignmentEpoch: number | string;
     }>(
       `INSERT INTO event_primary_scanners (
-         "eventId", "scannerId", "scannerName", "scannerEmail", "deviceId", "assignedAt", "assignedBy"
-       ) VALUES ($1, $2, $3, $4, $5, now(), $6)
+         "eventId", "scannerId", "scannerName", "scannerEmail", "deviceId", "assignmentEpoch", "assignedAt", "assignedBy"
+       ) VALUES ($1, $2, $3, $4, $5, $6, now(), $7)
        ON CONFLICT ("eventId") DO UPDATE SET
          "scannerId" = EXCLUDED."scannerId",
          "scannerName" = EXCLUDED."scannerName",
          "scannerEmail" = EXCLUDED."scannerEmail",
          "assignedAt" = now(),
+         "assignmentEpoch" = EXCLUDED."assignmentEpoch",
          "assignedBy" = EXCLUDED."assignedBy"
-       RETURNING "eventId", "scannerId", "scannerName", "scannerEmail", "deviceId", "assignedAt", "assignedBy"`,
-      [eventId, candidate.id, candidate.name, candidate.email, null, actor.id],
+       RETURNING "eventId", "scannerId", "scannerName", "scannerEmail", "deviceId", "assignedAt", "assignedBy", "assignmentEpoch"`,
+      [eventId, lockedCandidate.scannerId, lockedCandidate.name, lockedCandidate.email, null, assignmentEpoch, actor.id],
     );
 
     const handoverId = `hnd-${randomUUID()}`;
@@ -763,6 +835,7 @@ export async function handoverEventPrimaryScanner(
         deviceId: primaryRow.deviceId,
         assignedAt: primaryRow.assignedAt.toISOString(),
         assignedBy: primaryRow.assignedBy,
+        assignmentEpoch: Number(primaryRow.assignmentEpoch),
       },
       handover: {
         id: hRow.id,
@@ -822,6 +895,15 @@ export async function emergencyStopOffline(
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
+    await client.query('SELECT id FROM events WHERE id = $1 FOR UPDATE', [eventId]);
+    const lockedPrimary = await client.query<{ scannerId: string }>(
+      'SELECT "scannerId" FROM event_primary_scanners WHERE "eventId" = $1 FOR UPDATE',
+      [eventId],
+    );
+    if ((lockedPrimary.rows[0]?.scannerId ?? null) !== (oldPrimary?.scannerId ?? null)) {
+      throw new Error('เครื่องหลักเปลี่ยนแปลงระหว่างตรวจสอบ กรุณาโหลดข้อมูลใหม่');
+    }
+    if (lockedPrimary.rowCount) await advancePrimaryScannerEpoch(client, eventId);
 
     // 2. Upsert event_offline_controls to halted
     const haltReason = options?.reason || 'DEVICE_DAMAGED_RECONCILIATION_REQUIRED';

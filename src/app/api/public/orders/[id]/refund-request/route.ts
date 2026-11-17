@@ -1,6 +1,7 @@
 import { createSafeErrorResponse } from '@/server/api-error';
 import { getDatabasePool } from '@/server/database';
 import { submitRefundRequest } from '@/server/refunds';
+import { isPayloadTooLargeError, readBoundedJson } from '@/server/http-body';
 
 export const runtime = 'nodejs';
 
@@ -22,7 +23,18 @@ export async function POST(
   }
 
   try {
-    const body = await request.json();
+    let body: { ticketIds?: string[]; reason?: string; bankName?: string; bankAccountNo?: string; bankAccountName?: string };
+    try {
+      body = await readBoundedJson<typeof body>(request, 32 * 1024);
+    } catch (error) {
+      const tooLarge = isPayloadTooLargeError(error);
+      return Response.json({ message: tooLarge ? 'Payload too large' : 'Invalid JSON body' }, { status: tooLarge ? 413 : 400 });
+    }
+    if (!Array.isArray(body.ticketIds) || typeof body.reason !== 'string'
+      || typeof body.bankName !== 'string' || typeof body.bankAccountNo !== 'string'
+      || typeof body.bankAccountName !== 'string') {
+      return Response.json({ message: 'ข้อมูลคำขอคืนเงินไม่ถูกต้อง' }, { status: 400 });
+    }
     const { ticketIds, reason, bankName, bankAccountNo, bankAccountName } = body;
 
     const pool = getDatabasePool();

@@ -11,7 +11,7 @@ import { arch, platform, cpus } from 'node:os';
 export const baselineRef = 'f623c17';
 export function benchmarkEnvironment() {
   const files = ['src/server/reports.ts', 'src/server/events.ts', 'src/lib/adaptive-polling.ts',
-    'src/lib/offline-admission.ts', 'src/app/api/media/[...key]/route.ts', 'src/components/responsive-image.tsx',
+    'src/lib/offline-admission.ts', 'src/app/api/media/[...key]/route.ts', 'src/server/image-variants.ts', 'src/components/responsive-image.tsx',
     'src/components/home-concert-catalog.tsx', 'src/app/page.tsx', 'src/components/navbar-search.tsx',
     'src/components/owner-finance-hub.tsx', 'src/components/organizer-finance-view.tsx',
     'src/components/organizer-overview-view.tsx', 'src/components/organizer-money-report-view.tsx',
@@ -204,7 +204,7 @@ export async function browserBenchmarks(mediaGET, storage) {
       const cold = [], warm = [];
       let bytes = 0;
       for (let i = 0; i < 8; i++) {
-        const key = `benchmark-${format}-${i}.jpg`;
+        const key = `posters/benchmark-${format}-${i}.jpg`;
         await storage.put(key, poster, 'image/jpeg', 'public');
         const url = `${origin}/api/media/${key}${format === 'original' ? '' : `?w=360&fm=${format}`}`;
         for (const samples of [cold, warm]) {

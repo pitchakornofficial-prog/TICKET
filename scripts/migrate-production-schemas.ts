@@ -4,6 +4,11 @@ import { ensureFeeSchema } from '../src/server/fees.ts';
 import { ensureQueueSchema } from '../src/server/queue.ts';
 import { ensureGuestOtpSchema } from '../src/server/guest-otp.ts';
 import { ensureReservationSchema } from '../src/server/reservation.ts';
+import { ensurePaymentSchema, ensureStripeWebhookInboxSchema } from '../src/server/payment.ts';
+import { ensureUploadFinalizeSchema } from '../src/server/upload-finalization.ts';
+import { ensurePasswordResetTokenSchema } from '../src/server/password-reset.ts';
+import { ensureOwnerContactInfoSchema } from '../src/server/owner-contact-info.ts';
+import { ensureInboundEmailSchema } from '../src/server/inbound-email.ts';
 
 const pool = createDatabasePool();
 try {
@@ -18,6 +23,17 @@ try {
   console.log('4. Guest OTP schema & atomic functions: OK');
   await ensureReservationSchema(pool);
   console.log('5. Reservation schema, triggers, and atomic functions: OK');
+  await ensurePaymentSchema(pool);
+  await ensureStripeWebhookInboxSchema(pool);
+  console.log('6. Payment & Stripe webhook inbox schema: OK');
+  await ensureUploadFinalizeSchema(pool);
+  console.log('7. Upload finalization intent schema: OK');
+  await ensurePasswordResetTokenSchema(pool);
+  console.log('8. Password reset token schema: OK');
+  await ensureOwnerContactInfoSchema(pool);
+  console.log('9. Owner contact info schema: OK');
+  await ensureInboundEmailSchema(pool);
+  console.log('10. Inbound email mailbox schema: OK');
 
   // Verify backfill consistency
   const expectedRes = await pool.query<{ ticketTypeId: string; expected: number }>(`
@@ -59,7 +75,7 @@ try {
     throw new Error(`Bucket backfill validation failed with ${mismatchCount} mismatches`);
   }
 
-  console.log(`6. Paid buckets backfill validated successfully (${expectedRes.rows.length} ticket types verified).`);
+  console.log(`10. Paid buckets backfill validated successfully (${expectedRes.rows.length} ticket types verified).`);
   console.log('Migration and schema verification completed successfully.');
 } catch (error) {
   console.error('Migration failed:', error);

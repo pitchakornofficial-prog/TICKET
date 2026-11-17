@@ -1,6 +1,6 @@
-import { createHash, randomBytes, randomUUID } from 'node:crypto';
+import { createHash, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto';
 import type { Pool } from 'pg';
-import { hashPassword } from 'better-auth/crypto';
+import { hashPassword, verifyPassword } from 'better-auth/crypto';
 import { inTransaction } from './database.ts';
 import { emailTransport } from './email.ts';
 import { minimumPasswordLength, maximumPasswordLength } from '../lib/bootstrap-input.ts';
@@ -10,6 +10,16 @@ import { minimumPasswordLength, maximumPasswordLength } from '../lib/bootstrap-i
 // - โค้ด/ลิงก์ต้องสุ่มอย่างปลอดภัย เก็บในรูปที่ไม่เปิดเผยค่าลับ (Hash)
 export const INVITATION_EXPIRATION_HOURS = 48;
 export const INVITATION_EXPIRATION_SECONDS = INVITATION_EXPIRATION_HOURS * 60 * 60; // 172800 seconds
+
+export class InvitationSecurityError extends Error {
+  readonly status: 400 | 401 | 403;
+
+  constructor(message: string, status: 400 | 401 | 403) {
+    super(message);
+    this.name = 'InvitationSecurityError';
+    this.status = status;
+  }
+}
 
 export function hashInvitationToken(token: string): string {
   return createHash('sha256').update(token).digest('hex');
@@ -39,7 +49,7 @@ export async function ensureInvitationSchema(pool: Pool): Promise<void> {
         CREATE TABLE IF NOT EXISTS organizer_invitations (
           id TEXT PRIMARY KEY,
           email TEXT NOT NULL,
-          token TEXT NOT NULL UNIQUE,
+          token_hash TEXT NOT NULL UNIQUE,
           role TEXT NOT NULL DEFAULT 'organizer',
           status TEXT NOT NULL,
           "expiresAt" TIMESTAMPTZ NOT NULL,
@@ -48,7 +58,23 @@ export async function ensureInvitationSchema(pool: Pool): Promise<void> {
         );
         ALTER TABLE organizer_invitations ADD COLUMN IF NOT EXISTS role TEXT NOT NULL DEFAULT 'organizer';
         CREATE INDEX IF NOT EXISTS idx_organizer_invitations_email ON organizer_invitations(email);
-        CREATE INDEX IF NOT EXISTS idx_organizer_invitations_token ON organizer_invitations(token);
+        DO $$
+        BEGIN
+          IF EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_schema = current_schema()
+              AND table_name = 'organizer_invitations'
+              AND column_name = 'token'
+          ) AND NOT EXISTS (
+            SELECT 1 FROM information_schema.columns
+            WHERE table_schema = current_schema()
+              AND table_name = 'organizer_invitations'
+              AND column_name = 'token_hash'
+          ) THEN
+            ALTER TABLE organizer_invitations RENAME COLUMN token TO token_hash;
+          END IF;
+        END $$;
+        CREATE INDEX IF NOT EXISTS idx_organizer_invitations_token_hash ON organizer_invitations(token_hash);
 
         CREATE TABLE IF NOT EXISTS invitation_audit_logs (
           id TEXT PRIMARY KEY,
@@ -112,6 +138,13 @@ export async function createOrganizerInvitation(
   baseURL: string,
   now = new Date(),
   invitedRole: 'organizer' | 'owner' = 'organizer',
+  issuer?: {
+    userId: string;
+    name?: string | null;
+    email?: string | null;
+    ipAddress?: string | null;
+    confirmPassword?: string;
+  },
 ): Promise<{ id: string; token: string; email: string; role: 'organizer' | 'owner' }> {
   const normalizedEmail = email.trim().toLowerCase();
   if (!normalizedEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
@@ -119,6 +152,26 @@ export async function createOrganizerInvitation(
   }
 
   await ensureInvitationSchema(pool);
+
+  if (!issuer?.userId) {
+    throw new InvitationSecurityError('ไม่พบข้อมูลผู้เชิญ', 401);
+  }
+  if (invitedRole === 'owner') {
+    if (!issuer.confirmPassword) {
+      throw new InvitationSecurityError('กรุณาระบุรหัสผ่านปัจจุบันของคุณเพื่อยืนยันการเชิญผู้ดูแลระบบ (Owner)', 400);
+    }
+    const account = await pool.query<{ password: string | null }>(
+      'SELECT password FROM auth_account WHERE "userId" = $1 AND "providerId" = $2',
+      [issuer.userId, 'credential'],
+    );
+    if (!account.rowCount || !account.rows[0]?.password) {
+      throw new InvitationSecurityError('ไม่พบบัญชีผู้ใช้', 401);
+    }
+    const passwordMatches = await verifyPassword({ hash: account.rows[0].password, password: issuer.confirmPassword });
+    if (!passwordMatches) {
+      throw new InvitationSecurityError('รหัสผ่านยืนยันไม่ถูกต้อง', 403);
+    }
+  }
 
   return inTransaction(pool, async client => {
     // Check if user already exists
@@ -141,9 +194,26 @@ export async function createOrganizerInvitation(
     const expiresAt = new Date(now.getTime() + INVITATION_EXPIRATION_SECONDS * 1000);
 
     await client.query(
-      `INSERT INTO organizer_invitations (id, email, token, status, "expiresAt", "createdAt", role)
+      `INSERT INTO organizer_invitations (id, email, token_hash, status, "expiresAt", "createdAt", role)
        VALUES ($1, $2, $3, 'pending', $4, $5, $6)`,
       [id, normalizedEmail, tokenHash, expiresAt, now, invitedRole],
+    );
+
+    await client.query(
+      `INSERT INTO invitation_audit_logs (
+        id, "invitationId", "invitedEmail", "invitedRole", "issuedByUserId", "issuedByName", "issuedByEmail", "ipAddress", "createdAt"
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+      [
+        `AUDIT-${randomUUID()}`,
+        id,
+        normalizedEmail,
+        invitedRole,
+        issuer.userId,
+        issuer.name || null,
+        issuer.email || null,
+        issuer.ipAddress || null,
+        now,
+      ],
     );
 
     const inviteUrl = `${new URL(baseURL).origin}/accept-invitation?token=${token}`;
@@ -169,8 +239,8 @@ export async function verifyInvitation(
 
   const tokenHash = hashInvitationToken(token);
   const res = await pool.query(
-    'SELECT id, email, status, "expiresAt", role FROM organizer_invitations WHERE token = $1 OR token = $2',
-    [tokenHash, token],
+    'SELECT id, email, token_hash, status, "expiresAt", role FROM organizer_invitations WHERE token_hash = $1',
+    [tokenHash],
   );
 
   if (res.rowCount === 0) {
@@ -178,6 +248,9 @@ export async function verifyInvitation(
   }
 
   const row = res.rows[0];
+  if (!safeEqualInvitationHash(row.token_hash, tokenHash)) {
+    return { valid: false, reason: 'not_found' };
+  }
   if (row.status === 'accepted') {
     return { valid: false, reason: 'used' };
   }
@@ -189,6 +262,13 @@ export async function verifyInvitation(
   }
 
   return { valid: true, email: row.email, role: (row.role as 'organizer' | 'owner') || 'organizer' };
+}
+
+function safeEqualInvitationHash(storedHash: unknown, providedHash: string): boolean {
+  if (typeof storedHash !== 'string' || !/^[0-9a-f]{64}$/i.test(storedHash)) return false;
+  const stored = Buffer.from(storedHash, 'hex');
+  const provided = Buffer.from(providedHash, 'hex');
+  return stored.length === 32 && provided.length === 32 && timingSafeEqual(stored, provided);
 }
 
 export async function acceptOrganizerInvitation(
@@ -212,11 +292,11 @@ export async function acceptOrganizerInvitation(
     // Lock invitation row
     const tokenHash = hashInvitationToken(token);
     const res = await client.query(
-      `SELECT id, email, status, "expiresAt", role 
+      `SELECT id, email, token_hash, status, "expiresAt", role
        FROM organizer_invitations 
-       WHERE token = $1 OR token = $2 
+       WHERE token_hash = $1
        FOR UPDATE`,
-      [tokenHash, token],
+      [tokenHash],
     );
 
     if (res.rowCount === 0) {
@@ -224,6 +304,9 @@ export async function acceptOrganizerInvitation(
     }
 
     const row = res.rows[0];
+    if (!safeEqualInvitationHash(row.token_hash, tokenHash)) {
+      throw new Error('ไม่พบคำเชิญ');
+    }
     if (row.status === 'accepted') {
       throw new Error('คำเชิญนี้ถูกใช้งานไปแล้ว');
     }

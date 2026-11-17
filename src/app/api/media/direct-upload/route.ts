@@ -1,4 +1,5 @@
 import { validateUploadedFile } from '@/server/file-validator';
+import { sanitizePublicImage } from '@/server/upload-image';
 import { storage } from '@/server/storage';
 import { MAX_FILE_SIZE } from '@/server/upload-quota';
 
@@ -17,6 +18,9 @@ export async function PUT(request: Request) {
 
   if (!key || !token) {
     return Response.json({ message: 'พารามิเตอร์ key หรือ token ไม่ถูกต้อง' }, { status: 400 });
+  }
+  if (!key.startsWith('pending/')) {
+    return Response.json({ message: 'อัปโหลดได้เฉพาะไฟล์ที่ยังไม่ผ่านการยืนยัน' }, { status: 403 });
   }
 
   // Verify presigned token in memory store
@@ -91,7 +95,15 @@ export async function PUT(request: Request) {
   }
 
   const finalContentType = validation.detectedContentType || claimedContentType;
-  const { url: publicUrl } = await storage.put(key, buffer, finalContentType, visibility);
+  let finalBuffer: Buffer = buffer;
+  if (visibility === 'public') {
+    try {
+      finalBuffer = await sanitizePublicImage(buffer, finalContentType);
+    } catch {
+      return Response.json({ message: 'ไฟล์ภาพเสียหายหรือไม่สามารถแปลงเป็นภาพที่ปลอดภัยได้' }, { status: 400 });
+    }
+  }
+  await storage.put(key, finalBuffer, finalContentType, visibility);
 
-  return Response.json({ success: true, key, url: publicUrl }, { status: 200 });
+  return Response.json({ success: true, uploadKey: key, requiresFinalize: true }, { status: 200 });
 }

@@ -47,7 +47,7 @@ test.describe('Public customer pages and navigation (TASK-007, D-02, D-05, D-08,
     // 2. Contact page
     await page.goto('/contact');
     await expect(page.getByRole('heading', { level: 1 })).toContainText('ติดต่อเรา');
-    await expect(page.getByText('support@ticket.invalid')).toBeVisible();
+    await expect(page.getByText('support@phatysd.me')).toBeVisible();
     expect(await page.locator('body').innerText()).not.toMatch(/\p{Extended_Pictographic}/u);
 
     // 3. Terms page

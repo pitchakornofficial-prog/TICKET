@@ -7,6 +7,7 @@ import {
   getBuyerTicketCountForEvent,
 } from '../../src/server/reservation';
 import { getCapturedEmails, clearCapturedEmails } from '../../src/server/email';
+import { saveEventFeeSettings } from '../../src/server/fees';
 
 describe('Issue #8: Anti-Scalping Reservation Concurrency on PostgreSQL (D-59, AC-10)', () => {
   let fixture: Awaited<ReturnType<typeof authFixture>>;
@@ -195,5 +196,54 @@ describe('Issue #8: Anti-Scalping Reservation Concurrency on PostgreSQL (D-59, A
 
     expect(countA).toBe(3);
     expect(countB).toBe(3);
+  });
+
+  it('serializes a fee update with the reservation quote so the stored order uses one complete settings version', async () => {
+    const event = await createEventDraft(
+      fixture.pool,
+      fixture.ids.organizer,
+      { title: 'Fee Quote Lock Test', location: 'Impact Arena', limitPerOrder: 4 },
+      [{
+        startTime: '2026-12-20T19:00:00.000Z',
+        endTime: '2026-12-20T22:00:00.000Z',
+        ticketTypes: [{ name: 'Regular', price: 1000, quota: 10 }],
+      }],
+    );
+    await approveSession(fixture.pool, event.sessions[0].id, fixture.ids.owner);
+    await saveEventFeeSettings(fixture.pool, event.id, {
+      organizerFeeMode: 'percentage',
+      organizerFeeRate: 5,
+      customerFeeMode: 'per_ticket',
+      customerFeeRate: 20,
+      reservePercentage: 0,
+    }, fixture.ids.owner);
+    const token = await getVerifiedToken('fee-lock-buyer@ticket.invalid');
+
+    const [, reservation] = await Promise.all([
+      saveEventFeeSettings(fixture.pool, event.id, {
+        organizerFeeMode: 'percentage',
+        organizerFeeRate: 5,
+        customerFeeMode: 'per_ticket',
+        customerFeeRate: 50,
+        reservePercentage: 0,
+      }, fixture.ids.owner),
+      createReservation(fixture.pool, {
+        verifiedToken: token,
+        eventId: event.id,
+        sessionId: event.sessions[0].id,
+        items: [{ ticketTypeId: event.sessions[0].ticketTypes[0].id, quantity: 1 }],
+      }),
+    ]);
+
+    const quote = await fixture.pool.query<{
+      customerFeeRate: number;
+      customerFee: number;
+    }>(
+      `SELECT "customerFeeRate", "customerFee" FROM orders WHERE id = $1`,
+      [reservation.id],
+    );
+    const storedRate = Number(quote.rows[0].customerFeeRate);
+    expect([20, 50]).toContain(storedRate);
+    expect(Number(quote.rows[0].customerFee)).toBe(storedRate);
   });
 });

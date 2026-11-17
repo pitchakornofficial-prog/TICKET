@@ -131,6 +131,13 @@ describe('Issue #15: Guest Token Purpose Restriction & Cross-Workflow Protection
       purpose: 'order_lookup',
       expiresAt: futureDate,
     },
+    'token-lookup-bound': {
+      email: 'buyer1@ticket.invalid',
+      name: 'คุณผู้ซื้อ หนึ่ง',
+      phone: '0812345678',
+      purpose: 'order_lookup:ORD-BUYER-1',
+      expiresAt: futureDate,
+    },
   });
 
   describe('1. getVerifiedGuestSession purpose enforcement', () => {
@@ -143,6 +150,12 @@ describe('Issue #15: Guest Token Purpose Restriction & Cross-Workflow Protection
     it('returns null when purpose does NOT match expectedPurpose', async () => {
       const session = await getVerifiedGuestSession(mockPool, 'token-lookup-valid', new Date(), 'checkout');
       expect(session).toBeNull();
+    });
+
+    it('accepts an order-bound lookup session only for the lookup purpose', async () => {
+      const session = await getVerifiedGuestSession(mockPool, 'token-lookup-bound', new Date(), 'order_lookup');
+      expect(session?.purpose).toBe('order_lookup:ORD-BUYER-1');
+      await expect(getVerifiedGuestSession(mockPool, 'token-lookup-bound', new Date(), 'checkout')).resolves.toBeNull();
     });
 
     it('returns session without purpose check when expectedPurpose is omitted', async () => {

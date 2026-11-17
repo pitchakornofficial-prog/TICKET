@@ -27,6 +27,14 @@ describe('organizer invitation integration flow and role boundary', () => {
     });
   }
 
+  function createTestInvitation(email: string, now: Date) {
+    return createOrganizerInvitation(fixture.pool, email, baseURL, now, 'organizer', {
+      userId: fixture.ids.owner,
+      name: fixtureAccounts.owner.name,
+      email: fixtureAccounts.owner.email,
+    });
+  }
+
   beforeAll(async () => {
     fixture = await authFixture('integration', baseURL);
   }, 30000);
@@ -79,12 +87,38 @@ describe('organizer invitation integration flow and role boundary', () => {
     expect(inviteJson.message).toBe('ส่งคำเชิญสำเร็จ');
     expect(getCapturedEmails()).toHaveLength(1);
     expect(getCapturedEmails()[0].to).toBe('new-org3@ticket.invalid');
+
+    const missingPassword = await handleAuthRequest(fixture.auth, makeRequest('invite-organizer', {
+      email: 'new-owner-missing@ticket.invalid',
+      role: 'owner',
+    }, { Cookie: ownerCookie }));
+    expect(missingPassword.status).toBe(400);
+
+    const wrongPassword = await handleAuthRequest(fixture.auth, makeRequest('invite-organizer', {
+      email: 'new-owner-wrong@ticket.invalid',
+      role: 'owner',
+      confirmPassword: 'Wrong-password!002',
+    }, { Cookie: ownerCookie }));
+    expect(wrongPassword.status).toBe(403);
+
+    const ownerInvitation = await handleAuthRequest(fixture.auth, makeRequest('invite-organizer', {
+      email: 'new-owner-valid@ticket.invalid',
+      role: 'owner',
+      confirmPassword: fixturePassword,
+    }, { Cookie: ownerCookie }));
+    expect(ownerInvitation.status).toBe(200);
+    const ownerAudit = await fixture.pool.query(
+      `SELECT "invitedRole", "issuedByUserId" FROM invitation_audit_logs
+       WHERE "invitedEmail" = $1`,
+      ['new-owner-valid@ticket.invalid'],
+    );
+    expect(ownerAudit.rows).toEqual([{ invitedRole: 'owner', issuedByUserId: fixture.ids.owner }]);
   });
 
   it('enforces 48-hour expiration and one-time use', async () => {
     const t0 = new Date('2026-10-20T10:00:00.000Z');
     const email = 'expiry-test@ticket.invalid';
-    const inv = await createOrganizerInvitation(fixture.pool, email, baseURL, t0);
+    const inv = await createTestInvitation(email, t0);
 
     // Check before 48h: valid
     const check1 = await verifyInvitation(fixture.pool, inv.token, new Date(t0.getTime() + 47 * 3600 * 1000));
@@ -140,11 +174,11 @@ describe('organizer invitation integration flow and role boundary', () => {
     const email = 'reissue-test@ticket.invalid';
 
     // Invitation 1
-    const inv1 = await createOrganizerInvitation(fixture.pool, email, baseURL, t0);
+    const inv1 = await createTestInvitation(email, t0);
     expect((await verifyInvitation(fixture.pool, inv1.token, t0)).valid).toBe(true);
 
     // Invitation 2 (reissue)
-    const inv2 = await createOrganizerInvitation(fixture.pool, email, baseURL, new Date(t0.getTime() + 60000));
+    const inv2 = await createTestInvitation(email, new Date(t0.getTime() + 60000));
     expect(inv2.token).not.toBe(inv1.token);
 
     // Old invitation 1 is replaced

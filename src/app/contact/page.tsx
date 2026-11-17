@@ -28,7 +28,7 @@ export default function ContactPage() {
           <dl className="contact-details">
             <div>
               <dt>อีเมลฝ่ายสนับสนุน</dt>
-              <dd><strong>support@ticket.invalid</strong></dd>
+              <dd><strong>support@phatysd.me</strong></dd>
             </div>
             <div>
               <dt>เวลาทำการ</dt>
@@ -56,7 +56,7 @@ export default function ContactPage() {
           <dl className="contact-details">
             <div>
               <dt>อีเมลฝ่ายประสานงาน</dt>
-              <dd><strong>organizer@ticket.invalid</strong></dd>
+              <dd><strong>organizer@phatysd.me</strong></dd>
             </div>
             <div>
               <dt>เอกสารที่ต้องเตรียม</dt>

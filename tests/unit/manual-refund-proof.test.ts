@@ -109,6 +109,9 @@ describe('TASK-023: Manual Refund Transfer & Proof Unit Tests (AC-37, AC-92, AC-
         if (sql === 'BEGIN' || sql === 'ROLLBACK' || sql === 'COMMIT' || sql.includes('CREATE TABLE')) {
           return { rows: [], rowCount: 0 };
         }
+        if (sql.includes('FROM refund_requests rr JOIN orders')) {
+          return { rows: [{ eventId: 'event-1' }], rowCount: 1 };
+        }
         if (sql.includes('FROM refund_requests') && sql.includes('FOR UPDATE')) {
           return {
             rows: [

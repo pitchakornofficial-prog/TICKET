@@ -158,11 +158,17 @@ test.describe('Owner Contact Correction Flow (TASK-019, AC-76, G-24)', () => {
     await freshPage.goto('/my-tickets');
     await expect(freshPage.getByRole('heading', { name: 'ค้นหาบัตรคอนเสิร์ตของฉัน' })).toBeVisible();
 
-    // Case 5A: Lookup with old email + old phone fails (AC-62, AC-76)
+    // Case 5A: Lookup with old email + old phone gives generic anti-enumeration response without issuing an OTP (AC-62, AC-76)
     await freshPage.locator('#lookup-email').fill(initialEmail);
     await freshPage.locator('#lookup-phone').fill(initialPhone);
     await freshPage.getByRole('button', { name: 'ขอรหัส OTP เพื่อเปิดดูบัตร' }).click({ force: true });
-    await expect(freshPage.getByText('ไม่พบรายการคำสั่งซื้อที่ตรงกับอีเมลและเบอร์โทรศัพท์ที่ระบุ')).toBeVisible();
+    await expect(freshPage.getByRole('heading', { name: 'ยืนยันรหัส OTP' })).toBeVisible();
+    await expect(freshPage.getByText('ไม่พบรายการคำสั่งซื้อที่ตรงกับอีเมลและเบอร์โทรศัพท์ที่ระบุ')).toHaveCount(0);
+    const oldContactOtpRes = await request.get(
+      `/api/auth/test-inspect-reset-token?type=guest_otp&email=${encodeURIComponent(initialEmail)}`,
+    );
+    expect(oldContactOtpRes.status()).toBe(404);
+    await freshPage.getByRole('button', { name: 'แก้ไขอีเมลหรือเบอร์โทร' }).click({ force: true });
 
     // Case 5B: Lookup with NEW email + NEW phone succeeds
     await freshPage.locator('#lookup-email').fill(correctedEmail);

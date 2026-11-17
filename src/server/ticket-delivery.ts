@@ -21,7 +21,7 @@ export interface TicketEmailDeliveryRecord {
   eventTitle?: string;
 }
 
-function ticketOrderUrl(order: { id: string; buyerEmail: string }, override?: string): string {
+function ticketOrderUrl(order: { id: string; buyerEmail: string; buyerPhone: string }, override?: string): string {
   const rawBaseUrl =
     override ||
     process.env.BETTER_AUTH_URL ||
@@ -35,7 +35,7 @@ function ticketOrderUrl(order: { id: string; buyerEmail: string }, override?: st
     throw new Error('Ticket email links require a public HTTPS origin');
   }
   const baseUrl = url.origin;
-  const accessToken = createOrderTicketAccessToken(order.id, order.buyerEmail);
+  const accessToken = createOrderTicketAccessToken(order.id, order.buyerEmail, order.buyerPhone);
   return `${baseUrl}/orders/${order.id}/success?tab=tickets&token=${encodeURIComponent(accessToken)}`;
 }
 
@@ -251,6 +251,7 @@ export async function sendOrderTicketsEmail(
     id: string;
     buyerName: string;
     buyerEmail: string;
+    buyerPhone: string;
     eventTitle: string;
     location: string;
     sessionStartTime: string;
@@ -264,6 +265,7 @@ export async function sendOrderTicketsEmail(
       id: orderId,
       buyerName: first.buyerName,
       buyerEmail: first.buyerEmail,
+      buyerPhone: first.buyerPhone,
       eventTitle: first.eventTitle,
       location: first.location,
       sessionStartTime: first.sessionStartTime,
@@ -305,7 +307,7 @@ export async function sendOrderTicketsEmail(
   const deliveryId = `EML-${randomUUID().slice(0, 8).toUpperCase()}`;
   // Direct ticket view link with signed token so buyer can open ticket straight from email without OTP
   const orderUrl = ticketOrderUrl(
-    { id: order.id, buyerEmail: order.buyerEmail },
+    { id: order.id, buyerEmail: order.buyerEmail, buyerPhone: order.buyerPhone },
     options?.baseUrl,
   );
 
@@ -393,7 +395,7 @@ export async function retryTicketEmailDelivery(
   const transport = options?.transport || emailTransport;
 
   const res = await pool.query(
-    `SELECT d.id, d."orderId", d."recipientEmail", d.status, d."retryCount",
+    `SELECT d.id, d."orderId", d."recipientEmail", d.status, d."retryCount", o."buyerPhone",
             o."buyerName", o."eventId", e.title as "eventTitle", e.location,
             es."startTime" as "sessionStartTime"
      FROM ticket_email_deliveries d
@@ -412,7 +414,7 @@ export async function retryTicketEmailDelivery(
   const tickets = await getOrderTickets(pool, delivery.orderId);
 
   const orderUrl = ticketOrderUrl(
-    { id: delivery.orderId, buyerEmail: delivery.recipientEmail },
+    { id: delivery.orderId, buyerEmail: delivery.recipientEmail, buyerPhone: delivery.buyerPhone },
     options?.baseUrl,
   );
   const { subject, html, text } = buildTicketEmailContent(

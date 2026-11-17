@@ -6,6 +6,7 @@ import { ensureReservationSchema } from './reservation.ts';
 import { ensureTicketSchema, issueTicketsForOrder, buildTicketsToIssue, type TicketDetail, type TicketIssuanceItemRow } from './tickets.ts';
 import { ensureRefundSchema } from './refunds.ts';
 import { roundHalfUp } from './fees.ts';
+import { lockEventFinancial } from './event-lock.ts';
 import { sendOrderTicketsEmail } from './ticket-delivery.ts';
 import {
   generatePromptPaySvg,
@@ -125,6 +126,74 @@ export async function ensurePaymentSchema(pool: Pool): Promise<void> {
   })();
   paymentSchemaPromises.set(pool, promise);
   return promise;
+}
+
+export type StripeWebhookInboxStatus = 'pending_review' | 'processed' | 'ignored' | 'rejected';
+
+const webhookInboxSchemaPromises = new WeakMap<Pool, Promise<void>>();
+
+export async function ensureStripeWebhookInboxSchema(pool: Pool): Promise<void> {
+  const existing = webhookInboxSchemaPromises.get(pool);
+  if (existing) return existing;
+  const promise = inTransaction(pool, async client => {
+    await client.query('SELECT pg_advisory_xact_lock($1)', [945162033]);
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS stripe_webhook_inbox (
+        id TEXT PRIMARY KEY,
+        "eventType" TEXT NOT NULL,
+        "rawBody" TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'pending_review',
+        attempts INT NOT NULL DEFAULT 1,
+        "lastError" TEXT,
+        "receivedAt" TIMESTAMPTZ NOT NULL DEFAULT now(),
+        "lastReceivedAt" TIMESTAMPTZ NOT NULL DEFAULT now(),
+        "processedAt" TIMESTAMPTZ
+      );
+      CREATE INDEX IF NOT EXISTS idx_stripe_webhook_inbox_status
+        ON stripe_webhook_inbox(status, "lastReceivedAt");
+    `);
+  }).catch(error => {
+    webhookInboxSchemaPromises.delete(pool);
+    throw error;
+  });
+  webhookInboxSchemaPromises.set(pool, promise);
+  return promise;
+}
+
+export async function recordStripeWebhookDelivery(
+  pool: Pool,
+  event: StripeEvent<StripePaymentIntent>,
+  rawBody: string,
+): Promise<StripeWebhookInboxStatus> {
+  await ensureStripeWebhookInboxSchema(pool);
+  const result = await pool.query<{ status: StripeWebhookInboxStatus }>(
+    `INSERT INTO stripe_webhook_inbox (id, "eventType", "rawBody")
+     VALUES ($1, $2, $3)
+     ON CONFLICT (id) DO UPDATE SET
+       attempts = stripe_webhook_inbox.attempts + 1,
+       "lastReceivedAt" = now(),
+       "lastError" = NULL
+     RETURNING status`,
+    [event.id, event.type, rawBody],
+  );
+  return result.rows[0]?.status ?? 'pending_review';
+}
+
+export async function updateStripeWebhookDelivery(
+  pool: Pool,
+  eventId: string,
+  status: StripeWebhookInboxStatus,
+  errorMessage?: string,
+): Promise<void> {
+  await ensureStripeWebhookInboxSchema(pool);
+  await pool.query(
+    `UPDATE stripe_webhook_inbox
+     SET status = $2,
+         "lastError" = $3,
+         "processedAt" = CASE WHEN $2 IN ('processed', 'ignored', 'rejected') THEN now() ELSE NULL END
+     WHERE id = $1`,
+    [eventId, status, errorMessage ? errorMessage.slice(0, 500) : null],
+  );
 }
 
 
@@ -397,6 +466,57 @@ export interface ProcessStripeEventResult {
   refundAmount?: number;
 }
 
+async function hasSufficientQuotaForOrder(
+  client: PoolClient,
+  orderId: string,
+  now: Date,
+): Promise<boolean> {
+  const requestedRes = await client.query<{ ticketTypeId: string; quantity: number }>(
+    `SELECT "ticketTypeId", SUM(quantity)::int AS quantity
+     FROM order_items
+     WHERE "orderId" = $1
+     GROUP BY "ticketTypeId"
+     ORDER BY "ticketTypeId"`,
+    [orderId],
+  );
+  if (requestedRes.rowCount === 0) return false;
+
+  const ticketTypeIds = requestedRes.rows.map(row => row.ticketTypeId);
+  const ticketTypesRes = await client.query<{ id: string; quota: number }>(
+    `SELECT id, quota
+     FROM ticket_types
+     WHERE id = ANY($1::text[])
+     ORDER BY id
+     FOR NO KEY UPDATE`,
+    [ticketTypeIds],
+  );
+  if (ticketTypesRes.rowCount !== ticketTypeIds.length) return false;
+
+  const heldRes = await client.query<{ ticketTypeId: string; held: number }>(
+    `SELECT oi."ticketTypeId",
+            GREATEST(0,
+              COALESCE(SUM(oi.quantity), 0)::int -
+              COALESCE((
+                SELECT COUNT(*)::int FROM tickets t
+                WHERE t."ticketTypeId" = oi."ticketTypeId" AND t.status = 'refunded'
+              ), 0)
+            )::int AS held
+     FROM order_items oi
+     JOIN orders o ON o.id = oi."orderId"
+     WHERE oi."ticketTypeId" = ANY($1::text[])
+       AND o.id <> $2
+       AND (o.status = 'paid' OR (o.status = 'reserved' AND o."expiresAt" > $3))
+     GROUP BY oi."ticketTypeId"`,
+    [ticketTypeIds, orderId, now],
+  );
+
+  const heldByType = new Map(heldRes.rows.map(row => [row.ticketTypeId, Number(row.held) || 0]));
+  const quotaByType = new Map(ticketTypesRes.rows.map(row => [row.id, Number(row.quota)]));
+  return requestedRes.rows.every(row =>
+    (quotaByType.get(row.ticketTypeId) ?? -1) - (heldByType.get(row.ticketTypeId) ?? 0) >= Number(row.quantity),
+  );
+}
+
 /**
  * Processes an authenticated Stripe webhook event according to AC-119, AC-120, AC-123, AC-124, AC-125 (G-53 / P5).
  */
@@ -504,6 +624,22 @@ export async function processStripeSuccessEvent(
 
   // 5. Atomic database processing
   const result = await inTransaction(pool, async (client: PoolClient): Promise<ProcessStripeEventResult> => {
+    const eventScopeRes = await client.query<{ eventId: string }>(
+      `SELECT o."eventId"
+       FROM payment_charges pc JOIN orders o ON o.id = pc."orderId"
+       WHERE pc.id = $1`,
+      [retrievedIntent.id],
+    );
+    if (eventScopeRes.rowCount === 0) {
+      return {
+        success: false,
+        status: 'mismatch',
+        intentId: retrievedIntent.id,
+        message: `ไม่พบรายการชำระเงินที่ตรงกับ Stripe intent ${retrievedIntent.id} (AC-119)`,
+      };
+    }
+    await lockEventFinancial(client, eventScopeRes.rows[0].eventId);
+
     // Lock charge + order + check idempotency tables in a single round-trip
     const stateRes = await client.query<{
       chargeId: string;
@@ -1126,43 +1262,7 @@ export async function processStripeSuccessEvent(
     // Case 3: T <= D and Session is Active (AC-17, AC-72, AC-119, AC-124)
     // Check if reservation hold expired before callback arrived
     if (isHoldExpired) {
-      const itemsRes = await client.query(
-        `SELECT id, "ticketTypeId", quantity FROM order_items WHERE "orderId" = $1`,
-        [order.id],
-      );
-      const ticketTypeIds = itemsRes.rows.map(r => r.ticketTypeId);
-      const ttRes = await client.query(
-        `SELECT id, name, quota FROM ticket_types WHERE id = ANY($1) FOR NO KEY UPDATE`,
-        [ticketTypeIds],
-      );
-      const ttMap = new Map(ttRes.rows.map(r => [r.id, r]));
-      let hasSufficientQuota = true;
-
-      for (const item of itemsRes.rows) {
-        const tt = ttMap.get(item.ticketTypeId);
-        if (!tt) {
-          hasSufficientQuota = false;
-          break;
-        }
-        const heldRes = await client.query(
-          `SELECT GREATEST(0,
-             coalesce(sum(oi.quantity), 0)::int -
-             coalesce((SELECT count(*)::int FROM tickets t WHERE t."ticketTypeId" = $1 AND t.status = 'refunded'), 0)
-           )::int as held
-           FROM order_items oi
-           JOIN orders o ON oi."orderId" = o.id
-           WHERE oi."ticketTypeId" = $1
-             AND o.id != $2
-             AND (o.status = 'paid' OR (o.status = 'reserved' AND o."expiresAt" > $3))`,
-          [item.ticketTypeId, order.id, now],
-        );
-        const held = Number(heldRes.rows[0]?.held) || 0;
-        const availableQuota = Number(tt.quota) - held;
-        if (availableQuota < item.quantity) {
-          hasSufficientQuota = false;
-          break;
-        }
-      }
+      const hasSufficientQuota = await hasSufficientQuotaForOrder(client, order.id, now);
 
       if (!hasSufficientQuota) {
         // Insufficient quota: Do NOT issue partial tickets (AC-74, AC-119, G-23)
@@ -1342,6 +1442,17 @@ export async function verifyAndProcessPayment(
   await ensureRefundSchema(pool);
 
   const result: ProcessPaymentResult = await inTransaction(pool, async (client: PoolClient): Promise<ProcessPaymentResult> => {
+    const eventScopeRes = await client.query<{ eventId: string }>(
+      `SELECT o."eventId"
+       FROM payment_charges pc JOIN orders o ON o.id = pc."orderId"
+       WHERE pc.id = $1`,
+      [input.chargeId],
+    );
+    if (eventScopeRes.rowCount === 0) {
+      throw new Error('ไม่พบรายการชำระเงินที่ระบุ');
+    }
+    await lockEventFinancial(client, eventScopeRes.rows[0].eventId);
+
     // 1. Lock payment charge
     const chargeRes = await client.query(
       `SELECT id, "orderId", amount, currency, status, "expiresAt"
@@ -1738,52 +1849,7 @@ export async function verifyAndProcessPayment(
 
     if (isHoldExpired) {
       // Re-check quota availability for all ticket types in the order (AC-72, AC-74)
-      const itemsRes = await client.query(
-        `SELECT id, "ticketTypeId", quantity
-         FROM order_items
-         WHERE "orderId" = $1`,
-        [order.id],
-      );
-
-      const ticketTypeIds = itemsRes.rows.map(r => r.ticketTypeId);
-      const ttRes = await client.query(
-        `SELECT id, name, quota
-         FROM ticket_types
-         WHERE id = ANY($1)
-         FOR UPDATE`,
-        [ticketTypeIds],
-      );
-
-      const ttMap = new Map(ttRes.rows.map(r => [r.id, r]));
-      let hasSufficientQuota = true;
-
-      for (const item of itemsRes.rows) {
-        const tt = ttMap.get(item.ticketTypeId);
-        if (!tt) {
-          hasSufficientQuota = false;
-          break;
-        }
-
-        const heldRes = await client.query(
-          `SELECT GREATEST(0,
-             coalesce(sum(oi.quantity), 0)::int -
-             coalesce((SELECT count(*)::int FROM tickets t WHERE t."ticketTypeId" = $1 AND t.status = 'refunded'), 0)
-           )::int as held
-           FROM order_items oi
-           JOIN orders o ON oi."orderId" = o.id
-           WHERE oi."ticketTypeId" = $1
-             AND o.id != $2
-             AND (o.status = 'paid' OR (o.status = 'reserved' AND o."expiresAt" > $3))`,
-          [item.ticketTypeId, order.id, now],
-        );
-
-        const held = Number(heldRes.rows[0]?.held) || 0;
-        const availableQuota = Number(tt.quota) - held;
-        if (availableQuota < item.quantity) {
-          hasSufficientQuota = false;
-          break;
-        }
-      }
+      const hasSufficientQuota = await hasSufficientQuotaForOrder(client, order.id, now);
 
       if (!hasSufficientQuota) {
         // Insufficient quota -> Do NOT fulfill partially, open owner review case for full refund (AC-74, G-23)

@@ -2,6 +2,7 @@ import { createSafeErrorResponse } from '@/server/api-error';
 import { assertSameOrigin } from '@/server/origin';
 import { getAuth } from '@/server/auth';
 import { deleteNews } from '@/server/news';
+import { safeRevalidateTag } from '@/server/cache';
 import type { Pool } from 'pg';
 
 export const runtime = 'nodejs';
@@ -30,6 +31,7 @@ export async function DELETE(
     if (!deleted) {
       return Response.json({ message: 'ไม่พบข่าวที่ต้องการลบ' }, { status: 404 });
     }
+    safeRevalidateTag('public-news');
     return Response.json({ message: 'ลบข่าวสารสำเร็จ' }, { status: 200 });
   } catch (error: unknown) {
     return createSafeErrorResponse(error, 'เกิดข้อผิดพลาดในการลบข่าว', { defaultStatus: 500 });

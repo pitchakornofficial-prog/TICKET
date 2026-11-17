@@ -7,6 +7,7 @@ import {
   createStripeSuccessEvent,
   StripeContractDouble,
 } from '@/server/stripe';
+import { isPayloadTooLargeError, readBoundedJson } from '@/server/http-body';
 
 export const runtime = 'nodejs';
 
@@ -39,7 +40,14 @@ export async function POST(
   }
 
   try {
-    const body = await request.json().catch(() => ({}));
+    let body: { verifiedToken?: string; orderToken?: string; chargeId?: string; providerPaidAt?: string } = {};
+    try {
+      body = await readBoundedJson<typeof body>(request, 32 * 1024);
+    } catch (error) {
+      if (isPayloadTooLargeError(error)) {
+        return Response.json({ message: 'Payload too large' }, { status: 413 });
+      }
+    }
 
     const verifiedToken =
       body.verifiedToken ||
@@ -100,7 +108,7 @@ export async function POST(
       result.status === 'cancelled_session_refund_face_value' ||
       result.status === 'cancelled_session_refund_full';
     const status = isProcessed ? 200 : 400;
-    return Response.json(result, { status, headers: { 'Cache-Control': 'no-store' } });
+    return Response.json(result, { status, headers: { 'Cache-Control': 'private, no-store, no-cache, must-revalidate' } });
   } catch (error: unknown) {
     return createSafeErrorResponse(error, 'เกิดข้อผิดพลาดในการประมวลผลการชำระเงิน', {
       defaultStatus: 500,

@@ -54,7 +54,15 @@ test('native IndexedDB preserves replacement snapshots, reload state and pending
     sessionStorage.setItem('native-idb-fixed-time', String(now));
     const dataset = {
       event: { id: 'e2e-native-idb', title: 'Native browser regression', location: 'Local', status: 'approved' },
-      primaryScanner: null, isCurrentScannerPrimary: true, sessions: [], admissionLogs: [],
+      primaryScanner: {
+        scannerId: 'scanner',
+        scannerName: 'Scanner',
+        scannerEmail: 'scanner@example.com',
+        assignedAt: new Date(now).toISOString(),
+        assignmentEpoch: 1,
+        assignmentToken: 'e2e-offline-assignment-token',
+      },
+      isCurrentScannerPrimary: true, sessions: [], admissionLogs: [],
       lastSuccessfulSync: new Date(now).toISOString(), syncTimestamp: new Date(now).toISOString(), totalTickets: 1,
       tickets: [{ id: 't1', ticketCode: 'T1', qrHash: window.__hash.hashOfflineQrPayload('e2e-native-idb', 'QR1'),
         ticketTypeId: 'tt1', ticketTypeName: 'Standing', sessionId: 'session1', status: 'valid',

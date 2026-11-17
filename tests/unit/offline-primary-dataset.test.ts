@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 import { hashOfflineQrPayload, sha256Hex } from '@/lib/offline-qr-hash';
 import type { OfflineTicketItem, OfflineDataset } from '@/server/primary-scanner';
+import { createOfflineAssignmentToken } from '@/server/offline-assignment-token';
 
 describe('TASK-032: Offline Primary Dataset Unit Tests (AC-94, AC-65, G-41)', () => {
   it('1. Offline dataset payload strictly forbids buyer PII and raw qrPayload (AC-65)', () => {
@@ -71,6 +72,8 @@ describe('TASK-032: Offline Primary Dataset Unit Tests (AC-94, AC-65, G-41)', ()
         scannerName: 'ทีมสแกน 1',
         scannerEmail: 'scanner1@ticket.invalid',
         assignedAt: new Date().toISOString(),
+        assignmentEpoch: 1,
+        assignmentToken: createOfflineAssignmentToken({ eventId: 'EVT-001', scannerId: 'SCAN-001', assignmentEpoch: 1 }),
       },
       isCurrentScannerPrimary: true,
       sessions: [
@@ -109,6 +112,8 @@ describe('TASK-032: Offline Primary Dataset Unit Tests (AC-94, AC-65, G-41)', ()
         scannerName: 'หัวหน้าทีมสแกน',
         scannerEmail: 'primary@ticket.invalid',
         assignedAt: new Date().toISOString(),
+        assignmentEpoch: 1,
+        assignmentToken: createOfflineAssignmentToken({ eventId: 'EVT-001', scannerId: 'SCAN-PRIMARY', assignmentEpoch: 1 }),
       },
       isCurrentScannerPrimary: false,
       sessions: [],

@@ -294,6 +294,7 @@ export function GuestOrderLookupView({ initialOrderId }: GuestOrderLookupViewPro
           phone: phone.trim(),
           code: cleanCode,
           requestId,
+          orderId: orderId.trim() || undefined,
         }),
       });
 

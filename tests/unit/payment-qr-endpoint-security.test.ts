@@ -97,7 +97,7 @@ describe('GET & POST /api/public/checkout/orders/[id]/payment-qr Security Gate',
       });
 
       expect(response.status).toBe(200);
-      expect(response.headers.get('Cache-Control')).toBe('no-store');
+      expect(response.headers.get('Cache-Control')).toBe('private, no-store, no-cache, must-revalidate');
       const data = await response.json();
       expect(data.charge.id).toBe('pi_test_mock_123');
       expect(data.charge.amount).toBe(250000);
@@ -157,7 +157,7 @@ describe('GET & POST /api/public/checkout/orders/[id]/payment-qr Security Gate',
       });
 
       expect(response.status).toBe(200);
-      expect(response.headers.get('Cache-Control')).toBe('no-store');
+      expect(response.headers.get('Cache-Control')).toBe('private, no-store, no-cache, must-revalidate');
       const data = await response.json();
       expect(data.charge.id).toBe('pi_test_mock_123');
     });

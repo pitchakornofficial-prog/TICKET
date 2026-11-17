@@ -1,5 +1,6 @@
 import { createSafeErrorResponse } from '@/server/api-error';
 import { assertSameOrigin } from '@/server/origin';
+import { safeRevalidateTag } from '@/server/cache';
 import { getAuth } from '@/server/auth';
 import {
   getEventDetails,
@@ -85,6 +86,7 @@ export async function PUT(
       Array.isArray(body.sessions) ? (body.sessions as SessionDraftInput[]) : undefined,
       isOwner,
     );
+    if (updated.status === 'approved') safeRevalidateTag('public-events');
     return Response.json({ message: 'อัปเดตงานคอนเสิร์ตสำเร็จ', event: updated }, { status: 200 });
   } catch (error: unknown) {
     return createSafeErrorResponse(error, 'เกิดข้อผิดพลาดในการอัปเดตงานคอนเสิร์ต', { defaultStatus: 400 });
@@ -159,6 +161,7 @@ export async function POST(
     const pool = auth.options.database as Pool;
     try {
       await revertEventToDraft(pool, id, session.user.id);
+      safeRevalidateTag('public-events');
       return Response.json({ message: 'ดึงงานคอนเสิร์ตกลับมาเป็นฉบับร่างเรียบร้อยแล้ว' }, { status: 200 });
     } catch (error: unknown) {
       return createSafeErrorResponse(error, 'เกิดข้อผิดพลาดในการดึงกลับเป็นฉบับร่าง', { defaultStatus: 400 });

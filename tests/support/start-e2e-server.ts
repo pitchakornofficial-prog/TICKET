@@ -4,6 +4,7 @@ import { authFixture } from './auth-fixture.ts';
 import { handleTestInspectRequest } from './test-inspect-handler.ts';
 
 const fixture = await authFixture('e2e');
+process.env.BETTER_AUTH_SECRET = fixture.settings.secret;
 const child = spawn(process.execPath, ['node_modules/next/dist/bin/next', 'dev', '--hostname', '127.0.0.1', '--port', '3101'], {
   stdio: 'inherit',
   env: {
@@ -12,6 +13,8 @@ const child = spawn(process.execPath, ['node_modules/next/dist/bin/next', 'dev',
     DATABASE_URL: fixture.databaseUrl,
     BETTER_AUTH_URL: fixture.settings.baseURL,
     BETTER_AUTH_SECRET: fixture.settings.secret,
+    TRUST_PROXY: '1',
+    ENABLE_DEV_MAIL_PREVIEW: 'true',
     // Never inherit real provider credentials from the shell or Next's .env.local.
     STRIPE_SECRET_KEY: '',
     STRIPE_PUBLISHABLE_KEY: '',
@@ -35,10 +38,23 @@ const child = spawn(process.execPath, ['node_modules/next/dist/bin/next', 'dev',
   },
 });
 
+async function fetchChildCapturedEmails() {
+  try {
+    const res = await fetch('http://127.0.0.1:3101/api/dev/captured-emails', { cache: 'no-store' });
+    if (!res.ok) return [];
+    const data = (await res.json()) as { emails?: Array<{ to: string; subject?: string; text?: string }> };
+    return Array.isArray(data.emails) ? data.emails : [];
+  } catch {
+    return [];
+  }
+}
+
 const proxy = createServer(async (req, res) => {
   if (req.url?.startsWith('/api/auth/test-inspect-reset-token')) {
     try {
-      const result = await handleTestInspectRequest(fixture.pool, req.url);
+      const result = await handleTestInspectRequest(fixture.pool, req.url, {
+        getEmails: fetchChildCapturedEmails,
+      });
       res.writeHead(result.status, {
         'Content-Type': 'application/json',
         'Cache-Control': 'no-store',

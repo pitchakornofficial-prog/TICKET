@@ -22,7 +22,7 @@ export async function GET(request: Request) {
     const counts = await getOwnerOverviewCounts(pool);
     return Response.json(counts, {
       status: 200,
-      headers: { 'Cache-Control': 'no-store' },
+      headers: { 'Cache-Control': 'private, no-store, no-cache, must-revalidate' },
     });
   } catch (error: unknown) {
     return createSafeErrorResponse(error, 'เกิดข้อผิดพลาดในการโหลดตัวเลขภาพรวม', { defaultStatus: 500 });
