@@ -36,12 +36,14 @@ describe('D-191 Minimal Outside QR Download Button & Overview Dashboard Exclusiv
   it('verifies Item 2: overview dashboard is isolated exclusively to the overview tab in OwnerWorkspaceView', () => {
     const workspaceSrc = readFileSync(join(rootDir, 'src/components/owner-workspace-view.tsx'), 'utf8');
 
-    // Full overview rendered when activeSection === 'overview'
+    // Full overview rendered exclusively when activeSection === 'overview'
     expect(workspaceSrc).toContain("activeSection === 'overview' ?");
     expect(workspaceSrc).toContain('isFullOverview={true}');
 
-    // Compact overview dashboard removed from other sections
+    // Overview dashboard must not be rendered in other sections (e.g. inside owner-section-body)
     expect(workspaceSrc).not.toContain('isFullOverview={false}');
+    const dashboardRenderMatches = workspaceSrc.match(/<OwnerOverviewDashboard\b/g) ?? [];
+    expect(dashboardRenderMatches).toHaveLength(1);
 
     // Zero emojis check (D-14)
     expect(workspaceSrc).not.toMatch(/\p{Extended_Pictographic}/u);

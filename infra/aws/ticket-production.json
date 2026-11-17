@@ -135,6 +135,10 @@
               {
                 "Name": "TRUST_PROXY",
                 "Value": "cloudflare"
+              },
+              {
+                "Name": "SES_REPLY_USE_MAILBOX_FROM",
+                "Value": "true"
               }
             ],
             "Secrets": [
@@ -208,6 +212,30 @@
                 "Name": "R2_ACCOUNT_ID",
                 "ValueFrom": {
                   "Fn::Sub": "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/ticket/production/R2_ACCOUNT_ID"
+                }
+              },
+              {
+                "Name": "SES_INBOUND_WEBHOOK_SECRET",
+                "ValueFrom": {
+                  "Fn::Sub": "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/ticket/production/SES_INBOUND_WEBHOOK_SECRET"
+                }
+              },
+              {
+                "Name": "SES_INBOUND_SNS_TOPIC_ARN",
+                "ValueFrom": {
+                  "Fn::Sub": "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/ticket/production/SES_INBOUND_SNS_TOPIC_ARN"
+                }
+              },
+              {
+                "Name": "SES_INBOUND_S3_BUCKET",
+                "ValueFrom": {
+                  "Fn::Sub": "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/ticket/production/SES_INBOUND_S3_BUCKET"
+                }
+              },
+              {
+                "Name": "SES_INBOUND_ALLOWED_RECIPIENTS",
+                "ValueFrom": {
+                  "Fn::Sub": "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/ticket/production/SES_INBOUND_ALLOWED_RECIPIENTS"
                 }
               }
             ],
@@ -295,8 +323,29 @@
                     },
                     {
                       "Fn::Sub": "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/ticket/production/R2_ACCOUNT_ID"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/ticket/production/SES_INBOUND_WEBHOOK_SECRET"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/ticket/production/SES_INBOUND_SNS_TOPIC_ARN"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/ticket/production/SES_INBOUND_S3_BUCKET"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/ticket/production/SES_INBOUND_ALLOWED_RECIPIENTS"
                     }
                   ]
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "s3:GetObject"
+                  ],
+                  "Resource": {
+                    "Fn::Sub": "arn:${AWS::Partition}:s3:::ticket-ses-inbound-${AWS::AccountId}-${AWS::Region}/inbound/*"
+                  }
                 }
               ]
             }
@@ -387,6 +436,10 @@
               {
                 "Name": "TRUST_PROXY",
                 "Value": "cloudflare"
+              },
+              {
+                "Name": "SES_REPLY_USE_MAILBOX_FROM",
+                "Value": "true"
               }
             ],
             "Secrets": [
@@ -460,6 +513,30 @@
                 "Name": "R2_ACCOUNT_ID",
                 "ValueFrom": {
                   "Fn::Sub": "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/ticket/production/R2_ACCOUNT_ID"
+                }
+              },
+              {
+                "Name": "SES_INBOUND_WEBHOOK_SECRET",
+                "ValueFrom": {
+                  "Fn::Sub": "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/ticket/production/SES_INBOUND_WEBHOOK_SECRET"
+                }
+              },
+              {
+                "Name": "SES_INBOUND_SNS_TOPIC_ARN",
+                "ValueFrom": {
+                  "Fn::Sub": "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/ticket/production/SES_INBOUND_SNS_TOPIC_ARN"
+                }
+              },
+              {
+                "Name": "SES_INBOUND_S3_BUCKET",
+                "ValueFrom": {
+                  "Fn::Sub": "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/ticket/production/SES_INBOUND_S3_BUCKET"
+                }
+              },
+              {
+                "Name": "SES_INBOUND_ALLOWED_RECIPIENTS",
+                "ValueFrom": {
+                  "Fn::Sub": "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/ticket/production/SES_INBOUND_ALLOWED_RECIPIENTS"
                 }
               }
             ],

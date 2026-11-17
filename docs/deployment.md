@@ -1,5 +1,66 @@
 # Deployment — AWS Singapore
 
+## Production Release 2026-11-17 (ticket-production-web:19)
+
+Deployed security-hardened release from branch `dev-phat` (`41ebe48`) to `ticket-production` (`ap-southeast-1`, Account `901708383730`).
+
+### 1. Security Hardening & ALB Security Group Verification
+- **SES Inbound Webhook (`src/app/api/webhooks/ses-inbound/route.ts`)**:
+  - Switched body reading to stream-bounded `readBoundedText` and `PayloadTooLargeError` from `src/server/http-body.ts` (`10 MiB` ceiling) to enforce size limits before buffering.
+  - Added production SNS confused-deputy guard: when `NODE_ENV=production` and neither `SES_INBOUND_SNS_TOPIC_ARN` nor a verified `SES_INBOUND_WEBHOOK_SECRET` is present, SNS envelopes immediately return `HTTP 503`; mismatched `TopicArn` returns `HTTP 403`.
+  - Pre-commit checks passed: `npm run typecheck`, `npm run lint` (567 files), and `npm run test:unit` (148 files / 996 tests, including 13 tests in `tests/unit/inbound-email.test.ts`).
+- **Cloudflare Proxy & ALB Security Group (`sg-01826a56935021d21`)**:
+  - `curl -sSI https://ticket.phatysd.me/api/health` confirmed Cloudflare Proxy (`server: cloudflare`, `cf-ray: a5bbcdfb4fe01940-BKK`, `cf-cache-status: DYNAMIC`).
+  - `ticket-workload-alb` (`IpAddressType: ipv4`) attaches only `sg-01826a56935021d21`. Inbound rules already restrict ingress solely to TCP `443` from all 15 official Cloudflare IPv4 CIDR ranges (`https://www.cloudflare.com/ips-v4`), with no `0.0.0.0/0` or port `80` exposure.
+
+### 2. ARM64 ECR Images & CloudFormation Rollout
+- Built `linux/arm64` images from `Dockerfile` (`--provenance=false`) and pushed to `901708383730.dkr.ecr.ap-southeast-1.amazonaws.com/ticket-workload-test`:
+  - `WebImage` (`prod-web-20261117-41ebe48`): `901708383730.dkr.ecr.ap-southeast-1.amazonaws.com/ticket-workload-test@sha256:706c6516a4b773ea6e00108ec525e014b98afd99902a1eced4e1e66c476d67f1`
+  - `OperationsImage` (`prod-ops-20261117-41ebe48`): `901708383730.dkr.ecr.ap-southeast-1.amazonaws.com/ticket-workload-test@sha256:f89079ae156d8fafcd9e4e54b7e24d97f4937e701c6dac28211c817a3b0297e9`
+- Executed CloudFormation change set `release-20261117-41ebe48` (`infra/aws/ticket-production.json`, including least-privilege `WebExecutionRole` `ReadWebAndOperationsParameters` SSM policy) -> `UPDATE_COMPLETE`.
+- ECS service `ticket-production-web` stabilized at primary revision `ticket-production-web:19` (`COMPLETED`, `1/1` running task `2bbbfb9fe6d541469b67992d46818ea8`); ALB target `172.31.18.184:3000` (`ap-southeast-1b`) is `healthy` (prior target `172.31.24.28:3000` drained and deregistered).
+- `OperationsTask` revision updated to `ticket-production-operations:13`.
+
+### 3. Production Schema Migration (`ticket-production-operations:13`)
+- Executed one-off `OperationsTask` (`arn:aws:ecs:ap-southeast-1:901708383730:task/ticket-production/1ca1dc7d2b06466a950c4dde885ca137`, command `["node", "scripts/migrate-production-schemas.ts"]`, `exitCode: 0`):
+  - `1. Auth schema: OK`
+  - `2. Fee schema: OK`
+  - `3. Queue schema: OK`
+  - `4. Guest OTP schema & atomic functions: OK`
+  - `5. Reservation schema, triggers, and atomic functions: OK`
+  - `6. Payment & Stripe webhook inbox schema: OK`
+  - `7. Upload finalization intent schema: OK`
+  - `8. Password reset token schema: OK`
+  - `9. Owner contact info schema: OK`
+  - `10. Inbound email mailbox schema: OK`
+  - `10. Paid buckets backfill validated successfully (2 ticket types verified).`
+
+### 4. Post-Deployment Live Smoke Check (`https://ticket.phatysd.me`)
+- `GET /api/health` -> `HTTP 200` (`{"status":"ok"}`)
+- `GET /` -> `HTTP 200`
+- `GET /news` -> `HTTP 200`
+- `GET /contact` -> `HTTP 200`
+- `GET /about` -> `HTTP 200`
+- `POST /api/webhooks/stripe` (unsigned `{}`) -> `HTTP 400` (`{"error":"Missing Stripe-Signature header"}`)
+- `POST /api/webhooks/ses-inbound` (unauthenticated direct `{}`) -> `HTTP 401` (`{"error":"Missing SNS envelope or valid SES_INBOUND_WEBHOOK_SECRET"}`)
+- `POST /api/webhooks/ses-inbound` (SNS envelope without configured `SES_INBOUND_SNS_TOPIC_ARN` / `SES_INBOUND_WEBHOOK_SECRET`) -> `HTTP 503` (`{"error":"SES_INBOUND_SNS_TOPIC_ARN or SES_INBOUND_WEBHOOK_SECRET is required in production"}`)
+- CloudWatch stream `web/web/2bbbfb9fe6d541469b67992d46818ea8` confirmed clean Next.js 16.4.2 startup with zero unhandled exceptions.
+
+### 5. SES Inbound Email Receiving & Cloudflare MX Verification
+- **CloudFormation Stack `ticket-ses-inbound` (`infra/aws/ticket-ses-inbound.json`)**:
+  - Deployed (`CREATE_COMPLETE`) in `ap-southeast-1`:
+    - S3 Bucket: `ticket-ses-inbound-901708383730-ap-southeast-1` (Private, AES256, 90-day lifecycle)
+    - SNS Topic: `arn:aws:sns:ap-southeast-1:901708383730:ticket-ses-inbound`
+  - Activated SES Receipt Rule Set `ticket-inbound-rules` (`ticket-support-inbound` for `support@phatysd.me`, `organizer@phatysd.me`, `organizer-support@phatysd.me`, `TlsPolicy: Require`, `ScanEnabled: true`).
+- **SSM Parameters, IAM Policy & `ticket-production` Wiring**:
+  - Created `/ticket/production/SES_INBOUND_WEBHOOK_SECRET` (`SecureString`), `/ticket/production/SES_INBOUND_SNS_TOPIC_ARN`, `/ticket/production/SES_INBOUND_S3_BUCKET`, and `/ticket/production/SES_INBOUND_ALLOWED_RECIPIENTS`.
+  - Granted inline policy `ReadInboundEmailS3` (`s3:GetObject` on `arn:aws:s3:::ticket-ses-inbound-901708383730-ap-southeast-1/inbound/*`) to `ticket-production-ses` and wired `SES_INBOUND_*` + `SES_REPLY_USE_MAILBOX_FROM=true` into `infra/aws/ticket-production.json` (`UPDATE_COMPLETE`, `tests/unit/production-ssm-least-privilege.test.ts` passed).
+- **SNS HTTPS Subscription & Cloudflare DNS `MX` Verification**:
+  - SNS HTTPS Subscription `arn:aws:sns:ap-southeast-1:901708383730:ticket-ses-inbound:565648b0-3a6c-4431-b173-3c47883b662e` confirmed (`PendingConfirmation: false`).
+  - Verified Cloudflare DNS `MX` record via `dig MX phatysd.me +short` -> `10 inbound-smtp.ap-southeast-1.amazonaws.com.`.
+
+---
+
 ## Production Release 2026-11-17 (ticket-production-web:18)
 
 Deployed hardened release from branch `dev-phat` (`c0921b4` + `OperationsTask` SSM wiring in `infra/aws/ticket-production.json`) to `ticket-production` (`ap-southeast-1`, Account `901708383730`).

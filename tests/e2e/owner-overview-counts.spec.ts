@@ -9,8 +9,18 @@ test.beforeEach(async ({ context }, testInfo) => {
 test.describe('Owner Overview Counts Dashboard (TASK-039, AC-115, D-17)', () => {
   test('Owner views pending action items overview cards and navigates to target section on card click', async ({
     page,
-  }) => {
+  }, testInfo) => {
     test.setTimeout(60000);
+
+    const isMobile = testInfo.project.name === 'mobile-chromium';
+    const openOverviewTab = async () => {
+      if (isMobile) {
+        await page.evaluate(() => window.scrollTo(0, 0));
+        await page.locator('[data-testid="owner-mobile-menu-toggle"]').click();
+      }
+      await page.locator('[data-testid="owner-nav-overview"]').click();
+      await expect(page).toHaveURL(/#overview/);
+    };
 
     // 1. Log in as owner
     await page.goto('/login');
@@ -19,8 +29,12 @@ test.describe('Owner Overview Counts Dashboard (TASK-039, AC-115, D-17)', () => 
     await page.getByRole('button', { name: 'เข้าสู่ระบบ', exact: true }).click();
     await expect(page).toHaveURL('/back-office/owner');
 
-    // 2. Overview Dashboard is visible at top of workspace
+    // Overview Dashboard must NOT be rendered on default approval tab (D-191)
     const overviewDashboard = page.locator('[data-testid="owner-overview-dashboard"]');
+    await expect(overviewDashboard).toHaveCount(0);
+
+    // 2. Navigate to Overview tab and verify Overview Dashboard is visible
+    await openOverviewTab();
     await expect(overviewDashboard).toBeVisible();
     await expect(page.locator('#owner-overview-title')).toContainText('ภาพรวมงานค้างที่ต้องดำเนินการ (Overview)');
 
@@ -48,27 +62,35 @@ test.describe('Owner Overview Counts Dashboard (TASK-039, AC-115, D-17)', () => 
     await expect(page.locator('[data-testid="overview-count-failed-emails"]')).toBeVisible();
     await expect(page.locator('[data-testid="overview-count-sync-conflicts"]')).toBeVisible();
 
-    // 4. Test Card Navigation: Clicking "payment-exceptions" jumps to Finance section
+    // 4. Test Card Navigation: Clicking "payment-exceptions" jumps to Finance section (and overview is hidden)
     await cardPayments.click();
     await expect(page.locator('[data-testid="owner-section-content-finance"]')).toBeVisible();
     await expect(page.locator('[data-testid="owner-payment-recovery-manager"]')).toBeVisible();
+    await expect(overviewDashboard).toHaveCount(0);
 
-    // 5. Clicking "failed-emails" jumps to Customer section
+    // 5. Return to Overview and click "failed-emails" -> jumps to Customer section
+    await openOverviewTab();
     await cardEmails.click();
     await expect(page.locator('[data-testid="owner-section-content-customer"]')).toBeVisible();
     await expect(page.getByRole('heading', { name: 'การจัดส่งอีเมลบัตรที่ล้มเหลว' })).toBeVisible();
+    await expect(overviewDashboard).toHaveCount(0);
 
-    // 6. Clicking "sync-conflicts" jumps to System section
+    // 6. Return to Overview and click "sync-conflicts" -> jumps to System section
+    await openOverviewTab();
     await cardConflicts.click();
     await expect(page.locator('[data-testid="owner-section-content-system"]')).toBeVisible();
     await expect(page.locator('[data-testid="owner-sync-conflicts-manager"]')).toBeVisible();
+    await expect(overviewDashboard).toHaveCount(0);
 
-    // 7. Clicking "pending-sessions" jumps back to Approval section
+    // 7. Return to Overview and click "pending-sessions" -> jumps to Approval section
+    await openOverviewTab();
     await cardSessions.click();
     await expect(page.locator('[data-testid="owner-section-content-approval"]')).toBeVisible();
     await expect(page.locator('#owner-session-approval-manager')).toBeVisible();
+    await expect(overviewDashboard).toHaveCount(0);
 
-    // 8. Refresh button reloads overview counts
+    // 8. Return to Overview and test Refresh button reloads overview counts
+    await openOverviewTab();
     const refreshBtn = page.locator('[data-testid="overview-refresh-btn"]');
     await expect(refreshBtn).toBeVisible();
     await refreshBtn.click();
