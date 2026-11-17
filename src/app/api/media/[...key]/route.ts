@@ -3,8 +3,10 @@ import { headers } from 'next/headers';
 import { getAuth, readActor } from '@/server/auth';
 import { storage } from '@/server/storage';
 import { parseImageVariant, transformPublicImage } from '@/server/image-variants';
+import { readBoundedStream, isPayloadTooLargeError } from '@/server/http-body';
 
 export const runtime = 'nodejs';
+const MAX_IMAGE_SOURCE_BYTES = 15 * 1024 * 1024;
 
 export async function GET(
   request: Request,
@@ -90,7 +92,20 @@ export async function GET(
   if (variant) {
     // Originals keep the streaming path. Only requested public image variants
     // are buffered; proof bytes are never transformed or publicly cached.
-    const source = bufferItem?.data ?? Buffer.from(await new Response(streamItem?.stream).arrayBuffer());
+    if (bufferItem && bufferItem.data.byteLength > MAX_IMAGE_SOURCE_BYTES) {
+      return new Response('Payload too large', { status: 413 });
+    }
+    if (streamItem?.contentLength !== undefined && streamItem.contentLength > MAX_IMAGE_SOURCE_BYTES) {
+      await streamItem.stream.cancel().catch(() => {});
+      return new Response('Payload too large', { status: 413 });
+    }
+    let source: Buffer;
+    try {
+      source = bufferItem?.data ?? await readBoundedStream(streamItem?.stream ?? null, MAX_IMAGE_SOURCE_BYTES);
+    } catch (error) {
+      if (isPayloadTooLargeError(error)) return new Response('Payload too large', { status: 413 });
+      throw error;
+    }
     bufferItem = { data: source, contentType: item.contentType, visibility: item.visibility };
     try {
       const transformed = await transformPublicImage(fullKey, source, item.contentType, variant);

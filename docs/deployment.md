@@ -1,5 +1,61 @@
 # Deployment — AWS Singapore
 
+## Production Release 2026-11-17 (ticket-production-web:18)
+
+Deployed hardened release from branch `dev-phat` (`c0921b4` + `OperationsTask` SSM wiring in `infra/aws/ticket-production.json`) to `ticket-production` (`ap-southeast-1`, Account `901708383730`).
+
+### 1. SSM, SES, and SNS Readiness
+- Created SSM parameter `/ticket/production/GUEST_OTP_PEPPER` as `SecureString` (version 1, 32 random bytes / 64 hex chars; value never logged).
+- Amazon SES (`ap-southeast-1`):
+  - `ProductionAccessEnabled: true`, `SendingEnabled: true`, `EnforcementStatus: HEALTHY`, `ReviewDetails.Status: GRANTED`
+  - Quota: `Max24HourSend: 50000`, `MaxSendRate: 14.0` emails/s
+  - Identity `phatysd.me`: `VerifiedForSendingStatus: true`, `VerificationStatus: SUCCESS`, `DkimAttributes.Status: SUCCESS` (`SigningEnabled: true`), `MailFromDomain: mail.phatysd.me` (`MailFromDomainStatus: SUCCESS`)
+- SNS Topic `arn:aws:sns:ap-southeast-1:901708383730:ticket-production-alerts`: confirmed email subscription (`yodsavee.su.68@ubu.ac.th`).
+
+### 2. ARM64 ECR Images & CloudFormation Rollout
+- Built `linux/arm64` images from `Dockerfile` (`--provenance=false`) and pushed to `901708383730.dkr.ecr.ap-southeast-1.amazonaws.com/ticket-workload-test`:
+  - `WebImage` (`prod-web-20261117-c0921b4`): `901708383730.dkr.ecr.ap-southeast-1.amazonaws.com/ticket-workload-test@sha256:10b9bb94845f080664b2d97e8dad3fff9060769aaab7e500ca28de5000521af5`
+  - `OperationsImage` (`prod-ops-20261117-c0921b4`): `901708383730.dkr.ecr.ap-southeast-1.amazonaws.com/ticket-workload-test@sha256:2045a1fd365787630024d6ab6b5800fb872d7ef7e06cafbeec906a6c3a283548`
+- Updated `infra/aws/ticket-production.json`:
+  - `WebTask`: `1024` CPU (`1 vCPU`) / `2048` MiB (`2 GiB`), `TRUST_PROXY=cloudflare`, and `GUEST_OTP_PEPPER` from SSM `/ticket/production/GUEST_OTP_PEPPER`.
+  - `OperationsTask`: `WebExecutionRole` with production `Environment` and `Secrets` (`DATABASE_URL` via `DATABASE_URL_DIRECT`, `R2_*`, `SES_*`, `STRIPE_*`, `BETTER_AUTH_SECRET`, `GUEST_OTP_PEPPER`).
+- Executed CloudFormation change set `release-20261117-c0921b4` -> `UPDATE_COMPLETE`.
+- ECS service `ticket-production-web` stabilized at primary revision `ticket-production-web:18` (`COMPLETED`, `1/1` running task `6001404edd0f4a9a9f0c4acf6a78dc87`); ALB target `172.31.24.28:3000` (`ap-southeast-1b`) is `healthy`.
+- `OperationsTask` revision updated to `ticket-production-operations:12`.
+
+### 3. Pre-Release Operations Tasks (`ticket-production-operations:12`)
+- **Schema Migration & Backfill** (`arn:aws:ecs:ap-southeast-1:901708383730:task/ticket-production/7a077f09594a468c972c72295c1f675e`, `exitCode: 0`):
+  - `1. Auth schema: OK`
+  - `2. Fee schema: OK`
+  - `3. Queue schema: OK`
+  - `4. Guest OTP schema & atomic functions: OK`
+  - `5. Reservation schema, triggers, and atomic functions: OK`
+  - `6. Payment & Stripe webhook inbox schema: OK`
+  - `7. Upload finalization intent schema: OK`
+  - `8. Password reset token schema: OK`
+  - `9. Owner contact info schema: OK`
+  - `10. Paid buckets backfill validated successfully (2 ticket types verified).`
+- **Cloudflare R2 Connectivity Check** (`arn:aws:ecs:ap-southeast-1:901708383730:task/ticket-production/07d118ef56804deebfa918e908f7d92e`, `exitCode: 0`):
+  - `R2 OK: put/get/delete passed on bucket ticket-prod`
+
+### 4. Post-Deployment Live Smoke Check (`https://ticket.phatysd.me`)
+- `GET /api/health` -> `HTTP 200` (`cache-control: no-store`)
+- `GET /` -> `HTTP 200` (`cache-control: private, no-cache, no-store, max-age=0, must-revalidate`)
+- `GET /news` -> `HTTP 200`
+- `GET /api/public/events` -> `HTTP 200` (`cache-control: public, max-age=30`)
+- `GET /api/auth/get-session` -> `HTTP 200` (`cache-control: private, no-store, no-cache, must-revalidate`)
+- `GET /api/public/orders` -> `HTTP 401` (`cache-control: private, no-store, no-cache, must-revalidate`)
+- Security headers (`X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`, `Strict-Transport-Security`, `Permissions-Policy`, `Content-Security-Policy`) present on responses.
+- `POST /api/webhooks/stripe` (unsigned `{}`) -> `HTTP 400` (`{"error":"Missing Stripe-Signature header"}`).
+- `POST /api/public/checkout/orders/test-order/pay-test` -> `HTTP 403` (blocked in Live Mode); `POST /api/orders/test-order/pay-test` -> `HTTP 404`.
+- CloudWatch stream `web/web/6001404edd0f4a9a9f0c4acf6a78dc87` confirmed clean Next.js 16.4.2 startup with zero unhandled exceptions (non-blocking warning observed from Better Auth internal rate-limiter because `advanced.ipAddress.ipAddressHeaders` is unset in `auth-options.ts`, while app-level OTP/queue/invitation IP limits use `extractClientIp` with `TRUST_PROXY=cloudflare`).
+
+### 5. Remaining Manual Console Actions Before Sale Launch
+- **Neon Console**: Upgrade project `soft-glitter-40333363` (`production` branch) from Free plan (6-hour history retention) to >= 7-day PITR retention per ADR-0002.
+- **Pre-Scale & Provider Console Checks**: Set `MinCapacity >= 2` 30 minutes before ticket drop per ADR-0002, and verify Stripe Live webhook delivery/payout readiness plus Cloudflare WAF/origin rules.
+
+---
+
 ## Production Release 2026-11-13 (ticket-production-web:17)
 
 User explicitly requested pre-deployment migration/backfill verification and production rollout of the latest optimized code.

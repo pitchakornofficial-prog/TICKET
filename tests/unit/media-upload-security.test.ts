@@ -171,6 +171,18 @@ describe('Issue #4: Stored XSS Prevention & File Upload Security (AC-92, Issue-0
     expect(res.headers.get('Content-Disposition')).toContain('inline;');
   });
 
+  it('rejects an image source larger than 15 MiB before creating a transformed variant', async () => {
+    const key = 'posters/oversized-source.png';
+    await storage.put(key, Buffer.alloc(15 * 1024 * 1024 + 1), 'image/png', 'public');
+
+    const response = await GET(
+      new Request(`http://localhost:3000/api/media/${key}?w=320`),
+      { params: Promise.resolve({ key: key.split('/') }) },
+    );
+
+    expect(response.status).toBe(413);
+  });
+
   it('forces attachment download disposition for PDF documents', async () => {
     currentRole = 'owner';
     const key = 'proofs/test-transfer-slip.pdf';

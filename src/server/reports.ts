@@ -44,6 +44,20 @@ export function maskPhone(phone: string): string {
   return `${clean.slice(0, 3)}***${clean.slice(-4)}`;
 }
 
+export function maskPayoutAccountNumber(accountNumber: string): string {
+  const value = accountNumber.trim();
+  const digitCount = (value.match(/\d/g) || []).length;
+  const digitsToKeep = digitCount > 4 ? 4 : 0;
+  let digitsToMask = digitCount - digitsToKeep;
+  return value.replace(/\d/g, digit => {
+    if (digitsToMask > 0) {
+      digitsToMask -= 1;
+      return '•';
+    }
+    return digit;
+  });
+}
+
 export interface CalculateEventAccountingParams {
   netSales: number; // sum(V_o)
   grossSales: number; // sum(V_o^orig)
@@ -1036,7 +1050,9 @@ async function getBatchFinanceSummaries(
       organizerName: ev.organizerName || 'ผู้จัดงาน',
       organizerEmail: isOwner ? (ev.organizerEmail || '') : maskEmail(ev.organizerEmail || ''),
       payoutBankName: ev.payoutBankName || '',
-      payoutAccountNumber: ev.payoutAccountNumber || '',
+      payoutAccountNumber: isOwner
+        ? ev.payoutAccountNumber || ''
+        : maskPayoutAccountNumber(ev.payoutAccountNumber || ''),
       payoutAccountName: ev.payoutAccountName || '',
       firstSessionStartTime: firstStartIso,
       finalSessionEnd: finalEndDate ? finalEndDate.toISOString() : null,

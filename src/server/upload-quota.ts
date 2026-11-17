@@ -1,6 +1,9 @@
 import { randomUUID } from 'node:crypto';
 import type { Pool } from 'pg';
 import { inTransaction } from './database.ts';
+import { readBoundedRequestBytes } from './http-body.ts';
+
+export { readBoundedJson } from './http-body.ts';
 
 export const MAX_REQUEST_BODY_SIZE = 16 * 1024 * 1024; // 16MB limit for HTTP request body
 export const MAX_JSON_BODY_SIZE = 1 * 1024 * 1024; // 1MB limit for JSON requests
@@ -71,87 +74,13 @@ export async function readBoundedFormData(
   request: Request,
   maxBytes = MAX_REQUEST_BODY_SIZE,
 ): Promise<FormData> {
-  // Pre-check Content-Length header
-  const cl = request.headers.get('content-length');
-  if (cl) {
-    const len = Number.parseInt(cl, 10);
-    if (!Number.isNaN(len) && len > maxBytes) {
-      throw new Error('PAYLOAD_TOO_LARGE');
-    }
-  }
-
-  if (!request.body) {
-    return await request.formData();
-  }
-
-  const reader = request.body.getReader();
-  const chunks: Uint8Array[] = [];
-  let totalBytes = 0;
-
-  try {
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      totalBytes += value.byteLength;
-      if (totalBytes > maxBytes) {
-        throw new Error('PAYLOAD_TOO_LARGE');
-      }
-      chunks.push(value);
-    }
-  } finally {
-    reader.releaseLock();
-  }
-
-  const combined = Buffer.concat(chunks);
+  const combined = await readBoundedRequestBytes(request, maxBytes);
   const newReq = new Request(request.url, {
     method: request.method,
     headers: request.headers,
-    body: combined,
+    body: new Uint8Array(combined),
   });
   return await newReq.formData();
-}
-
-/**
- * Reads request body stream with a hard byte ceiling and parses as JSON.
- * Throws PAYLOAD_TOO_LARGE if stream exceeds maxBytes.
- */
-export async function readBoundedJson<T = unknown>(
-  request: Request,
-  maxBytes = MAX_JSON_BODY_SIZE,
-): Promise<T> {
-  // Pre-check Content-Length header
-  const cl = request.headers.get('content-length');
-  if (cl) {
-    const len = Number.parseInt(cl, 10);
-    if (!Number.isNaN(len) && len > maxBytes) {
-      throw new Error('PAYLOAD_TOO_LARGE');
-    }
-  }
-
-  if (!request.body) {
-    return (await request.json()) as T;
-  }
-
-  const reader = request.body.getReader();
-  const chunks: Uint8Array[] = [];
-  let totalBytes = 0;
-
-  try {
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      totalBytes += value.byteLength;
-      if (totalBytes > maxBytes) {
-        throw new Error('PAYLOAD_TOO_LARGE');
-      }
-      chunks.push(value);
-    }
-  } finally {
-    reader.releaseLock();
-  }
-
-  const combined = Buffer.concat(chunks).toString('utf-8');
-  return JSON.parse(combined) as T;
 }
 
 /**

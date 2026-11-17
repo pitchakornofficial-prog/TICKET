@@ -86,4 +86,30 @@ describe('password reset token storage hardening', () => {
     expect(stored?.[1]).toEqual(['user-1', hashPasswordResetIdentifier(identifier)]);
     expect(stored?.[1]?.[1]).not.toBe(identifier);
   });
+
+  it('revokes password-reset sessions and aligns Better Auth IP headers with TRUST_PROXY', async () => {
+    vi.stubEnv('TRUST_PROXY', 'cloudflare');
+    const pool = { query: vi.fn().mockResolvedValue({ rowCount: 1, rows: [] }) } as unknown as Pool;
+    const options = authOptions(pool, {
+      baseURL: 'https://ticket.example.com',
+      secret: 'test-secret-with-at-least-32-characters',
+    });
+    const emailPassword = options.emailAndPassword as unknown as {
+      revokeSessionsOnPasswordReset: boolean;
+      onPasswordReset: (input: { user: { id: string } }) => Promise<void>;
+    };
+    const advanced = options.advanced as unknown as {
+      ipAddress: { ipAddressHeaders: string[] };
+    };
+
+    expect(emailPassword.revokeSessionsOnPasswordReset).toBe(true);
+    expect(advanced.ipAddress.ipAddressHeaders).toEqual(['cf-connecting-ip', 'x-forwarded-for']);
+
+    await emailPassword.onPasswordReset({ user: { id: 'user-reset-1' } });
+    expect(pool.query).toHaveBeenCalledWith(
+      'DELETE FROM auth_session WHERE "userId" = $1',
+      ['user-reset-1'],
+    );
+    vi.unstubAllEnvs();
+  });
 });

@@ -63,6 +63,27 @@ describe('POST /api/webhooks/stripe Route Security (Fail-Closed)', () => {
     expect(processSpy).not.toHaveBeenCalled();
   });
 
+  it('rejects an oversized streamed body with 413 before signature validation without Content-Length', async () => {
+    delete process.env.STRIPE_WEBHOOK_SECRET;
+    const processSpy = vi.spyOn(paymentModule, 'processStripeSuccessEvent');
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new Uint8Array(256 * 1024));
+        controller.enqueue(new Uint8Array(1));
+      },
+    });
+    const request = new Request('http://localhost/api/webhooks/stripe', {
+      method: 'POST',
+      body,
+      duplex: 'half',
+    } as RequestInit & { duplex: 'half' });
+
+    expect(request.headers.has('content-length')).toBe(false);
+    const response = await POST(request);
+    expect(response.status).toBe(413);
+    expect(processSpy).not.toHaveBeenCalled();
+  });
+
   it('rejects (400) when signature does not match configured secret', async () => {
     process.env.STRIPE_WEBHOOK_SECRET = mockSecret;
 

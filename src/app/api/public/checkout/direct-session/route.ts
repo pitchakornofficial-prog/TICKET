@@ -5,6 +5,7 @@ import { ensureGuestOtpSchema } from '@/server/guest-otp';
 import { verifyQueueAccess } from '@/server/queue';
 import { getBuyerTicketCountForEvent } from '@/server/reservation';
 import { readQueueCookie } from '@/server/queue-cookie';
+import { isPayloadTooLargeError, readBoundedJson } from '@/server/http-body';
 
 export const runtime = 'nodejs';
 
@@ -20,8 +21,8 @@ export async function POST(request: Request) {
   }
 
   try {
-    const body = await request.json();
-    const name = (body.name || '').trim();
+    const body = await readBoundedJson<{ name?: string; email?: string; phone?: string; eventId?: string; totalTickets?: number }>(request, 32 * 1024);
+    const name = (body.name || '').replace(/\p{Cc}/gu, '').trim();
     const email = (body.email || '').trim().toLowerCase();
     const phone = (body.phone || '').trim();
     const eventId = body.eventId;
@@ -30,13 +31,22 @@ export async function POST(request: Request) {
     if (!name || name.length < 2) {
       return NextResponse.json({ message: 'กรุณากรอกชื่อ-นามสกุลให้ถูกต้อง' }, { status: 400 });
     }
+    if (name.length > 120) {
+      return NextResponse.json({ message: 'ชื่อผู้ซื้อต้องไม่เกิน 120 ตัวอักษร' }, { status: 400 });
+    }
 
     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       return NextResponse.json({ message: 'รูปแบบอีเมลไม่ถูกต้อง' }, { status: 400 });
     }
+    if (email.length > 254) {
+      return NextResponse.json({ message: 'อีเมลผู้ซื้อต้องไม่เกิน 254 ตัวอักษร' }, { status: 400 });
+    }
 
     if (!phone || phone.length < 9) {
       return NextResponse.json({ message: 'กรุณากรอกเบอร์โทรศัพท์ให้ถูกต้อง' }, { status: 400 });
+    }
+    if (phone.length > 30) {
+      return NextResponse.json({ message: 'เบอร์โทรศัพท์ต้องไม่เกิน 30 ตัวอักษร' }, { status: 400 });
     }
 
     let pool = null;
@@ -130,7 +140,9 @@ export async function POST(request: Request) {
       buyerQuota,
     });
   } catch (error) {
-    const msg = error instanceof Error ? error.message : 'เกิดข้อผิดพลาดในการตรวจสอบข้อมูลผู้ซื้อ';
-    return NextResponse.json({ message: msg }, { status: 400 });
+    const msg = isPayloadTooLargeError(error)
+      ? 'Payload too large'
+      : error instanceof Error ? error.message : 'เกิดข้อผิดพลาดในการตรวจสอบข้อมูลผู้ซื้อ';
+    return NextResponse.json({ message: msg }, { status: isPayloadTooLargeError(error) ? 413 : 400 });
   }
 }

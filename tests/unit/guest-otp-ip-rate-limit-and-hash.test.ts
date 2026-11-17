@@ -249,6 +249,22 @@ describe('Issue #16: Guest OTP IP Rate Limiting and Hashed Storage', () => {
       expect(storedOtp.code).toBe(computedHash);
     });
 
+    it('strips control characters and HTML-escapes the buyer name in OTP email markup', async () => {
+      clearCapturedEmails();
+      const { pool } = createMockPool();
+      const result = await requestGuestOtp(pool, {
+        buyer: { name: 'A&B <script>"\'\r\n', email: 'escaped_name@example.com', phone: '0812345678' },
+        purpose: 'checkout',
+      });
+
+      expect(result.success).toBe(true);
+      const email = getCapturedEmails().at(-1);
+      expect(email?.html).toContain('A&amp;B &lt;script&gt;&quot;&#39;');
+      expect(email?.html).not.toContain('<script>');
+      expect(email?.text).not.toContain('\r');
+      expect(email?.text).not.toContain('\n\n Lovelace');
+    });
+
     it('verifies successfully with correct 6-digit code using hash verification', async () => {
       clearCapturedEmails();
       const { pool } = createMockPool();

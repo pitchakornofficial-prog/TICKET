@@ -4,10 +4,49 @@ import sharp from 'sharp';
 const WIDTHS = [240, 320, 360, 480, 640, 800, 960, 1280, 1600];
 const MAX_ENTRIES = 64;
 const MAX_BYTES = 24 * 1024 * 1024;
+export const MAX_IMAGE_PIXELS = 40_000_000;
+export const MAX_IMAGE_TRANSFORMS = 2;
+export const MAX_QUEUED_IMAGE_TRANSFORMS = 4;
+
+export class ImageTransformCapacityError extends Error {
+  constructor() {
+    super('IMAGE_TRANSFORM_CAPACITY_EXCEEDED');
+    this.name = 'ImageTransformCapacityError';
+  }
+}
+
 interface Variant { data: Buffer; contentType: string }
 const cache = new Map<string, Variant>();
 const pending = new Map<string, Promise<Variant>>();
 let cachedBytes = 0;
+let activeTransforms = 0;
+const transformQueue: Array<() => void> = [];
+
+async function acquireTransformSlot(): Promise<void> {
+  if (activeTransforms < MAX_IMAGE_TRANSFORMS) {
+    activeTransforms += 1;
+    return;
+  }
+  if (transformQueue.length >= MAX_QUEUED_IMAGE_TRANSFORMS) {
+    throw new ImageTransformCapacityError();
+  }
+  await new Promise<void>(resolve => transformQueue.push(resolve));
+}
+
+function releaseTransformSlot(): void {
+  const next = transformQueue.shift();
+  if (next) next();
+  else activeTransforms -= 1;
+}
+
+async function withTransformSlot<T>(work: () => Promise<T>): Promise<T> {
+  await acquireTransformSlot();
+  try {
+    return await work();
+  } finally {
+    releaseTransformSlot();
+  }
+}
 
 export function parseImageVariant(url: string) {
   const params = new URL(url).searchParams;
@@ -36,8 +75,8 @@ export async function transformPublicImage(
   }
   const active = pending.get(cacheKey);
   if (active) return active;
-  const work = (async () => {
-    let pipeline = sharp(source).rotate();
+  const work = withTransformSlot(async () => {
+    let pipeline = sharp(source, { limitInputPixels: MAX_IMAGE_PIXELS }).rotate();
     if (options.width) pipeline = pipeline.resize({ width: options.width, withoutEnlargement: true });
     let outputType = contentType;
     if (options.format === 'avif') { pipeline = pipeline.avif({ quality: 65 }); outputType = 'image/avif'; }
@@ -59,7 +98,7 @@ export async function transformPublicImage(
       }
     }
     return value;
-  })();
+  });
   if (pending.size < MAX_ENTRIES) pending.set(cacheKey, work);
   try { return await work; }
   finally { if (pending.get(cacheKey) === work) pending.delete(cacheKey); }

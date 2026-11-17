@@ -96,7 +96,7 @@
         },
         "ExecutionRoleArn": {
           "Fn::GetAtt": [
-            "ExecutionRole",
+            "WebExecutionRole",
             "Arn"
           ]
         },
@@ -111,11 +111,103 @@
               "node",
               "scripts/db-check.ts"
             ],
+            "Environment": [
+              {
+                "Name": "TICKET_DEPLOY_ENV",
+                "Value": "production"
+              },
+              {
+                "Name": "BETTER_AUTH_URL",
+                "Value": "https://ticket.phatysd.me"
+              },
+              {
+                "Name": "EMAIL_FROM",
+                "Value": "TICKET <tickets@phatysd.me>"
+              },
+              {
+                "Name": "SES_REGION",
+                "Value": "ap-southeast-1"
+              },
+              {
+                "Name": "DATABASE_POOL_MAX",
+                "Value": "15"
+              },
+              {
+                "Name": "TRUST_PROXY",
+                "Value": "cloudflare"
+              }
+            ],
             "Secrets": [
               {
                 "Name": "DATABASE_URL",
                 "ValueFrom": {
                   "Fn::Sub": "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/ticket/production/DATABASE_URL_DIRECT"
+                }
+              },
+              {
+                "Name": "BETTER_AUTH_SECRET",
+                "ValueFrom": {
+                  "Fn::Sub": "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/ticket/production/BETTER_AUTH_SECRET"
+                }
+              },
+              {
+                "Name": "GUEST_OTP_PEPPER",
+                "ValueFrom": {
+                  "Fn::Sub": "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/ticket/production/GUEST_OTP_PEPPER"
+                }
+              },
+              {
+                "Name": "SES_ACCESS_KEY_ID",
+                "ValueFrom": {
+                  "Fn::Sub": "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/ticket/production/SES_ACCESS_KEY_ID"
+                }
+              },
+              {
+                "Name": "SES_SECRET_ACCESS_KEY",
+                "ValueFrom": {
+                  "Fn::Sub": "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/ticket/production/SES_SECRET_ACCESS_KEY"
+                }
+              },
+              {
+                "Name": "STRIPE_SECRET_KEY",
+                "ValueFrom": {
+                  "Fn::Sub": "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/ticket/production/STRIPE_SECRET_KEY"
+                }
+              },
+              {
+                "Name": "STRIPE_PUBLISHABLE_KEY",
+                "ValueFrom": {
+                  "Fn::Sub": "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/ticket/production/STRIPE_PUBLISHABLE_KEY"
+                }
+              },
+              {
+                "Name": "STRIPE_WEBHOOK_SECRET",
+                "ValueFrom": {
+                  "Fn::Sub": "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/ticket/production/STRIPE_WEBHOOK_SECRET"
+                }
+              },
+              {
+                "Name": "R2_ACCESS_KEY_ID",
+                "ValueFrom": {
+                  "Fn::Sub": "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/ticket/production/R2_ACCESS_KEY_ID"
+                }
+              },
+              {
+                "Name": "R2_SECRET_ACCESS_KEY",
+                "ValueFrom": {
+                  "Fn::Sub": "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/ticket/production/R2_SECRET_ACCESS_KEY"
+                }
+              },
+              {
+                "Name": "R2_BUCKET",
+                "ValueFrom": {
+                  "Fn::Sub": "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/ticket/production/R2_BUCKET"
+                }
+              },
+              {
+                "Name": "R2_ACCOUNT_ID",
+                "ValueFrom": {
+                  "Fn::Sub": "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/ticket/production/R2_ACCOUNT_ID"
                 }
               }
             ],
@@ -155,7 +247,7 @@
         ],
         "Policies": [
           {
-            "PolicyName": "ReadProductionParameters",
+            "PolicyName": "ReadWebAndOperationsParameters",
             "PolicyDocument": {
               "Version": "2012-10-17",
               "Statement": [
@@ -164,9 +256,47 @@
                   "Action": [
                     "ssm:GetParameters"
                   ],
-                  "Resource": {
-                    "Fn::Sub": "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/ticket/production/*"
-                  }
+                  "Resource": [
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/ticket/production/DATABASE_URL"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/ticket/production/DATABASE_URL_DIRECT"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/ticket/production/BETTER_AUTH_SECRET"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/ticket/production/GUEST_OTP_PEPPER"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/ticket/production/SES_ACCESS_KEY_ID"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/ticket/production/SES_SECRET_ACCESS_KEY"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/ticket/production/STRIPE_SECRET_KEY"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/ticket/production/STRIPE_PUBLISHABLE_KEY"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/ticket/production/STRIPE_WEBHOOK_SECRET"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/ticket/production/R2_ACCESS_KEY_ID"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/ticket/production/R2_SECRET_ACCESS_KEY"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/ticket/production/R2_BUCKET"
+                    },
+                    {
+                      "Fn::Sub": "arn:${AWS::Partition}:ssm:${AWS::Region}:${AWS::AccountId}:parameter/ticket/production/R2_ACCOUNT_ID"
+                    }
+                  ]
                 }
               ]
             }

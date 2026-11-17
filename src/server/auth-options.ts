@@ -12,6 +12,12 @@ export function authOptions(pool: Pool, settings: { baseURL: string; secret: str
     throw new Error('BETTER_AUTH_URL must be an HTTPS origin (HTTP is allowed on loopback only)');
   }
   const trustedOrigins = [url.origin];
+  const trustedProxy = process.env.TRUST_PROXY?.trim().toLowerCase();
+  const ipAddressHeaders = trustedProxy === 'cloudflare'
+    ? ['cf-connecting-ip', 'x-forwarded-for']
+    : trustedProxy && Number.isInteger(Number(trustedProxy)) && Number(trustedProxy) > 0
+      ? ['x-forwarded-for']
+      : [];
   return {
     appName: 'TICKET',
     baseURL: url.origin,
@@ -24,6 +30,12 @@ export function authOptions(pool: Pool, settings: { baseURL: string; secret: str
       minPasswordLength: minimumPasswordLength,
       maxPasswordLength: maximumPasswordLength,
       resetPasswordTokenExpiresIn: 30 * 60,
+      revokeSessionsOnPasswordReset: true,
+      onPasswordReset: async ({ user }) => {
+        // Better Auth revokes database sessions as part of reset. Keep this explicit
+        // delete as a defense-in-depth guarantee for the configured auth_session table.
+        await pool.query('DELETE FROM auth_session WHERE "userId" = $1', [user.id]);
+      },
       sendResetPassword: async ({ user, url, token }) => {
         await recordPasswordResetTokenIdentifier(pool, user.id, `reset-password:${token}`);
         const { emailTransport } = await import('./email.ts');
@@ -60,7 +72,13 @@ export function authOptions(pool: Pool, settings: { baseURL: string; secret: str
       cookieCache: { enabled: false },
     },
     rateLimit: { enabled: true, storage: 'database', modelName: 'auth_rate_limit', window: 60, max: 100 },
-    advanced: { cookiePrefix: 'ticket', useSecureCookies: url.protocol === 'https:', disableOriginCheck: false, disableCSRFCheck: false },
+    advanced: {
+      cookiePrefix: 'ticket',
+      useSecureCookies: url.protocol === 'https:',
+      disableOriginCheck: false,
+      disableCSRFCheck: false,
+      ipAddress: { ipAddressHeaders },
+    },
     telemetry: { enabled: false },
     logger: {
       log: (level: 'info' | 'warn' | 'error' | 'debug', message: string, ...args: unknown[]) => {

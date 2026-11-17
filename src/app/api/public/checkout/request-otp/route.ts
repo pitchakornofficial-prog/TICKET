@@ -4,6 +4,7 @@ import { extractClientIp, requestGuestOtp } from '@/server/guest-otp';
 import { verifyQueueAccess } from '@/server/queue';
 import { readQueueCookie } from '@/server/queue-cookie';
 import { randomUUID } from 'node:crypto';
+import { isPayloadTooLargeError, readBoundedJson } from '@/server/http-body';
 
 export const runtime = 'nodejs';
 
@@ -16,9 +17,12 @@ export async function POST(request: Request) {
   } = {};
 
   try {
-    body = await request.json();
-  } catch {
-    return Response.json({ message: 'Invalid JSON body' }, { status: 400 });
+    body = await readBoundedJson<typeof body>(request, 32 * 1024);
+  } catch (error) {
+    return Response.json(
+      { message: isPayloadTooLargeError(error) ? 'Payload too large' : 'Invalid JSON body' },
+      { status: isPayloadTooLargeError(error) ? 413 : 400 },
+    );
   }
 
   if (!body.buyer) {

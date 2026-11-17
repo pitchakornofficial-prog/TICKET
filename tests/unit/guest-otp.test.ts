@@ -53,6 +53,19 @@ describe('Guest checkout validation and OTP security parameters (TASK-011, AC-57
         phone: '0812345678',
       });
     });
+
+    it('bounds buyer field lengths and removes control characters from names', () => {
+      expect(validateBuyerDetails({ name: 'n'.repeat(121), email: 'guest@example.com', phone: '0812345678' }).valid).toBe(false);
+      expect(validateBuyerDetails({ name: 'Guest', email: `${'a'.repeat(246)}@example.com`, phone: '0812345678' }).valid).toBe(false);
+      expect(validateBuyerDetails({ name: 'Guest', email: 'guest@example.com', phone: '1'.repeat(31) }).valid).toBe(false);
+
+      const safe = validateBuyerDetails({
+        name: '  Ada\r\n Lovelace\u0000  ',
+        email: 'ada@example.com',
+        phone: '0812345678',
+      });
+      expect(safe.data?.name).toBe('Ada Lovelace');
+    });
   });
 
   describe('Security parameters (ADR-0004 & SPEC-001)', () => {

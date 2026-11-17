@@ -5,6 +5,7 @@ import {
   claimUploadFinalizeIntent,
   readStorageItemBounded,
   setUploadFinalizeIntentStatus,
+  sweepExpiredUploadFinalizeIntents,
   verifyUploadFinalizeToken,
 } from '@/server/upload-finalization';
 import { sanitizePublicImage } from '@/server/upload-image';
@@ -53,6 +54,8 @@ export async function POST(request: Request) {
   } catch {
     // Unit and local test auth providers may not expose a database pool.
   }
+
+  await sweepExpiredUploadFinalizeIntents(pool, storage).catch(() => {});
 
   let intentClaimed = false;
   try {

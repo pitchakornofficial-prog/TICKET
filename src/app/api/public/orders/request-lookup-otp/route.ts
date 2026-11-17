@@ -3,19 +3,26 @@ import { getDatabasePool } from '@/server/database';
 import { requestOrderLookupOtp } from '@/server/guest-order-lookup';
 import { extractClientIp } from '@/server/guest-otp';
 import { randomUUID } from 'node:crypto';
+import { isPayloadTooLargeError, readBoundedJson } from '@/server/http-body';
 
 export const runtime = 'nodejs';
 
 export async function POST(request: Request) {
   try {
-    const body = await request.json();
+    let body: { email?: string; phone?: string; orderId?: string };
+    try {
+      body = await readBoundedJson<typeof body>(request, 32 * 1024);
+    } catch (error) {
+      const tooLarge = isPayloadTooLargeError(error);
+      return Response.json({ message: tooLarge ? 'Payload too large' : 'Invalid JSON body' }, { status: tooLarge ? 413 : 400 });
+    }
     const { email, phone, orderId } = body || {};
 
     const pool = getDatabasePool();
     const clientIp = extractClientIp(request);
     const result = await requestOrderLookupOtp(pool, {
-      email,
-      phone,
+      email: email || '',
+      phone: phone || '',
       orderId,
       clientIp,
     });

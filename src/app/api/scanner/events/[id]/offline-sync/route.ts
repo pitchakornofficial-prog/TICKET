@@ -2,6 +2,8 @@ import { createSafeErrorResponse } from '@/server/api-error';
 import { getAuth } from '@/server/auth';
 import { syncOfflineAdmissionScans } from '@/server/admission';
 import { verifyScannerSessionEventScope } from '@/server/scanner-scope';
+import { assertSameOrigin } from '@/server/origin';
+import { isPayloadTooLargeError, readBoundedJson } from '@/server/http-body';
 import type { Pool } from 'pg';
 
 export const runtime = 'nodejs';
@@ -10,6 +12,9 @@ export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  const originError = assertSameOrigin(request);
+  if (originError) return originError;
+
   const auth = getAuth();
   const session = await auth.api.getSession({ headers: request.headers });
 
@@ -42,8 +47,19 @@ export async function POST(
       return Response.json({ message: scopeCheck.reason }, { status: 403 });
     }
 
-    const body = await request.json();
-    const scans = Array.isArray(body?.scans) ? body.scans : [];
+    let body: unknown;
+    try {
+      body = await readBoundedJson(request, 512 * 1024);
+    } catch (error) {
+      const tooLarge = isPayloadTooLargeError(error);
+      return Response.json(
+        { message: tooLarge ? 'คำขอมีขนาดใหญ่เกินกำหนด' : 'ข้อมูล JSON ไม่ถูกต้อง' },
+        { status: tooLarge ? 413 : 400 },
+      );
+    }
+    const scans = body && typeof body === 'object' && 'scans' in body && Array.isArray(body.scans)
+      ? body.scans
+      : [];
 
     const result = await syncOfflineAdmissionScans(
       pool,
@@ -59,7 +75,7 @@ export async function POST(
   } catch (error: unknown) {
     return createSafeErrorResponse(error, 'เกิดข้อผิดพลาดในการซิงก์ข้อมูลออฟไลน์', {
       defaultStatus: 500,
-      statusResolver: (msg) => (msg.includes('ไม่อนุญาต') ? 403 : 500),
+      statusResolver: (msg) => (msg.includes('ไม่อนุญาต') ? 403 : msg.includes('500 รายการ') ? 400 : 500),
     });
   }
 }

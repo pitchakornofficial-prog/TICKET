@@ -10,7 +10,7 @@ import {
   type OrganizerFeeMode,
   ensureFeeSchema,
 } from './fees.ts';
-import { getVerifiedGuestSession, type GuestVerifiedSession } from './guest-otp.ts';
+import { getVerifiedGuestSession, validateBuyerDetails, type GuestVerifiedSession } from './guest-otp.ts';
 import { ensureQueueSchema, QUEUE_ADMISSION_LOCK_NAMESPACE, QUEUE_CAPACITY, verifyQueueAccess } from './queue.ts';
 
 export class QueueLockedError extends Error {
@@ -26,6 +26,41 @@ export const RESERVATION_HOLD_SECONDS = 15 * 60; // 900 seconds
 export interface ReservationItemInput {
   ticketTypeId: string;
   quantity: number;
+}
+
+export const MAX_RESERVATION_ITEMS = 20;
+export const MAX_RESERVATION_ITEM_QUANTITY = 100;
+
+export function validateReservationItems(items: unknown): ReservationItemInput[] {
+  if (!Array.isArray(items) || items.length === 0) {
+    throw new Error('กรุณาเลือกประเภทบัตรและจำนวนอย่างน้อย 1 ใบ');
+  }
+  if (items.length > MAX_RESERVATION_ITEMS) {
+    throw new Error('คำสั่งซื้อมีประเภทบัตรได้ไม่เกิน 20 รายการ');
+  }
+
+  return items.map((item: unknown) => {
+    if (!item || typeof item !== 'object') {
+      throw new Error('ข้อมูลประเภทบัตรไม่ถูกต้อง');
+    }
+    const candidate = item as Partial<ReservationItemInput>;
+    if (typeof candidate.ticketTypeId !== 'string' || !candidate.ticketTypeId.trim()) {
+      throw new Error('กรุณาระบุประเภทบัตรให้ถูกต้อง');
+    }
+    const quantity = candidate.quantity;
+    if (typeof quantity !== 'number' || !Number.isInteger(quantity) || quantity <= 0 || quantity > MAX_RESERVATION_ITEM_QUANTITY) {
+      throw new Error('จำนวนบัตรแต่ละประเภทต้องเป็นจำนวนเต็มระหว่าง 1 ถึง 100 ใบ');
+    }
+    return { ticketTypeId: candidate.ticketTypeId.trim(), quantity };
+  });
+}
+
+export function validateReservationBuyer(input: Partial<GuestVerifiedSession>): Pick<GuestVerifiedSession, 'email' | 'name' | 'phone'> {
+  const validation = validateBuyerDetails(input);
+  if (!validation.valid || !validation.data) {
+    throw new Error(validation.error || 'ข้อมูลผู้ซื้อไม่ถูกต้อง');
+  }
+  return validation.data;
 }
 
 export interface CreateReservationInput {
@@ -1130,11 +1165,11 @@ async function createReservationFast(
       throw new Error('กรุณายืนยันตัวตนผ่าน OTP ก่อนดำเนินการกันบัตร');
     }
 
-    const verifiedSession: Pick<GuestVerifiedSession, 'email' | 'name' | 'phone'> = {
+    const verifiedSession = validateReservationBuyer({
       email: pre.gvsEmail,
       name: pre.gvsName ?? '',
       phone: pre.gvsPhone ?? '',
-    };
+    });
 
     validateEventAndLimits(
       pre.evId
@@ -1280,17 +1315,7 @@ export async function createReservation(
   options?: { queueToken?: string | null; enforceQueue?: boolean },
 ): Promise<OrderReservationDetail> {
   // Input validation
-  if (!input.items || input.items.length === 0) {
-    throw new Error('กรุณาเลือกประเภทบัตรและจำนวนอย่างน้อย 1 ใบ');
-  }
-
-  const sanitizedItems = input.items
-    .map(i => ({ ticketTypeId: i.ticketTypeId?.trim(), quantity: Number(i.quantity) }))
-    .filter(i => i.quantity > 0);
-
-  if (sanitizedItems.length === 0) {
-    throw new Error('กรุณาเลือกจำนวนบัตรมากกว่า 0 ใบ');
-  }
+  const sanitizedItems = validateReservationItems(input.items);
 
   const totalTickets = sanitizedItems.reduce((acc, i) => acc + i.quantity, 0);
 
@@ -1303,11 +1328,12 @@ export async function createReservation(
   if (!verifiedSession) {
     throw new Error('กรุณายืนยันตัวตนผ่าน OTP ก่อนดำเนินการกันบัตร');
   }
+  const buyer = validateReservationBuyer(verifiedSession);
 
   await ensureReservationSchema(pool);
 
   return inTransaction(pool, async (client: PoolClient) => {
-    const emailNorm = verifiedSession.email.trim().toLowerCase();
+    const emailNorm = buyer.email.trim().toLowerCase();
 
     await lockEventFeeReservation(client, input.eventId);
 
@@ -1360,8 +1386,8 @@ export async function createReservation(
     const alreadyPurchased = await getBuyerTicketCountForEvent(
       client,
       input.eventId,
-      verifiedSession.email,
-      verifiedSession.phone,
+      buyer.email,
+      buyer.phone,
       now,
     );
 
@@ -1503,7 +1529,7 @@ export async function createReservation(
     const ticketTypeMap = new Map(ttRes.rows.map(r => [r.id, r]));
 
     // 5. Calculate UBU Privilege & item pricing before running quota check + insert
-    const hasUbuPrivilege = isUbuEmail(verifiedSession.email);
+    const hasUbuPrivilege = isUbuEmail(buyer.email);
     const isUbuPrivilegeMode = ubuPrivilegeModeFlag;
     const isUbuFreshyEvent = isUbuPrivilegeMode || input.eventId === 'event-ubu-freshy-2026';
 
@@ -1636,9 +1662,9 @@ export async function createReservation(
           orderId,
           input.eventId,
           input.sessionId,
-          verifiedSession.email,
-          verifiedSession.name,
-          verifiedSession.phone,
+          buyer.email,
+          buyer.name,
+          buyer.phone,
           orderSubtotal,
           discountAmount,
           customerFee,
@@ -1721,9 +1747,9 @@ export async function createReservation(
           orderId,
           input.eventId,
           input.sessionId,
-          verifiedSession.email,
-          verifiedSession.name,
-          verifiedSession.phone,
+          buyer.email,
+          buyer.name,
+          buyer.phone,
           orderSubtotal,
           discountAmount,
           customerFee,
@@ -1750,9 +1776,9 @@ export async function createReservation(
       id: orderId,
       eventId: input.eventId,
       sessionId: input.sessionId,
-      buyerEmail: verifiedSession.email,
-      buyerName: verifiedSession.name,
-      buyerPhone: verifiedSession.phone,
+        buyerEmail: buyer.email,
+        buyerName: buyer.name,
+        buyerPhone: buyer.phone,
       status: 'reserved',
       items: orderItemsToInsert,
       subtotal: orderSubtotal,

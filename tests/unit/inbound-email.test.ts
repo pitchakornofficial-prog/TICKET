@@ -518,6 +518,102 @@ describe('SES Inbound Mailbox (MIME parser, SNS security, webhook, owner API & U
       expect(replyRes.status).toBe(200);
       expect(getCapturedEmails()).toHaveLength(1);
     });
+
+    it('rejects oversized streamed webhook payloads over 10 MiB without Content-Length using 413', async () => {
+      const { POST: postWebhook } = await import(
+        '../../src/app/api/webhooks/ses-inbound/route'
+      );
+
+      const cancel = vi.fn();
+      const body = new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(new Uint8Array(6 * 1024 * 1024));
+          controller.enqueue(new Uint8Array(5 * 1024 * 1024));
+        },
+        cancel,
+      });
+
+      const req = new Request('http://127.0.0.1:3000/api/webhooks/ses-inbound', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body,
+        duplex: 'half',
+      } as RequestInit & { duplex: 'half' });
+
+      expect(req.headers.has('content-length')).toBe(false);
+      const res = await postWebhook(req);
+      expect(res.status).toBe(413);
+      expect(cancel).toHaveBeenCalledOnce();
+    });
+
+    it('blocks SNS confused deputy in production when neither TopicArn nor secret is configured, and rejects mismatched TopicArn', async () => {
+      const { POST: postWebhook } = await import(
+        '../../src/app/api/webhooks/ses-inbound/route'
+      );
+
+      const fetchSpy = vi.spyOn(globalThis, 'fetch');
+      vi.stubEnv('NODE_ENV', 'production');
+      vi.stubEnv('SES_INBOUND_SNS_TOPIC_ARN', '');
+      vi.stubEnv('SES_INBOUND_WEBHOOK_SECRET', '');
+
+      const snsEnvelope = {
+        Type: 'Notification',
+        MessageId: 'sns-msg-attacker-1',
+        TopicArn: 'arn:aws:sns:ap-southeast-1:999999999999:attacker-topic',
+        Message: JSON.stringify({ notificationType: 'Received' }),
+        Timestamp: '2026-11-17T03:00:00.000Z',
+        SignatureVersion: '1',
+        Signature: 'invalid-signature',
+        SigningCertURL: 'https://sns.ap-southeast-1.amazonaws.com/SimpleNotificationService-test.pem',
+      };
+
+      const unconfiguredRes = await postWebhook(
+        new Request('http://127.0.0.1:3000/api/webhooks/ses-inbound', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(snsEnvelope),
+        }),
+      );
+      expect(unconfiguredRes.status).toBe(503);
+      expect(fetchSpy).not.toHaveBeenCalled();
+
+      vi.stubEnv(
+        'SES_INBOUND_SNS_TOPIC_ARN',
+        'arn:aws:sns:ap-southeast-1:123456789012:ticket-inbound-prod',
+      );
+      const mismatchRes = await postWebhook(
+        new Request('http://127.0.0.1:3000/api/webhooks/ses-inbound', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(snsEnvelope),
+        }),
+      );
+      expect(mismatchRes.status).toBe(403);
+      expect((await mismatchRes.json()) as { error: string }).toEqual({
+        error: 'SNS TopicArn mismatch',
+      });
+      expect(fetchSpy).not.toHaveBeenCalled();
+
+      vi.stubEnv('SES_INBOUND_SNS_TOPIC_ARN', '');
+      vi.stubEnv('SES_INBOUND_WEBHOOK_SECRET', 'prod-inbound-secret');
+      const secretVerifiedRes = await postWebhook(
+        new Request('http://127.0.0.1:3000/api/webhooks/ses-inbound', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-inbound-secret': 'prod-inbound-secret',
+          },
+          body: JSON.stringify({
+            ...snsEnvelope,
+            SigningCertURL: 'https://evil.example.com/cert.pem',
+          }),
+        }),
+      );
+      expect(secretVerifiedRes.status).toBe(403);
+      expect((await secretVerifiedRes.json()) as { error: string }).toEqual({
+        error: 'Invalid SNS message signature',
+      });
+    });
   });
 
   describe('OwnerInboundMailbox UI compliance', () => {

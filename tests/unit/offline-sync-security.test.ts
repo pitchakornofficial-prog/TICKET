@@ -560,4 +560,17 @@ describe('syncOfflineAdmissionScans cross-event, authorization, and state securi
     expect(result.acknowledgedIds).toEqual(['scan-1-entry', 'scan-2-exit', 'scan-3-reentry']);
     expect(currentAdmissionStatus).toBe('inside');
   });
+
+  it('rejects offline sync batches above 500 scans before database access', async () => {
+    const mockClient = { query: vi.fn(), release: vi.fn() } as unknown as PoolClient;
+    const mockPool = createPrimaryScannerMockPool(mockClient);
+
+    await expect(syncOfflineAdmissionScans(
+      mockPool,
+      { id: 'auth-scanner-id', role: 'scanner', name: 'Primary' },
+      'event-1',
+      { scans: Array.from({ length: 501 }, (_, index) => ({ id: `scan-${index}` })) as never },
+    )).rejects.toThrow('500 รายการ');
+    expect(mockPool.query).not.toHaveBeenCalled();
+  });
 });

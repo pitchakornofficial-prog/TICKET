@@ -1,6 +1,6 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import type { Pool } from 'pg';
-import type { StorageItem } from './storage.ts';
+import type { StorageDriver, StorageItem } from './storage.ts';
 
 export interface UploadFinalizeClaims {
   intentId: string;
@@ -83,10 +83,11 @@ export function createUploadFinalizeToken(claims: UploadFinalizeClaims): string 
 export async function persistUploadFinalizeIntent(
   pool: Pool | undefined,
   claims: UploadFinalizeClaims,
+  storage?: Pick<StorageDriver, 'delete'>,
 ): Promise<void> {
   if (pool) {
+    await sweepExpiredUploadFinalizeIntents(pool, storage);
     await ensureUploadFinalizeSchema(pool);
-    await pool.query('DELETE FROM upload_finalize_intents WHERE "expiresAt" < now() - interval \'1 day\'');
     await pool.query(
       `INSERT INTO upload_finalize_intents (
          id, "actorId", "uploadKey", "targetKey", "contentType", visibility,
@@ -101,6 +102,23 @@ export async function persistUploadFinalizeIntent(
     throw new Error('Shared upload finalization storage is not configured');
   }
   memoryUploadIntents.set(claims.intentId, { claims, status: 'pending' });
+}
+
+export async function sweepExpiredUploadFinalizeIntents(
+  pool: Pool | undefined,
+  storage?: Pick<StorageDriver, 'delete'>,
+): Promise<void> {
+  if (!pool) return;
+  await ensureUploadFinalizeSchema(pool);
+  const expired = await pool.query<{ uploadKey: string }>(
+    'DELETE FROM upload_finalize_intents WHERE "expiresAt" < now() RETURNING "uploadKey"',
+  );
+  if (!storage) return;
+
+  const uploadKeys = expired.rows.map(row => row.uploadKey).filter(key => key.startsWith('pending/'));
+  for (let index = 0; index < uploadKeys.length; index += 16) {
+    await Promise.allSettled(uploadKeys.slice(index, index + 16).map(key => storage.delete(key)));
+  }
 }
 
 export async function claimUploadFinalizeIntent(

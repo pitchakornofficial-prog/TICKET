@@ -1,4 +1,5 @@
 import { getDatabasePool } from '@/server/database';
+import { PayloadTooLargeError, readBoundedText } from '@/server/http-body';
 import {
   ingestDirectInboundEmail,
   ingestSesInboundNotification,
@@ -12,21 +13,6 @@ import {
 export const runtime = 'nodejs';
 
 const MAX_INBOUND_WEBHOOK_BYTES = 10 * 1024 * 1024; // 10 MiB
-
-async function readBoundedText(request: Request, maxBytes: number): Promise<string> {
-  const contentLength = request.headers.get('content-length');
-  if (contentLength) {
-    const parsed = Number.parseInt(contentLength, 10);
-    if (Number.isFinite(parsed) && parsed > maxBytes) {
-      throw new Error('PAYLOAD_TOO_LARGE');
-    }
-  }
-  const text = await request.text();
-  if (Buffer.byteLength(text, 'utf8') > maxBytes) {
-    throw new Error('PAYLOAD_TOO_LARGE');
-  }
-  return text;
-}
 
 function isSnsEnvelope(obj: unknown): obj is SnsEnvelope {
   if (!obj || typeof obj !== 'object') return false;
@@ -46,7 +32,7 @@ export async function POST(request: Request) {
     try {
       rawBody = await readBoundedText(request, MAX_INBOUND_WEBHOOK_BYTES);
     } catch (err) {
-      if (err instanceof Error && err.message === 'PAYLOAD_TOO_LARGE') {
+      if (err instanceof PayloadTooLargeError) {
         return Response.json({ error: 'Payload too large' }, { status: 413 });
       }
       return Response.json({ error: 'Failed to read request body' }, { status: 400 });
@@ -75,11 +61,18 @@ export async function POST(request: Request) {
       return Response.json({ error: 'Unauthorized webhook secret' }, { status: 401 });
     }
 
-    const pool = getDatabasePool();
-
     // 1. AWS SNS HTTP/HTTPS Envelope (SubscriptionConfirmation / Notification / UnsubscribeConfirmation)
     if (isSnsEnvelope(payload)) {
-      const expectedTopicArn = process.env.SES_INBOUND_SNS_TOPIC_ARN?.trim();
+      const expectedTopicArn = process.env.SES_INBOUND_SNS_TOPIC_ARN?.trim() || '';
+      if (process.env.NODE_ENV === 'production' && !expectedTopicArn && !secretMatched) {
+        return Response.json(
+          {
+            error:
+              'SES_INBOUND_SNS_TOPIC_ARN or SES_INBOUND_WEBHOOK_SECRET is required in production',
+          },
+          { status: 503 },
+        );
+      }
       if (expectedTopicArn && payload.TopicArn !== expectedTopicArn) {
         return Response.json({ error: 'SNS TopicArn mismatch' }, { status: 403 });
       }
@@ -115,6 +108,7 @@ export async function POST(request: Request) {
           return Response.json({ error: 'Invalid SES notification JSON' }, { status: 400 });
         }
 
+        const pool = getDatabasePool();
         const result = await ingestSesInboundNotification(pool, sesPayload, {
           snsMessageId: payload.MessageId,
         });
@@ -131,6 +125,8 @@ export async function POST(request: Request) {
         { status: 401 },
       );
     }
+
+    const pool = getDatabasePool();
 
     if (payload && typeof payload === 'object') {
       const obj = payload as Record<string, unknown>;

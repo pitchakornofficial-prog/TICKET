@@ -129,6 +129,28 @@ export interface GuestVerifiedSession {
   expiresAt: string;
 }
 
+const MAX_BUYER_NAME_LENGTH = 120;
+const MAX_BUYER_EMAIL_LENGTH = 254;
+const MAX_BUYER_PHONE_LENGTH = 30;
+
+function sanitizeBuyerName(value: unknown): string {
+  if (typeof value !== 'string') return '';
+  return value.replace(/\p{Cc}/gu, '').trim();
+}
+
+export function escapeHtml(value: string): string {
+  return value.replace(/[&<>"']/g, character => {
+    switch (character) {
+      case '&': return '&amp;';
+      case '<': return '&lt;';
+      case '>': return '&gt;';
+      case '"': return '&quot;';
+      case "'": return '&#39;';
+      default: return character;
+    }
+  });
+}
+
 const guestOtpSchemaPromises = new WeakMap<Pool, Promise<void>>();
 
 export async function ensureGuestOtpSchema(pool: Pool): Promise<void> {
@@ -492,16 +514,22 @@ export function validateBuyerDetails(input: Partial<GuestBuyerDetails>): {
   error?: string;
   data?: GuestBuyerDetails;
 } {
-  const name = input.name?.trim();
-  const email = input.email?.trim().toLowerCase();
-  const phone = input.phone?.trim();
+  const name = sanitizeBuyerName(input?.name);
+  const email = typeof input?.email === 'string' ? input.email.trim().toLowerCase() : '';
+  const phone = typeof input?.phone === 'string' ? input.phone.trim() : '';
 
   // AC-60: missing name, email, or phone prevents moving forward
   if (!name) {
     return { valid: false, error: 'กรุณากรอกชื่อ-นามสกุล' };
   }
+  if (name.length > MAX_BUYER_NAME_LENGTH) {
+    return { valid: false, error: 'ชื่อผู้ซื้อต้องไม่เกิน 120 ตัวอักษร' };
+  }
   if (!email) {
     return { valid: false, error: 'กรุณากรอกอีเมล' };
+  }
+  if (email.length > MAX_BUYER_EMAIL_LENGTH) {
+    return { valid: false, error: 'อีเมลผู้ซื้อต้องไม่เกิน 254 ตัวอักษร' };
   }
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     return { valid: false, error: 'รูปแบบอีเมลไม่ถูกต้อง' };
@@ -519,6 +547,9 @@ export function validateBuyerDetails(input: Partial<GuestBuyerDetails>): {
   }
   if (!phone) {
     return { valid: false, error: 'กรุณากรอกเบอร์โทรศัพท์' };
+  }
+  if (phone.length > MAX_BUYER_PHONE_LENGTH) {
+    return { valid: false, error: 'เบอร์โทรศัพท์ต้องไม่เกิน 30 ตัวอักษร' };
   }
   const cleanPhone = phone.replace(/[\s-]/g, '');
   if (cleanPhone.length < 9 || cleanPhone.length > 15 || !/^\+?\d+$/.test(cleanPhone)) {
@@ -846,6 +877,8 @@ export async function requestGuestOtp(
     console.log(`[LOCAL DEV OTP] Email: ${email} | Code: ${otpCode} | Purpose: ${purpose}`);
   }
 
+  const safeHtmlName = escapeHtml(name);
+
   await emailTransport.send({
     from: 'TICKET <no-reply@ticket.local>',
     to: email,
@@ -854,7 +887,7 @@ export async function requestGuestOtp(
     html: `
         <div style="font-family: sans-serif; padding: 20px; color: #111214;">
           <h2>${actionTitle}</h2>
-          <p>สวัสดีคุณ <strong>${name}</strong>,</p>
+          <p>สวัสดีคุณ <strong>${safeHtmlName}</strong>,</p>
           <p>รหัส OTP เพื่อยืนยันอีเมลของคุณคือ:</p>
           <div style="font-size: 32px; font-weight: bold; letter-spacing: 6px; color: #1848ed; margin: 20px 0;">
             ${otpCode}

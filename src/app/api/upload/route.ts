@@ -121,7 +121,7 @@ export async function handlePresignedRequest(
       reservationId: quota.reservationId,
       expiresAt: Date.now() + presigned.expiresInSeconds * 1000,
     } as const;
-    await persistUploadFinalizeIntent(pool, finalizeClaims);
+    await persistUploadFinalizeIntent(pool, finalizeClaims, storage);
     const finalizeToken = createUploadFinalizeToken(finalizeClaims);
 
     return Response.json(

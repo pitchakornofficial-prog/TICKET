@@ -9,13 +9,22 @@ import {
   type StripeEvent,
   type StripePaymentIntent,
 } from '@/server/stripe';
+import { readBoundedText } from '@/server/http-body';
 
 export const runtime = 'nodejs';
 
 export async function POST(request: Request) {
+  let rawBody: string;
   try {
-    const pool = getDatabasePool();
-    const rawBody = await request.text();
+    rawBody = await readBoundedText(request, 256 * 1024);
+  } catch (error) {
+    if ((error as Error)?.message === 'PAYLOAD_TOO_LARGE') {
+      return Response.json({ error: 'Payload too large' }, { status: 413 });
+    }
+    return Response.json({ error: 'Unable to read webhook payload' }, { status: 400 });
+  }
+
+  try {
     const signatureHeader = request.headers.get('stripe-signature');
     const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
 
@@ -42,6 +51,8 @@ export async function POST(request: Request) {
     } catch {
       return Response.json({ error: 'Invalid JSON payload' }, { status: 400 });
     }
+
+    const pool = getDatabasePool();
 
     // Persist the verified delivery independently so processing failures remain retryable.
     const priorStatus = await recordStripeWebhookDelivery(pool, event, rawBody);

@@ -13,6 +13,7 @@ import { testDatabaseUrl } from '../support/test-database';
 describe('internal owner bootstrap and PostgreSQL-backed role sessions', () => {
   let fixture: Awaited<ReturnType<typeof authFixture>>;
   const baseURL = 'http://127.0.0.1:3100';
+  const originalTrustProxy = process.env.TRUST_PROXY;
   let nextIp = 1;
   function request(path: string, body?: unknown, cookie?: string, origin = baseURL) {
     return new Request(`${baseURL}/api/auth/${path}`, {
@@ -22,8 +23,18 @@ describe('internal owner bootstrap and PostgreSQL-backed role sessions', () => {
     });
   }
   function cookieFrom(response: Response) { return response.headers.getSetCookie().map(cookie => cookie.split(';')[0]).join('; '); }
-  beforeAll(async () => { fixture = await authFixture('integration', baseURL); }, 30000);
-  afterAll(async () => { if (fixture) await fixture.cleanup(); });
+  beforeAll(async () => {
+    // Test requests supply one trusted X-Forwarded-For hop to isolate login-rate-limit buckets.
+    process.env.TRUST_PROXY = '1';
+    fixture = await authFixture('integration', baseURL);
+  }, 30000);
+  afterAll(async () => {
+    try { if (fixture) await fixture.cleanup(); }
+    finally {
+      if (originalTrustProxy === undefined) delete process.env.TRUST_PROXY;
+      else process.env.TRUST_PROXY = originalTrustProxy;
+    }
+  });
 
   it('creates only the first owner internally, never overwrites its password, and can repeat migration safely', async () => {
     await migrateAuth(fixture.pool);

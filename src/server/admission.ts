@@ -746,6 +746,12 @@ export async function syncOfflineAdmissionScans(
   eventId: string,
   input: SyncOfflineAdmissionInput,
 ): Promise<SyncOfflineAdmissionResult> {
+  if (!Array.isArray(input.scans)) {
+    throw new Error('ข้อมูลรายการสแกนไม่ถูกต้อง');
+  }
+  if (input.scans.length > 500) {
+    throw new Error('รายการสแกนต่อ batch ต้องไม่เกิน 500 รายการ');
+  }
   if (actor.role !== 'scanner') {
     throw new Error('ไม่อนุญาต: เฉพาะเครื่องหลักประจำงานเท่านั้นที่สามารถซิงก์ข้อมูลออฟไลน์ได้');
   }

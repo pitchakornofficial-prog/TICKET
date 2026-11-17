@@ -1,6 +1,7 @@
 import { createSafeErrorResponse } from '@/server/api-error';
 import { getDatabasePool } from '@/server/database';
 import { verifyGuestOtp } from '@/server/guest-otp';
+import { isPayloadTooLargeError, readBoundedJson } from '@/server/http-body';
 import { verifyQueueAccess } from '@/server/queue';
 import { getEventLimitAndBuyerTicketCount } from '@/server/reservation';
 import { readQueueCookie } from '@/server/queue-cookie';
@@ -18,9 +19,12 @@ export async function POST(request: Request) {
   } = {};
 
   try {
-    body = await request.json();
-  } catch {
-    return Response.json({ message: 'Invalid JSON body' }, { status: 400 });
+    body = await readBoundedJson<typeof body>(request, 32 * 1024);
+  } catch (error) {
+    return Response.json(
+      { message: isPayloadTooLargeError(error) ? 'Payload too large' : 'Invalid JSON body' },
+      { status: isPayloadTooLargeError(error) ? 413 : 400 },
+    );
   }
 
   if (!body.email || !body.code || !body.requestId || !body.buyer) {
