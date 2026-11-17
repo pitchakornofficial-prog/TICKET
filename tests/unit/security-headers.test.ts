@@ -48,6 +48,9 @@ describe('Security headers configuration in next.config.ts', () => {
 
     const noStoreRules = headersConfig.filter(rule => rule.headers.some(header => header.key === 'Cache-Control'));
     expect(noStoreRules.map(rule => rule.source)).toEqual([
+      '/api/events/:path*',
+      '/api/events',
+      '/orders/lookup',
       '/api/auth/:path*',
       '/api/owner/:path*',
       '/api/organizer/:path*',

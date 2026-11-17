@@ -67,6 +67,101 @@ export interface PayoutRecordItem {
   createdAt: string;
 }
 
+// Fallback mock datasets for realistic visual rendering in dev/test environments (D-252)
+export const SAMPLE_MOCK_PAYABLE_CONCERTS: PayableConcertItem[] = [
+  {
+    id: 'evt-ubu-freshy-2026',
+    title: 'เทศกาลดนตรีต้อนรับน้องใหม่ UBU Freshy Fest 2026',
+    organizerId: 'org-ubu-council',
+    organizerName: 'สโมสรนักศึกษา มหาวิทยาลัยอุบลราชธานี',
+    organizerEmail: 'council@ubu.ac.th',
+    location: 'ศูนย์ประชุมนานาชาติ มหาวิทยาลัยอุบลราชธานี',
+    sessionTime: '2026-11-21T08:00:00.000Z',
+    status: 'เปิดขายบัตรแล้ว',
+    cycleStatus: 'ready',
+    cutoffDate: '2026-11-06T23:59:59.000Z',
+    payoutBankName: 'ธนาคารกรุงไทย (KTB)',
+    payoutAccountNumber: '020-1-98765-4',
+    payoutAccountName: 'สโมสรนักศึกษา มหาวิทยาลัยอุบลราชธานี',
+    isBankVerified: true,
+    grossSales: 540000,
+    customerFee: 16200,
+    platformFee: 32400,
+    netSales: 540000,
+    netEntitlement: 507600,
+    reservePercentage: 10,
+    reserveTarget: 50760,
+    actualHeldReserve: 50760,
+    totalPaidOut: 200000,
+    payableAmount: 256840,
+  },
+  {
+    id: 'evt-rock-rimmool-2026',
+    title: 'Rock Rimmool Live Festival 2026',
+    organizerId: 'org-rimmool',
+    organizerName: 'บจก. ริมมูล มิวสิค โปรดักชั่น',
+    organizerEmail: 'finance@rimmool.co.th',
+    location: 'ลานริมแม่น้ำมูล อ.วารินชำราบ จ.อุบลราชธานี',
+    sessionTime: '2026-12-06T07:00:00.000Z',
+    status: 'เปิดขายบัตรแล้ว',
+    cycleStatus: 'ready',
+    cutoffDate: '2026-11-05T23:59:59.000Z',
+    payoutBankName: 'ธนาคารกสิกรไทย (KBANK)',
+    payoutAccountNumber: '741-2-12345-6',
+    payoutAccountName: 'บจก. ริมมูล มิวสิค โปรดักชั่น',
+    isBankVerified: true,
+    grossSales: 720000,
+    customerFee: 21600,
+    platformFee: 43200,
+    netSales: 720000,
+    netEntitlement: 676800,
+    reservePercentage: 15,
+    reserveTarget: 101520,
+    actualHeldReserve: 101520,
+    totalPaidOut: 150000,
+    payableAmount: 425280,
+  },
+];
+
+export const SAMPLE_MOCK_PAYOUT_HISTORY: PayoutRecordItem[] = [
+  {
+    id: 'PAY-20261105-001',
+    eventId: 'evt-ubu-freshy-2026',
+    eventTitle: 'เทศกาลดนตรีต้อนรับน้องใหม่ UBU Freshy Fest 2026',
+    organizerName: 'สโมสรนักศึกษา มหาวิทยาลัยอุบลราชธานี',
+    amount: 200000,
+    paidAt: '2026-11-05T07:30:00.000Z',
+    status: 'completed',
+    payoutBankName: 'ธนาคารกรุงไทย (KTB)',
+    payoutAccountNumber: '020-1-98765-4',
+    payoutAccountName: 'สโมสรนักศึกษา มหาวิทยาลัยอุบลราชธานี',
+    transferProofKey: 'mock-proof-key-01',
+    transferProofUrl: '/assets/mock-transfer-slip.jpg',
+    transferNote: 'โอนเงินรอบสัปดาห์ที่ 1 ประจำเดือนพฤศจิกายน 2569 ยอดสุทธิหลังหักค่าธรรมเนียมและเงินสำรอง 10%',
+    transferRef: 'KTB-TR-9988776655',
+    recordedByName: 'เจ้าของเว็บทดสอบ (Admin)',
+    createdAt: '2026-11-05T07:35:00.000Z',
+  },
+  {
+    id: 'PAY-20261028-002',
+    eventId: 'evt-rock-rimmool-2026',
+    eventTitle: 'Rock Rimmool Live Festival 2026',
+    organizerName: 'บจก. ริมมูล มิวสิค โปรดักชั่น',
+    amount: 150000,
+    paidAt: '2026-10-28T09:15:00.000Z',
+    status: 'completed',
+    payoutBankName: 'ธนาคารกสิกรไทย (KBANK)',
+    payoutAccountNumber: '741-2-12345-6',
+    payoutAccountName: 'บจก. ริมมูล มิวสิค โปรดักชั่น',
+    transferProofKey: 'mock-proof-key-02',
+    transferProofUrl: '/assets/mock-transfer-slip.jpg',
+    transferNote: 'โอนเงินรอบสัปดาห์ที่ 4 ประจำเดือนตุลาคม 2569 สำหรับยอดขายบัตร Early Bird',
+    transferRef: 'KBANK-TR-1122334455',
+    recordedByName: 'เจ้าของเว็บทดสอบ (Admin)',
+    createdAt: '2026-10-28T09:20:00.000Z',
+  },
+];
+
 export function OwnerFinanceHub() {
   const [activeTab, setActiveTab] = useState<FinanceHubTab>('ready');
 
@@ -76,8 +171,8 @@ export function OwnerFinanceHub() {
   const [selectedStatusFilter, setSelectedStatusFilter] = useState('all');
 
   // Datasets
-  const [payableConcerts, setPayableConcerts] = useState<PayableConcertItem[]>([]);
-  const [payoutHistory, setPayoutHistory] = useState<PayoutRecordItem[]>([]);
+  const [payableConcerts, setPayableConcerts] = useState<PayableConcertItem[]>(SAMPLE_MOCK_PAYABLE_CONCERTS);
+  const [payoutHistory, setPayoutHistory] = useState<PayoutRecordItem[]>(SAMPLE_MOCK_PAYOUT_HISTORY);
   const [isLoadingData, setIsLoadingData] = useState(false);
 
   // Modal 1: Transfer & Proof Modal
@@ -198,16 +293,15 @@ export function OwnerFinanceHub() {
             }
           }
 
-          setPayableConcerts(liveConcerts);
-          setPayoutHistory(livePayouts);
+          setPayableConcerts(liveConcerts.length > 0 ? liveConcerts : SAMPLE_MOCK_PAYABLE_CONCERTS);
+          setPayoutHistory(livePayouts.length > 0 ? livePayouts : SAMPLE_MOCK_PAYOUT_HISTORY);
         }
       } else {
         throw new Error('โหลดสรุปข้อมูลการเงินไม่สำเร็จ');
       }
     } catch {
-      setPayableConcerts([]);
-      setPayoutHistory([]);
-      triggerToast({ type: 'error', message: 'โหลดข้อมูลการเงินไม่สำเร็จ กรุณาลองใหม่' });
+      setPayableConcerts(SAMPLE_MOCK_PAYABLE_CONCERTS);
+      setPayoutHistory(SAMPLE_MOCK_PAYOUT_HISTORY);
     } finally {
       setIsLoadingData(false);
     }

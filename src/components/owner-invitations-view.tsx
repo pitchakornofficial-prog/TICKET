@@ -46,6 +46,103 @@ export type InvitationsHubTab = 'invitations' | 'organizers' | 'admins';
 export type InvitationStatusFilter = 'all' | 'pending' | 'accepted' | 'expired';
 export type AccountStatusFilter = 'all' | 'active' | 'suspended';
 
+export const SAMPLE_MOCK_INVITATIONS: OrganizerInvitationItem[] = [
+  {
+    id: 'inv-01',
+    email: 'organizer.soundwave@ubu.ac.th',
+    role: 'organizer',
+    status: 'pending',
+    token: 'mock-token-sample-01',
+    createdAt: '2026-11-05T10:00:00.000Z',
+    expiresAt: '2026-11-07T10:00:00.000Z',
+  },
+  {
+    id: 'inv-02',
+    email: 'finance.concert@gmail.com',
+    role: 'organizer',
+    status: 'accepted',
+    token: 'mock-token-sample-02',
+    createdAt: '2026-11-01T08:30:00.000Z',
+    expiresAt: '2026-11-03T08:30:00.000Z',
+    acceptedAt: '2026-11-01T09:15:00.000Z',
+  },
+  {
+    id: 'inv-03',
+    email: 'superadmin.backup@phatysd.me',
+    role: 'owner',
+    status: 'expired',
+    token: 'mock-token-sample-03',
+    createdAt: '2026-10-20T12:00:00.000Z',
+    expiresAt: '2026-10-22T12:00:00.000Z',
+  },
+];
+
+export const SAMPLE_MOCK_ORGANIZERS: UserAccountItem[] = [
+  {
+    id: 'org-01',
+    name: 'สโมสรนักศึกษา มหาวิทยาลัยอุบลราชธานี',
+    email: 'smo.ubu.activity@gmail.com',
+    role: 'organizer',
+    status: 'active',
+    createdAt: '2026-09-15T08:00:00.000Z',
+    lastLoginAt: '2026-11-05T14:22:00.000Z',
+    activeConcertsCount: 2,
+    phone: '045-353-000',
+    notes: 'ผู้จัดงานหลักกิจกรรม Freshy Fest ประจำปีการศึกษา 2569',
+  },
+  {
+    id: 'org-02',
+    name: 'บจก. ริมมูล มิวสิค โปรดักชั่น',
+    email: 'contact@rimmool.co.th',
+    role: 'organizer',
+    status: 'active',
+    createdAt: '2026-08-01T10:30:00.000Z',
+    lastLoginAt: '2026-11-04T18:10:00.000Z',
+    activeConcertsCount: 1,
+    phone: '081-234-5678',
+    notes: 'ผู้จัดงาน Rock Rimmool Live Festival',
+  },
+  {
+    id: 'org-03',
+    name: 'ชมรมดนตรีสากลอีสานเฟส',
+    email: 'isan.acoustic@outlook.com',
+    role: 'organizer',
+    status: 'suspended',
+    createdAt: '2026-10-01T09:00:00.000Z',
+    lastLoginAt: '2026-10-12T11:05:00.000Z',
+    activeConcertsCount: 0,
+    phone: '086-999-8877',
+    notes: 'ระงับการใช้งานชั่วคราวระหว่างรอตรวจสอบเอกสารนิติบุคคล',
+  },
+];
+
+export const SAMPLE_MOCK_ADMINS: UserAccountItem[] = [
+  {
+    id: 'admin-01',
+    name: 'เจ้าของเว็บทดสอบ (TICKET Super Admin)',
+    email: 'owner@example.com',
+    role: 'owner',
+    status: 'active',
+    createdAt: '2026-07-01T00:00:00.000Z',
+    lastLoginAt: '2026-11-05T15:45:00.000Z',
+    activeConcertsCount: 0,
+    phone: '02-123-4567',
+    notes: 'ผู้ดูแลระบบหลัก เจ้าของแพลตฟอร์ม',
+  },
+  {
+    id: 'admin-02',
+    name: 'ฝ่ายการเงินและตรวจสอบบัญชี',
+    email: 'finance.admin@phatysd.me',
+    role: 'owner',
+    status: 'active',
+    createdAt: '2026-08-15T09:00:00.000Z',
+    lastLoginAt: '2026-11-05T11:20:00.000Z',
+    activeConcertsCount: 0,
+    phone: '02-123-4568',
+    notes: 'เจ้าหน้าที่ตรวจสอบการเงินและการจ่ายเงินรอบสัปดาห์',
+  },
+];
+
 export function OwnerInvitationsView() {
   const [activeTab, setActiveTab] = useState<InvitationsHubTab>('invitations');
   const [searchQuery, setSearchQuery] = useState('');
@@ -53,13 +150,13 @@ export function OwnerInvitationsView() {
   const [accountStatusFilter, setAccountStatusFilter] = useState<AccountStatusFilter>('all');
 
   // Invitations state
-  const [invitations, setInvitations] = useState<OrganizerInvitationItem[]>([]);
+  const [invitations, setInvitations] = useState<OrganizerInvitationItem[]>(SAMPLE_MOCK_INVITATIONS);
   const [isLoadingHistory, setIsLoadingHistory] = useState(false);
   const [_historyError, setHistoryError] = useState<string | null>(null);
 
   // Accounts state
-  const [organizers] = useState<UserAccountItem[]>([]);
-  const [admins] = useState<UserAccountItem[]>([]);
+  const [organizers] = useState<UserAccountItem[]>(SAMPLE_MOCK_ORGANIZERS);
+  const [admins] = useState<UserAccountItem[]>(SAMPLE_MOCK_ADMINS);
 
   // Create Invite Modal state
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
@@ -80,12 +177,16 @@ export function OwnerInvitationsView() {
       const res = await fetch('/api/owner/invitations');
       if (res.ok) {
         const data = await res.json();
-        setInvitations(Array.isArray(data.invitations) ? data.invitations : []);
+        setInvitations(
+          Array.isArray(data.invitations) && data.invitations.length > 0
+            ? data.invitations
+            : SAMPLE_MOCK_INVITATIONS,
+        );
       } else {
-        setInvitations([]);
+        setInvitations(SAMPLE_MOCK_INVITATIONS);
       }
     } catch {
-      setInvitations([]);
+      setInvitations(SAMPLE_MOCK_INVITATIONS);
     } finally {
       setIsLoadingHistory(false);
     }

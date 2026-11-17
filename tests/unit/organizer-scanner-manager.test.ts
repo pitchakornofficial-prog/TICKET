@@ -115,7 +115,7 @@ describe('Organizer Scanner Manager (D-89)', () => {
     const cssContent = (`${readFileSync(
       join(rootDir, 'src/app/globals.css'),
       'utf8',
-    )}\n${readFileSync(join(rootDir, 'src/app/globals.css').replace("src/app/globals.css", "src/app/back-office/back-office.css"), 'utf8')}`);
+    )}\n${readFileSync(join(rootDir, 'src/app/globals.css').replace(/src[/\\]app[/\\]globals\.css/, "src/app/back-office/back-office.css"), 'utf8')}`);
     expect(cssContent).toContain('.scanner-quota-pill');
     expect(cssContent).toContain('.scanner-quota-alert');
     expect(cssContent).toContain('.scanner-qr-frame');
@@ -150,7 +150,7 @@ describe('Organizer Scanner Manager (D-89)', () => {
     const cssContent = (`${readFileSync(
       join(rootDir, 'src/app/globals.css'),
       'utf8',
-    )}\n${readFileSync(join(rootDir, 'src/app/globals.css').replace("src/app/globals.css", "src/app/back-office/back-office.css"), 'utf8')}`);
+    )}\n${readFileSync(join(rootDir, 'src/app/globals.css').replace(/src[/\\]app[/\\]globals\.css/, "src/app/back-office/back-office.css"), 'utf8')}`);
     expect(cssContent).toContain('.terminal-centered-wrapper');
     expect(cssContent).toContain('.scanner-workspace-card');
   });
@@ -180,7 +180,7 @@ describe('Organizer Scanner Manager (D-89)', () => {
     const cssContent = (`${readFileSync(
       join(rootDir, 'src/app/globals.css'),
       'utf8',
-    )}\n${readFileSync(join(rootDir, 'src/app/globals.css').replace("src/app/globals.css", "src/app/back-office/back-office.css"), 'utf8')}`);
+    )}\n${readFileSync(join(rootDir, 'src/app/globals.css').replace(/src[/\\]app[/\\]globals\.css/, "src/app/back-office/back-office.css"), 'utf8')}`);
     expect(cssContent).toContain('.scanner-card-3zones');
     expect(cssContent).toContain('.scanner-zone-actions');
   });
@@ -200,7 +200,7 @@ describe('Organizer Scanner Manager (D-89)', () => {
     const cssContent = (`${readFileSync(
       join(rootDir, 'src/app/globals.css'),
       'utf8',
-    )}\n${readFileSync(join(rootDir, 'src/app/globals.css').replace("src/app/globals.css", "src/app/back-office/back-office.css"), 'utf8')}`);
+    )}\n${readFileSync(join(rootDir, 'src/app/globals.css').replace(/src[/\\]app[/\\]globals\.css/, "src/app/back-office/back-office.css"), 'utf8')}`);
     expect(cssContent).toContain('.scanner-card-title-row');
     expect(cssContent).toContain('.scanner-edit-name-btn');
     expect(cssContent).toContain('.scanner-action-btn:disabled');
@@ -220,7 +220,7 @@ describe('Organizer Scanner Manager (D-89)', () => {
     const cssContent = (`${readFileSync(
       join(rootDir, 'src/app/globals.css'),
       'utf8',
-    )}\n${readFileSync(join(rootDir, 'src/app/globals.css').replace("src/app/globals.css", "src/app/back-office/back-office.css"), 'utf8')}`);
+    )}\n${readFileSync(join(rootDir, 'src/app/globals.css').replace(/src[/\\]app[/\\]globals\.css/, "src/app/back-office/back-office.css"), 'utf8')}`);
     expect(cssContent).toContain('.scanner-action-btn.btn-edit-name');
     expect(cssContent).toContain('.scanner-action-btn.btn-handover.is-active-primary');
   });
@@ -240,7 +240,7 @@ describe('Organizer Scanner Manager (D-89)', () => {
     const cssContent = (`${readFileSync(
       join(rootDir, 'src/app/globals.css'),
       'utf8',
-    )}\n${readFileSync(join(rootDir, 'src/app/globals.css').replace("src/app/globals.css", "src/app/back-office/back-office.css"), 'utf8')}`);
+    )}\n${readFileSync(join(rootDir, 'src/app/globals.css').replace(/src[/\\]app[/\\]globals\.css/, "src/app/back-office/back-office.css"), 'utf8')}`);
     expect(cssContent).toContain('.scanner-zone-actions');
     expect(cssContent).toContain('gap: 0.6rem');
     expect(cssContent).toContain('height: 36px');
@@ -263,7 +263,7 @@ describe('Organizer Scanner Manager (D-89)', () => {
     const cssContent = (`${readFileSync(
       join(rootDir, 'src/app/globals.css'),
       'utf8',
-    )}\n${readFileSync(join(rootDir, 'src/app/globals.css').replace("src/app/globals.css", "src/app/back-office/back-office.css"), 'utf8')}`);
+    )}\n${readFileSync(join(rootDir, 'src/app/globals.css').replace(/src[/\\]app[/\\]globals\.css/, "src/app/back-office/back-office.css"), 'utf8')}`);
     expect(cssContent).toContain('.scanner-unified-control-bar');
     expect(cssContent).toContain('.scanner-control-btn.btn-add-scanner');
     expect(cssContent).toContain('.scanner-control-btn.btn-emergency-halt');
@@ -273,7 +273,7 @@ describe('Organizer Scanner Manager (D-89)', () => {
     const cssContent = (`${readFileSync(
       join(rootDir, 'src/app/globals.css'),
       'utf8',
-    )}\n${readFileSync(join(rootDir, 'src/app/globals.css').replace("src/app/globals.css", "src/app/back-office/back-office.css"), 'utf8')}`);
+    )}\n${readFileSync(join(rootDir, 'src/app/globals.css').replace(/src[/\\]app[/\\]globals\.css/, "src/app/back-office/back-office.css"), 'utf8')}`);
     expect(cssContent).toContain('.scanner-unified-control-bar');
     expect(cssContent).toContain('align-items: flex-end');
     expect(cssContent).toContain('height: 42px');
@@ -304,7 +304,7 @@ describe('Organizer Scanner Manager (D-89)', () => {
     const cssContent = (`${readFileSync(
       join(rootDir, 'src/app/globals.css'),
       'utf8',
-    )}\n${readFileSync(join(rootDir, 'src/app/globals.css').replace("src/app/globals.css", "src/app/back-office/back-office.css"), 'utf8')}`);
+    )}\n${readFileSync(join(rootDir, 'src/app/globals.css').replace(/src[/\\]app[/\\]globals\.css/, "src/app/back-office/back-office.css"), 'utf8')}`);
     expect(cssContent).toContain('.scanner-event-combobox-trigger');
     expect(cssContent).toContain('.scanner-control-select-native-sync');
     expect(cssContent).toContain('.scanner-event-popover');
@@ -339,7 +339,7 @@ describe('Organizer Scanner Manager (D-89)', () => {
     const cssContent = (`${readFileSync(
       join(rootDir, 'src/app/globals.css'),
       'utf8',
-    )}\n${readFileSync(join(rootDir, 'src/app/globals.css').replace("src/app/globals.css", "src/app/back-office/back-office.css"), 'utf8')}`);
+    )}\n${readFileSync(join(rootDir, 'src/app/globals.css').replace(/src[/\\]app[/\\]globals\.css/, "src/app/back-office/back-office.css"), 'utf8')}`);
     expect(cssContent).toContain('.scanner-control-form-native-sync');
   });
 
@@ -362,7 +362,7 @@ describe('Organizer Scanner Manager (D-89)', () => {
     const cssContent = (`${readFileSync(
       join(rootDir, 'src/app/globals.css'),
       'utf8',
-    )}\n${readFileSync(join(rootDir, 'src/app/globals.css').replace("src/app/globals.css", "src/app/back-office/back-office.css"), 'utf8')}`);
+    )}\n${readFileSync(join(rootDir, 'src/app/globals.css').replace(/src[/\\]app[/\\]globals\.css/, "src/app/back-office/back-office.css"), 'utf8')}`);
     expect(cssContent).toContain('.scanner-handover-test-compat');
   });
 
@@ -407,7 +407,7 @@ describe('Organizer Scanner Manager (D-89)', () => {
     const cssContent = (`${readFileSync(
       join(rootDir, 'src/app/globals.css'),
       'utf8',
-    )}\n${readFileSync(join(rootDir, 'src/app/globals.css').replace("src/app/globals.css", "src/app/back-office/back-office.css"), 'utf8')}`);
+    )}\n${readFileSync(join(rootDir, 'src/app/globals.css').replace(/src[/\\]app[/\\]globals\.css/, "src/app/back-office/back-office.css"), 'utf8')}`);
     expect(cssContent).toContain('.scanner-primary-dedicated-card');
     expect(cssContent).toContain('.primary-card-top-row');
     expect(cssContent).toContain('.primary-card-heading');
@@ -422,7 +422,7 @@ describe('Organizer Scanner Manager (D-89)', () => {
     const cssContent = (`${readFileSync(
       join(rootDir, 'src/app/globals.css'),
       'utf8',
-    )}\n${readFileSync(join(rootDir, 'src/app/globals.css').replace("src/app/globals.css", "src/app/back-office/back-office.css"), 'utf8')}`);
+    )}\n${readFileSync(join(rootDir, 'src/app/globals.css').replace(/src[/\\]app[/\\]globals\.css/, "src/app/back-office/back-office.css"), 'utf8')}`);
     // .scanner-action-btn.btn-edit-name matches .scanner-action-btn.btn-remove styling
     expect(cssContent).toContain('.scanner-action-btn.btn-edit-name');
     expect(cssContent).toContain('Matches btn-remove neutral outline style D-103');
@@ -446,7 +446,7 @@ describe('Organizer Scanner Manager (D-89)', () => {
     const cssContent = (`${readFileSync(
       join(rootDir, 'src/app/globals.css'),
       'utf8',
-    )}\n${readFileSync(join(rootDir, 'src/app/globals.css').replace("src/app/globals.css", "src/app/back-office/back-office.css"), 'utf8')}`);
+    )}\n${readFileSync(join(rootDir, 'src/app/globals.css').replace(/src[/\\]app[/\\]globals\.css/, "src/app/back-office/back-office.css"), 'utf8')}`);
     expect(cssContent).toContain('.scanner-device-pill');
     expect(cssContent).toContain('.scanner-device-pill.bound');
     expect(cssContent).toContain('.scanner-device-pill.unbound');
@@ -587,7 +587,7 @@ describe('Organizer Scanner Manager (D-89)', () => {
     const cssContent = (`${readFileSync(
       join(rootDir, 'src/app/globals.css'),
       'utf8',
-    )}\n${readFileSync(join(rootDir, 'src/app/globals.css').replace("src/app/globals.css", "src/app/back-office/back-office.css"), 'utf8')}`);
+    )}\n${readFileSync(join(rootDir, 'src/app/globals.css').replace(/src[/\\]app[/\\]globals\.css/, "src/app/back-office/back-office.css"), 'utf8')}`);
     expect(cssContent).toContain('.terminal-sub-tabs-bar');
     expect(cssContent).toContain('.terminal-tab-btn');
     expect(cssContent).toContain('.scanner-conn-badge');
@@ -638,7 +638,7 @@ describe('Organizer Scanner Manager (D-89)', () => {
     const cssContent = (`${readFileSync(
       join(rootDir, 'src/app/globals.css'),
       'utf8',
-    )}\n${readFileSync(join(rootDir, 'src/app/globals.css').replace("src/app/globals.css", "src/app/back-office/back-office.css"), 'utf8')}`);
+    )}\n${readFileSync(join(rootDir, 'src/app/globals.css').replace(/src[/\\]app[/\\]globals\.css/, "src/app/back-office/back-office.css"), 'utf8')}`);
     expect(cssContent).toContain('.terminal-header-card');
     expect(cssContent).toContain('.terminal-control-toolbar');
     expect(cssContent).toContain('.camera-icon-toggle-btn');
