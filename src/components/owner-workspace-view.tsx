@@ -512,10 +512,6 @@ export function OwnerWorkspaceView({ initialSection }: OwnerWorkspaceViewProps) 
             )}
 
             <div className="owner-section-body">
-              <OwnerOverviewDashboard
-                onNavigateToSection={handleNavigateToSection}
-              />
-
               {activeSection === 'approval' && (
                 <>
                   <OwnerSessionApprovalManager />
