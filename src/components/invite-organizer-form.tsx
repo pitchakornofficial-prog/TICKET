@@ -5,19 +5,42 @@ import { useState } from 'react';
 export function InviteOrganizerForm() {
   const [email, setEmail] = useState('');
   const [role, setRole] = useState<'organizer' | 'owner'>('organizer');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [status, setStatus] = useState<'idle' | 'submitting' | 'success' | 'error'>('idle');
   const [message, setMessage] = useState('');
 
+  function handleRoleChange(nextRole: 'organizer' | 'owner') {
+    setRole(nextRole);
+    if (nextRole !== 'owner') {
+      setConfirmPassword('');
+    }
+    if (status === 'error') {
+      setStatus('idle');
+      setMessage('');
+    }
+  }
+
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    setStatus('submitting');
     setMessage('');
+
+    if (role === 'owner' && !confirmPassword) {
+      setStatus('error');
+      setMessage('กรุณาระบุรหัสผ่านปัจจุบันของคุณเพื่อยืนยันการเชิญผู้ดูแลระบบ (Owner)');
+      return;
+    }
+
+    setStatus('submitting');
 
     try {
       const res = await fetch('/api/auth/invite-organizer', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, role }),
+        body: JSON.stringify({
+          email,
+          role,
+          ...(role === 'owner' ? { confirmPassword } : {}),
+        }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -30,6 +53,7 @@ export function InviteOrganizerForm() {
       setStatus('success');
       setMessage(`ส่งคำเชิญไปยัง ${email} สำเร็จ (บทบาท${roleText} ลิงก์มีอายุ 48 ชั่วโมง)`);
       setEmail('');
+      setConfirmPassword('');
     } catch {
       setStatus('error');
       setMessage('เกิดข้อผิดพลาดในการเชื่อมต่อ กรุณาลองใหม่อีกครั้ง');
@@ -47,7 +71,7 @@ export function InviteOrganizerForm() {
           <select
             id="invite-role-select"
             value={role}
-            onChange={e => setRole(e.target.value as 'organizer' | 'owner')}
+            onChange={e => handleRoleChange(e.target.value as 'organizer' | 'owner')}
             disabled={status === 'submitting'}
             style={{
               width: '100%',
@@ -77,6 +101,23 @@ export function InviteOrganizerForm() {
             disabled={status === 'submitting'}
           />
         </div>
+
+        {role === 'owner' && (
+          <div className="form-group" style={{ marginBottom: '1rem' }}>
+            <label htmlFor="invite-confirm-password">รหัสผ่านปัจจุบันของคุณเพื่อยืนยัน *</label>
+            <input
+              id="invite-confirm-password"
+              name="confirmPassword"
+              type="password"
+              autoComplete="current-password"
+              value={confirmPassword}
+              onChange={e => setConfirmPassword(e.target.value)}
+              placeholder="ระบุรหัสผ่านบัญชีของคุณในปัจจุบัน"
+              required
+              disabled={status === 'submitting'}
+            />
+          </div>
+        )}
 
         {status === 'error' && (
           <div id="invite-error" className="form-error" role="alert" style={{ color: '#ef4444', marginBottom: '1rem' }}>

@@ -10,6 +10,8 @@ import {
   CheckIcon,
   ShieldCheckIcon,
   LockIcon,
+  EyeIcon,
+  EyeOffIcon,
   XIcon,
   PlusIcon,
   SearchIcon,
@@ -65,6 +67,8 @@ export function OwnerInvitationsView() {
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
   const [email, setEmail] = useState('');
   const [role, setRole] = useState<'organizer' | 'owner'>('organizer');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [status, setStatus] = useState<'idle' | 'submitting' | 'success' | 'error'>('idle');
   const [message, setMessage] = useState('');
   const [lastInviteUrl, setLastInviteUrl] = useState<string | null>(null);
@@ -97,16 +101,32 @@ export function OwnerInvitationsView() {
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    setStatus('submitting');
     setMessage('');
     setLastInviteUrl(null);
     setCopiedLink(false);
+
+    if (role === 'owner' && !confirmPassword) {
+      const errorMsg = 'กรุณาระบุรหัสผ่านปัจจุบันของคุณเพื่อยืนยันการเชิญผู้ดูแลระบบ (Owner)';
+      setStatus('error');
+      setMessage(errorMsg);
+      triggerToast({
+        message: errorMsg,
+        type: 'error',
+      });
+      return;
+    }
+
+    setStatus('submitting');
 
     try {
       const res = await fetch('/api/owner/invitations', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, role }),
+        body: JSON.stringify({
+          email,
+          role,
+          ...(role === 'owner' ? { confirmPassword } : {}),
+        }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -127,6 +147,8 @@ export function OwnerInvitationsView() {
           : '');
 
       setStatus('success');
+      setConfirmPassword('');
+      setShowConfirmPassword(false);
       setMessage(`ส่งคำเชิญบทบาท${roleText}ไปยัง ${email} สำเร็จ ลิงก์มีอายุ 48 ชั่วโมง`);
       setLastInviteUrl(generatedUrl);
 
@@ -157,9 +179,23 @@ export function OwnerInvitationsView() {
     }
   }
 
+  function handleRoleChange(nextRole: 'organizer' | 'owner') {
+    setRole(nextRole);
+    if (nextRole !== 'owner') {
+      setConfirmPassword('');
+      setShowConfirmPassword(false);
+    }
+    if (status === 'error') {
+      setStatus('idle');
+      setMessage('');
+    }
+  }
+
   function handleOpenInviteModal(prefillEmail?: string, prefillRole?: 'organizer' | 'owner') {
     setEmail(prefillEmail || '');
     setRole(prefillRole || 'organizer');
+    setConfirmPassword('');
+    setShowConfirmPassword(false);
     setStatus('idle');
     setMessage('');
     setLastInviteUrl(null);
@@ -170,6 +206,8 @@ export function OwnerInvitationsView() {
   function handleCloseInviteModal() {
     setIsInviteModalOpen(false);
     setEmail('');
+    setConfirmPassword('');
+    setShowConfirmPassword(false);
     setStatus('idle');
     setMessage('');
     setLastInviteUrl(null);
@@ -816,7 +854,7 @@ export function OwnerInvitationsView() {
                   <select
                     id="invite-role-select"
                     value={role}
-                    onChange={e => setRole(e.target.value as 'organizer' | 'owner')}
+                    onChange={e => handleRoleChange(e.target.value as 'organizer' | 'owner')}
                     disabled={status === 'submitting'}
                     style={{ display: 'none' }}
                     aria-hidden="true"
@@ -835,7 +873,7 @@ export function OwnerInvitationsView() {
                     {/* Role Option 1: Organizer */}
                     <button
                       type="button"
-                      onClick={() => setRole('organizer')}
+                      onClick={() => handleRoleChange('organizer')}
                       disabled={status === 'submitting'}
                       style={{
                         textAlign: 'left',
@@ -865,7 +903,7 @@ export function OwnerInvitationsView() {
                     {/* Role Option 2: Owner/Admin */}
                     <button
                       type="button"
-                      onClick={() => setRole('owner')}
+                      onClick={() => handleRoleChange('owner')}
                       disabled={status === 'submitting'}
                       style={{
                         textAlign: 'left',
@@ -925,6 +963,89 @@ export function OwnerInvitationsView() {
                     หากเคยส่งคำเชิญไปยังอีเมลนี้แล้ว การส่งครั้งใหม่จะยกเลิกลิงก์เดิมและออกลิงก์ใหม่ให้อัตโนมัติ
                   </span>
                 </div>
+
+                {/* Step-up Password Confirmation for Owner/Admin Invitations */}
+                {role === 'owner' && (
+                  <div
+                    className="form-group"
+                    data-testid="owner-invite-password-confirmation"
+                    style={{
+                      marginBottom: '1.25rem',
+                      padding: '1rem',
+                      borderRadius: '10px',
+                      border: '1px solid #cbd5e1',
+                      backgroundColor: '#f8fafc',
+                    }}
+                  >
+                    <label
+                      htmlFor="invite-confirm-password"
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.4rem',
+                        fontWeight: 600,
+                        fontSize: '0.875rem',
+                        color: '#0f172a',
+                        marginBottom: '0.4rem',
+                      }}
+                    >
+                      <LockIcon style={{ width: '15px', height: '15px', color: '#0f172a' }} />
+                      <span>รหัสผ่านปัจจุบันของคุณเพื่อยืนยัน *</span>
+                    </label>
+                    <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                      <input
+                        id="invite-confirm-password"
+                        name="confirmPassword"
+                        type={showConfirmPassword ? 'text' : 'password'}
+                        autoComplete="current-password"
+                        value={confirmPassword}
+                        onChange={e => setConfirmPassword(e.target.value)}
+                        placeholder="ระบุรหัสผ่านบัญชีของคุณในปัจจุบัน"
+                        required
+                        disabled={status === 'submitting'}
+                        className="text-input"
+                        style={{
+                          width: '100%',
+                          height: '38px',
+                          padding: '0 2.5rem 0 0.85rem',
+                          borderRadius: '8px',
+                          border: '1px solid #cbd5e1',
+                          backgroundColor: '#ffffff',
+                          fontSize: '0.875rem',
+                          boxSizing: 'border-box',
+                        }}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowConfirmPassword(prev => !prev)}
+                        disabled={status === 'submitting'}
+                        aria-label={showConfirmPassword ? 'ซ่อนรหัสผ่าน' : 'แสดงรหัสผ่าน'}
+                        title={showConfirmPassword ? 'ซ่อนรหัสผ่าน' : 'แสดงรหัสผ่าน'}
+                        style={{
+                          position: 'absolute',
+                          right: '0.5rem',
+                          background: 'transparent',
+                          border: 'none',
+                          padding: '0.25rem',
+                          cursor: 'pointer',
+                          color: '#64748b',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                        }}
+                      >
+                        {showConfirmPassword ? (
+                          <EyeOffIcon style={{ width: '16px', height: '16px' }} />
+                        ) : (
+                          <EyeIcon style={{ width: '16px', height: '16px' }} />
+                        )}
+                      </button>
+                    </div>
+                    <span style={{ display: 'block', fontSize: '0.775rem', color: '#475569', marginTop: '0.4rem', lineHeight: 1.45 }}>
+                      เพื่อความปลอดภัย การเชิญผู้ดูแลระบบ (Admin / Owner) จำเป็นต้องยืนยันด้วยรหัสผ่านปัจจุบันของคุณ
+                    </span>
+                  </div>
+                )}
 
                 {/* Error Banner */}
                 {status === 'error' && (

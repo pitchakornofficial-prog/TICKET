@@ -1,4 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { recordInvitationAuditLog } from '../../src/server/invitation';
 import { hashPassword } from 'better-auth/crypto';
 import type { Pool } from 'pg';
@@ -190,5 +192,18 @@ describe('Item 11: Owner Invitation Step-Up Authentication & Audit Trail', () =>
       ['auth-http-owner-valid@example.com'],
     );
     expect(logs.rowCount).toBe(1);
+  });
+
+  it('collects and forwards confirmPassword in invitation UIs when inviting an owner', () => {
+    const rootDir = process.cwd();
+    const viewSrc = readFileSync(join(rootDir, 'src/components/owner-invitations-view.tsx'), 'utf8');
+    const formSrc = readFileSync(join(rootDir, 'src/components/invite-organizer-form.tsx'), 'utf8');
+
+    for (const src of [viewSrc, formSrc]) {
+      expect(src).toContain('id="invite-confirm-password"');
+      expect(src).toContain('name="confirmPassword"');
+      expect(src).toContain('autoComplete="current-password"');
+      expect(src).toContain("role === 'owner' ? { confirmPassword } : {}");
+    }
   });
 });
