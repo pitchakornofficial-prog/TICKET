@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   createOrganizerInvitation,
   hashInvitationToken,
+  listBackOfficeAccounts,
   listOrganizerInvitations,
   verifyInvitation,
 } from '../../src/server/invitation';
@@ -161,5 +162,52 @@ describe('Invitation Token Hashing & Exposure Prevention (Item 10)', () => {
     expect(list).toHaveLength(1);
     expect((list[0] as Record<string, unknown>).token).toBeUndefined();
     expect((list[0] as Record<string, unknown>).tokenHash).toBeUndefined();
+  });
+
+  it('listBackOfficeAccounts separates organizers and admins from auth_user', async () => {
+    const mockPool = {
+      query: vi.fn().mockResolvedValue({
+        rowCount: 2,
+        rows: [
+          {
+            id: 'usr-owner-1',
+            name: 'Yodsavee',
+            email: 'yodsavee@example.com',
+            role: 'owner',
+            createdAt: '2026-11-17T00:00:00.000Z',
+            lastLoginAt: '2026-11-18T10:00:00.000Z',
+            activeConcertsCount: 0,
+          },
+          {
+            id: 'usr-org-1',
+            name: 'Freshy Club',
+            email: 'organizer@example.com',
+            role: 'organizer',
+            createdAt: '2026-11-17T01:00:00.000Z',
+            lastLoginAt: null,
+            activeConcertsCount: 2,
+          },
+        ],
+      }),
+    } as unknown as Pool;
+
+    const accounts = await listBackOfficeAccounts(mockPool);
+    expect(accounts.admins).toHaveLength(1);
+    expect(accounts.admins[0]).toMatchObject({
+      id: 'usr-owner-1',
+      name: 'Yodsavee',
+      email: 'yodsavee@example.com',
+      role: 'owner',
+      status: 'active',
+    });
+    expect(accounts.organizers).toHaveLength(1);
+    expect(accounts.organizers[0]).toMatchObject({
+      id: 'usr-org-1',
+      name: 'Freshy Club',
+      email: 'organizer@example.com',
+      role: 'organizer',
+      activeConcertsCount: 2,
+      status: 'active',
+    });
   });
 });

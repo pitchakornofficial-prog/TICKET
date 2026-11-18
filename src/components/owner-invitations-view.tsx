@@ -60,8 +60,8 @@ export function OwnerInvitationsView() {
   const [_historyError, setHistoryError] = useState<string | null>(null);
 
   // Accounts state
-  const [organizers] = useState<UserAccountItem[]>([]);
-  const [admins] = useState<UserAccountItem[]>([]);
+  const [organizers, setOrganizers] = useState<UserAccountItem[]>([]);
+  const [admins, setAdmins] = useState<UserAccountItem[]>([]);
 
   // Create Invite Modal state
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
@@ -85,11 +85,17 @@ export function OwnerInvitationsView() {
       if (res.ok) {
         const data = await res.json();
         setInvitations(Array.isArray(data.invitations) ? data.invitations : []);
+        setOrganizers(Array.isArray(data.organizers) ? data.organizers : []);
+        setAdmins(Array.isArray(data.admins) ? data.admins : []);
       } else {
         setInvitations([]);
+        setOrganizers([]);
+        setAdmins([]);
       }
     } catch {
       setInvitations([]);
+      setOrganizers([]);
+      setAdmins([]);
     } finally {
       setIsLoadingHistory(false);
     }
@@ -225,11 +231,31 @@ export function OwnerInvitationsView() {
     }
   }
 
-  function handleSendPasswordReset(user: UserAccountItem) {
-    triggerToast({
-      message: `ส่งลิงก์ตั้งค่ารหัสผ่านใหม่ไปยังอีเมล "${user.email}" เรียบร้อยแล้ว`,
-      type: 'success',
-    });
+  async function handleSendPasswordReset(user: UserAccountItem) {
+    try {
+      const res = await fetch('/api/auth/request-password-reset', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: user.email, redirectTo: '/reset-password' }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        triggerToast({
+          message: data.message || `ไม่สามารถส่งลิงก์ตั้งค่ารหัสผ่านใหม่ไปยัง "${user.email}" ได้`,
+          type: 'error',
+        });
+        return;
+      }
+      triggerToast({
+        message: `ส่งลิงก์ตั้งค่ารหัสผ่านใหม่ไปยังอีเมล "${user.email}" เรียบร้อยแล้ว`,
+        type: 'success',
+      });
+    } catch {
+      triggerToast({
+        message: 'เกิดข้อผิดพลาดในการเชื่อมต่อ กรุณาลองใหม่อีกครั้ง',
+        type: 'error',
+      });
+    }
   }
 
   // Filtered Invitations
@@ -242,7 +268,7 @@ export function OwnerInvitationsView() {
         const q = searchQuery.toLowerCase().trim();
         const matchesEmail = inv.email.toLowerCase().includes(q);
         const matchesRole = (inv.role === 'owner' ? 'ผู้ดูแลระบบ admin' : 'ผู้จัดงาน organizer').toLowerCase().includes(q);
-        const matchesToken = inv.token.toLowerCase().includes(q);
+        const matchesToken = (inv.token || '').toLowerCase().includes(q);
         if (!matchesEmail && !matchesRole && !matchesToken) return false;
       }
       return true;

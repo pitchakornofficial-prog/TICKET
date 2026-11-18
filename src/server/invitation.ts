@@ -391,3 +391,86 @@ export async function listOrganizerInvitations(
     };
   });
 }
+
+export interface BackOfficeAccountRecord {
+  id: string;
+  name: string;
+  email: string;
+  role: 'organizer' | 'owner';
+  status: 'active' | 'suspended';
+  createdAt: string;
+  lastLoginAt: string | null;
+  activeConcertsCount: number;
+  phone: string | null;
+  notes: string | null;
+}
+
+export async function listBackOfficeAccounts(pool: Pool): Promise<{
+  organizers: BackOfficeAccountRecord[];
+  admins: BackOfficeAccountRecord[];
+}> {
+  let rows: Array<{
+    id: string;
+    name: string;
+    email: string;
+    role: string;
+    createdAt: Date | string;
+    lastLoginAt?: Date | string | null;
+    activeConcertsCount?: number | string | null;
+  }> = [];
+
+  try {
+    const result = await pool.query(
+      `SELECT
+         u.id,
+         u.name,
+         u.email,
+         u.role,
+         u."createdAt",
+         (SELECT MAX(s."createdAt") FROM auth_session s WHERE s."userId" = u.id) AS "lastLoginAt",
+         (SELECT COUNT(*)::int FROM events e WHERE e."organizerId" = u.id AND e.status <> 'cancelled') AS "activeConcertsCount"
+       FROM auth_user u
+       WHERE u.role IN ('organizer', 'owner')
+       ORDER BY u."createdAt" DESC`,
+    );
+    rows = result.rows;
+  } catch {
+    try {
+      const fallback = await pool.query(
+        `SELECT id, name, email, role, "createdAt"
+         FROM auth_user
+         WHERE role IN ('organizer', 'owner')
+         ORDER BY "createdAt" DESC`,
+      );
+      rows = fallback.rows;
+    } catch {
+      rows = [];
+    }
+  }
+
+  const organizers: BackOfficeAccountRecord[] = [];
+  const admins: BackOfficeAccountRecord[] = [];
+
+  for (const row of rows) {
+    const role: 'organizer' | 'owner' = row.role === 'owner' ? 'owner' : 'organizer';
+    const item: BackOfficeAccountRecord = {
+      id: row.id,
+      name: row.name || row.email,
+      email: row.email,
+      role,
+      status: 'active',
+      createdAt: new Date(row.createdAt).toISOString(),
+      lastLoginAt: row.lastLoginAt ? new Date(row.lastLoginAt).toISOString() : null,
+      activeConcertsCount: Number(row.activeConcertsCount) || 0,
+      phone: null,
+      notes: null,
+    };
+    if (role === 'owner') {
+      admins.push(item);
+    } else {
+      organizers.push(item);
+    }
+  }
+
+  return { organizers, admins };
+}

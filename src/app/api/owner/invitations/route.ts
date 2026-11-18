@@ -5,6 +5,7 @@ import { getDatabasePool } from '@/server/database';
 import {
   createOrganizerInvitation,
   InvitationSecurityError,
+  listBackOfficeAccounts,
   listOrganizerInvitations,
 } from '@/server/invitation';
 import { extractClientIp } from '@/server/guest-otp';
@@ -20,8 +21,14 @@ export async function GET(request: Request) {
 
   const pool = getDatabasePool();
   try {
-    const invitations = await listOrganizerInvitations(pool);
-    return Response.json({ invitations }, { status: 200, headers: { 'Cache-Control': 'private, no-store, no-cache, must-revalidate' } });
+    const [invitations, accounts] = await Promise.all([
+      listOrganizerInvitations(pool),
+      listBackOfficeAccounts(pool),
+    ]);
+    return Response.json(
+      { invitations, organizers: accounts.organizers, admins: accounts.admins },
+      { status: 200, headers: { 'Cache-Control': 'private, no-store, no-cache, must-revalidate' } },
+    );
   } catch (error: unknown) {
     return createSafeErrorResponse(error, 'เกิดข้อผิดพลาดในการโหลดรายการคำเชิญ', { defaultStatus: 500 });
   }
