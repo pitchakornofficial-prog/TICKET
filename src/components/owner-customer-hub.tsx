@@ -130,18 +130,9 @@ export function OwnerCustomerHub() {
     fetchDeliveries();
   }, [fetchOrders, fetchAudits, fetchDeliveries]);
 
-  // Display datasets with mock fallbacks when API is empty (D-230, D-250)
-  const displayOrders = useMemo(() => {
-    return orders;
-  }, [orders]);
-
-  const displayAudits = useMemo(() => {
-    return audits;
-  }, [audits]);
-
-  const displayDeliveries = useMemo(() => {
-    return deliveries;
-  }, [deliveries]);
+  const displayOrders = orders;
+  const displayAudits = audits;
+  const displayDeliveries = deliveries;
 
   // Unique events for dropdown filter
   const eventOptions = useMemo(() => {

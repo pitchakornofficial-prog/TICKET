@@ -496,6 +496,7 @@ export function OwnerSessionApprovalManager() {
     setSubmittingApproval(true);
     setError('');
     setActionMessage('');
+
     try {
       const res = await fetch('/api/owner/sessions', {
         method: 'POST',

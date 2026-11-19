@@ -109,7 +109,6 @@ export function OwnerSystemHub() {
             createdAt: string;
             updatedAt?: string;
           }
-          // Merge API news with our rich dataset
           const mappedApiNews: SystemNewsItem[] = data.news.map((item: ApiNewsItem) => ({
             id: item.id,
             title: item.title,
@@ -124,6 +123,8 @@ export function OwnerSystemHub() {
             updatedAt: item.updatedAt || item.createdAt,
           }));
           setNewsList(mappedApiNews);
+        } else {
+          setNewsList([]);
         }
       } else {
         throw new Error('โหลดข่าวสารไม่สำเร็จ');
@@ -282,11 +283,7 @@ export function OwnerSystemHub() {
             coverBannerUrl: e.coverBannerUrl,
             location: e.location,
           }));
-          setAvailableEvents(prev => {
-            const existingIds = new Set(prev.map(p => p.id));
-            const newEvents = mapped.filter((m: RawApiEvent) => !existingIds.has(m.id));
-            return [...prev, ...newEvents];
-          });
+          setAvailableEvents(mapped);
         }
       })
       .catch(() => {});
@@ -308,7 +305,7 @@ export function OwnerSystemHub() {
   const [isBannerModalOpen, setIsBannerModalOpen] = useState(false);
   const [editingBannerId, setEditingBannerId] = useState<string | null>(null);
   const [formBannerType, setFormBannerType] = useState<BannerType>('featured_concert');
-  const [formSelectedEventId, setFormSelectedEventId] = useState<string>('evt_rock_rimmool_2026');
+  const [formSelectedEventId, setFormSelectedEventId] = useState<string>('');
   const [formBannerImageUrl, setFormBannerImageUrl] = useState('');
   const [formBannerLinkType, setFormBannerLinkType] = useState<BannerLinkType>('concert');
   const [formBannerCustomUrl, setFormBannerCustomUrl] = useState('');
@@ -322,13 +319,9 @@ export function OwnerSystemHub() {
   const openCreateBannerModal = () => {
     setEditingBannerId(null);
     setFormBannerType('featured_concert');
-    const firstEvt = availableEvents[0] || {
-      id: 'evt_rock_rimmool_2026',
-      title: 'Rock Rimmool Live Festival 2026',
-      posterUrl: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?auto=format&fit=crop&w=1600&q=80',
-    };
-    setFormSelectedEventId(firstEvt.id);
-    setFormBannerImageUrl(firstEvt.posterUrl || '');
+    const firstEvt = availableEvents[0];
+    setFormSelectedEventId(firstEvt?.id || '');
+    setFormBannerImageUrl(firstEvt?.posterUrl || '');
     setFormBannerLinkType('concert');
     setFormBannerCustomUrl('');
     setFormBannerOrder(bannersList.length + 1);

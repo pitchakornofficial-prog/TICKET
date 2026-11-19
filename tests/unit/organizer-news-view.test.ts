@@ -102,7 +102,7 @@ describe('Organizer News Management & Live Preview Modal (D-81)', () => {
     const cssContent = (`${readFileSync(
       join(rootDir, 'src/app/globals.css'),
       'utf8',
-    )}\n${readFileSync(join(rootDir, 'src/app/globals.css').replace("src/app/globals.css", "src/app/back-office/back-office.css"), 'utf8')}`);
+    )}\n${readFileSync(join(rootDir, 'src/app/globals.css').replace(/src[/\\]app[/\\]globals\.css/, "src/app/back-office/back-office.css"), 'utf8')}`);
     expect(cssContent).toContain('.organizer-news-page');
     expect(cssContent).toContain('.news-editorial-card');
     expect(cssContent).toContain('.news-editor-modal-card');

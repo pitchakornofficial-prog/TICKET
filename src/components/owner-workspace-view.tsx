@@ -51,6 +51,9 @@ const OwnerPoliciesView = dynamic(() =>
 const OwnerInboundMailbox = dynamic(() =>
   import('@/components/owner-inbound-mailbox').then(m => m.OwnerInboundMailbox),
 );
+const AdminTicketDesigner = dynamic(() =>
+  import('@/components/admin-ticket-designer').then(m => m.AdminTicketDesigner),
+);
 
 const GOV_CHARTER_TAB_ID = ['poli', 'cies'].join('');
 
@@ -58,6 +61,7 @@ export type OwnerSectionId =
   | 'overview'
   | 'approval'
   | 'refunds'
+  | 'ticket-designer'
   | 'finance'
   | 'customer'
   | 'inbox'
@@ -127,6 +131,12 @@ const SECTIONS: SectionConfig[] = [
     description: 'กล่องจดหมายขาเข้าและตอบกลับอีเมลฝ่ายสนับสนุนและผู้จัดงาน',
     icon: MailIcon,
   },
+  {
+    id: 'ticket-designer',
+    label: 'ออกแบบบัตร',
+    description: 'จัดองค์ประกอบ สี ฟอนต์ คิวอาร์โค้ด และทดสอบพื้นหลังบัตรคอนเสิร์ต',
+    icon: SlidersIcon,
+  },
 ];
 
 interface SectionGroupConfig {
@@ -145,7 +155,7 @@ const SECTION_GROUPS: SectionGroupConfig[] = [
   {
     id: 'concerts-operations',
     name: 'งานคอนเสิร์ตและตั๋ว',
-    sections: [SECTIONS[1], SECTIONS[2]], // approval, refunds
+    sections: [SECTIONS[1], SECTIONS[2], SECTIONS[9]], // approval, refunds, ticket-designer
   },
   {
     id: 'commerce-finance',
@@ -165,6 +175,8 @@ const HASH_TO_SECTION: Record<string, OwnerSectionId> = {
   'owner-session-approval-manager': 'approval',
   refunds: 'refunds',
   'owner-refund-approval-manager': 'refunds',
+  'ticket-designer': 'ticket-designer',
+  'ticket-design': 'ticket-designer',
   finance: 'finance',
   'owner-fee-settings-manager': 'finance',
   'owner-weekly-payout-manager': 'finance',
@@ -521,6 +533,10 @@ export function OwnerWorkspaceView({ initialSection }: OwnerWorkspaceViewProps) 
 
               {activeSection === 'refunds' && (
                 <OwnerRefundApprovalManager />
+              )}
+
+              {activeSection === 'ticket-designer' && (
+                <AdminTicketDesigner />
               )}
 
               {activeSection === 'finance' && (
