@@ -117,6 +117,13 @@ describe('Admin Concert Ticket Designer & Background Testing Studio', () => {
     expect(designerSrc).toContain('studio-btn save-master');
     expect(designerSrc).toContain('studio-preset-pill');
     expect(designerSrc).toContain('studio-view-mode-btn');
+
+    // Element Visibility & Hide Controls (สำหรับส่วนที่ไม่ต้องการใช้บนบัตร)
+    expect(designerSrc).toContain('hide-element-action-btn');
+    expect(designerSrc).toContain('section-quick-item-pill-group');
+    expect(designerSrc).toContain('quick-item-eye-btn');
+    expect(designerSrc).toContain('layers-batch-actions');
+    expect(designerSrc).toContain('layers-preset-btn');
   });
 
   it('verifies ticket designer page route exists under back-office and expands to 1920 full screen', () => {

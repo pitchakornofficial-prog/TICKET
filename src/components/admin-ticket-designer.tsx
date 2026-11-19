@@ -1959,7 +1959,30 @@ export function AdminTicketDesigner() {
                 {selectedItem ? (
                   <div className="inspector-card">
                     <div className="inspector-card-header">
-                      <span className="inspector-item-badge">กำลังแก้ไข</span>
+                      <div className="inspector-card-header-top">
+                        <span className="inspector-item-badge">กำลังแก้ไข</span>
+                        <button
+                          type="button"
+                          className="hide-element-action-btn"
+                          onClick={() => {
+                            setState((prev) => ({
+                              ...prev,
+                              elements: {
+                                ...prev.elements,
+                                [selectedItem.id]: {
+                                  ...prev.elements[selectedItem.id],
+                                  visible: false,
+                                },
+                              },
+                            }));
+                            setSelectedId(null);
+                          }}
+                          title="ซ่อนชิ้นส่วนนี้ ไม่ให้แสดงบนบัตร"
+                        >
+                          <EyeOffIcon style={{ width: 13, height: 13 }} />
+                          <span>ซ่อนชิ้นส่วนนี้ (ไม่ใช้งาน)</span>
+                        </button>
+                      </div>
                       <h3 className="inspector-item-title">{selectedItem.label}</h3>
                     </div>
 
@@ -2239,14 +2262,43 @@ export function AdminTicketDesigner() {
                               const item = state.elements[itemId];
                               if (!item) return null;
                               return (
-                                <button
+                                <div
                                   key={itemId}
-                                  type="button"
-                                  className="section-quick-item-btn"
-                                  onClick={() => setSelectedId(itemId)}
+                                  className={`section-quick-item-pill-group ${!item.visible ? 'is-hidden-pill' : ''}`}
                                 >
-                                  {item.label.split(' (')[0]}
-                                </button>
+                                  <button
+                                    type="button"
+                                    className={`section-quick-item-btn ${!item.visible ? 'is-hidden' : ''}`}
+                                    onClick={() => setSelectedId(itemId)}
+                                    title={`คลิกเพื่อเลือกแก้ไข ${item.label.split(' (')[0]}`}
+                                  >
+                                    {item.label.split(' (')[0]}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className={`quick-item-eye-btn ${!item.visible ? 'is-hidden' : ''}`}
+                                    onClick={() => {
+                                      setState((prev) => ({
+                                        ...prev,
+                                        elements: {
+                                          ...prev.elements,
+                                          [itemId]: {
+                                            ...prev.elements[itemId],
+                                            visible: !prev.elements[itemId].visible,
+                                          },
+                                        },
+                                      }));
+                                    }}
+                                    title={item.visible ? 'คลิกเพื่อซ่อนชิ้นส่วนนี้' : 'คลิกเพื่อแสดงชิ้นส่วนนี้'}
+                                    aria-label={`${item.visible ? 'ซ่อน' : 'แสดง'} ${item.label.split(' (')[0]}`}
+                                  >
+                                    {item.visible ? (
+                                      <EyeIcon style={{ width: 12, height: 12 }} />
+                                    ) : (
+                                      <EyeOffIcon style={{ width: 12, height: 12, color: '#94a3b8' }} />
+                                    )}
+                                  </button>
+                                </div>
                               );
                             })}
                           </div>
@@ -2663,12 +2715,52 @@ export function AdminTicketDesigner() {
             {/* TAB 5: ALL ELEMENTS VISIBILITY CHECKLIST */}
             {activeSideTab === 'allElements' && (
               <div className="side-tab-content">
-                <span className="elements-list-hint">คลิกเพื่อเลือกชิ้นส่วน หรือกดไอคอนตาเพื่อซ่อน/แสดง:</span>
+                <div className="layers-tab-header">
+                  <span className="elements-list-hint">
+                    เปิด/ปิด หรือเลือกชิ้นส่วนบนบัตร ({Object.values(state.elements).filter((e) => e.visible).length}/{Object.values(state.elements).length} ชิ้นส่วนกำลังแสดง):
+                  </span>
+                  <div className="layers-batch-actions">
+                    <button
+                      type="button"
+                      className="layers-preset-btn"
+                      onClick={() => {
+                        setState((prev) => {
+                          const updated = { ...prev.elements };
+                          for (const key of Object.keys(updated)) {
+                            updated[key] = { ...updated[key], visible: true };
+                          }
+                          return { ...prev, elements: updated };
+                        });
+                      }}
+                      title="เปิดแสดงทุกชิ้นส่วนบนบัตร"
+                    >
+                      เปิดแสดงทั้งหมด
+                    </button>
+                    <button
+                      type="button"
+                      className="layers-preset-btn"
+                      onClick={() => {
+                        setState((prev) => ({
+                          ...prev,
+                          elements: {
+                            ...prev.elements,
+                            gateInfo: { ...prev.elements.gateInfo, visible: false },
+                            seatInfo: { ...prev.elements.seatInfo, visible: false },
+                            priceInfo: { ...prev.elements.priceInfo, visible: false },
+                          },
+                        }));
+                      }}
+                      title="ซ่อนข้อมูลประตู แถว/ที่นั่ง และราคา สำหรับบัตรยืนหรือเทศกาลดนตรี"
+                    >
+                      แบบบัตรยืน (ไม่ระบุที่นั่ง/ราคา)
+                    </button>
+                  </div>
+                </div>
                 <div className="elements-toggle-stack">
                   {Object.values(state.elements).map((el) => (
                     <div
                       key={el.id}
-                      className={`element-row-item ${selectedId === el.id ? 'active' : ''}`}
+                      className={`element-row-item ${selectedId === el.id ? 'active' : ''} ${!el.visible ? 'is-dimmed' : ''}`}
                     >
                       <button
                         type="button"
