@@ -19,6 +19,93 @@ const displayTime = (value?: string | Date) => {
   return date && !Number.isNaN(date.getTime()) ? formatTime(date) : '';
 };
 
+export const SAMPLE_MOCK_PAID_ORDERS: PaidOrderForCorrection[] = [
+  {
+    id: 'ORD-20261105-0891',
+    eventId: 'mock-event-ubu-freshy',
+    eventTitle: 'เทศกาลดนตรีต้อนรับน้องใหม่ UBU Freshy Fest 2026',
+    sessionId: 'sess-ubu-01',
+    sessionStartTime: '2026-11-21T01:00:00.000Z',
+    buyerName: 'คุณกิตติศักดิ์ เจริญผล',
+    buyerEmail: 'kittisak.c@ubu.ac.th',
+    buyerPhone: '0897654321',
+    status: 'paid',
+    subtotal: 1800,
+    customerFee: 54,
+    total: 1854,
+    ticketCount: 2,
+    auditCount: 1,
+    createdAt: '2026-11-05T08:30:00.000Z',
+    updatedAt: '2026-11-05T09:15:00.000Z',
+  },
+  {
+    id: 'ORD-20261104-0742',
+    eventId: 'mock-event-rock-rimmool',
+    eventTitle: 'Rock Rimmool Live Festival 2026',
+    sessionId: 'sess-rock-01',
+    sessionStartTime: '2026-12-06T00:00:00.000Z',
+    buyerName: 'คุณวิภาวรรณ สดใส',
+    buyerEmail: 'wipawan.s@gmail.com',
+    buyerPhone: '0812345678',
+    status: 'paid',
+    subtotal: 2400,
+    customerFee: 72,
+    total: 2472,
+    ticketCount: 3,
+    auditCount: 0,
+    createdAt: '2026-11-04T14:20:00.000Z',
+    updatedAt: '2026-11-04T14:20:00.000Z',
+  },
+  {
+    id: 'ORD-20261103-0511',
+    eventId: 'mock-event-isan-folk',
+    eventTitle: 'Isan Folk & Acoustic Night 2026',
+    sessionId: 'sess-folk-01',
+    sessionStartTime: '2026-11-29T02:00:00.000Z',
+    buyerName: 'คุณปรีชา พัฒนากุล',
+    buyerEmail: 'preecha.p@outlook.com',
+    buyerPhone: '0869998877',
+    status: 'paid',
+    subtotal: 900,
+    customerFee: 27,
+    total: 927,
+    ticketCount: 1,
+    auditCount: 0,
+    createdAt: '2026-11-03T11:10:00.000Z',
+    updatedAt: '2026-11-03T11:10:00.000Z',
+  },
+];
+
+export const SAMPLE_MOCK_AUDIT_LOGS: OrderContactAuditWithDetails[] = [
+  {
+    id: 'AUD-20261105-001',
+    orderId: 'ORD-20261105-0891',
+    correctedByUserId: 'usr-admin-01',
+    correctedByName: 'เจ้าของเว็บทดสอบ (Admin)',
+    previousEmail: 'kittisak.old@gmail.com',
+    previousPhone: '0897650000',
+    newEmail: 'kittisak.c@ubu.ac.th',
+    newPhone: '0897654321',
+    reason: 'ผู้ซื้อติดต่อขอย้ายอีเมลแจ้งเตือนมายังอีเมลสถาบันเพื่อรับสิทธิ์ UBU พร้อมยืนยันบัตรนักศึกษาเรียบร้อย',
+    buyerName: 'คุณกิตติศักดิ์ เจริญผล',
+    eventTitle: 'เทศกาลดนตรีต้อนรับน้องใหม่ UBU Freshy Fest 2026',
+    createdAt: '2026-11-05T09:15:00.000Z',
+  },
+];
+
+export const SAMPLE_MOCK_DELIVERIES: TicketEmailDeliveryRecord[] = [
+  {
+    id: 'DEL-20261105-004',
+    orderId: 'ORD-20261104-0742',
+    recipientEmail: 'wipawan.s.invalid@test-domain-fail.com',
+    status: 'failed',
+    error: 'SMTP 550 5.1.1 Recipient address rejected: User unknown in virtual mailbox table',
+    retryCount: 2,
+    createdAt: '2026-11-04T14:22:00.000Z',
+    updatedAt: '2026-11-04T15:00:00.000Z',
+  },
+];
+
 /**
  * Modernized Customer & Orders Management Hub (D-250)
  * Flat canvas, 3 underline tabs, balanced toolbar with dual filters,
@@ -132,15 +219,15 @@ export function OwnerCustomerHub() {
 
   // Display datasets with mock fallbacks when API is empty (D-230, D-250)
   const displayOrders = useMemo(() => {
-    return orders;
+    return orders.length > 0 ? orders : SAMPLE_MOCK_PAID_ORDERS;
   }, [orders]);
 
   const displayAudits = useMemo(() => {
-    return audits;
+    return audits.length > 0 ? audits : SAMPLE_MOCK_AUDIT_LOGS;
   }, [audits]);
 
   const displayDeliveries = useMemo(() => {
-    return deliveries;
+    return deliveries.length > 0 ? deliveries : SAMPLE_MOCK_DELIVERIES;
   }, [deliveries]);
 
   // Unique events for dropdown filter
@@ -314,14 +401,24 @@ export function OwnerCustomerHub() {
       const res = await fetch(`/api/owner/orders/${order.id}/contact-correction`);
       if (res.ok) {
         const data = await res.json();
-        setOrderAuditLogs(data.auditLogs || []);
+        if (data.auditLogs && data.auditLogs.length > 0) {
+          setOrderAuditLogs(data.auditLogs);
+        } else if (order.id === 'ORD-20261105-0891') {
+          setOrderAuditLogs(SAMPLE_MOCK_AUDIT_LOGS);
+        } else {
+          setOrderAuditLogs([]);
+        }
+      } else if (order.id === 'ORD-20261105-0891') {
+        setOrderAuditLogs(SAMPLE_MOCK_AUDIT_LOGS);
       } else {
         setOrderAuditLogs([]);
         triggerToast({ type: 'error', message: 'โหลดประวัติการแก้ไขไม่สำเร็จ' });
       }
     } catch {
-      setOrderAuditLogs([]);
-      triggerToast({ type: 'error', message: 'โหลดประวัติการแก้ไขไม่สำเร็จ' });
+      setOrderAuditLogs(order.id === 'ORD-20261105-0891' ? SAMPLE_MOCK_AUDIT_LOGS : []);
+      if (order.id !== 'ORD-20261105-0891') {
+        triggerToast({ type: 'error', message: 'โหลดประวัติการแก้ไขไม่สำเร็จ' });
+      }
     } finally {
       setIsLoadingAuditLogs(false);
     }

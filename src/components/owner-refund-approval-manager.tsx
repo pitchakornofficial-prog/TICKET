@@ -13,6 +13,99 @@ import {
 } from './icons';
 import { AlertIcon } from './alert-icon';
 
+export const SAMPLE_MOCK_REFUNDS: OwnerRefundRequestItem[] = [
+  {
+    id: 'REF-20261106-001',
+    orderId: 'ORD-20261028-0842',
+    eventId: 'mock-freshy-fest',
+    eventTitle: 'เทศกาลดนตรีต้อนรับน้องใหม่ UBU Freshy Fest 2026',
+    sessionId: 'sess-freshy-1',
+    sessionStatus: 'published',
+    buyerEmail: 'somchai.r@ubu.ac.th',
+    buyerPhone: '0812345678',
+    buyerName: 'สมชาย รักสงบ',
+    requestedAmount: 1600,
+    reason: 'ติดภารกิจด่วนช่วงเวลาการแสดง ไม่สามารถเดินทางมาร่วมงานได้',
+    status: 'pending',
+    bankName: 'ธนาคารกสิกรไทย',
+    bankAccountNo: '123-2-34567-8',
+    bankAccountName: 'สมชาย รักสงบ',
+    submittedAt: '2026-11-05T14:20:00.000Z',
+    reviewedAt: null,
+    reviewedByName: null,
+    rejectionReason: null,
+    transferredAt: null,
+    transferredAmount: null,
+    transferProofKey: null,
+    transferProofUrl: null,
+    transferNote: null,
+    transferFailureReason: null,
+    transferFailedAt: null,
+    liabilityStatus: null,
+    items: [],
+  },
+  {
+    id: 'REF-20261106-002',
+    orderId: 'ORD-20261029-0115',
+    eventId: 'mock-live-event-1',
+    eventTitle: 'Isan Sound & Rhythm Music Festival 2026',
+    sessionId: 'sess-isan-1',
+    sessionStatus: 'published',
+    buyerEmail: 'kanda.j@gmail.com',
+    buyerPhone: '0898765432',
+    buyerName: 'กานดา ใจดี',
+    requestedAmount: 1200,
+    reason: 'ขอคืนเงินตามนโยบาย Special Refund Window จากการเลื่อนวันแสดง',
+    status: 'approved',
+    bankName: 'ธนาคารไทยพาณิชย์',
+    bankAccountNo: '987-1-65432-1',
+    bankAccountName: 'กานดา ใจดี',
+    submittedAt: '2026-11-04T10:15:00.000Z',
+    reviewedAt: '2026-11-05T09:30:00.000Z',
+    reviewedByName: 'เจ้าของระบบ (Admin)',
+    rejectionReason: null,
+    transferredAt: null,
+    transferredAmount: null,
+    transferProofKey: null,
+    transferProofUrl: null,
+    transferNote: null,
+    transferFailureReason: null,
+    transferFailedAt: null,
+    liabilityStatus: 'unpaid',
+    items: [],
+  },
+  {
+    id: 'REF-20261106-003',
+    orderId: 'ORD-20261030-0450',
+    eventId: 'mock-rock-rimmool',
+    eventTitle: 'Rock Rimmool Live Festival 2026',
+    sessionId: 'sess-rock-1',
+    sessionStatus: 'published',
+    buyerEmail: 'piyapat.m@gmail.com',
+    buyerPhone: '0865551234',
+    buyerName: 'ปิยะภัทร มีสุข',
+    requestedAmount: 2400,
+    reason: 'ขอคืนเงินเนื่องจากงานยกเลิกและได้รับเงินคืนเรียบร้อยแล้ว',
+    status: 'completed',
+    bankName: 'ธนาคารกรุงเทพ',
+    bankAccountNo: '456-7-89012-3',
+    bankAccountName: 'ปิยะภัทร มีสุข',
+    submittedAt: '2026-11-03T11:00:00.000Z',
+    reviewedAt: '2026-11-03T14:00:00.000Z',
+    reviewedByName: 'เจ้าของระบบ (Admin)',
+    rejectionReason: null,
+    transferredAt: '2026-11-04T10:30:00.000Z',
+    transferredAmount: 2400,
+    transferProofKey: 'proof-mock-003',
+    transferProofUrl: '/assets/mock-transfer-slip.jpg',
+    transferNote: 'โอนเงินคืนลูกค้าเรียบร้อยแล้วตามยอดคำขอ',
+    transferFailureReason: null,
+    transferFailedAt: null,
+    liabilityStatus: 'settled',
+    items: [],
+  },
+];
+
 export function OwnerRefundApprovalManager() {
   const [requests, setRequests] = useState<OwnerRefundRequestItem[]>([]);
   const [filterStatus, setFilterStatus] = useState<'pending' | 'approved' | 'completed' | 'all'>('pending');
@@ -79,6 +172,16 @@ export function OwnerRefundApprovalManager() {
     setProcessingId(requestId);
     setFeedback(null);
 
+    if (requestId.startsWith('REF-20261106-')) {
+      setFeedback({
+        type: 'success',
+        message: 'อนุมัติการคืนเงินสำเร็จ เพิกถอนสิทธิ์บัตรและบันทึกภาระหนี้แล้ว (โหมดจำลอง)',
+      });
+      setRequests(prev => (prev.length > 0 ? prev : SAMPLE_MOCK_REFUNDS).map(r => r.id === requestId ? { ...r, status: 'approved' } : r));
+      setProcessingId(null);
+      return;
+    }
+
     try {
       const res = await fetch(`/api/owner/refunds/${requestId}/approve`, {
         method: 'POST',
@@ -110,6 +213,15 @@ export function OwnerRefundApprovalManager() {
 
     setProcessingId(requestId);
     setFeedback(null);
+
+    if (requestId.startsWith('REF-20261106-')) {
+      setFeedback({ type: 'success', message: 'ปฏิเสธคำขอคืนเงินเรียบร้อยแล้ว (โหมดจำลอง)' });
+      setRequests(prev => (prev.length > 0 ? prev : SAMPLE_MOCK_REFUNDS).map(r => r.id === requestId ? { ...r, status: 'rejected', rejectionReason } : r));
+      setRejectingId(null);
+      setRejectionReason('');
+      setProcessingId(null);
+      return;
+    }
 
     try {
       const res = await fetch(`/api/owner/refunds/${requestId}/reject`, {
@@ -237,7 +349,9 @@ export function OwnerRefundApprovalManager() {
     }
   };
 
-  const allAvailableRequests = requests;
+  const allAvailableRequests = useMemo(() => {
+    return requests.length > 0 ? requests : SAMPLE_MOCK_REFUNDS;
+  }, [requests]);
 
   // Tab Filtering
   const pendingRequests = useMemo(() => {
