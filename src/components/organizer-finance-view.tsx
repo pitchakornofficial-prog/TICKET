@@ -313,7 +313,9 @@ export function OrganizerFinanceView({
   const handleDownloadSlip = (imageSrc: string, payout: PayoutHistoryItem) => {
     const refCode = payout.transferProofKey || `TXN-${payout.id.slice(0, 8).toUpperCase()}`;
     const img = new Image();
-    img.crossOrigin = 'anonymous';
+    if (imageSrc.startsWith('http://') || imageSrc.startsWith('https://')) {
+      img.crossOrigin = 'anonymous';
+    }
     img.onload = () => {
       const canvas = document.createElement('canvas');
       canvas.width = img.naturalWidth || 480;

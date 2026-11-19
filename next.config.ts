@@ -53,6 +53,9 @@ const nextConfig: NextConfig = {
   poweredByHeader: false,
   agentRules: false,
   devIndicators: false,
+  experimental: {
+    agentUpgrade: 'security',
+  },
   images: {
     formats: ['image/avif', 'image/webp'],
   },

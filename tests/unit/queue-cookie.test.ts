@@ -22,7 +22,10 @@ describe('Queue pass integrity and admission controls', () => {
     });
     expect(readQueueCookie(request, 'event-b')).toBeNull();
 
-    const tamperedValue = `${value.slice(0, -1)}${value.endsWith('a') ? 'b' : 'a'}`;
+    const sep = value.lastIndexOf('.');
+    const sig = value.slice(sep + 1);
+    const tamperedSig = sig[0] === 'X' ? `Y${sig.slice(1)}` : `X${sig.slice(1)}`;
+    const tamperedValue = `${value.slice(0, sep + 1)}${tamperedSig}`;
     const tamperedRequest = new Request('http://localhost/events/event-a', {
       headers: { cookie: `ticket_queue_pass=${tamperedValue}` },
     });
