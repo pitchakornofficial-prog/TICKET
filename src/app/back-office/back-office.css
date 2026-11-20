@@ -14310,6 +14310,13 @@ button.reject-btn:hover:not(:disabled),
   color: #0f172a;
 }
 
+.fullscreen-ticket-studio .studio-btn.secondary.active {
+  background-color: #f1f5f9;
+  border-color: #0f172a;
+  color: #0f172a;
+  font-weight: 700;
+}
+
 .fullscreen-ticket-studio .studio-btn.primary {
   background-color: #ffffff;
   color: #0f172a;
@@ -15347,6 +15354,19 @@ button.reject-btn:hover:not(:disabled),
 
 .color-swatch-chip:hover {
   transform: scale(1.15);
+}
+
+.fullscreen-ticket-studio .color-swatch-chip.transparent-swatch {
+  background: repeating-conic-gradient(#e2e8f0 0% 25%, #ffffff 0% 50%) 50% / 8px 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1.5px dashed #94a3b8;
+  position: relative;
+}
+
+.fullscreen-ticket-studio .color-swatch-chip.transparent-swatch.active {
+  border: 2px solid #0f172a;
 }
 
 /* Background Testing Controls */

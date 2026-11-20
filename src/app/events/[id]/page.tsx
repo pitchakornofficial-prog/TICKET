@@ -22,7 +22,6 @@ import { PurchaseTermsFaqList } from '@/components/purchase-terms-faq-list';
 import { ExpandableEventDescription } from '@/components/expandable-event-description';
 import { EventProhibitedItemsCarousel } from '@/components/event-prohibited-items-carousel';
 import { EventInteractivePoster } from '@/components/event-interactive-poster';
-import { EventOfficialGallery } from '@/components/event-official-gallery';
 import { FloatingBackToTop } from '@/components/floating-back-to-top';
 
 interface EventDetailPageProps {
@@ -171,10 +170,10 @@ export default async function EventDetailPage({ params, searchParams }: EventDet
 
       {/* 1. Wide Panoramic Cover Banner (D-34) */}
       <div className="event-cover-banner-wrapper">
-        {event.posterUrl ? (
+        {event.coverBannerUrl || event.posterUrl ? (
           /* biome-ignore lint/performance/noImgElement: panoramic cover banner display */
           <img
-            src={event.posterUrl}
+            src={event.coverBannerUrl || event.posterUrl}
             alt={`แบนเนอร์คอนเสิร์ต ${event.title}`}
             className="event-cover-banner-img"
           />
@@ -336,12 +335,7 @@ export default async function EventDetailPage({ params, searchParams }: EventDet
 
         <hr className="detail-section-divider" />
 
-        {/* Category 2: ภาพและรายละเอียดเพิ่มเติมจากผู้จัด (Event Gallery & Official Details) (D-147) */}
-        <EventOfficialGallery eventTitle={event.title} />
-
-        <hr className="detail-section-divider" />
-
-        {/* Category 3: รอบการแสดงและประเภทบัตร */}
+        {/* Category 2: รอบการแสดงและประเภทบัตร */}
         <section className="event-category-card" aria-labelledby="cat-sessions-title">
           <div className="category-header-wrap">
             <h2 id="cat-sessions-title" className="category-heading">

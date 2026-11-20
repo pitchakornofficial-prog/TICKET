@@ -162,8 +162,6 @@ export function OrganizerEventsManager({
   const [posterPreviewUrl, setPosterPreviewUrl] = useState<string | null>(null);
   const [coverBannerFile, setCoverBannerFile] = useState<File | null>(null);
   const [coverBannerPreviewUrl, setCoverBannerPreviewUrl] = useState<string | null>(null);
-  const [ticketTemplateFile, setTicketTemplateFile] = useState<File | null>(null);
-  const [ticketTemplatePreviewUrl, setTicketTemplatePreviewUrl] = useState<string | null>(null);
 
   // Governance & Commercial States (D-217, D-218)
   const [payoutAccounts, setPayoutAccounts] = useState<PayoutBankAccount[]>([]);
@@ -226,8 +224,6 @@ export function OrganizerEventsManager({
     setPosterPreviewUrl(null);
     setCoverBannerFile(null);
     setCoverBannerPreviewUrl(null);
-    setTicketTemplateFile(null);
-    setTicketTemplatePreviewUrl(null);
     setAgeRestriction('all');
     setRefundPolicy('refundable_7d');
     setRefundPolicyCustom('');
@@ -279,7 +275,6 @@ export function OrganizerEventsManager({
       setLimitMode(lim >= 99 ? 'unlimited' : 'custom');
       setPosterPreviewUrl(ev.posterUrl || null);
       setCoverBannerPreviewUrl(ev.coverBannerUrl || null);
-      setTicketTemplatePreviewUrl(ev.ticketTemplateUrl || null);
       setAgeRestriction(ev.ageRestriction || 'all');
       setRefundPolicy(ev.refundPolicy?.includes('ไม่รับคืน') ? 'non_refundable' : ev.refundPolicy?.includes('7 วัน') ? 'refundable_7d' : ev.refundPolicy ? 'custom' : 'refundable_7d');
       setRefundPolicyCustom(ev.refundPolicy || '');
@@ -319,7 +314,6 @@ export function OrganizerEventsManager({
         setLimitPerOrder(fullEvent.limitPerOrder || 4);
         setPosterPreviewUrl(fullEvent.posterUrl || ev.posterUrl || null);
         setCoverBannerPreviewUrl(fullEvent.coverBannerUrl || null);
-        setTicketTemplatePreviewUrl(fullEvent.ticketTemplateUrl || null);
         if (fullEvent.sessions && fullEvent.sessions.length > 0) {
           setSessions(fullEvent.sessions.map((s: { id: string; startTime?: string; endTime?: string; admissionStartTime?: string; admissionEndTime?: string; ticketTypes?: TicketTypeDraft[] }) => ({
             id: s.id,
@@ -438,15 +432,6 @@ export function OrganizerEventsManager({
   function handleCoverBannerChange(file: File | null) {
     setCoverBannerFile(file);
     setCoverBannerPreviewUrl(prev => {
-      if (prev?.startsWith('blob:')) URL.revokeObjectURL(prev);
-      return file ? URL.createObjectURL(file) : null;
-    });
-  }
-
-  // Handle local ticket template preview
-  function handleTemplateChange(file: File | null) {
-    setTicketTemplateFile(file);
-    setTicketTemplatePreviewUrl(prev => {
       if (prev?.startsWith('blob:')) URL.revokeObjectURL(prev);
       return file ? URL.createObjectURL(file) : null;
     });
@@ -600,17 +585,6 @@ export function OrganizerEventsManager({
       }
     }
 
-    let ticketTemplateUrl: string | undefined;
-    if (ticketTemplateFile) {
-      const fd = new FormData();
-      fd.append('file', ticketTemplateFile);
-      const upRes = await fetch('/api/upload', { method: 'POST', body: fd });
-      if (upRes.ok) {
-        const upData = await upRes.json();
-        ticketTemplateUrl = upData.url;
-      }
-    }
-
     // Format sessions and ticket types for API
     const formattedSessions = sessions.map(s => ({
       startTime: new Date(s.startTime).toISOString(),
@@ -649,7 +623,6 @@ export function OrganizerEventsManager({
         ubuPrivilegeMode: effectiveUbuPrivilegeMode,
         posterUrl,
         coverBannerUrl,
-        ticketTemplateUrl,
         sessions: formattedSessions,
       };
 
@@ -2346,70 +2319,6 @@ export function OrganizerEventsManager({
                             style={{ padding: '0.3rem 0.6rem', fontSize: '0.75rem' }}
                             onClick={() => {
                               handleCoverBannerChange(null);
-                              setDraftSaved(false);
-                            }}
-                          >
-                            ลบ
-                          </button>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* 3. Digital Ticket Template (2.4:1) */}
-                    <div className="compact-image-card">
-                      <div className="compact-image-header">
-                        <strong className="compact-image-title">
-                          <span>3. ภาพพื้นหลังตั๋ว</span>
-                          <HeaderInfoTooltip text="ภาพพื้นหลังบัตรดิจิทัลสัดส่วน 2.4:1 สำหรับพิมพ์บน E-Ticket และ QR Code (แนะนำ 1200 x 500 px)" />
-                        </strong>
-                        <span className="aspect-ratio-badge">2.4:1</span>
-                      </div>
-
-                      <div className="compact-image-preview-box">
-                        {ticketTemplatePreviewUrl ? (
-                          <>
-                            {/* biome-ignore lint/performance/noImgElement: aspect preview */}
-                            <img src={ticketTemplatePreviewUrl} alt="ตัวอย่างพื้นหลังบัตร" className="compact-image-thumb" />
-                          </>
-                        ) : (
-                          <label className="aspect-dropzone-label" style={{ padding: '0.5rem' }}>
-                            <TicketIcon />
-                            <span className="aspect-dropzone-text" style={{ fontSize: '0.78rem' }}>คลิกเลือกภาพพื้นหลังตั๋ว</span>
-                            <span className="aspect-dropzone-hint" style={{ fontSize: '0.7rem' }}>สัดส่วน 2.4:1 · แนะนำ 1200x500px</span>
-                            <input
-                              id="event-ticket-template"
-                              type="file"
-                              accept="image/*"
-                              onChange={e => {
-                                handleTemplateChange(e.target.files?.[0] || null);
-                                setDraftSaved(false);
-                              }}
-                              style={{ display: 'none' }}
-                            />
-                          </label>
-                        )}
-                      </div>
-
-                      {ticketTemplatePreviewUrl && (
-                        <div className="compact-image-actions">
-                          <label className="aspect-action-btn" style={{ padding: '0.3rem 0.6rem', fontSize: '0.75rem', cursor: 'pointer' }}>
-                            <span>เปลี่ยนรูป</span>
-                            <input
-                              type="file"
-                              accept="image/*"
-                              onChange={e => {
-                                handleTemplateChange(e.target.files?.[0] || null);
-                                setDraftSaved(false);
-                              }}
-                              style={{ display: 'none' }}
-                            />
-                          </label>
-                          <button
-                            type="button"
-                            className="aspect-action-btn btn-remove"
-                            style={{ padding: '0.3rem 0.6rem', fontSize: '0.75rem' }}
-                            onClick={() => {
-                              handleTemplateChange(null);
                               setDraftSaved(false);
                             }}
                           >

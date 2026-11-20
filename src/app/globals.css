@@ -3084,7 +3084,8 @@ textarea.text-input {
   border: none;
 }
 
-.step-badge-number {
+.step-badge-number,
+.step-card-number {
   width: 28px;
   height: 28px;
   border-radius: 50%;

@@ -74,6 +74,66 @@ export function GuestOrderLookupView({ initialOrderId }: GuestOrderLookupViewPro
     };
   }, [mode]);
 
+  // Sync Master Ticket Template and listen for real-time design updates (D-275)
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    // Fetch server master template if differs from local
+    fetch('/api/public/ticket-master-template')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!data?.template) return;
+        const fetchedStr = JSON.stringify(data.template);
+        const currentStr = localStorage.getItem('ticket_master_template_v1');
+        if (fetchedStr !== currentStr) {
+          try {
+            localStorage.setItem('ticket_master_template_v1', fetchedStr);
+            setTicketImageUrls({});
+          } catch {
+            // ignore
+          }
+        }
+      })
+      .catch(() => {
+        // use local cache
+      });
+
+    const handleTemplateUpdated = () => {
+      // Invalidate generated ticket images to immediately re-render passes with the new master template
+      setTicketImageUrls({});
+    };
+
+    window.addEventListener('ticket_master_template_updated', handleTemplateUpdated);
+    window.addEventListener('ticket:master-template-changed', handleTemplateUpdated);
+    window.addEventListener('storage', (e) => {
+      if (e.key === 'ticket_master_template_v1') {
+        handleTemplateUpdated();
+      }
+    });
+
+    let channel: BroadcastChannel | null = null;
+    if (typeof BroadcastChannel !== 'undefined') {
+      try {
+        channel = new BroadcastChannel('ticket_master_template_channel');
+        channel.onmessage = (msg) => {
+          if (msg.data?.type === 'UPDATE') {
+            handleTemplateUpdated();
+          }
+        };
+      } catch {
+        // ignore
+      }
+    }
+
+    return () => {
+      window.removeEventListener('ticket_master_template_updated', handleTemplateUpdated);
+      window.removeEventListener('ticket:master-template-changed', handleTemplateUpdated);
+      if (channel) {
+        channel.close();
+      }
+    };
+  }, []);
+
   // Automatically generate direct ticket image passes (D-165)
   useEffect(() => {
     let active = true;
