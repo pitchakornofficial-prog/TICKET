@@ -869,7 +869,7 @@ export async function getPublicEventWithApprovedSessions(pool: Pool, eventId: st
   try {
     await ensureEventSchema(pool);
     const evRes = await pool.query(
-      `SELECT e.id, e.title, e.description, e.location, e."posterUrl", e."ticketTemplateUrl", e."limitPerOrder", e.status,
+      `SELECT e.id, e.title, e.description, e.location, e."posterUrl", e."coverBannerUrl", e."ticketTemplateUrl", e."limitPerOrder", e.status,
               e."salesStartTime", e."salesEndTime",
               u.name as "organizerName", u.email as "organizerEmail"
        FROM events e

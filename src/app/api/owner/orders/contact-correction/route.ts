@@ -22,10 +22,12 @@ export async function GET(request: Request) {
 
   const url = new URL(request.url);
   const search = url.searchParams.get('q') || url.searchParams.get('orderId') || undefined;
+  const dateFrom = url.searchParams.get('dateFrom') || undefined;
+  const dateTo = url.searchParams.get('dateTo') || undefined;
 
   try {
     const pool = getDatabasePool();
-    const orders = await listPaidOrdersForOwner(pool, search);
+    const orders = await listPaidOrdersForOwner(pool, search, { dateFrom, dateTo });
     return Response.json({ orders }, { status: 200, headers: { 'Cache-Control': 'private, no-store, no-cache, must-revalidate' } });
   } catch (error: unknown) {
     return createSafeErrorResponse(error, 'เกิดข้อผิดพลาดในการดึงข้อมูลคำสั่งซื้อ', { defaultStatus: 500 });
