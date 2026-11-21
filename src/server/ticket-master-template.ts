@@ -1,6 +1,6 @@
 import type { Pool } from 'pg';
-import { inTransaction } from './database';
-import type { TicketDesignerState } from '@/lib/ticket-master-template-sync';
+import { inTransaction } from './database.ts';
+import type { TicketDesignerState } from '../lib/ticket-master-template-sync.ts';
 
 export function parseTicketMasterTemplate(input: unknown): TicketDesignerState | null {
   if (!input || typeof input !== 'object' || Array.isArray(input)) return null;
