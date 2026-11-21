@@ -2,7 +2,6 @@ import type { TicketDetail } from '@/server/tickets';
 import { formatDate, formatTime } from '@/lib/locale';
 import { generateCustomQrSvg } from '@/lib/ticket-qr';
 import {
-  type MovableItem,
   type TicketDesignerState,
   loadLocalMasterTemplate,
 } from '@/lib/ticket-master-template-sync';
@@ -104,18 +103,20 @@ function drawRoundedRect(
     if (typeof ctx.rect === 'function') ctx.rect(x, y, w, h);
     return;
   }
+  const radius = Math.min(r, w / 2, h / 2);
   if (typeof ctx.roundRect === 'function') {
-    ctx.roundRect(x, y, w, h, r);
+    ctx.roundRect(x, y, w, h, radius);
   } else if (typeof ctx.arcTo === 'function') {
-    ctx.moveTo(x + r, y);
-    ctx.lineTo(x + w - r, y);
-    ctx.arcTo(x + w, y, x + w, y + r, r);
-    ctx.lineTo(x + w, y + h - r);
-    ctx.arcTo(x + w, y + h, x + w - r, y + h, r);
-    ctx.lineTo(x + r, y + h);
-    ctx.arcTo(x, y + h, x, y + h - r, r);
-    ctx.lineTo(x, y + r);
-    ctx.arcTo(x, y, x + r, y, r);
+    ctx.moveTo(x + radius, y);
+    ctx.lineTo(x + w - radius, y);
+    ctx.arcTo(x + w, y, x + w, y + radius, radius);
+    ctx.lineTo(x + w, y + h - radius);
+    ctx.arcTo(x + w, y + h, x + w - radius, y + h, radius);
+    ctx.lineTo(x + radius, y + h);
+    ctx.arcTo(x, y + h, x, y + h - radius, radius);
+    ctx.lineTo(x, y + radius);
+    ctx.arcTo(x, y, x + radius, y, radius);
+    ctx.closePath();
   } else if (typeof ctx.rect === 'function') {
     ctx.rect(x, y, w, h);
   }
@@ -235,25 +236,6 @@ export async function generateTicketCanvas(
   ctx.textAlign = 'left';
   ctx.textBaseline = 'top';
 
-  // Helper for drawing optional element box background/border
-  const drawElementBox = (el: MovableItem, x: number, y: number, textW: number, boxH: number) => {
-    const hasBg = el.bgColor && el.bgColor !== 'transparent';
-    const bWidth = el.borderWidth ?? (el.borderColor && el.borderColor !== 'transparent' ? 1 : 0);
-    const hasBorder = bWidth > 0 && el.borderColor && el.borderColor !== 'transparent';
-    if (!hasBg && !hasBorder) return;
-    const padX = 8 * scaleFactor;
-    const boxW = textW + padX * 2;
-    if (hasBg) {
-      ctx.fillStyle = el.bgColor as string;
-      ctx.fillRect(x - padX, y - 4 * scaleFactor, boxW, boxH);
-    }
-    if (hasBorder) {
-      ctx.strokeStyle = el.borderColor as string;
-      ctx.lineWidth = bWidth * scaleFactor;
-      ctx.strokeRect(x - padX, y - 4 * scaleFactor, boxW, boxH);
-    }
-  };
-
   // 5. Elements rendering with live concert ticket data
   const elements = template.elements || {};
 
@@ -283,19 +265,17 @@ export async function generateTicketCanvas(
     renderFullEventTitle(ctx, ticket.eventTitle, titleX, titleY, titleWidth, initialFs, 20);
   }
 
-  // Ticket Type / Zone Badge (Solid black or customized D-165)
+  // Ticket Type / Zone (Matching other meta items, no frame)
   const badge = elements.zoneBadge;
   if (badge?.visible) {
     const badgeX = badge.x * scaleFactor;
     const badgeY = badge.y * scaleFactor;
-    const fs = Math.round((badge.fontSize || 14) * scaleFactor);
-    ctx.font = `bold ${fs}px ${fontFam}`;
-    const textW = ctx.measureText(ticket.ticketTypeName).width;
-    if (badge.bgColor && badge.bgColor !== 'transparent') {
-      drawElementBox(badge, badgeX, badgeY, textW, 28 * scaleFactor);
-    }
+    const fs = Math.round((badge.fontSize || 16) * scaleFactor);
+    ctx.font = `13px ${fontFam}`;
+    ctx.fillStyle = badge.secondaryColor || '#64748b';
+    ctx.fillText(badge.secondaryText || 'โซน / ประเภทบัตร (ZONE & CATEGORY)', badgeX, badgeY);
     ctx.fillStyle = badge.color || '#0f172a';
-    renderTextFitted(ctx, ticket.ticketTypeName, badgeX, badgeY, Math.max(stubX - badgeX - 40, 300), fs, 12, fontFam, true);
+    renderTextFitted(ctx, ticket.ticketTypeName, badgeX, badgeY + 22, Math.max(stubX - badgeX - 40, 300), fs, 12, fontFam, true);
   }
 
   // Gate Info
@@ -446,7 +426,8 @@ export async function generateTicketCanvas(
     const qrX = qr.x * scaleFactor;
     const qrY = qr.y * scaleFactor;
     const qrPad = 8 * scaleFactor;
-    const qrRadius = 8 * scaleFactor;
+    const qrRadius = 12 * scaleFactor;
+    const innerQrRadius = 8 * scaleFactor;
     const boxX = qrX - qrPad;
     const boxY = qrY - qrPad;
     const boxW = qrSize + qrPad * 2;
@@ -482,7 +463,7 @@ export async function generateTicketCanvas(
         ctx.save();
         if (typeof ctx.beginPath === 'function' && typeof ctx.clip === 'function') {
           ctx.beginPath();
-          drawRoundedRect(ctx, qrX, qrY, qrSize, qrSize, 4 * scaleFactor);
+          drawRoundedRect(ctx, qrX, qrY, qrSize, qrSize, innerQrRadius);
           ctx.clip();
         }
         ctx.drawImage(qrImg, qrX, qrY, qrSize, qrSize);
@@ -502,7 +483,7 @@ export async function generateTicketCanvas(
           ctx.save();
           if (typeof ctx.beginPath === 'function' && typeof ctx.clip === 'function') {
             ctx.beginPath();
-            drawRoundedRect(ctx, qrX, qrY, qrSize, qrSize, 4 * scaleFactor);
+            drawRoundedRect(ctx, qrX, qrY, qrSize, qrSize, innerQrRadius);
             ctx.clip();
           }
           ctx.drawImage(qrSvgImg, qrX, qrY, qrSize, qrSize);

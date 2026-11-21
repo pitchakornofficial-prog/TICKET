@@ -60,6 +60,8 @@ export default async function EventDetailPage({ params, searchParams }: EventDet
     salesStartTime: event.salesStartTime,
     salesEndTime: event.salesEndTime,
     sessions,
+    isSalesPaused: Boolean(event.isSalesPaused),
+    salesPausedReason: event.salesPausedReason,
   });
 
   let startingPrice = 0;
@@ -87,8 +89,8 @@ export default async function EventDetailPage({ params, searchParams }: EventDet
         <div
           role="alert"
           style={{
-            backgroundColor: salesStatus.reason === 'not_started' ? '#eff6ff' : '#fef2f2',
-            border: `1px solid ${salesStatus.reason === 'not_started' ? '#bfdbfe' : '#fecaca'}`,
+            backgroundColor: salesStatus.reason === 'paused' ? '#fffbeb' : salesStatus.reason === 'not_started' ? '#eff6ff' : '#fef2f2',
+            border: `1px solid ${salesStatus.reason === 'paused' ? '#fde68a' : salesStatus.reason === 'not_started' ? '#bfdbfe' : '#fecaca'}`,
             borderRadius: '12px',
             padding: '14px 18px',
             marginBottom: '20px',
@@ -96,14 +98,16 @@ export default async function EventDetailPage({ params, searchParams }: EventDet
             alignItems: 'center',
             gap: '12px',
             fontSize: '14px',
-            color: salesStatus.reason === 'not_started' ? '#1e40af' : '#991b1b',
+            color: salesStatus.reason === 'paused' ? '#92400e' : salesStatus.reason === 'not_started' ? '#1e40af' : '#991b1b',
           }}
         >
           <AlertIcon />
           <span style={{ fontWeight: 500 }}>
-            {salesStatus.reason === 'not_started' && salesStatus.opensAt
-              ? `ยังไม่ถึงเวลาเปิดจำหน่ายบัตร (เปิดจำหน่าย ${formatDate(salesStatus.opensAt)} เวลา ${formatTime(salesStatus.opensAt)} น.)`
-              : salesStatus.message}
+            {salesStatus.reason === 'paused'
+              ? `ระงับการจำหน่ายบัตรชั่วคราว: ${salesStatus.message}`
+              : salesStatus.reason === 'not_started' && salesStatus.opensAt
+                ? `ยังไม่ถึงเวลาเปิดจำหน่ายบัตร (เปิดจำหน่าย ${formatDate(salesStatus.opensAt)} เวลา ${formatTime(salesStatus.opensAt)} น.)`
+                : salesStatus.message}
           </span>
         </div>
       )}
@@ -294,22 +298,23 @@ export default async function EventDetailPage({ params, searchParams }: EventDet
                     ศิลปินผู้ร่วมสร้างสรรค์การแสดง (Lineup)
                   </h3>
                   <div className="artist-grid-2x2">
-                    <div className="artist-card-item primary-artist">
-                      <span className="artist-role-badge">ศิลปินหลัก</span>
-                      <strong className="artist-name">THE NEON BAND</strong>
-                    </div>
-                    <div className="artist-card-item">
-                      <span className="artist-role-badge guest-badge">ศิลปินรับเชิญ</span>
-                      <strong className="artist-name">ELECTRIC DREAMS</strong>
-                    </div>
-                    <div className="artist-card-item">
-                      <span className="artist-role-badge guest-badge">Special Guest DJ</span>
-                      <strong className="artist-name">DJ NEBULA</strong>
-                    </div>
-                    <div className="artist-card-item">
-                      <span className="artist-role-badge guest-badge">วงออร์เคสตรา</span>
-                      <strong className="artist-name">SYMPHONY ENSEMBLE</strong>
-                    </div>
+                    {(event.artists || 'THE NEON BAND, ELECTRIC DREAMS')
+                      .split(',')
+                      .map((a: string, i: number) => {
+                        const artistName = a.trim();
+                        if (!artistName) return null;
+                        return (
+                          <div
+                            key={artistName || `artist-${i}`}
+                            className={`artist-card-item ${i === 0 ? 'primary-artist' : ''}`}
+                          >
+                            <span className={`artist-role-badge ${i === 0 ? '' : 'guest-badge'}`}>
+                              {i === 0 ? 'ศิลปินหลัก' : 'ศิลปินรับเชิญ'}
+                            </span>
+                            <strong className="artist-name">{artistName}</strong>
+                          </div>
+                        );
+                      })}
                   </div>
                 </div>
 
@@ -429,7 +434,11 @@ export default async function EventDetailPage({ params, searchParams }: EventDet
                 data-testid="enter-queue-cta-btn"
                 style={{ opacity: 0.55, cursor: 'not-allowed' }}
               >
-                {salesStatus.reason === 'not_started' ? 'ยังไม่เปิดจำหน่าย' : 'ปิดการจำหน่ายแล้ว'}
+                {salesStatus.reason === 'paused'
+                  ? 'ระงับการจำหน่ายชั่วคราว'
+                  : salesStatus.reason === 'not_started'
+                    ? 'ยังไม่เปิดจำหน่าย'
+                    : 'ปิดการจำหน่ายแล้ว'}
               </button>
             )}
           </div>

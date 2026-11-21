@@ -407,7 +407,7 @@ export async function ensureReservationSchema(pool: Pool): Promise<void> {
         END IF;
       END IF;
 
-      SELECT "limitPerOrder", status, "salesStartTime", "salesEndTime"
+      SELECT "limitPerOrder", status, "salesStartTime", "salesEndTime", "isSalesPaused", "salesPausedReason"
       INTO v_ev
       FROM events
       WHERE id = p_event_id;
@@ -415,6 +415,13 @@ export async function ensureReservationSchema(pool: Pool): Promise<void> {
       IF NOT FOUND THEN
         outcome := 'ERROR';
         err_message := 'ไม่พบคอนเสิร์ตที่ระบุ';
+        RETURN NEXT;
+        RETURN;
+      END IF;
+
+      IF v_ev."isSalesPaused" IS TRUE THEN
+        outcome := 'ERROR';
+        err_message := COALESCE(NULLIF(v_ev."salesPausedReason", ''), 'การจำหน่ายบัตรถูกระงับชั่วคราวโดยผู้ดูแลระบบ');
         RETURN NEXT;
         RETURN;
       END IF;
@@ -811,6 +818,8 @@ function validateEventAndLimits(
     status: string;
     salesStartTime: Date | string | null;
     salesEndTime: Date | string | null;
+    isSalesPaused?: boolean | null;
+    salesPausedReason?: string | null;
   } | null | undefined,
   totalTickets: number,
   alreadyPurchased: number,
@@ -818,6 +827,9 @@ function validateEventAndLimits(
 ): number {
   if (!event) {
     throw new Error('ไม่พบคอนเสิร์ตที่ระบุ');
+  }
+  if (event.isSalesPaused) {
+    throw new Error(event.salesPausedReason?.trim() || 'การจำหน่ายบัตรถูกระงับชั่วคราวโดยผู้ดูแลระบบ');
   }
   if (event.status !== 'approved') {
     throw new Error('คอนเสิร์ตนี้ยังไม่เปิดจำหน่าย');
@@ -1352,14 +1364,19 @@ export async function createReservation(
       status: string;
       salesStartTime: Date | string | null;
       salesEndTime: Date | string | null;
+      isSalesPaused?: boolean | null;
+      salesPausedReason?: string | null;
     }>(
-      'SELECT id, title, "limitPerOrder", status, "salesStartTime", "salesEndTime" FROM events WHERE id = $1',
+      'SELECT id, title, "limitPerOrder", status, "salesStartTime", "salesEndTime", "isSalesPaused", "salesPausedReason" FROM events WHERE id = $1',
       [input.eventId],
     );
     if (eventRes.rowCount === 0) {
       throw new Error('ไม่พบคอนเสิร์ตที่ระบุ');
     }
     const event = eventRes.rows[0];
+    if (event.isSalesPaused) {
+      throw new Error(event.salesPausedReason?.trim() || 'การจำหน่ายบัตรถูกระงับชั่วคราวโดยผู้ดูแลระบบ');
+    }
     if (event.status !== 'approved') {
       throw new Error('คอนเสิร์ตนี้ยังไม่เปิดจำหน่าย');
     }

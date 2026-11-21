@@ -21,6 +21,7 @@ export type SessionStatus = 'draft' | 'pending_approval' | 'approved' | 'rejecte
 export interface EventDraftInput {
   title: string;
   description?: string;
+  artists?: string;
   location: string;
   posterUrl?: string;
   ticketTemplateUrl?: string;
@@ -37,6 +38,8 @@ export interface EventDraftInput {
   payoutAccountNumber?: string;
   payoutAccountName?: string;
   ubuPrivilegeMode?: boolean;
+  isSalesPaused?: boolean;
+  salesPausedReason?: string;
 }
 
 export interface SessionDraftInput {
@@ -58,10 +61,13 @@ export interface PublicEventSummary {
   id: string;
   title: string;
   description?: string;
+  artists?: string | null;
   location: string;
   posterUrl: string | null;
   limitPerOrder: number;
   status: string;
+  isSalesPaused?: boolean;
+  salesPausedReason?: string | null;
   earliestStartTime: string;
   latestEndTime: string;
   startingPrice: number;
@@ -135,6 +141,9 @@ export async function ensureEventSchema(pool: Pool): Promise<void> {
         ALTER TABLE events ADD COLUMN IF NOT EXISTS "payoutAccountNumber" TEXT;
         ALTER TABLE events ADD COLUMN IF NOT EXISTS "payoutAccountName" TEXT;
         ALTER TABLE events ADD COLUMN IF NOT EXISTS "ubuPrivilegeMode" BOOLEAN NOT NULL DEFAULT FALSE;
+        ALTER TABLE events ADD COLUMN IF NOT EXISTS artists TEXT;
+        ALTER TABLE events ADD COLUMN IF NOT EXISTS "isSalesPaused" BOOLEAN NOT NULL DEFAULT FALSE;
+        ALTER TABLE events ADD COLUMN IF NOT EXISTS "salesPausedReason" TEXT;
         CREATE INDEX IF NOT EXISTS idx_events_organizerId ON events("organizerId");
 
         CREATE TABLE IF NOT EXISTS event_sessions (
@@ -236,6 +245,7 @@ export async function ensureEventSchema(pool: Pool): Promise<void> {
         ALTER TABLE event_sessions ADD COLUMN IF NOT EXISTS "rescheduledFromEndTime" TIMESTAMPTZ;
         ALTER TABLE session_amendments ADD COLUMN IF NOT EXISTS "specialRefundWindowStart" TIMESTAMPTZ;
         ALTER TABLE session_amendments ADD COLUMN IF NOT EXISTS "specialRefundWindowEnd" TIMESTAMPTZ;
+        ALTER TABLE session_amendments ADD COLUMN IF NOT EXISTS "concertDetails" JSONB;
         ALTER TABLE event_scanners ADD COLUMN IF NOT EXISTS "boundDeviceId" TEXT;
         ALTER TABLE event_scanners ADD COLUMN IF NOT EXISTS "boundAt" TIMESTAMPTZ;
       `);
@@ -283,13 +293,14 @@ export async function createEventDraft(
   return inTransaction(pool, async client => {
     const eventId = randomUUID();
     await client.query(
-      `INSERT INTO events (id, "organizerId", title, description, location, "posterUrl", "ticketTemplateUrl", "coverBannerUrl", "googleMapsUrl", "salesStartTime", "salesEndTime", "limitPerOrder", "ageRestriction", "refundPolicy", "entryGuidelines", "payoutAccountId", "payoutBankName", "payoutAccountNumber", "payoutAccountName", "ubuPrivilegeMode", status, "createdAt", "updatedAt")
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, 'draft', now(), now())`,
+      `INSERT INTO events (id, "organizerId", title, description, artists, location, "posterUrl", "ticketTemplateUrl", "coverBannerUrl", "googleMapsUrl", "salesStartTime", "salesEndTime", "limitPerOrder", "ageRestriction", "refundPolicy", "entryGuidelines", "payoutAccountId", "payoutBankName", "payoutAccountNumber", "payoutAccountName", "ubuPrivilegeMode", "isSalesPaused", "salesPausedReason", status, "createdAt", "updatedAt")
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, 'draft', now(), now())`,
       [
         eventId,
         organizerId,
         eventInput.title.trim(),
         eventInput.description?.trim() || '',
+        eventInput.artists?.trim() || null,
         eventInput.location.trim(),
         eventInput.posterUrl || null,
         eventInput.ticketTemplateUrl || null,
@@ -306,6 +317,8 @@ export async function createEventDraft(
         eventInput.payoutAccountNumber || null,
         eventInput.payoutAccountName || null,
         Boolean(eventInput.ubuPrivilegeMode),
+        Boolean(eventInput.isSalesPaused),
+        eventInput.salesPausedReason?.trim() || null,
       ],
     );
 
@@ -376,6 +389,15 @@ export async function updateEventDraft(
     }
     if (eventInput.location !== undefined) {
       await client.query('UPDATE events SET location = $1, "updatedAt" = now() WHERE id = $2', [eventInput.location.trim(), eventId]);
+    }
+    if (eventInput.artists !== undefined) {
+      await client.query('UPDATE events SET artists = $1, "updatedAt" = now() WHERE id = $2', [eventInput.artists ? eventInput.artists.trim() : null, eventId]);
+    }
+    if (eventInput.isSalesPaused !== undefined) {
+      await client.query('UPDATE events SET "isSalesPaused" = $1, "updatedAt" = now() WHERE id = $2', [Boolean(eventInput.isSalesPaused), eventId]);
+    }
+    if (eventInput.salesPausedReason !== undefined) {
+      await client.query('UPDATE events SET "salesPausedReason" = $1, "updatedAt" = now() WHERE id = $2', [eventInput.salesPausedReason ? eventInput.salesPausedReason.trim() : null, eventId]);
     }
     if (eventInput.posterUrl !== undefined) {
       await client.query('UPDATE events SET "posterUrl" = $1, "updatedAt" = now() WHERE id = $2', [eventInput.posterUrl, eventId]);
@@ -667,10 +689,13 @@ export async function listPublicEvents(pool: Pool, search?: string): Promise<Pub
         e.id, 
         e.title, 
         e.description, 
+        e.artists,
         e.location, 
         e."posterUrl", 
         e."limitPerOrder",
         e.status,
+        e."isSalesPaused",
+        e."salesPausedReason",
         MIN(s."startTime") AS "earliestStartTime",
         MAX(s."endTime") AS "latestEndTime",
         COALESCE(MIN(tt.price), 0) AS "startingPrice",
@@ -681,7 +706,7 @@ export async function listPublicEvents(pool: Pool, search?: string): Promise<Pub
       LEFT JOIN ticket_types tt ON tt."sessionId" = s.id
       WHERE e.status = 'approved'
         AND ($1::text IS NULL OR e.title ILIKE '%' || $1 || '%' OR e.location ILIKE '%' || $1 || '%' OR COALESCE(e.description, '') ILIKE '%' || $1 || '%')
-      GROUP BY e.id, e.title, e.description, e.location, e."posterUrl", e."limitPerOrder", e.status
+      GROUP BY e.id, e.title, e.description, e.artists, e.location, e."posterUrl", e."limitPerOrder", e.status, e."isSalesPaused", e."salesPausedReason"
       ORDER BY MIN(s."startTime") ASC
     `;
     const res = await pool.query(query, [search?.trim() ? search.trim() : null]);
@@ -744,10 +769,13 @@ export async function queryPublicEventsCatalog(
            e.id,
            e.title,
            COALESCE(e.description, '') AS description_text,
+           e.artists,
            e.location,
            e."posterUrl",
            e."limitPerOrder",
            e.status,
+           e."isSalesPaused",
+           e."salesPausedReason",
            MIN(s."startTime") AS "earliestStartTime",
            MAX(s."endTime") AS "latestEndTime",
            COALESCE(MIN(tt.price), 0) AS "startingPrice",
@@ -757,11 +785,12 @@ export async function queryPublicEventsCatalog(
          JOIN event_sessions s ON s."eventId" = e.id AND s.status = 'approved'
          LEFT JOIN ticket_types tt ON tt."sessionId" = s.id
          WHERE e.status = 'approved'
-         GROUP BY e.id, e.title, e.description, e.location, e."posterUrl", e."limitPerOrder", e.status
+         GROUP BY e.id, e.title, e.description, e.artists, e.location, e."posterUrl", e."limitPerOrder", e.status, e."isSalesPaused", e."salesPausedReason"
        ),
        filtered AS (
          SELECT
-           id, title, location, "posterUrl", "limitPerOrder", status,
+           id, title, location, artists, "posterUrl", "limitPerOrder", status,
+           "isSalesPaused", "salesPausedReason",
            "earliestStartTime", "latestEndTime", "startingPrice",
            "approvedSessionCount", "totalQuota"
          FROM event_agg
@@ -869,8 +898,8 @@ export async function getPublicEventWithApprovedSessions(pool: Pool, eventId: st
   try {
     await ensureEventSchema(pool);
     const evRes = await pool.query(
-      `SELECT e.id, e.title, e.description, e.location, e."posterUrl", e."coverBannerUrl", e."ticketTemplateUrl", e."limitPerOrder", e.status,
-              e."salesStartTime", e."salesEndTime",
+      `SELECT e.id, e.title, e.description, e.artists, e.location, e."posterUrl", e."coverBannerUrl", e."ticketTemplateUrl", e."limitPerOrder", e.status,
+              e."salesStartTime", e."salesEndTime", e."isSalesPaused", e."salesPausedReason",
               u.name as "organizerName", u.email as "organizerEmail"
        FROM events e
        LEFT JOIN auth_user u ON e."organizerId" = u.id
@@ -1456,6 +1485,7 @@ export interface SubmitSessionAmendmentInput {
   admissionStartTime?: string | Date | null;
   admissionEndTime?: string | Date | null;
   ticketTypes: AmendmentTicketTypeItem[];
+  concertDetails?: Record<string, unknown> | null;
 }
 
 export interface SessionAmendmentRecord {
@@ -1482,6 +1512,8 @@ export interface SessionAmendmentRecord {
     quota: number;
     heldQuota: number;
   }[];
+  concertDetails?: Record<string, unknown> | null;
+  currentConcertDetails?: Record<string, unknown> | null;
   status: 'pending' | 'approved' | 'rejected';
   rejectionReason: string | null;
   reviewedBy: string | null;
@@ -1529,7 +1561,40 @@ export async function submitSessionAmendment(
       throw new Error('แก้ไขได้เฉพาะรอบการแสดงที่ได้รับการอนุมัติแล้วเท่านั้น (Approved live session)');
     }
 
-    // 2. Initial quota validation (AC-109)
+    // 2. Initial quota and deletion validation (AC-109, D-279)
+    // Check if any existing ticket types are omitted and verify they have 0 sold/held tickets
+    const curTtsRes = await client.query<{ id: string; name: string }>(
+      'SELECT id, name FROM ticket_types WHERE "sessionId" = $1',
+      [session.id],
+    );
+    const submittedIds = new Set(input.ticketTypes.map(t => t.id).filter(Boolean));
+    for (const curTt of curTtsRes.rows) {
+      if (!submittedIds.has(curTt.id)) {
+        const heldRes = await client.query<{ heldQuota: number }>(
+          `SELECT GREATEST(0, COALESCE(
+            (SELECT SUM(oi.quantity)::int
+             FROM order_items oi
+             JOIN orders o ON oi."orderId" = o.id
+             WHERE oi."ticketTypeId" = $1
+               AND (o.status = 'paid' OR (o.status = 'reserved' AND o."expiresAt" > now()))
+            ), 0
+          ) - COALESCE(
+            (SELECT COUNT(*)::int
+             FROM tickets t
+             WHERE t."ticketTypeId" = $1 AND t.status = 'refunded'
+            ), 0
+          )) AS "heldQuota"`,
+          [curTt.id],
+        );
+        const heldCount = heldRes.rows[0]?.heldQuota ? Number(heldRes.rows[0].heldQuota) : 0;
+        if (heldCount > 0) {
+          throw new Error(
+            `ไม่สามารถลบประเภทบัตร "${curTt.name}" ได้เนื่องจากมีผู้ซื้อหรือถือครองบัตรแล้ว (${heldCount} ใบ)`,
+          );
+        }
+      }
+    }
+
     for (const item of input.ticketTypes) {
       if (!Number.isInteger(item.quota) || item.quota <= 0) {
         throw new Error(`จำนวนบัตรสำหรับประเภท "${item.name}" ต้องมากกว่า 0`);
@@ -1580,8 +1645,8 @@ export async function submitSessionAmendment(
       `INSERT INTO session_amendments (
         id, "sessionId", "eventId", "organizerId",
         "startTime", "endTime", "admissionStartTime", "admissionEndTime",
-        "ticketTypes", status, "createdAt", "updatedAt"
-      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, 'pending', now(), now())`,
+        "ticketTypes", "concertDetails", status, "createdAt", "updatedAt"
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, 'pending', now(), now())`,
       [
         amendmentId,
         session.id,
@@ -1592,6 +1657,7 @@ export async function submitSessionAmendment(
         input.admissionStartTime ? new Date(input.admissionStartTime) : null,
         input.admissionEndTime ? new Date(input.admissionEndTime) : null,
         JSON.stringify(input.ticketTypes),
+        input.concertDetails ? JSON.stringify(input.concertDetails) : null,
       ],
     );
 
@@ -1624,20 +1690,34 @@ export async function listPendingSessionAmendments(pool: Pool): Promise<SessionA
     currentAdmissionStartTime: Date | null;
     currentAdmissionEndTime: Date | null;
     ticketTypes: AmendmentTicketTypeItem[];
+    concertDetails: Record<string, unknown> | string | null;
     status: 'pending' | 'approved' | 'rejected';
     rejectionReason: string | null;
     reviewedBy: string | null;
     reviewedAt: Date | null;
     createdAt: Date;
     updatedAt: Date;
+    currentArtists?: string | null;
+    currentLocation?: string | null;
+    currentDescription?: string | null;
+    currentPosterUrl?: string | null;
+    currentCoverBannerUrl?: string | null;
+    currentGoogleMapsUrl?: string | null;
+    currentAgeRestriction?: string | null;
+    currentRefundPolicy?: string | null;
+    currentEntryGuidelines?: string | null;
   }>(
     `SELECT sa.id, sa."sessionId", sa."eventId", e.title AS "eventTitle",
             sa."organizerId", u.name AS "organizerName", u.email AS "organizerEmail",
             sa."startTime", sa."endTime", sa."admissionStartTime", sa."admissionEndTime",
             s."startTime" AS "currentStartTime", s."endTime" AS "currentEndTime",
             s."admissionStartTime" AS "currentAdmissionStartTime", s."admissionEndTime" AS "currentAdmissionEndTime",
-            sa."ticketTypes", sa.status, sa."rejectionReason", sa."reviewedBy", sa."reviewedAt",
-            sa."createdAt", sa."updatedAt"
+            sa."ticketTypes", sa."concertDetails", sa.status, sa."rejectionReason", sa."reviewedBy", sa."reviewedAt",
+            sa."createdAt", sa."updatedAt",
+            e.artists AS "currentArtists", e.location AS "currentLocation", e.description AS "currentDescription",
+            e."posterUrl" AS "currentPosterUrl", e."coverBannerUrl" AS "currentCoverBannerUrl",
+            e."googleMapsUrl" AS "currentGoogleMapsUrl", e."ageRestriction" AS "currentAgeRestriction",
+            e."refundPolicy" AS "currentRefundPolicy", e."entryGuidelines" AS "currentEntryGuidelines"
      FROM session_amendments sa
      JOIN event_sessions s ON s.id = sa."sessionId"
      JOIN events e ON e.id = sa."eventId"
@@ -1707,6 +1787,19 @@ export async function listPendingSessionAmendments(pool: Pool): Promise<SessionA
       currentAdmissionEndTime: row.currentAdmissionEndTime ? row.currentAdmissionEndTime.toISOString() : null,
       ticketTypes,
       currentTicketTypes,
+      concertDetails: typeof row.concertDetails === 'string' ? JSON.parse(row.concertDetails) : row.concertDetails,
+      currentConcertDetails: {
+        title: row.eventTitle,
+        artists: row.currentArtists || '',
+        location: row.currentLocation || '',
+        description: row.currentDescription || '',
+        posterUrl: row.currentPosterUrl || null,
+        coverBannerUrl: row.currentCoverBannerUrl || null,
+        googleMapsUrl: row.currentGoogleMapsUrl || null,
+        ageRestriction: row.currentAgeRestriction || '',
+        refundPolicy: row.currentRefundPolicy || '',
+        entryGuidelines: row.currentEntryGuidelines || '',
+      },
       status: row.status,
       rejectionReason: row.rejectionReason,
       reviewedBy: row.reviewedBy,
@@ -1746,6 +1839,7 @@ export async function listSessionAmendments(
     currentAdmissionStartTime: Date | null;
     currentAdmissionEndTime: Date | null;
     ticketTypes: AmendmentTicketTypeItem[];
+    concertDetails: Record<string, unknown> | string | null;
     status: 'pending' | 'approved' | 'rejected';
     rejectionReason: string | null;
     reviewedBy: string | null;
@@ -1758,7 +1852,7 @@ export async function listSessionAmendments(
             sa."startTime", sa."endTime", sa."admissionStartTime", sa."admissionEndTime",
             s."startTime" AS "currentStartTime", s."endTime" AS "currentEndTime",
             s."admissionStartTime" AS "currentAdmissionStartTime", s."admissionEndTime" AS "currentAdmissionEndTime",
-            sa."ticketTypes", sa.status, sa."rejectionReason", sa."reviewedBy", sa."reviewedAt",
+            sa."ticketTypes", sa."concertDetails", sa.status, sa."rejectionReason", sa."reviewedBy", sa."reviewedAt",
             sa."createdAt", sa."updatedAt"
      FROM session_amendments sa
      JOIN event_sessions s ON s.id = sa."sessionId"
@@ -1787,6 +1881,7 @@ export async function listSessionAmendments(
     currentAdmissionEndTime: row.currentAdmissionEndTime ? row.currentAdmissionEndTime.toISOString() : null,
     ticketTypes: typeof row.ticketTypes === 'string' ? JSON.parse(row.ticketTypes) : row.ticketTypes,
     currentTicketTypes: [],
+    concertDetails: typeof row.concertDetails === 'string' ? JSON.parse(row.concertDetails) : row.concertDetails,
     status: row.status,
     rejectionReason: row.rejectionReason,
     reviewedBy: row.reviewedBy,
@@ -1831,9 +1926,10 @@ export async function approveSessionAmendment(
       admissionStartTime: Date | null;
       admissionEndTime: Date | null;
       ticketTypes: AmendmentTicketTypeItem[];
+      concertDetails: Record<string, unknown> | string | null;
       status: string;
     }>(
-      `SELECT id, "sessionId", "eventId", "startTime", "endTime", "admissionStartTime", "admissionEndTime", "ticketTypes", status
+      `SELECT id, "sessionId", "eventId", "startTime", "endTime", "admissionStartTime", "admissionEndTime", "ticketTypes", "concertDetails", status
        FROM session_amendments
        WHERE id = $1
        FOR UPDATE`,
@@ -1942,7 +2038,45 @@ export async function approveSessionAmendment(
       );
     }
 
-    // 5. Update or insert ticket types (AC-67, AC-68, AC-109)
+    // 4.2 Update concert details if provided (D-279)
+    if (amd.concertDetails) {
+      const cDetails = typeof amd.concertDetails === 'string'
+        ? JSON.parse(amd.concertDetails)
+        : amd.concertDetails;
+      if (cDetails && typeof cDetails === 'object') {
+        const detailsObj = cDetails as Record<string, unknown>;
+        await client.query(
+          `UPDATE events
+           SET title = COALESCE($2, title),
+               artists = COALESCE($3, artists),
+               location = COALESCE($4, location),
+               description = COALESCE($5, description),
+               "posterUrl" = COALESCE($6, "posterUrl"),
+               "coverBannerUrl" = COALESCE($7, "coverBannerUrl"),
+               "googleMapsUrl" = COALESCE($8, "googleMapsUrl"),
+               "ageRestriction" = COALESCE($9, "ageRestriction"),
+               "refundPolicy" = COALESCE($10, "refundPolicy"),
+               "entryGuidelines" = COALESCE($11, "entryGuidelines"),
+               "updatedAt" = now()
+           WHERE id = $1`,
+          [
+            amd.eventId,
+            detailsObj.title ? String(detailsObj.title).trim() : null,
+            detailsObj.artists != null ? String(detailsObj.artists).trim() : null,
+            detailsObj.location ? String(detailsObj.location).trim() : null,
+            detailsObj.description != null ? String(detailsObj.description).trim() : null,
+            detailsObj.posterUrl != null ? String(detailsObj.posterUrl).trim() : null,
+            detailsObj.coverBannerUrl != null ? String(detailsObj.coverBannerUrl).trim() : null,
+            detailsObj.googleMapsUrl != null ? String(detailsObj.googleMapsUrl).trim() : null,
+            detailsObj.ageRestriction != null ? String(detailsObj.ageRestriction).trim() : null,
+            detailsObj.refundPolicy != null ? String(detailsObj.refundPolicy).trim() : null,
+            detailsObj.entryGuidelines != null ? String(detailsObj.entryGuidelines).trim() : null,
+          ],
+        );
+      }
+    }
+
+    // 5. Update or insert ticket types (AC-67, AC-68, AC-109, D-279)
     for (const item of ticketTypes) {
       if (item.id) {
         const updRes = await client.query(
@@ -1983,6 +2117,15 @@ export async function approveSessionAmendment(
           ],
         );
       }
+    }
+
+    // Safely delete any ticket types omitted in amendment (only allowed if 0 sold tickets, verified earlier)
+    const approvedIds = ticketTypes.map(t => t.id).filter(Boolean);
+    if (approvedIds.length > 0) {
+      await client.query(
+        `DELETE FROM ticket_types WHERE "sessionId" = $1 AND id NOT IN (${approvedIds.map((_, i) => `$${i + 2}`).join(', ')})`,
+        [amd.sessionId, ...approvedIds],
+      );
     }
 
     // 6. Mark amendment approved

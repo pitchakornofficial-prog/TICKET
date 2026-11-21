@@ -41,6 +41,8 @@ export default async function EventCheckoutPage({ params }: EventCheckoutPagePro
       limitPerOrder={event.limitPerOrder}
       salesStartTime={event.salesStartTime}
       salesEndTime={event.salesEndTime}
+      isSalesPaused={event.isSalesPaused}
+      salesPausedReason={event.salesPausedReason}
       sessions={event.sessions || []}
       feeSettings={
         feeSettings

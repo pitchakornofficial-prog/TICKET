@@ -42,3 +42,20 @@ export function formatDate(instant: Date): string {
 export function formatTime(instant: Date): string {
   return timeFormatter.format(instant);
 }
+
+/**
+ * Formats a Date or ISO timestamp into a local 'YYYY-MM-DDTHH:mm' string
+ * suitable for HTML5 <input type="datetime-local"> without UTC timezone shift.
+ */
+export function toLocalDatetimeInputString(dateInput?: string | Date | null): string {
+  if (!dateInput) return '';
+  const date = dateInput instanceof Date ? dateInput : new Date(dateInput);
+  if (Number.isNaN(date.getTime())) return '';
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  const hours = String(date.getHours()).padStart(2, '0');
+  const minutes = String(date.getMinutes()).padStart(2, '0');
+  return `${year}-${month}-${day}T${hours}:${minutes}`;
+}
+
