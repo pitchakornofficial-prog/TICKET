@@ -57,7 +57,7 @@ export function GuestCheckoutEntry({
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
-  const [pdpaAccepted, setPdpaAccepted] = useState(true);
+  const [pdpaAccepted, setPdpaAccepted] = useState(false);
 
   // OTP details
   const [otpCode, setOtpCode] = useState('');
@@ -382,13 +382,13 @@ export function GuestCheckoutEntry({
 
   return (
     <section className="checkout-verification-card" style={{ marginTop: '2rem' }} aria-labelledby="checkout-step-title">
-      <div className="checkout-step-card-header">
-        <span className="step-card-number">{stepNumber ?? 2}</span>
+      <div className="checkout-step-card-header" style={{ display: 'flex', alignItems: 'flex-start', gap: '0.75rem', marginBottom: '1.25rem' }}>
+        <span className="step-badge-number step-card-number" style={{ marginTop: '0.2rem' }}>{stepNumber ?? 2}</span>
         <div>
-          <h2 className="step-card-title" id="checkout-step-title" aria-label="ข้อมูลผู้ซื้อและยืนยันอีเมล (Guest Checkout)">
+          <h2 className="step-card-title" id="checkout-step-title" aria-label="ข้อมูลผู้ซื้อและยืนยันอีเมล (Guest Checkout)" style={{ margin: 0, fontSize: '1.3rem', fontWeight: 600 }}>
             ข้อมูลผู้ซื้อและยืนยันอีเมล (Guest Checkout)
           </h2>
-          <p className="step-card-subtitle">
+          <p className="step-card-subtitle" style={{ margin: '0.35rem 0 0', color: 'var(--muted)', fontSize: '0.9rem' }}>
             ซื้อบัตรได้สะดวกรวดเร็วโดยไม่ต้องสมัครสมาชิก ระบบจะส่งรหัส OTP 6 หลักไปยังอีเมลของคุณเพื่อยืนยันก่อนชำระเงิน
           </p>
         </div>

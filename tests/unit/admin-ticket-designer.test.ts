@@ -124,6 +124,13 @@ describe('Admin Concert Ticket Designer & Background Testing Studio', () => {
     expect(designerSrc).toContain('quick-item-eye-btn');
     expect(designerSrc).toContain('layers-batch-actions');
     expect(designerSrc).toContain('layers-preset-btn');
+
+    // Subtitle Color & Transparent Background/Border Customization
+    expect(designerSrc).toContain('secondaryColor');
+    expect(designerSrc).toContain('itemSecondaryColor');
+    expect(designerSrc).toContain('transparent-swatch');
+    expect(designerSrc).toContain('itemBorderColor');
+    expect(designerSrc).toContain('getElementBoxStyle');
   });
 
   it('verifies ticket designer page route exists under back-office and expands to 1920 full screen', () => {

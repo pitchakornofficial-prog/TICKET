@@ -168,7 +168,7 @@ describe('Multi-step purchase journey (TASK-040, AC-117, D-27)', () => {
     );
     expect(eventPage).toContain('text-nowrap');
     expect(eventPage).toContain('EventInteractivePoster');
-    expect(eventPage).toContain('EventOfficialGallery');
+    expect(eventPage).not.toContain('EventOfficialGallery');
     expect(eventPage).not.toMatch(/\p{Extended_Pictographic}/u);
 
     const interactivePoster = readFileSync(

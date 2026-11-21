@@ -10,6 +10,7 @@ import {
   type ChangeEvent,
   type DragEvent,
   type PointerEvent,
+  type CSSProperties,
 } from 'react';
 import {
   SparklesIcon,
@@ -47,7 +48,10 @@ export interface MovableItem {
   fontSize?: number;
   fontWeight?: '600' | '700' | '800';
   color?: string;
+  secondaryColor?: string;
   bgColor?: string;
+  borderColor?: string;
+  borderWidth?: number;
   text?: string;
   secondaryText?: string;
   size?: number; // for QR
@@ -132,6 +136,7 @@ export const DEFAULT_STATE: TicketDesignerState = {
       y: 26,
       visible: true,
       color: '#0f172a',
+      secondaryColor: '#64748b',
       text: 'TICKET',
       secondaryText: 'OFFICIAL CONCERT PASS',
     },
@@ -156,10 +161,12 @@ export const DEFAULT_STATE: TicketDesignerState = {
       x: 36,
       y: 112,
       visible: true,
-      fontSize: 13,
+      fontSize: 14,
       fontWeight: '700',
-      color: '#ffffff',
-      bgColor: '#0f172a',
+      color: '#0f172a',
+      bgColor: 'transparent',
+      borderColor: 'transparent',
+      borderWidth: 0,
       text: 'VIP FRONT ROW - ZONE A',
     },
 
@@ -174,6 +181,7 @@ export const DEFAULT_STATE: TicketDesignerState = {
       fontSize: 16,
       fontWeight: '700',
       color: '#0f172a',
+      secondaryColor: '#64748b',
       secondaryText: 'ประตูทางเข้า (GATE)',
       text: 'GATE 2',
     },
@@ -187,6 +195,7 @@ export const DEFAULT_STATE: TicketDesignerState = {
       fontSize: 16,
       fontWeight: '700',
       color: '#0f172a',
+      secondaryColor: '#64748b',
       secondaryText: 'แถว/ที่นั่ง (ROW / SEAT)',
       text: 'แถว A / ที่นั่ง 14',
     },
@@ -200,6 +209,7 @@ export const DEFAULT_STATE: TicketDesignerState = {
       fontSize: 16,
       fontWeight: '700',
       color: '#0f172a',
+      secondaryColor: '#64748b',
       secondaryText: 'ราคาบัตร (PRICE)',
       text: 'THB 3,500',
     },
@@ -214,6 +224,7 @@ export const DEFAULT_STATE: TicketDesignerState = {
       visible: true,
       fontSize: 14,
       color: '#0f172a',
+      secondaryColor: '#64748b',
       text: '24 ธันวาคม 2026 | ประตูเปิด 17:00 น. | เริ่มแสดง 19:00 น.',
       secondaryText: 'วันและเวลาแสดง (DATE & TIME)',
     },
@@ -226,6 +237,7 @@ export const DEFAULT_STATE: TicketDesignerState = {
       visible: true,
       fontSize: 14,
       color: '#0f172a',
+      secondaryColor: '#64748b',
       text: 'ศูนย์ประชุมและแสดงสินค้านานาชาติ เชียงใหม่ (Hall 1)',
       secondaryText: 'สถานที่จัดงาน (VENUE & HALL)',
     },
@@ -240,6 +252,7 @@ export const DEFAULT_STATE: TicketDesignerState = {
       visible: true,
       fontSize: 13,
       color: '#0f172a',
+      secondaryColor: '#64748b',
       text: 'สมชาย รักดนตรี',
       secondaryText: 'ผู้ถือบัตร (ATTENDEE)',
     },
@@ -253,6 +266,7 @@ export const DEFAULT_STATE: TicketDesignerState = {
       fontSize: 14,
       fontWeight: '700',
       color: '#0f172a',
+      secondaryColor: '#64748b',
       text: 'TK-849201-9482-01',
       secondaryText: 'รหัสบัตร (TICKET CODE)',
     },
@@ -266,6 +280,7 @@ export const DEFAULT_STATE: TicketDesignerState = {
       text: 'TK-849201-9482-01',
       secondaryText: 'SECURITY VERIFICATION',
       color: '#0f172a',
+      secondaryColor: '#64748b',
     },
 
     // 6. Footer Terms & Policy Section
@@ -292,6 +307,7 @@ export const DEFAULT_STATE: TicketDesignerState = {
       fontSize: 12,
       fontWeight: '700',
       color: '#0f172a',
+      secondaryColor: '#64748b',
       secondaryText: 'ADMISSION STUB',
       text: 'ISAN ROCK 2026 · VIP ZONE A',
     },
@@ -314,6 +330,7 @@ export const DEFAULT_STATE: TicketDesignerState = {
       fontSize: 13,
       fontWeight: '700',
       color: '#0f172a',
+      secondaryColor: '#64748b',
       text: 'TK-849201-9482-01',
       secondaryText: 'รหัสอ้างอิงบัตร (TICKET CODE)',
     },
@@ -337,6 +354,7 @@ export const DEFAULT_STATE: TicketDesignerState = {
       visible: true,
       fontSize: 11,
       color: '#64748b',
+      secondaryColor: '#64748b',
       text: 'ORD-20261224-8891',
       secondaryText: 'หมายเลขคำสั่งซื้อ (ORDER ID)',
     },
@@ -403,7 +421,7 @@ const PRESETS: Record<string, { name: string; desc: string; apply: (s: TicketDes
         ...s.elements,
         brandLogo: { ...s.elements.brandLogo, color: '#0f172a' },
         eventTitle: { ...s.elements.eventTitle, color: '#0f172a' },
-        zoneBadge: { ...s.elements.zoneBadge, bgColor: '#0f172a', color: '#ffffff' },
+        zoneBadge: { ...s.elements.zoneBadge, bgColor: 'transparent', color: '#0f172a', borderWidth: 0, borderColor: 'transparent' },
         gateInfo: { ...s.elements.gateInfo, color: '#0f172a' },
         seatInfo: { ...s.elements.seatInfo, color: '#0f172a' },
         priceInfo: { ...s.elements.priceInfo, color: '#0f172a' },
@@ -441,7 +459,7 @@ const PRESETS: Record<string, { name: string; desc: string; apply: (s: TicketDes
         ...s.elements,
         brandLogo: { ...s.elements.brandLogo, color: '#f8fafc' },
         eventTitle: { ...s.elements.eventTitle, color: '#ffffff' },
-        zoneBadge: { ...s.elements.zoneBadge, bgColor: '#991b1b', color: '#ffffff' },
+        zoneBadge: { ...s.elements.zoneBadge, bgColor: 'transparent', color: '#f3f4f6', borderWidth: 0, borderColor: 'transparent' },
         gateInfo: { ...s.elements.gateInfo, color: '#f3f4f6' },
         seatInfo: { ...s.elements.seatInfo, color: '#f3f4f6' },
         priceInfo: { ...s.elements.priceInfo, color: '#f3f4f6' },
@@ -479,7 +497,7 @@ const PRESETS: Record<string, { name: string; desc: string; apply: (s: TicketDes
         ...s.elements,
         brandLogo: { ...s.elements.brandLogo, color: '#fbbf24' },
         eventTitle: { ...s.elements.eventTitle, color: '#fbbf24' },
-        zoneBadge: { ...s.elements.zoneBadge, bgColor: '#b45309', color: '#ffffff' },
+        zoneBadge: { ...s.elements.zoneBadge, bgColor: 'transparent', color: '#fbbf24', borderWidth: 0, borderColor: 'transparent' },
         gateInfo: { ...s.elements.gateInfo, color: '#fef3c7' },
         seatInfo: { ...s.elements.seatInfo, color: '#fef3c7' },
         priceInfo: { ...s.elements.priceInfo, color: '#fef3c7' },
@@ -517,7 +535,7 @@ const PRESETS: Record<string, { name: string; desc: string; apply: (s: TicketDes
         ...s.elements,
         brandLogo: { ...s.elements.brandLogo, color: '#2d1500' },
         eventTitle: { ...s.elements.eventTitle, color: '#2d1500' },
-        zoneBadge: { ...s.elements.zoneBadge, bgColor: '#9a3412', color: '#ffffff' },
+        zoneBadge: { ...s.elements.zoneBadge, bgColor: 'transparent', color: '#38281f', borderWidth: 0, borderColor: 'transparent' },
         gateInfo: { ...s.elements.gateInfo, color: '#38281f' },
         seatInfo: { ...s.elements.seatInfo, color: '#38281f' },
         priceInfo: { ...s.elements.priceInfo, color: '#38281f' },
@@ -555,7 +573,7 @@ const PRESETS: Record<string, { name: string; desc: string; apply: (s: TicketDes
         ...s.elements,
         brandLogo: { ...s.elements.brandLogo, color: '#0f172a' },
         eventTitle: { ...s.elements.eventTitle, color: '#0f172a' },
-        zoneBadge: { ...s.elements.zoneBadge, bgColor: '#334155', color: '#ffffff' },
+        zoneBadge: { ...s.elements.zoneBadge, bgColor: 'transparent', color: '#1e293b', borderWidth: 0, borderColor: 'transparent' },
         gateInfo: { ...s.elements.gateInfo, color: '#1e293b' },
         seatInfo: { ...s.elements.seatInfo, color: '#1e293b' },
         priceInfo: { ...s.elements.priceInfo, color: '#1e293b' },
@@ -593,7 +611,15 @@ const SAMPLE_BACKGROUNDS = [
   },
 ];
 
-function SecurityBarcodeSvg({ code, color = '#0f172a' }: { code: string; color?: string }) {
+function SecurityBarcodeSvg({
+  code,
+  color = '#0f172a',
+  secondaryColor = '#64748b',
+}: {
+  code: string;
+  color?: string;
+  secondaryColor?: string;
+}) {
   const bars = useMemo(() => {
     const list: { id: string; width: number; isBlack: boolean }[] = [
       { id: 'start-1', width: 3, isBlack: true },
@@ -621,7 +647,7 @@ function SecurityBarcodeSvg({ code, color = '#0f172a' }: { code: string; color?:
   let currentX = 0;
   return (
     <div className="security-barcode-container">
-      <div className="security-barcode-label">SECURITY VERIFICATION</div>
+      <div className="security-barcode-label" style={{ color: secondaryColor }}>SECURITY VERIFICATION</div>
       <svg width="180" height="34" viewBox="0 0 180 34" fill="none" xmlns="http://www.w3.org/2000/svg">
         <title>Security Barcode</title>
         {bars.map((bar) => {
@@ -686,8 +712,9 @@ export function AdminTicketDesigner() {
     };
   }, []);
 
-  // Load Saved Master Template on Mount if exists
+  // Load Saved Master Template on Mount if exists (Local or Server)
   useEffect(() => {
+    let active = true;
     try {
       const saved = localStorage.getItem(MASTER_TEMPLATE_STORAGE_KEY);
       if (saved) {
@@ -701,11 +728,39 @@ export function AdminTicketDesigner() {
               ...parsed.elements,
             },
           }));
+          return;
         }
       }
     } catch {
       // Fallback to default state
     }
+
+    // If not found in localStorage, fetch from server
+    fetch('/api/owner/ticket-master-template')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!active || !data?.template) return;
+        setState((prev) => ({
+          ...prev,
+          ...data.template,
+          elements: {
+            ...prev.elements,
+            ...(data.template.elements || {}),
+          },
+        }));
+        try {
+          localStorage.setItem(MASTER_TEMPLATE_STORAGE_KEY, JSON.stringify(data.template));
+        } catch {
+          // ignore
+        }
+      })
+      .catch(() => {
+        // Fallback to default state
+      });
+
+    return () => {
+      active = false;
+    };
   }, []);
 
   const effectiveScale = zoomMode === 'fit' ? fitScale : manualScale;
@@ -906,10 +961,40 @@ export function AdminTicketDesigner() {
   };
 
   // Save Master Template
-  const handleSaveMasterTemplate = () => {
+  const handleSaveMasterTemplate = async () => {
     try {
       localStorage.setItem(MASTER_TEMPLATE_STORAGE_KEY, JSON.stringify(state));
-      setMasterSavedToast('บันทึกแบบบัตรหลักของระบบสำเร็จ แบบบัตรนี้จะถูกนำไปใช้เป็นมาตรฐานทั่วทั้งระบบ');
+      window.dispatchEvent(
+        new CustomEvent('ticket_master_template_updated', { detail: state })
+      );
+      window.dispatchEvent(
+        new CustomEvent('ticket:master-template-changed', { detail: state })
+      );
+
+      if (typeof BroadcastChannel !== 'undefined') {
+        try {
+          const ch = new BroadcastChannel('ticket_master_template_channel');
+          ch.postMessage({ type: 'UPDATE', template: state });
+          ch.close();
+        } catch {
+          // ignore channel error
+        }
+      }
+
+      // Synchronize with database
+      try {
+        await fetch('/api/owner/ticket-master-template', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ template: state }),
+        });
+      } catch {
+        // server sync fallback
+      }
+
+      setMasterSavedToast(
+        'บันทึกแบบบัตรหลักของระบบสำเร็จ แบบบัตรนี้ถูกนำไปใช้เป็นมาตรฐานกับบัตรทุกคอนเสิร์ตทั่วทั้งระบบแล้ว'
+      );
       setTimeout(() => {
         setMasterSavedToast(null);
       }, 4500);
@@ -919,20 +1004,35 @@ export function AdminTicketDesigner() {
   };
 
   // Load Saved Master Template
-  const handleLoadMasterTemplate = () => {
+  const handleLoadMasterTemplate = async () => {
     try {
-      const saved = localStorage.getItem(MASTER_TEMPLATE_STORAGE_KEY);
+      let saved = localStorage.getItem(MASTER_TEMPLATE_STORAGE_KEY);
+      if (!saved) {
+        try {
+          const res = await fetch('/api/owner/ticket-master-template');
+          if (res.ok) {
+            const data = await res.json();
+            if (data?.template) {
+              saved = JSON.stringify(data.template);
+              localStorage.setItem(MASTER_TEMPLATE_STORAGE_KEY, saved);
+            }
+          }
+        } catch {
+          // ignore
+        }
+      }
+
       if (saved) {
         const parsed = JSON.parse(saved);
         if (parsed && typeof parsed === 'object') {
-          setState((prev) => ({
-            ...prev,
+          setState({
+            ...DEFAULT_STATE,
             ...parsed,
             elements: {
-              ...prev.elements,
-              ...parsed.elements,
+              ...DEFAULT_STATE.elements,
+              ...(parsed.elements || {}),
             },
-          }));
+          });
           setMasterSavedToast('โหลดแบบบัตรหลักของระบบเรียบร้อย');
           setTimeout(() => setMasterSavedToast(null), 3000);
         }
@@ -1032,11 +1132,50 @@ export function AdminTicketDesigner() {
       const height = 500;
       const scaleFactor = 1200 / 1000; // ratio from preview 1000 to export 1200
 
+      const drawRoundedRect = (
+        c: CanvasRenderingContext2D,
+        x: number,
+        y: number,
+        w: number,
+        h: number,
+        r: number
+      ) => {
+        if (r <= 0) {
+          if (typeof c.rect === 'function') c.rect(x, y, w, h);
+          return;
+        }
+        if (typeof c.roundRect === 'function') {
+          c.roundRect(x, y, w, h, r);
+        } else if (typeof c.arcTo === 'function') {
+          c.moveTo(x + r, y);
+          c.lineTo(x + w - r, y);
+          c.arcTo(x + w, y, x + w, y + r, r);
+          c.lineTo(x + w, y + h - r);
+          c.arcTo(x + w, y + h, x + w - r, y + h, r);
+          c.lineTo(x + r, y + h);
+          c.arcTo(x, y + h, x, y + h - r, r);
+          c.lineTo(x, y + r);
+          c.arcTo(x, y, x + r, y, r);
+        } else if (typeof c.rect === 'function') {
+          c.rect(x, y, w, h);
+        }
+      };
+
       const canvas = document.createElement('canvas');
       canvas.width = width;
       canvas.height = height;
       const ctx = canvas.getContext('2d');
       if (!ctx) throw new Error('Canvas context not available');
+
+      const cardRadius = Math.max((typeof state.borderRadius === 'number' ? state.borderRadius : 4) * scaleFactor, 0);
+
+      // Clip canvas for rounded card corners
+      if (cardRadius > 0 && typeof ctx.clip === 'function') {
+        ctx.save();
+        ctx.beginPath();
+        drawRoundedRect(ctx, 0, 0, width, height, cardRadius);
+        ctx.clip();
+      }
 
       // 1. Background
       if (state.bgType === 'solid') {
@@ -1079,8 +1218,14 @@ export function AdminTicketDesigner() {
       // 3. Border
       if (state.borderWidth > 0) {
         ctx.strokeStyle = state.borderColor;
-        ctx.lineWidth = state.borderWidth * 2;
-        ctx.strokeRect(0, 0, width, height);
+        ctx.lineWidth = state.borderWidth * scaleFactor;
+        if (cardRadius > 0 && typeof ctx.beginPath === 'function') {
+          ctx.beginPath();
+          drawRoundedRect(ctx, (state.borderWidth * scaleFactor) / 2, (state.borderWidth * scaleFactor) / 2, width - state.borderWidth * scaleFactor, height - state.borderWidth * scaleFactor, cardRadius);
+          ctx.stroke();
+        } else {
+          ctx.strokeRect(0, 0, width, height);
+        }
       }
 
       // 4. Tear Line
@@ -1108,6 +1253,11 @@ export function AdminTicketDesigner() {
         ctx.fillStyle = logo.color || '#0f172a';
         ctx.font = `bold 16px ${state.fontFamily}, Kanit, sans-serif`;
         ctx.fillText('TICKET', logo.x * scaleFactor + 24, logo.y * scaleFactor);
+        if (logo.secondaryText) {
+          ctx.fillStyle = logo.secondaryColor || '#64748b';
+          ctx.font = `10px ${state.fontFamily}, Kanit, sans-serif`;
+          ctx.fillText(logo.secondaryText, logo.x * scaleFactor + 92, logo.y * scaleFactor + 4);
+        }
       }
 
       // Event Title
@@ -1123,12 +1273,31 @@ export function AdminTicketDesigner() {
       if (badge?.visible && badge.text) {
         const badgeX = badge.x * scaleFactor;
         const badgeY = badge.y * scaleFactor;
-        ctx.font = `bold ${Math.round((badge.fontSize || 13) * scaleFactor)}px ${state.fontFamily}, Kanit, sans-serif`;
+        ctx.font = `bold ${Math.round((badge.fontSize || 14) * scaleFactor)}px ${state.fontFamily}, Kanit, sans-serif`;
         const textWidth = ctx.measureText(badge.text).width;
-        ctx.fillStyle = badge.bgColor || '#0f172a';
-        ctx.fillRect(badgeX, badgeY, textWidth + 24, 30);
-        ctx.fillStyle = badge.color || '#ffffff';
-        ctx.fillText(badge.text, badgeX + 12, badgeY + 5);
+        const hasBg = badge.bgColor && badge.bgColor !== 'transparent';
+        const bWidth = badge.borderWidth ?? (badge.borderColor && badge.borderColor !== 'transparent' ? 1 : 0);
+        const hasBorder = bWidth > 0 && badge.borderColor && badge.borderColor !== 'transparent';
+
+        if (hasBg || hasBorder) {
+          const padX = 8 * scaleFactor;
+          const boxW = textWidth + padX * 2;
+          const boxH = 30 * scaleFactor;
+          if (hasBg) {
+            ctx.fillStyle = badge.bgColor as string;
+            ctx.fillRect(badgeX, badgeY, boxW, boxH);
+          }
+          if (hasBorder) {
+            ctx.strokeStyle = badge.borderColor as string;
+            ctx.lineWidth = bWidth * scaleFactor;
+            ctx.strokeRect(badgeX, badgeY, boxW, boxH);
+          }
+          ctx.fillStyle = badge.color || '#0f172a';
+          ctx.fillText(badge.text, badgeX + padX, badgeY + 6 * scaleFactor);
+        } else {
+          ctx.fillStyle = badge.color || '#0f172a';
+          ctx.fillText(badge.text, badgeX, badgeY);
+        }
       }
 
       // Other Text Elements
@@ -1153,8 +1322,35 @@ export function AdminTicketDesigner() {
         const posX = el.x * scaleFactor;
         const posY = el.y * scaleFactor;
 
+        // Optional Box Background / Border for any element
+        const hasBg = el.bgColor && el.bgColor !== 'transparent';
+        const bWidth = el.borderWidth ?? (el.borderColor && el.borderColor !== 'transparent' ? 1 : 0);
+        const hasBorder = bWidth > 0 && el.borderColor && el.borderColor !== 'transparent';
+
+        if (hasBg || hasBorder) {
+          ctx.font = `${el.fontWeight || 'normal'} ${Math.round((el.fontSize || 14) * scaleFactor)}px ${state.fontFamily}, Kanit, sans-serif`;
+          const textW = Math.max(
+            el.text ? ctx.measureText(el.text).width : 0,
+            el.secondaryText ? ctx.measureText(el.secondaryText).width : 0,
+          );
+          const padW = 8 * scaleFactor;
+          const padH = 4 * scaleFactor;
+          const boxW = textW + padW * 2;
+          const boxH = (el.secondaryText ? 36 : 24) * scaleFactor;
+
+          if (hasBg) {
+            ctx.fillStyle = el.bgColor as string;
+            ctx.fillRect(posX - padW, posY - padH, boxW, boxH);
+          }
+          if (hasBorder) {
+            ctx.strokeStyle = el.borderColor as string;
+            ctx.lineWidth = bWidth * scaleFactor;
+            ctx.strokeRect(posX - padW, posY - padH, boxW, boxH);
+          }
+        }
+
         if (el.secondaryText) {
-          ctx.fillStyle = '#64748b';
+          ctx.fillStyle = el.secondaryColor || '#64748b';
           ctx.font = `12px ${state.fontFamily}, Kanit, sans-serif`;
           ctx.fillText(el.secondaryText, posX, posY);
         }
@@ -1171,7 +1367,7 @@ export function AdminTicketDesigner() {
       if (bcode?.visible && bcode.text) {
         const bX = bcode.x * scaleFactor;
         const bY = bcode.y * scaleFactor;
-        ctx.fillStyle = '#64748b';
+        ctx.fillStyle = bcode.secondaryColor || '#64748b';
         ctx.font = `11px ${state.fontFamily}, Kanit, sans-serif`;
         ctx.fillText('SECURITY VERIFICATION', bX, bY);
         // Draw bars
@@ -1197,9 +1393,39 @@ export function AdminTicketDesigner() {
         const qrW = (qr.size || 155) * scaleFactor;
         const qrX = qr.x * scaleFactor;
         const qrY = qr.y * scaleFactor;
-        ctx.fillStyle = state.qrBgColor;
-        ctx.fillRect(qrX - 8, qrY - 8, qrW + 16, qrW + 16);
+        const qrPad = 8 * scaleFactor;
+        const qrRadius = 8 * scaleFactor;
+        const boxX = qrX - qrPad;
+        const boxY = qrY - qrPad;
+        const boxW = qrW + qrPad * 2;
+        const boxH = qrW + qrPad * 2;
+
+        ctx.save();
+        ctx.fillStyle = state.qrBgColor && state.qrBgColor !== 'transparent' ? state.qrBgColor : '#ffffff';
+        if (typeof ctx.beginPath === 'function') {
+          ctx.beginPath();
+          drawRoundedRect(ctx, boxX, boxY, boxW, boxH, qrRadius);
+          if (typeof ctx.fill === 'function') {
+            ctx.fill();
+          } else {
+            ctx.fillRect(boxX, boxY, boxW, boxH);
+          }
+          ctx.strokeStyle = '#e2e8f0';
+          ctx.lineWidth = 1 * scaleFactor;
+          if (typeof ctx.stroke === 'function') ctx.stroke();
+        } else {
+          ctx.fillRect(boxX, boxY, boxW, boxH);
+        }
+        ctx.restore();
+
+        ctx.save();
+        if (typeof ctx.beginPath === 'function' && typeof ctx.clip === 'function') {
+          ctx.beginPath();
+          drawRoundedRect(ctx, qrX, qrY, qrW, qrW, 4 * scaleFactor);
+          ctx.clip();
+        }
         ctx.drawImage(qrImg, qrX, qrY, qrW, qrW);
+        ctx.restore();
       }
 
       // Trigger Download
@@ -1212,6 +1438,23 @@ export function AdminTicketDesigner() {
       setIsExporting(false);
     }
   }, [state, qrSvgDataUrl]);
+
+  // Helper to resolve box background & border styles for any element
+  const getElementBoxStyle = (el: MovableItem | undefined): CSSProperties => {
+    if (!el) return {};
+    const hasBg = el.bgColor && el.bgColor !== 'transparent';
+    const bWidth = el.borderWidth ?? (el.borderColor && el.borderColor !== 'transparent' ? 1 : 0);
+    const hasBorder = bWidth > 0 && el.borderColor && el.borderColor !== 'transparent';
+    if (!hasBg && !hasBorder) return {};
+    return {
+      backgroundColor: hasBg ? el.bgColor : 'transparent',
+      borderColor: hasBorder ? el.borderColor : 'transparent',
+      borderWidth: `${bWidth}px`,
+      borderStyle: hasBorder ? 'solid' : 'none',
+      padding: '4px 8px',
+      borderRadius: '4px',
+    };
+  };
 
   // Render Canonical Ticket Surface
   const renderTicketCard = (isInteractive: boolean) => {
@@ -1272,7 +1515,9 @@ export function AdminTicketDesigner() {
             <div className="brand-logo-content" style={{ color: state.elements.brandLogo.color }}>
               <TicketIcon style={{ width: 18, height: 18 }} />
               <strong>{state.elements.brandLogo.text || 'TICKET'}</strong>
-              <span className="brand-official-tag">{state.elements.brandLogo.secondaryText || 'OFFICIAL CONCERT PASS'}</span>
+              <span className="brand-official-tag" style={{ color: state.elements.brandLogo.secondaryColor || '#64748b' }}>
+                {state.elements.brandLogo.secondaryText || 'OFFICIAL CONCERT PASS'}
+              </span>
             </div>
             {isInteractive && selectedId === 'brandLogo' && (
               <span className="coord-chip">X: {state.elements.brandLogo.x} Y: {state.elements.brandLogo.y}</span>
@@ -1295,6 +1540,7 @@ export function AdminTicketDesigner() {
                 fontSize: `${state.elements.eventTitle.fontSize || 26}px`,
                 fontWeight: state.elements.eventTitle.fontWeight || '700',
                 color: state.elements.eventTitle.color,
+                ...getElementBoxStyle(state.elements.eventTitle),
               }}
             >
               {state.elements.eventTitle.text}
@@ -1317,9 +1563,10 @@ export function AdminTicketDesigner() {
             <div
               className="zone-badge-pill"
               style={{
-                fontSize: `${state.elements.zoneBadge.fontSize || 13}px`,
-                color: state.elements.zoneBadge.color,
-                backgroundColor: state.elements.zoneBadge.bgColor,
+                fontSize: `${state.elements.zoneBadge.fontSize || 14}px`,
+                fontWeight: state.elements.zoneBadge.fontWeight || '700',
+                color: state.elements.zoneBadge.color || '#0f172a',
+                ...getElementBoxStyle(state.elements.zoneBadge),
               }}
             >
               {state.elements.zoneBadge.text}
@@ -1339,8 +1586,10 @@ export function AdminTicketDesigner() {
             }}
             onPointerDown={(e) => handlePointerDown('gateInfo', e)}
           >
-            <div className="meta-block">
-              <span className="meta-label">{state.elements.gateInfo.secondaryText || 'ประตูทางเข้า (GATE)'}</span>
+            <div className="meta-block" style={{ ...getElementBoxStyle(state.elements.gateInfo) }}>
+              <span className="meta-label" style={{ color: state.elements.gateInfo.secondaryColor || '#64748b' }}>
+                {state.elements.gateInfo.secondaryText || 'ประตูทางเข้า (GATE)'}
+              </span>
               <strong className="meta-val" style={{ color: state.elements.gateInfo.color, fontSize: `${state.elements.gateInfo.fontSize || 16}px` }}>
                 {state.elements.gateInfo.text}
               </strong>
@@ -1360,8 +1609,10 @@ export function AdminTicketDesigner() {
             }}
             onPointerDown={(e) => handlePointerDown('seatInfo', e)}
           >
-            <div className="meta-block">
-              <span className="meta-label">{state.elements.seatInfo.secondaryText || 'แถว/ที่นั่ง (ROW / SEAT)'}</span>
+            <div className="meta-block" style={{ ...getElementBoxStyle(state.elements.seatInfo) }}>
+              <span className="meta-label" style={{ color: state.elements.seatInfo.secondaryColor || '#64748b' }}>
+                {state.elements.seatInfo.secondaryText || 'แถว/ที่นั่ง (ROW / SEAT)'}
+              </span>
               <strong className="meta-val" style={{ color: state.elements.seatInfo.color, fontSize: `${state.elements.seatInfo.fontSize || 16}px` }}>
                 {state.elements.seatInfo.text}
               </strong>
@@ -1381,8 +1632,10 @@ export function AdminTicketDesigner() {
             }}
             onPointerDown={(e) => handlePointerDown('priceInfo', e)}
           >
-            <div className="meta-block">
-              <span className="meta-label">{state.elements.priceInfo.secondaryText || 'ราคาบัตร (PRICE)'}</span>
+            <div className="meta-block" style={{ ...getElementBoxStyle(state.elements.priceInfo) }}>
+              <span className="meta-label" style={{ color: state.elements.priceInfo.secondaryColor || '#64748b' }}>
+                {state.elements.priceInfo.secondaryText || 'ราคาบัตร (PRICE)'}
+              </span>
               <strong className="meta-val" style={{ color: state.elements.priceInfo.color, fontSize: `${state.elements.priceInfo.fontSize || 16}px` }}>
                 {state.elements.priceInfo.text}
               </strong>
@@ -1402,8 +1655,10 @@ export function AdminTicketDesigner() {
             }}
             onPointerDown={(e) => handlePointerDown('dateTime', e)}
           >
-            <div className="meta-block">
-              <span className="meta-label">{state.elements.dateTime.secondaryText || 'วันและเวลาแสดง (DATE & TIME)'}</span>
+            <div className="meta-block" style={{ ...getElementBoxStyle(state.elements.dateTime) }}>
+              <span className="meta-label" style={{ color: state.elements.dateTime.secondaryColor || '#64748b' }}>
+                {state.elements.dateTime.secondaryText || 'วันและเวลาแสดง (DATE & TIME)'}
+              </span>
               <strong className="meta-val" style={{ color: state.elements.dateTime.color, fontSize: `${state.elements.dateTime.fontSize || 14}px` }}>
                 {state.elements.dateTime.text}
               </strong>
@@ -1423,8 +1678,10 @@ export function AdminTicketDesigner() {
             }}
             onPointerDown={(e) => handlePointerDown('venue', e)}
           >
-            <div className="meta-block">
-              <span className="meta-label">{state.elements.venue.secondaryText || 'สถานที่จัดงาน (VENUE & HALL)'}</span>
+            <div className="meta-block" style={{ ...getElementBoxStyle(state.elements.venue) }}>
+              <span className="meta-label" style={{ color: state.elements.venue.secondaryColor || '#64748b' }}>
+                {state.elements.venue.secondaryText || 'สถานที่จัดงาน (VENUE & HALL)'}
+              </span>
               <strong className="meta-val" style={{ color: state.elements.venue.color, fontSize: `${state.elements.venue.fontSize || 14}px` }}>
                 {state.elements.venue.text}
               </strong>
@@ -1444,8 +1701,10 @@ export function AdminTicketDesigner() {
             }}
             onPointerDown={(e) => handlePointerDown('buyerName', e)}
           >
-            <div className="meta-block">
-              <span className="meta-label">{state.elements.buyerName.secondaryText || 'ผู้ถือบัตร (ATTENDEE)'}</span>
+            <div className="meta-block" style={{ ...getElementBoxStyle(state.elements.buyerName) }}>
+              <span className="meta-label" style={{ color: state.elements.buyerName.secondaryColor || '#64748b' }}>
+                {state.elements.buyerName.secondaryText || 'ผู้ถือบัตร (ATTENDEE)'}
+              </span>
               <strong className="meta-val" style={{ color: state.elements.buyerName.color, fontSize: `${state.elements.buyerName.fontSize || 13}px` }}>
                 {state.elements.buyerName.text}
               </strong>
@@ -1465,8 +1724,10 @@ export function AdminTicketDesigner() {
             }}
             onPointerDown={(e) => handlePointerDown('ticketCode', e)}
           >
-            <div className="meta-block">
-              <span className="meta-label">{state.elements.ticketCode.secondaryText || 'รหัสบัตร (TICKET CODE)'}</span>
+            <div className="meta-block" style={{ ...getElementBoxStyle(state.elements.ticketCode) }}>
+              <span className="meta-label" style={{ color: state.elements.ticketCode.secondaryColor || '#64748b' }}>
+                {state.elements.ticketCode.secondaryText || 'รหัสบัตร (TICKET CODE)'}
+              </span>
               <strong className="meta-val font-mono" style={{ color: state.elements.ticketCode.color, fontSize: `${state.elements.ticketCode.fontSize || 14}px` }}>
                 {state.elements.ticketCode.text}
               </strong>
@@ -1486,7 +1747,11 @@ export function AdminTicketDesigner() {
             }}
             onPointerDown={(e) => handlePointerDown('barcode', e)}
           >
-            <SecurityBarcodeSvg code={state.elements.barcode.text || 'TK-849201-9482-01'} color={state.elements.barcode.color} />
+            <SecurityBarcodeSvg
+              code={state.elements.barcode.text || 'TK-849201-9482-01'}
+              color={state.elements.barcode.color}
+              secondaryColor={state.elements.barcode.secondaryColor}
+            />
             {isInteractive && selectedId === 'barcode' && (
               <span className="coord-chip">X: {state.elements.barcode.x} Y: {state.elements.barcode.y}</span>
             )}
@@ -1520,8 +1785,10 @@ export function AdminTicketDesigner() {
             }}
             onPointerDown={(e) => handlePointerDown('stubEventSummary', e)}
           >
-            <div className="stub-event-summary-block">
-              <span className="stub-event-badge">{state.elements.stubEventSummary.secondaryText || 'ADMISSION STUB'}</span>
+            <div className="stub-event-summary-block" style={{ ...getElementBoxStyle(state.elements.stubEventSummary) }}>
+              <span className="stub-event-badge" style={{ color: state.elements.stubEventSummary.secondaryColor || '#64748b' }}>
+                {state.elements.stubEventSummary.secondaryText || 'ADMISSION STUB'}
+              </span>
               <strong className="stub-event-title" style={{ color: state.elements.stubEventSummary.color, fontSize: `${state.elements.stubEventSummary.fontSize || 12}px` }}>
                 {state.elements.stubEventSummary.text}
               </strong>
@@ -1577,8 +1844,10 @@ export function AdminTicketDesigner() {
             }}
             onPointerDown={(e) => handlePointerDown('qrCodeLabel', e)}
           >
-            <div className="stub-code-block">
-              <span className="stub-code-tag">{state.elements.qrCodeLabel.secondaryText || 'รหัสอ้างอิงบัตร'}</span>
+            <div className="stub-code-block" style={{ ...getElementBoxStyle(state.elements.qrCodeLabel) }}>
+              <span className="stub-code-tag" style={{ color: state.elements.qrCodeLabel.secondaryColor || '#64748b' }}>
+                {state.elements.qrCodeLabel.secondaryText || 'รหัสอ้างอิงบัตร'}
+              </span>
               <strong className="stub-code-strong font-mono" style={{ color: state.elements.qrCodeLabel.color }}>
                 {state.elements.qrCodeLabel.text}
               </strong>
@@ -1616,8 +1885,10 @@ export function AdminTicketDesigner() {
             }}
             onPointerDown={(e) => handlePointerDown('orderId', e)}
           >
-            <div className="stub-code-block">
-              <span className="stub-code-tag">{state.elements.orderId.secondaryText || 'ORDER ID'}</span>
+            <div className="stub-code-block" style={{ ...getElementBoxStyle(state.elements.orderId) }}>
+              <span className="stub-code-tag" style={{ color: state.elements.orderId.secondaryColor || '#64748b' }}>
+                {state.elements.orderId.secondaryText || 'ORDER ID'}
+              </span>
               <span className="font-mono" style={{ color: state.elements.orderId.color, fontSize: `${state.elements.orderId.fontSize || 11}px` }}>
                 {state.elements.orderId.text}
               </span>
@@ -2042,6 +2313,78 @@ export function AdminTicketDesigner() {
                       </div>
                     )}
 
+                    {/* Secondary Text Color / Subtitle Color */}
+                    {selectedItem.secondaryText !== undefined && (
+                      <div className="studio-field">
+                        <label htmlFor={getFieldId('itemSecondaryColor')} className="studio-label">
+                          สีข้อความกำกับส่วนหัว (Subtitle / Tag Color)
+                        </label>
+                        <div className="studio-color-row">
+                          <input
+                            id={getFieldId('itemSecondaryColor')}
+                            type="color"
+                            value={selectedItem.secondaryColor || '#64748b'}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setState((prev) => ({
+                                ...prev,
+                                elements: {
+                                  ...prev.elements,
+                                  [selectedItem.id]: {
+                                    ...prev.elements[selectedItem.id],
+                                    secondaryColor: val,
+                                  },
+                                },
+                              }));
+                            }}
+                          />
+                          <input
+                            type="text"
+                            className="studio-input"
+                            value={selectedItem.secondaryColor || '#64748b'}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setState((prev) => ({
+                                ...prev,
+                                elements: {
+                                  ...prev.elements,
+                                  [selectedItem.id]: {
+                                    ...prev.elements[selectedItem.id],
+                                    secondaryColor: val,
+                                  },
+                                },
+                              }));
+                            }}
+                            aria-label="รหัสสีข้อความกำกับส่วนหัว"
+                          />
+                        </div>
+                        <div className="color-swatches" style={{ marginTop: '0.35rem' }}>
+                          {['#64748b', '#94a3b8', '#0f172a', '#334155', '#475569', '#78350f', '#0284c7', '#16a34a', '#dc2626'].map((hex) => (
+                            <button
+                              key={hex}
+                              type="button"
+                              className="color-swatch-chip"
+                              style={{ backgroundColor: hex }}
+                              onClick={() => {
+                                setState((prev) => ({
+                                  ...prev,
+                                  elements: {
+                                    ...prev.elements,
+                                    [selectedItem.id]: {
+                                      ...prev.elements[selectedItem.id],
+                                      secondaryColor: hex,
+                                    },
+                                  },
+                                }));
+                              }}
+                              title={`เลือกสี ${hex}`}
+                              aria-label={`สี ${hex}`}
+                            />
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
                     {/* Font Size */}
                     {selectedItem.fontSize !== undefined && (
                       <div className="studio-field">
@@ -2117,15 +2460,42 @@ export function AdminTicketDesigner() {
                       </div>
                     )}
 
-                    {/* Badge Background Color */}
-                    {selectedItem.bgColor !== undefined && (
-                      <div className="studio-field">
-                        <label htmlFor={getFieldId('itemBgColor')} className="studio-label">สีพื้นหลังป้าย</label>
+                    {/* Background & Border for Zone Badge and All Elements */}
+                    {selectedItem.id !== 'qrCode' && (
+                      <div className="studio-field" style={{ borderTop: '1px solid #f1f5f9', paddingTop: '0.75rem', marginTop: '0.5rem' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.25rem' }}>
+                          <label htmlFor={getFieldId('itemBgColor')} className="studio-label" style={{ margin: 0 }}>
+                            {selectedItem.id === 'zoneBadge' ? 'สีพื้นหลังป้ายโซน (Zone Background)' : 'สีพื้นหลังกล่องชิ้นส่วน (Box Background)'}
+                          </label>
+                          <button
+                            type="button"
+                            className={`studio-btn secondary ${(!selectedItem.bgColor || selectedItem.bgColor === 'transparent') ? 'active' : ''}`}
+                            style={{ height: '26px', padding: '0 0.5rem', fontSize: '0.72rem' }}
+                            onClick={() => {
+                              const isCurrentlyTransparent = !selectedItem.bgColor || selectedItem.bgColor === 'transparent';
+                              const nextBg = isCurrentlyTransparent ? '#0f172a' : 'transparent';
+                              setState((prev) => ({
+                                ...prev,
+                                elements: {
+                                  ...prev.elements,
+                                  [selectedItem.id]: {
+                                    ...prev.elements[selectedItem.id],
+                                    bgColor: nextBg,
+                                    color: (nextBg === 'transparent' && selectedItem.id === 'zoneBadge' && selectedItem.color === '#ffffff') ? '#0f172a' : selectedItem.color,
+                                  },
+                                },
+                              }));
+                            }}
+                          >
+                            {(!selectedItem.bgColor || selectedItem.bgColor === 'transparent') ? 'พื้นหลัง: โปร่งใส' : 'ปรับเป็นโปร่งใส'}
+                          </button>
+                        </div>
+
                         <div className="studio-color-row">
                           <input
                             id={getFieldId('itemBgColor')}
                             type="color"
-                            value={selectedItem.bgColor}
+                            value={selectedItem.bgColor && selectedItem.bgColor !== 'transparent' ? selectedItem.bgColor : '#0f172a'}
                             onChange={(e) => {
                               const val = e.target.value;
                               setState((prev) => ({
@@ -2143,7 +2513,7 @@ export function AdminTicketDesigner() {
                           <input
                             type="text"
                             className="studio-input"
-                            value={selectedItem.bgColor}
+                            value={selectedItem.bgColor || 'transparent'}
                             onChange={(e) => {
                               const val = e.target.value;
                               setState((prev) => ({
@@ -2157,8 +2527,143 @@ export function AdminTicketDesigner() {
                                 },
                               }));
                             }}
-                            aria-label="รหัสสีพื้นหลังป้าย"
+                            placeholder="transparent หรือ #0f172a"
+                            aria-label="รหัสสีพื้นหลัง"
                           />
+                        </div>
+
+                        <div className="color-swatches" style={{ marginTop: '0.35rem' }}>
+                          <button
+                            type="button"
+                            className={`color-swatch-chip transparent-swatch ${(!selectedItem.bgColor || selectedItem.bgColor === 'transparent') ? 'active' : ''}`}
+                            onClick={() => {
+                              setState((prev) => ({
+                                ...prev,
+                                elements: {
+                                  ...prev.elements,
+                                  [selectedItem.id]: {
+                                    ...prev.elements[selectedItem.id],
+                                    bgColor: 'transparent',
+                                    color: (selectedItem.id === 'zoneBadge' && selectedItem.color === '#ffffff') ? '#0f172a' : selectedItem.color,
+                                  },
+                                },
+                              }));
+                            }}
+                            title="โปร่งใส (ไม่มีพื้นหลัง)"
+                            aria-label="โปร่งใส (ไม่มีพื้นหลัง)"
+                          >
+                            <span style={{ fontSize: '9px', fontWeight: 700, color: '#64748b' }}>None</span>
+                          </button>
+                          {['#0f172a', '#ffffff', '#f1f5f9', '#e2e8f0', '#0284c7', '#9a3412', '#16a34a', '#d97706', '#991b1b'].map((hex) => (
+                            <button
+                              key={hex}
+                              type="button"
+                              className="color-swatch-chip"
+                              style={{ backgroundColor: hex }}
+                              onClick={() => {
+                                setState((prev) => ({
+                                  ...prev,
+                                  elements: {
+                                    ...prev.elements,
+                                    [selectedItem.id]: {
+                                      ...prev.elements[selectedItem.id],
+                                      bgColor: hex,
+                                    },
+                                  },
+                                }));
+                              }}
+                              title={`เลือกสี ${hex}`}
+                              aria-label={`สี ${hex}`}
+                            />
+                          ))}
+                        </div>
+
+                        {/* Border / Outline for Zone Badge & All Parts */}
+                        <div style={{ marginTop: '0.65rem' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.25rem' }}>
+                            <label htmlFor={getFieldId('itemBorderColor')} className="studio-label" style={{ margin: 0 }}>
+                              สีกรอบ / เส้นขอบ (Border / Outline)
+                            </label>
+                            <span style={{ fontSize: '0.72rem', color: '#64748b' }}>
+                              หนา {selectedItem.borderWidth ?? (selectedItem.borderColor && selectedItem.borderColor !== 'transparent' ? 1 : 0)}px
+                            </span>
+                          </div>
+
+                          <div className="studio-color-row">
+                            <input
+                              id={getFieldId('itemBorderColor')}
+                              type="color"
+                              value={selectedItem.borderColor && selectedItem.borderColor !== 'transparent' ? selectedItem.borderColor : '#0f172a'}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                setState((prev) => ({
+                                  ...prev,
+                                  elements: {
+                                    ...prev.elements,
+                                    [selectedItem.id]: {
+                                      ...prev.elements[selectedItem.id],
+                                      borderColor: val,
+                                      borderWidth: prev.elements[selectedItem.id].borderWidth || 1,
+                                    },
+                                  },
+                                }));
+                              }}
+                            />
+                            <input
+                              type="text"
+                              className="studio-input"
+                              value={selectedItem.borderColor || 'transparent'}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                setState((prev) => ({
+                                  ...prev,
+                                  elements: {
+                                    ...prev.elements,
+                                    [selectedItem.id]: {
+                                      ...prev.elements[selectedItem.id],
+                                      borderColor: val,
+                                      borderWidth: val !== 'transparent' ? (prev.elements[selectedItem.id].borderWidth || 1) : 0,
+                                    },
+                                  },
+                                }));
+                              }}
+                              placeholder="transparent หรือ #0f172a"
+                              aria-label="รหัสสีกรอบ"
+                            />
+                          </div>
+
+                          <div style={{ display: 'flex', gap: '0.35rem', marginTop: '0.35rem' }}>
+                            {[
+                              { label: 'ไม่มีกรอบ', width: 0, color: 'transparent' },
+                              { label: 'กรอบบาง (1px)', width: 1, color: selectedItem.borderColor && selectedItem.borderColor !== 'transparent' ? selectedItem.borderColor : '#0f172a' },
+                              { label: 'กรอบหนา (2px)', width: 2, color: selectedItem.borderColor && selectedItem.borderColor !== 'transparent' ? selectedItem.borderColor : '#0f172a' },
+                            ].map((b) => {
+                              const isCurrent = (selectedItem.borderWidth ?? 0) === b.width;
+                              return (
+                                <button
+                                  key={b.width}
+                                  type="button"
+                                  className={`studio-btn secondary ${isCurrent ? 'active' : ''}`}
+                                  style={{ height: '26px', padding: '0 0.5rem', fontSize: '0.72rem', flex: 1 }}
+                                  onClick={() => {
+                                    setState((prev) => ({
+                                      ...prev,
+                                      elements: {
+                                        ...prev.elements,
+                                        [selectedItem.id]: {
+                                          ...prev.elements[selectedItem.id],
+                                          borderWidth: b.width,
+                                          borderColor: b.color,
+                                        },
+                                      },
+                                    }));
+                                  }}
+                                >
+                                  {b.label}
+                                </button>
+                              );
+                            })}
+                          </div>
                         </div>
                       </div>
                     )}

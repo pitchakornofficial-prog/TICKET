@@ -42,6 +42,7 @@ describe('Security headers configuration in next.config.ts', () => {
     const csp = headersMap.get('Content-Security-Policy');
     expect(csp).toBeDefined();
     expect(csp).toContain("frame-ancestors 'none'");
+    expect(csp).toContain("frame-src 'self' https://maps.google.com https://www.google.com");
     expect(csp).toContain("default-src 'self'");
     expect(csp).toContain("script-src 'self' 'unsafe-inline' 'unsafe-eval' https://static.cloudflareinsights.com");
     expect(csp).toContain("img-src 'self' data: blob: https:");

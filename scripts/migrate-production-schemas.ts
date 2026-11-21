@@ -9,6 +9,8 @@ import { ensureUploadFinalizeSchema } from '../src/server/upload-finalization.ts
 import { ensurePasswordResetTokenSchema } from '../src/server/password-reset.ts';
 import { ensureOwnerContactInfoSchema } from '../src/server/owner-contact-info.ts';
 import { ensureInboundEmailSchema } from '../src/server/inbound-email.ts';
+import { ensureTicketMasterTemplateSchema } from '../src/server/ticket-master-template.ts';
+import { ensureTransactionMemoSchema } from '../src/server/transaction-memo.ts';
 
 const pool = createDatabasePool();
 try {
@@ -34,6 +36,10 @@ try {
   console.log('9. Owner contact info schema: OK');
   await ensureInboundEmailSchema(pool);
   console.log('10. Inbound email mailbox schema: OK');
+  await ensureTicketMasterTemplateSchema(pool);
+  console.log('11. Ticket master template schema: OK');
+  await ensureTransactionMemoSchema(pool);
+  console.log('12. Order transaction memo schema: OK');
 
   // Verify backfill consistency
   const expectedRes = await pool.query<{ ticketTypeId: string; expected: number }>(`
