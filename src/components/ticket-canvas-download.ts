@@ -92,6 +92,35 @@ export function renderFullEventTitle(
   return curY;
 }
 
+function drawRoundedRect(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  r: number,
+): void {
+  if (r <= 0) {
+    if (typeof ctx.rect === 'function') ctx.rect(x, y, w, h);
+    return;
+  }
+  if (typeof ctx.roundRect === 'function') {
+    ctx.roundRect(x, y, w, h, r);
+  } else if (typeof ctx.arcTo === 'function') {
+    ctx.moveTo(x + r, y);
+    ctx.lineTo(x + w - r, y);
+    ctx.arcTo(x + w, y, x + w, y + r, r);
+    ctx.lineTo(x + w, y + h - r);
+    ctx.arcTo(x + w, y + h, x + w - r, y + h, r);
+    ctx.lineTo(x + r, y + h);
+    ctx.arcTo(x, y + h, x, y + h - r, r);
+    ctx.lineTo(x, y + r);
+    ctx.arcTo(x, y, x + r, y, r);
+  } else if (typeof ctx.rect === 'function') {
+    ctx.rect(x, y, w, h);
+  }
+}
+
 /**
  * Renders a high-resolution 1200 x 500 px ticket pass on HTML5 Canvas.
  * Dynamically applies the master ticket template (D-275) with real concert data for all concerts.
@@ -122,6 +151,15 @@ export async function generateTicketCanvas(
 
   const template = overrideTemplate || loadLocalMasterTemplate();
   const fontFam = template.fontFamily ? `${template.fontFamily}, ${FONT_SANS}` : FONT_SANS;
+  const cardRadius = Math.max((typeof template.borderRadius === 'number' ? template.borderRadius : 4) * scaleFactor, 0);
+
+  // Clip canvas if rounded card corners are configured
+  if (cardRadius > 0 && typeof ctx.clip === 'function') {
+    ctx.save();
+    ctx.beginPath();
+    drawRoundedRect(ctx, 0, 0, width, height, cardRadius);
+    ctx.clip();
+  }
 
   // 1. Background rendering
   if (template.bgType === 'solid') {
@@ -162,13 +200,18 @@ export async function generateTicketCanvas(
   }
 
   // 3. Ticket Outline & Border
-  if (template.borderWidth > 0 && template.borderColor && template.borderColor !== 'transparent') {
-    ctx.strokeStyle = template.borderColor;
-    ctx.lineWidth = template.borderWidth * 2;
-    ctx.strokeRect(0, 0, width, height);
+  const borderWidth = template.borderWidth > 0 ? template.borderWidth * scaleFactor : 2;
+  const borderColor = (template.borderWidth > 0 && template.borderColor && template.borderColor !== 'transparent')
+    ? template.borderColor
+    : '#e2e8f0';
+
+  ctx.strokeStyle = borderColor;
+  ctx.lineWidth = borderWidth;
+  if (cardRadius > 0 && typeof ctx.beginPath === 'function') {
+    ctx.beginPath();
+    drawRoundedRect(ctx, borderWidth / 2, borderWidth / 2, width - borderWidth, height - borderWidth, cardRadius);
+    ctx.stroke();
   } else {
-    ctx.strokeStyle = '#e2e8f0';
-    ctx.lineWidth = 2;
     ctx.strokeRect(1, 1, width - 2, height - 2);
   }
 
@@ -245,10 +288,12 @@ export async function generateTicketCanvas(
   if (badge?.visible) {
     const badgeX = badge.x * scaleFactor;
     const badgeY = badge.y * scaleFactor;
-    const fs = Math.round((badge.fontSize || 13) * scaleFactor);
+    const fs = Math.round((badge.fontSize || 14) * scaleFactor);
     ctx.font = `bold ${fs}px ${fontFam}`;
     const textW = ctx.measureText(ticket.ticketTypeName).width;
-    drawElementBox(badge, badgeX, badgeY, textW, 28 * scaleFactor);
+    if (badge.bgColor && badge.bgColor !== 'transparent') {
+      drawElementBox(badge, badgeX, badgeY, textW, 28 * scaleFactor);
+    }
     ctx.fillStyle = badge.color || '#0f172a';
     renderTextFitted(ctx, ticket.ticketTypeName, badgeX, badgeY, Math.max(stubX - badgeX - 40, 300), fs, 12, fontFam, true);
   }
@@ -400,11 +445,31 @@ export async function generateTicketCanvas(
     const qrSize = Math.round((qr.size || template.qrSize || 155) * scaleFactor);
     const qrX = qr.x * scaleFactor;
     const qrY = qr.y * scaleFactor;
+    const qrPad = 8 * scaleFactor;
+    const qrRadius = 8 * scaleFactor;
+    const boxX = qrX - qrPad;
+    const boxY = qrY - qrPad;
+    const boxW = qrSize + qrPad * 2;
+    const boxH = qrSize + qrPad * 2;
 
-    if (template.qrBgColor && template.qrBgColor !== 'transparent') {
-      ctx.fillStyle = template.qrBgColor;
-      ctx.fillRect(qrX - 4, qrY - 4, qrSize + 8, qrSize + 8);
+    // Draw rounded QR container card (matches .surface-qr-btn in studio)
+    ctx.save();
+    ctx.fillStyle = template.qrBgColor && template.qrBgColor !== 'transparent' ? template.qrBgColor : '#ffffff';
+    if (typeof ctx.beginPath === 'function') {
+      ctx.beginPath();
+      drawRoundedRect(ctx, boxX, boxY, boxW, boxH, qrRadius);
+      if (typeof ctx.fill === 'function') {
+        ctx.fill();
+      } else {
+        ctx.fillRect(boxX, boxY, boxW, boxH);
+      }
+      ctx.strokeStyle = '#e2e8f0';
+      ctx.lineWidth = 1 * scaleFactor;
+      if (typeof ctx.stroke === 'function') ctx.stroke();
+    } else {
+      ctx.fillRect(boxX, boxY, boxW, boxH);
     }
+    ctx.restore();
 
     if (ticket.qrCodeUrl) {
       try {
@@ -414,7 +479,14 @@ export async function generateTicketCanvas(
           qrImg.onerror = () => reject();
           qrImg.src = ticket.qrCodeUrl;
         });
+        ctx.save();
+        if (typeof ctx.beginPath === 'function' && typeof ctx.clip === 'function') {
+          ctx.beginPath();
+          drawRoundedRect(ctx, qrX, qrY, qrSize, qrSize, 4 * scaleFactor);
+          ctx.clip();
+        }
         ctx.drawImage(qrImg, qrX, qrY, qrSize, qrSize);
+        ctx.restore();
       } catch {
         try {
           const svgUrl = generateCustomQrSvg(ticket.ticketCode, {
@@ -427,7 +499,14 @@ export async function generateTicketCanvas(
             qrSvgImg.onerror = () => reject();
             qrSvgImg.src = svgUrl;
           });
+          ctx.save();
+          if (typeof ctx.beginPath === 'function' && typeof ctx.clip === 'function') {
+            ctx.beginPath();
+            drawRoundedRect(ctx, qrX, qrY, qrSize, qrSize, 4 * scaleFactor);
+            ctx.clip();
+          }
           ctx.drawImage(qrSvgImg, qrX, qrY, qrSize, qrSize);
+          ctx.restore();
         } catch {
           ctx.fillStyle = '#0f172a';
           ctx.font = `14px ${fontFam}`;

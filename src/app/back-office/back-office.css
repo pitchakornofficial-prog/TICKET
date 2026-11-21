@@ -12279,6 +12279,322 @@ button.reject-btn:hover:not(:disabled),
   gap: 0.75rem;
 }
 
+/* D-276: Transaction Memo Slide-Over Drawer & Confirmation Modal */
+.memo-drawer-backdrop {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(15, 23, 42, 0.45);
+  backdrop-filter: blur(2px);
+  z-index: 1050;
+  display: flex;
+  justify-content: flex-end;
+  animation: fadeIn 0.15s ease-out;
+}
+
+.memo-slide-over-drawer {
+  width: 100%;
+  max-width: 540px;
+  height: 100%;
+  background-color: #ffffff;
+  box-shadow: -8px 0 32px rgba(15, 23, 42, 0.12);
+  display: flex;
+  flex-direction: column;
+  animation: slideInRight 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+@keyframes slideInRight {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+
+.memo-drawer-header {
+  padding: 1.25rem 1.5rem;
+  border-bottom: 1px solid #e2e8f0;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  background-color: #ffffff;
+}
+
+.memo-drawer-header-text h3 {
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.memo-drawer-header-text p {
+  margin: 0.25rem 0 0 0;
+  font-size: 0.8125rem;
+  color: #64748b;
+}
+
+.memo-drawer-close-btn {
+  background: transparent;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  width: 34px;
+  height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #64748b;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.memo-drawer-close-btn:hover {
+  background-color: #f1f5f9;
+  color: #0f172a;
+}
+
+.memo-drawer-body {
+  padding: 1.5rem;
+  overflow-y: auto;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.memo-section-card {
+  background-color: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.memo-section-title {
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: #1e293b;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.memo-summary-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem 1rem;
+}
+
+.memo-summary-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.memo-summary-field.span-2 {
+  grid-column: span 2;
+}
+
+.memo-summary-label {
+  font-size: 0.75rem;
+  color: #64748b;
+  font-weight: 500;
+}
+
+.memo-summary-val {
+  font-size: 0.875rem;
+  color: #0f172a;
+  font-weight: 600;
+  word-break: break-word;
+}
+
+.memo-items-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8125rem;
+  margin-top: 0.35rem;
+}
+
+.owner-workspace-container .memo-slide-over-drawer .memo-items-table tr th,
+.owner-workspace-container .memo-section-card .memo-items-table tr th {
+  text-align: left;
+  padding: 0.4rem 0.5rem;
+  background-color: #f1f5f9;
+  color: #475569;
+  font-weight: 600;
+  border-bottom: 1px solid #cbd5e1;
+}
+
+.owner-workspace-container .memo-slide-over-drawer .memo-items-table tr td,
+.owner-workspace-container .memo-section-card .memo-items-table tr td {
+  padding: 0.45rem 0.5rem;
+  border-bottom: 1px solid #e2e8f0;
+  color: #1e293b;
+}
+
+.memo-drawer-footer {
+  padding: 1rem 1.5rem;
+  border-top: 1px solid #e2e8f0;
+  background-color: #ffffff;
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+}
+
+.memo-confirmation-dialog {
+  max-width: 440px;
+  width: 90vw;
+}
+
+.status-badge.verified-pill,
+.row-card-badge-row .status-badge.verified-pill {
+  border: 1px solid #a7f3d0;
+  background-color: #ecfdf5;
+  color: #065f46;
+  font-weight: 600;
+}
+
+/* D-277: Auto-Verified Banner in Memo Drawer */
+.memo-auto-verified-card {
+  background-color: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  border-radius: 10px;
+  padding: 0.85rem 1rem;
+}
+
+.auto-verified-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+}
+
+.auto-verified-title {
+  margin: 0;
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: #15803d;
+}
+
+.auto-verified-desc {
+  margin: 0.25rem 0 0 0;
+  font-size: 0.8125rem;
+  color: #166534;
+  line-height: 1.4;
+}
+
+.memo-field-hint {
+  font-size: 0.72rem;
+  color: #64748b;
+  margin-top: 0.2rem;
+}
+
+/* D-277: Timeframe Selector & Excel Export in Customer Hub */
+.hub-timeframe-toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  padding: 0.75rem 1.25rem;
+  background-color: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  margin-bottom: 1.25rem;
+}
+
+.hub-timeframe-label {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: #475569;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.hub-timeframe-chips {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+}
+
+.timeframe-chip {
+  padding: 0.3rem 0.75rem;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  border-radius: 6px;
+  border: 1px solid #cbd5e1;
+  background-color: #ffffff;
+  color: #475569;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  min-height: unset;
+  box-shadow: none;
+}
+
+.timeframe-chip:hover {
+  background-color: #f1f5f9;
+  color: #0f172a;
+}
+
+.timeframe-chip.active {
+  background-color: #0f172a;
+  color: #ffffff;
+  border-color: #0f172a;
+  font-weight: 600;
+}
+
+.hub-date-range-group {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.hub-date-input {
+  padding: 0.3rem 0.55rem;
+  font-size: 0.8125rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  background-color: #ffffff;
+  color: #0f172a;
+  outline: none;
+  font-family: inherit;
+}
+
+.hub-date-input:focus {
+  border-color: #0f172a;
+}
+
+.hub-date-separator {
+  font-size: 0.8125rem;
+  color: #64748b;
+}
+
+.hub-export-excel-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  padding: 0.4rem 0.85rem;
+  min-height: 36px;
+  border-radius: 8px;
+  background-color: #ffffff;
+  color: #0f172a;
+  border: 1px solid #cbd5e1;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.hub-export-excel-btn:hover {
+  background-color: #f8fafc;
+  border-color: #0f172a;
+  color: #0f172a;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
+}
+
 .audit-log-item {
   background-color: #ffffff;
   border: 1px solid #e2e8f0;
@@ -14170,12 +14486,28 @@ button.reject-btn:hover:not(:disabled),
 }
 
 /* Protect Studio Designer against Universal Back-Office Button Overrides */
-.fullscreen-ticket-studio button {
+.fullscreen-ticket-studio button,
+.owner-workspace-container .fullscreen-ticket-studio button,
+.owner-main-content .fullscreen-ticket-studio button,
+.owner-section-body .fullscreen-ticket-studio button {
   min-height: unset;
   box-shadow: none;
   font-family: inherit;
   transform: none;
   text-decoration: none;
+  background-color: #ffffff;
+  color: #334155;
+  border: 1px solid #cbd5e1;
+}
+
+.fullscreen-ticket-studio button:hover,
+.owner-workspace-container .fullscreen-ticket-studio button:hover,
+.owner-main-content .fullscreen-ticket-studio button:hover,
+.owner-section-body .fullscreen-ticket-studio button:hover {
+  background-color: #f8fafc;
+  border-color: #94a3b8;
+  color: #0f172a;
+  transform: none;
 }
 
 /* Preset Pills - Non-Solid Outline Style */
@@ -14377,7 +14709,8 @@ button.reject-btn:hover:not(:disabled),
 }
 
 /* Scale & Zoom Floating Dock - Non-Solid */
-.fullscreen-ticket-studio .canvas-scale-dock {
+.fullscreen-ticket-studio .canvas-scale-dock,
+.owner-workspace-container .fullscreen-ticket-studio .canvas-scale-dock {
   position: absolute;
   top: 1rem;
   left: 1rem;
@@ -14391,6 +14724,13 @@ button.reject-btn:hover:not(:disabled),
   padding: 0.35rem 0.65rem;
   border-radius: 9999px;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+}
+
+.fullscreen-ticket-studio .canvas-scale-dock button,
+.owner-workspace-container .fullscreen-ticket-studio .canvas-scale-dock button {
+  background-color: #ffffff;
+  color: #334155;
+  border: 1px solid #cbd5e1;
 }
 
 .dock-mode-group {
@@ -14673,8 +15013,6 @@ button.reject-btn:hover:not(:disabled),
 .zone-badge-pill {
   display: inline-flex;
   align-items: center;
-  padding: 0.35rem 0.85rem;
-  border-radius: 4px;
   font-weight: 700;
   letter-spacing: 0.04em;
 }

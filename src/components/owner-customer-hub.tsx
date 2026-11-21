@@ -3,12 +3,14 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import type { PaidOrderForCorrection, OrderContactAuditRecord, OrderContactAuditWithDetails } from '@/server/contact-correction';
 import type { TicketEmailDeliveryRecord } from '@/server/ticket-delivery';
+import type { OrderTransactionMemo, OrderItemDetail, TransactionVerificationStatus } from '@/server/transaction-memo';
 import { formatBaht, formatDate, formatTime } from '@/lib/locale';
-import { SearchIcon, RefreshIcon, XIcon, CheckCircleIcon, MailIcon, UsersIcon } from './icons';
+import { SearchIcon, RefreshIcon, XIcon, CheckCircleIcon, MailIcon, UsersIcon, ReceiptIcon, ShieldCheckIcon, DownloadIcon, CalendarIcon } from './icons';
 import { triggerToast } from './toast-notification';
 
 type CustomerHubTab = 'orders' | 'audits' | 'emails';
 type EditStatusFilter = 'all' | 'edited' | 'unmodified';
+export type TimeframePreset = 'all' | 'today' | '7days' | '30days' | 'custom';
 
 const displayDate = (value?: string | Date) => {
   const date = value ? new Date(value) : null;
@@ -35,6 +37,13 @@ export const SAMPLE_MOCK_PAID_ORDERS: PaidOrderForCorrection[] = [
     total: 1854,
     ticketCount: 2,
     auditCount: 1,
+    hasTransactionMemo: true,
+    latestVerificationStatus: 'verified',
+    latestTransferRef: 'KBANK-20261105-0891',
+    autoTransferRef: 'KBANK-20261105-0891',
+    latestAdminNotes: 'ระบบตรวจรับยอดเงินโอนเข้าอัตโนมัติเรียบร้อย: ยอดชำระ 1,854.00 บาท โดยคุณกิตติศักดิ์ เจริญผล',
+    latestVerifiedAt: '2026-11-05T09:15:00.000Z',
+    latestRecordedByName: 'ระบบอัตโนมัติ',
     createdAt: '2026-11-05T08:30:00.000Z',
     updatedAt: '2026-11-05T09:15:00.000Z',
   },
@@ -53,6 +62,8 @@ export const SAMPLE_MOCK_PAID_ORDERS: PaidOrderForCorrection[] = [
     total: 2472,
     ticketCount: 3,
     auditCount: 0,
+    hasTransactionMemo: false,
+    autoTransferRef: 'PP-20261104-0742',
     createdAt: '2026-11-04T14:20:00.000Z',
     updatedAt: '2026-11-04T14:20:00.000Z',
   },
@@ -71,6 +82,8 @@ export const SAMPLE_MOCK_PAID_ORDERS: PaidOrderForCorrection[] = [
     total: 927,
     ticketCount: 1,
     auditCount: 0,
+    hasTransactionMemo: false,
+    autoTransferRef: 'PP-20261103-0511',
     createdAt: '2026-11-03T11:10:00.000Z',
     updatedAt: '2026-11-03T11:10:00.000Z',
   },
@@ -120,6 +133,11 @@ export function OwnerCustomerHub() {
   const [currentPage, setCurrentPage] = useState<number>(1);
   const pageSize = 10;
 
+  // D-277: Timeframe states for filtering and Excel evidence export
+  const [timeframePreset, setTimeframePreset] = useState<TimeframePreset>('all');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
+
   // Data states
   const [orders, setOrders] = useState<PaidOrderForCorrection[]>([]);
   const [audits, setAudits] = useState<OrderContactAuditWithDetails[]>([]);
@@ -139,6 +157,17 @@ export function OwnerCustomerHub() {
 
   const [viewingOrderDetails, setViewingOrderDetails] = useState<PaidOrderForCorrection | null>(null);
 
+  // D-276: Transaction Memo & Audit Drawer states
+  const [memoOrder, setMemoOrder] = useState<PaidOrderForCorrection | null>(null);
+  const [drawerItems, setDrawerItems] = useState<OrderItemDetail[]>([]);
+  const [drawerMemos, setDrawerMemos] = useState<OrderTransactionMemo[]>([]);
+  const [isLoadingDrawer, setIsLoadingDrawer] = useState(false);
+  const [transferRef, setTransferRef] = useState('');
+  const [verificationStatus, setVerificationStatus] = useState<TransactionVerificationStatus>('verified');
+  const [adminNotes, setAdminNotes] = useState('');
+  const [isConfirmingSave, setIsConfirmingSave] = useState(false);
+  const [isSubmittingMemo, setIsSubmittingMemo] = useState(false);
+
   // Filter setters that reset page to 1
   const handleSelectTab = (tab: CustomerHubTab) => {
     setActiveTab(tab);
@@ -157,6 +186,28 @@ export function OwnerCustomerHub() {
 
   const handleSearchChange = (query: string) => {
     setSearchQuery(query);
+    setCurrentPage(1);
+  };
+
+  // D-277: Timeframe selection handlers
+  const handleSelectTimeframe = (preset: TimeframePreset) => {
+    setTimeframePreset(preset);
+    setCurrentPage(1);
+    if (preset !== 'custom') {
+      setDateFrom('');
+      setDateTo('');
+    }
+  };
+
+  const handleDateFromChange = (val: string) => {
+    setDateFrom(val);
+    setTimeframePreset('custom');
+    setCurrentPage(1);
+  };
+
+  const handleDateToChange = (val: string) => {
+    setDateTo(val);
+    setTimeframePreset('custom');
     setCurrentPage(1);
   };
 
@@ -243,6 +294,12 @@ export function OwnerCustomerHub() {
 
   // Filtered orders
   const filteredOrders = useMemo(() => {
+    const now = new Date();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+    const todayEnd = todayStart + 86400000 - 1;
+    const sevenDaysAgo = now.getTime() - 7 * 86400000;
+    const thirtyDaysAgo = now.getTime() - 30 * 86400000;
+
     return displayOrders.filter(o => {
       // Event filter
       if (selectedEventId !== 'all' && o.eventId !== selectedEventId) {
@@ -255,6 +312,28 @@ export function OwnerCustomerHub() {
       if (selectedEditStatus === 'unmodified' && (o.auditCount && o.auditCount > 0)) {
         return false;
       }
+
+      // Timeframe filter (D-277)
+      const orderTime = new Date(o.createdAt).getTime();
+      if (!Number.isNaN(orderTime)) {
+        if (timeframePreset === 'today') {
+          if (orderTime < todayStart || orderTime > todayEnd) return false;
+        } else if (timeframePreset === '7days') {
+          if (orderTime < sevenDaysAgo) return false;
+        } else if (timeframePreset === '30days') {
+          if (orderTime < thirtyDaysAgo) return false;
+        } else if (timeframePreset === 'custom') {
+          if (dateFrom) {
+            const fromMs = new Date(`${dateFrom}T00:00:00`).getTime();
+            if (!Number.isNaN(fromMs) && orderTime < fromMs) return false;
+          }
+          if (dateTo) {
+            const toMs = new Date(`${dateTo}T23:59:59.999`).getTime();
+            if (!Number.isNaN(toMs) && orderTime > toMs) return false;
+          }
+        }
+      }
+
       // Query filter (in-memory refinement)
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase().trim();
@@ -267,7 +346,7 @@ export function OwnerCustomerHub() {
       }
       return true;
     });
-  }, [displayOrders, selectedEventId, selectedEditStatus, searchQuery]);
+  }, [displayOrders, selectedEventId, selectedEditStatus, timeframePreset, dateFrom, dateTo, searchQuery]);
 
   // Filtered audits
   const filteredAudits = useMemo(() => {
@@ -427,6 +506,220 @@ export function OwnerCustomerHub() {
   const handleCloseAuditModal = () => {
     setViewingAuditOrder(null);
     setOrderAuditLogs([]);
+  };
+
+  // D-276 & D-277: Handlers for Transaction Memo Drawer & Automated Verification Prefill
+  const handleOpenMemoDrawer = async (order: PaidOrderForCorrection) => {
+    setMemoOrder(order);
+    // D-277: Prefill customer & transaction details automatically from system verification
+    const prefilledRef = order.latestTransferRef || order.autoTransferRef || `PP-${order.id.replace(/^ORD-/, '')}`;
+    setTransferRef(prefilledRef);
+    setVerificationStatus((order.latestVerificationStatus as TransactionVerificationStatus) || 'verified');
+    const autoNote =
+      order.latestAdminNotes ||
+      `ระบบตรวจรับยอดเงินโอนเข้าอัตโนมัติเรียบร้อย: ยอดชำระ ${formatBaht(order.total)} บาท โดยคุณ ${order.buyerName} (${order.buyerEmail})`;
+    setAdminNotes(autoNote);
+    setIsLoadingDrawer(true);
+    try {
+      const res = await fetch(`/api/owner/orders/${order.id}/transaction-memo`);
+      if (res.ok) {
+        const data = await res.json();
+        setDrawerItems(data.items || []);
+        setDrawerMemos(data.memos || []);
+        if (data.memos && data.memos.length > 0) {
+          const latest = data.memos[0];
+          if (latest.transferRef) setTransferRef(latest.transferRef);
+          if (latest.verificationStatus) setVerificationStatus(latest.verificationStatus);
+          if (latest.adminNotes) setAdminNotes(latest.adminNotes);
+        }
+      } else {
+        setDrawerItems([
+          {
+            id: 'mock-item-1',
+            orderId: order.id,
+            ticketTypeId: 'default',
+            ticketTypeName: 'บัตรเข้าชมคอนเสิร์ต (Zone A)',
+            unitPrice: order.subtotal / (order.ticketCount || 1),
+            quantity: order.ticketCount,
+            subtotal: order.subtotal,
+          },
+        ]);
+        setDrawerMemos([]);
+      }
+    } catch {
+      setDrawerItems([
+        {
+          id: 'mock-item-1',
+          orderId: order.id,
+          ticketTypeId: 'default',
+          ticketTypeName: 'บัตรเข้าชมคอนเสิร์ต',
+          unitPrice: order.subtotal / (order.ticketCount || 1),
+          quantity: order.ticketCount,
+          subtotal: order.subtotal,
+        },
+      ]);
+      setDrawerMemos([]);
+    } finally {
+      setIsLoadingDrawer(false);
+    }
+  };
+
+  const handleCloseMemoDrawer = () => {
+    setMemoOrder(null);
+    setDrawerItems([]);
+    setDrawerMemos([]);
+    setTransferRef('');
+    setAdminNotes('');
+    setIsConfirmingSave(false);
+  };
+
+  const handleInitiateSaveMemo = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!transferRef.trim()) {
+      triggerToast({ type: 'error', message: 'กรุณากรอกเลขอ้างอิงการโอนหรือสลิปธนาคาร' });
+      return;
+    }
+    setIsConfirmingSave(true);
+  };
+
+  const handleConfirmSaveMemo = async () => {
+    if (!memoOrder) return;
+    setIsSubmittingMemo(true);
+    try {
+      const res = await fetch(`/api/owner/orders/${memoOrder.id}/transaction-memo`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          transferRef: transferRef.trim(),
+          verificationStatus,
+          adminNotes: adminNotes.trim(),
+        }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.message || 'บันทึกข้อมูลธุรกรรมไม่สำเร็จ');
+      }
+      const data = await res.json();
+
+      setOrders(prev =>
+        prev.map(o =>
+          o.id === memoOrder.id
+            ? {
+                ...o,
+                hasTransactionMemo: true,
+                latestVerificationStatus: verificationStatus,
+                latestTransferRef: transferRef.trim(),
+                autoTransferRef: transferRef.trim(),
+                latestAdminNotes: adminNotes.trim(),
+                latestVerifiedAt: new Date().toISOString(),
+                latestRecordedByName: 'Owner',
+              }
+            : o,
+        ),
+      );
+
+      triggerToast({
+        type: 'success',
+        message: `บันทึกข้อมูลธุรกรรมคำสั่งซื้อ #${memoOrder.id} เรียบร้อยแล้ว`,
+      });
+
+      if (data.memo) {
+        setDrawerMemos(prev => [data.memo, ...prev]);
+      }
+      setIsConfirmingSave(false);
+      handleCloseMemoDrawer();
+    } catch (err: unknown) {
+      triggerToast({
+        type: 'error',
+        message: err instanceof Error ? err.message : 'เกิดข้อผิดพลาดในการบันทึกข้อมูลธุรกรรม',
+      });
+    } finally {
+      setIsSubmittingMemo(false);
+    }
+  };
+
+  // D-277: Export Timeframe Transactions to Excel (CSV with UTF-8 BOM)
+  const handleExportExcel = () => {
+    if (filteredOrders.length === 0) {
+      triggerToast({ type: 'error', message: 'ไม่พบรายการคำสั่งซื้อในช่วงเวลาที่เลือกเพื่อส่งออก' });
+      return;
+    }
+
+    let timeframeLabel = 'ทั้งหมด';
+    if (timeframePreset === 'today') timeframeLabel = 'วันนี้';
+    else if (timeframePreset === '7days') timeframeLabel = '7 วันล่าสุด';
+    else if (timeframePreset === '30days') timeframeLabel = '30 วันล่าสุด';
+    else if (timeframePreset === 'custom') {
+      timeframeLabel = `ตั้งแต่วันที่ ${dateFrom || 'เริ่มต้น'} ถึง ${dateTo || 'ปัจจุบัน'}`;
+    }
+
+    const lines: string[] = [];
+    lines.push('"รายงานหลักฐานการตรวจสอบธุรกรรมและการชำระเงิน (TICKET - Transaction Audit & Payment Evidence)"');
+    lines.push(`"ช่วงเวลาที่เลือก: ${timeframeLabel}"`);
+    lines.push(`"วันที่ออกรายงาน: ${displayDate(new Date())} ${displayTime(new Date())}"`);
+    lines.push(`"จำนวนรายการ: ${filteredOrders.length} รายการ"`);
+    lines.push('');
+
+    // Column Headers
+    lines.push(
+      '"ลำดับ","รหัสคำสั่งซื้อ","วันที่สั่งซื้อ","เวลาที่สั่งซื้อ","ชื่อผู้ซื้อ","อีเมลผู้ซื้อ","เบอร์โทรศัพท์","คอนเสิร์ต","รอบการแสดง","จำนวนบัตร (ใบ)","ยอดค่าบัตร (บาท)","ค่าบริการระบบ 3% (บาท)","ยอดชำระสุทธิ (บาท)","สถานะคำสั่งซื้อ","รหัสอ้างอิงธุรกรรม (Transfer Ref)","สถานะการตรวจสอบ","วันที่บันทึกตรวจสอบ","ผู้ตรวจสอบ","บันทึกช่วยจำ (Admin Notes)"',
+    );
+
+    let totalTickets = 0;
+    let totalSubtotal = 0;
+    let totalCustomerFee = 0;
+    let totalRevenue = 0;
+
+    filteredOrders.forEach((o, index) => {
+      totalTickets += o.ticketCount || 0;
+      totalSubtotal += o.subtotal || 0;
+      totalCustomerFee += o.customerFee || 0;
+      totalRevenue += o.total || 0;
+
+      const orderDate = displayDate(o.createdAt);
+      const orderTime = displayTime(o.createdAt);
+      const sessionStr = `${displayDate(o.sessionStartTime)} ${displayTime(o.sessionStartTime)}`;
+      const transferRefStr = o.latestTransferRef || o.autoTransferRef || `PP-${o.id.replace(/^ORD-/, '')}`;
+      const verificationStatusStr =
+        o.latestVerificationStatus === 'verified'
+          ? 'ยอดเงินถูกต้องครบถ้วน'
+          : o.latestVerificationStatus === 'pending'
+            ? 'รอดำเนินการ'
+            : o.latestVerificationStatus === 'discrepancy'
+              ? 'ยอดไม่ตรง/ตรวจสอบเพิ่ม'
+              : 'ตรวจรับอัตโนมัติ';
+      const verifiedAtStr = o.latestVerifiedAt ? `${displayDate(o.latestVerifiedAt)} ${displayTime(o.latestVerifiedAt)}` : '-';
+      const recordedByStr = o.latestRecordedByName || 'ระบบอัตโนมัติ';
+      const notesStr = (o.latestAdminNotes || '').replace(/"/g, '""');
+      const buyerNameEscaped = o.buyerName.replace(/"/g, '""');
+      const eventTitleEscaped = o.eventTitle.replace(/"/g, '""');
+
+      lines.push(
+        `"${index + 1}","${o.id}","${orderDate}","${orderTime}","${buyerNameEscaped}","${o.buyerEmail}","${o.buyerPhone}","${eventTitleEscaped}","${sessionStr}","${o.ticketCount}","${o.subtotal}","${o.customerFee}","${o.total}","${o.status === 'paid' ? 'ชำระเงินแล้ว' : o.status}","${transferRefStr}","${verificationStatusStr}","${verifiedAtStr}","${recordedByStr}","${notesStr}"`,
+      );
+    });
+
+    lines.push('');
+    lines.push(
+      `"สรุปผลรวม","","","","","","","","รวมบัตร ${totalTickets} ใบ","ยอดบัตร ${formatBaht(totalSubtotal)} บาท","ค่าบริการ ${formatBaht(totalCustomerFee)} บาท","ยอดรวมสุทธิ ${formatBaht(totalRevenue)} บาท"`,
+    );
+
+    const csvContent = `\uFEFF${lines.join('\r\n')}`;
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    const dateStamp = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+    link.setAttribute('download', `ticket-transactions-evidence-${timeframePreset}-${dateStamp}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+
+    triggerToast({
+      type: 'success',
+      message: `ดาวน์โหลดรายงานธุรกรรม Excel (${filteredOrders.length} รายการ) สำเร็จเรียบร้อย`,
+    });
   };
 
   const handleRetryEmail = async (deliveryId: string) => {
@@ -611,8 +904,78 @@ export function OwnerCustomerHub() {
           >
             <RefreshIcon className={`hub-refresh-icon ${isLoading ? 'spinning' : ''}`} />
           </button>
+
+          {/* Excel Export Button (D-277) */}
+          {activeTab === 'orders' && (
+            <button
+              type="button"
+              className="hub-export-excel-btn"
+              onClick={handleExportExcel}
+              title="ดาวน์โหลดรายงานหลักฐานธุรกรรมเป็นไฟล์ Excel (CSV)"
+              data-testid="customer-export-excel-btn"
+            >
+              <DownloadIcon style={{ width: 14, height: 14 }} />
+              <span>ดาวน์โหลด Excel</span>
+            </button>
+          )}
         </div>
       </div>
+
+      {/* D-277: Timeframe Selector for Transaction & Orders Audit */}
+      {activeTab === 'orders' && (
+        <div className="hub-timeframe-toolbar" data-testid="hub-timeframe-toolbar">
+          <span className="hub-timeframe-label">
+            <CalendarIcon style={{ width: 15, height: 15 }} />
+            <span>ช่วงเวลาคำสั่งซื้อ:</span>
+          </span>
+
+          <div className="hub-timeframe-chips">
+            {(
+              [
+                { id: 'all', label: 'ทั้งหมด' },
+                { id: 'today', label: 'วันนี้' },
+                { id: '7days', label: '7 วันล่าสุด' },
+                { id: '30days', label: '30 วันล่าสุด' },
+                { id: 'custom', label: 'กำหนดเอง' },
+              ] as const
+            ).map((chip) => (
+              <button
+                key={chip.id}
+                type="button"
+                className={`timeframe-chip ${timeframePreset === chip.id ? 'active' : ''}`}
+                onClick={() => handleSelectTimeframe(chip.id)}
+                data-testid={`timeframe-chip-${chip.id}`}
+              >
+                {chip.label}
+              </button>
+            ))}
+          </div>
+
+          {timeframePreset === 'custom' && (
+            <div className="hub-date-range-group" data-testid="hub-custom-date-inputs">
+              <input
+                type="date"
+                className="hub-date-input"
+                value={dateFrom}
+                onChange={(e) => handleDateFromChange(e.target.value)}
+                aria-label="ตั้งแต่วันที่"
+                title="ตั้งแต่วันที่"
+                data-testid="timeframe-date-from"
+              />
+              <span className="hub-date-separator">ถึง</span>
+              <input
+                type="date"
+                className="hub-date-input"
+                value={dateTo}
+                onChange={(e) => handleDateToChange(e.target.value)}
+                aria-label="ถึงวันที่"
+                title="ถึงวันที่"
+                data-testid="timeframe-date-to"
+              />
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Tab 1: Orders Tab */}
       {activeTab === 'orders' && (
@@ -646,6 +1009,16 @@ export function OwnerCustomerHub() {
                           </span>
                         ) : (
                           <span className="row-detail-pill">ข้อมูลเดิม</span>
+                        )}
+                        {order.hasTransactionMemo && (
+                          <span
+                            className="row-detail-pill verified-pill"
+                            title={`ตรวจสอบแล้ว: ${order.latestTransferRef || '-'}`}
+                            data-testid={`verified-memo-badge-${order.id}`}
+                          >
+                            <ShieldCheckIcon style={{ width: 13, height: 13 }} />
+                            <span>บันทึกแล้ว</span>
+                          </span>
                         )}
                         <span className="row-meta-dot" aria-hidden="true">·</span>
                         <span className="row-meta-item">
@@ -709,6 +1082,17 @@ export function OwnerCustomerHub() {
                         data-testid={`view-audits-btn-${order.id}`}
                       >
                         <span>ประวัติการแก้ไข ({order.auditCount || 0})</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        id={`memo-transaction-btn-${order.id}`}
+                        className="secondary-button row-action-btn"
+                        onClick={() => handleOpenMemoDrawer(order)}
+                        data-testid={`memo-transaction-btn-${order.id}`}
+                      >
+                        <ReceiptIcon style={{ width: 14, height: 14 }} />
+                        <span>บันทึกธุรกรรม</span>
                       </button>
 
                       <button
@@ -1194,6 +1578,323 @@ export function OwnerCustomerHub() {
                 onClick={() => setViewingOrderDetails(null)}
               >
                 <span>ปิดหน้าต่าง</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* D-276: Transaction Memo Slide-Over Drawer */}
+      {memoOrder && (
+        <div
+          className="memo-drawer-backdrop"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="memo-drawer-title"
+          data-testid="memo-drawer-backdrop"
+        >
+          <div className="memo-slide-over-drawer">
+            <div className="memo-drawer-header">
+              <div className="memo-drawer-header-text">
+                <h3 id="memo-drawer-title">บันทึกธุรกรรมและการโอนเงิน</h3>
+                <p>
+                  คำสั่งซื้อ #{memoOrder.id} · {memoOrder.buyerName}
+                </p>
+              </div>
+              <button
+                type="button"
+                className="memo-drawer-close-btn"
+                onClick={handleCloseMemoDrawer}
+                aria-label="ปิดหน้าต่างบันทึกธุรกรรม"
+                data-testid="close-memo-drawer-btn"
+              >
+                <XIcon />
+              </button>
+            </div>
+
+            <div className="memo-drawer-body">
+              {/* Section 1: Customer & Order Breakdown */}
+              <div className="memo-section-card">
+                <h4 className="memo-section-title">
+                  <ReceiptIcon style={{ width: 16, height: 16 }} />
+                  <span>ข้อมูลคำสั่งซื้อและรายการที่ซื้อ</span>
+                </h4>
+                <div className="memo-summary-grid">
+                  <div className="memo-summary-field">
+                    <span className="memo-summary-label">ชื่อผู้ซื้อ:</span>
+                    <strong className="memo-summary-val">{memoOrder.buyerName}</strong>
+                  </div>
+                  <div className="memo-summary-field">
+                    <span className="memo-summary-label">เบอร์โทรศัพท์:</span>
+                    <strong className="memo-summary-val">{memoOrder.buyerPhone}</strong>
+                  </div>
+                  <div className="memo-summary-field span-2">
+                    <span className="memo-summary-label">อีเมล:</span>
+                    <strong className="memo-summary-val">{memoOrder.buyerEmail}</strong>
+                  </div>
+                  <div className="memo-summary-field span-2">
+                    <span className="memo-summary-label">คอนเสิร์ต:</span>
+                    <strong className="memo-summary-val">{memoOrder.eventTitle}</strong>
+                  </div>
+                  <div className="memo-summary-field span-2">
+                    <span className="memo-summary-label">รอบแสดง:</span>
+                    <strong className="memo-summary-val">
+                      {displayDate(memoOrder.sessionStartTime)} {displayTime(memoOrder.sessionStartTime)}
+                    </strong>
+                  </div>
+                </div>
+
+                {/* Items breakdown table */}
+                <table className="memo-items-table" data-testid="memo-items-table">
+                  <thead>
+                    <tr>
+                      <th>ประเภทบัตร</th>
+                      <th style={{ textAlign: 'right' }}>ราคา</th>
+                      <th style={{ textAlign: 'center' }}>จำนวน</th>
+                      <th style={{ textAlign: 'right' }}>รวม</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {isLoadingDrawer ? (
+                      <tr>
+                        <td colSpan={4} style={{ textAlign: 'center', padding: '1rem', color: '#64748b' }}>
+                          กำลังโหลดข้อมูล...
+                        </td>
+                      </tr>
+                    ) : drawerItems.length > 0 ? (
+                      drawerItems.map((item, idx) => (
+                        <tr key={item.ticketTypeId || idx}>
+                          <td>{item.ticketTypeName}</td>
+                          <td style={{ textAlign: 'right' }}>{formatBaht(item.unitPrice)}</td>
+                          <td style={{ textAlign: 'center' }}>{item.quantity}</td>
+                          <td style={{ textAlign: 'right' }}>{formatBaht(item.subtotal)}</td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td>บัตรเข้าชม ({memoOrder.ticketCount} ใบ)</td>
+                        <td style={{ textAlign: 'right' }}>-</td>
+                        <td style={{ textAlign: 'center' }}>{memoOrder.ticketCount}</td>
+                        <td style={{ textAlign: 'right' }}>{formatBaht(memoOrder.subtotal)}</td>
+                      </tr>
+                    )}
+                  </tbody>
+                  <tfoot>
+                    <tr>
+                      <td colSpan={3} style={{ textAlign: 'right', fontWeight: 500, color: '#64748b' }}>
+                        ค่าบริการระบบ (3%):
+                      </td>
+                      <td style={{ textAlign: 'right', fontWeight: 600 }}>{formatBaht(memoOrder.customerFee)} บาท</td>
+                    </tr>
+                    <tr>
+                      <td colSpan={3} style={{ textAlign: 'right', fontWeight: 700, color: '#0f172a' }}>
+                        ยอดชำระสุทธิ:
+                      </td>
+                      <td style={{ textAlign: 'right', fontWeight: 700, color: '#0f172a', fontSize: '1rem' }}>
+                        {formatBaht(memoOrder.total)} บาท
+                      </td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+
+              {/* D-277: Automated Verification Notice */}
+              <div className="memo-auto-verified-card" data-testid="memo-auto-verified-banner">
+                <div className="auto-verified-header">
+                  <ShieldCheckIcon style={{ width: 18, height: 18, color: '#16a34a', flexShrink: 0 }} />
+                  <div>
+                    <h5 className="auto-verified-title">ระบบตรวจสอบยอดเงินโอนเข้าอัตโนมัติแล้ว</h5>
+                    <p className="auto-verified-desc">
+                      ระบบได้ใส่ข้อมูลผู้ซื้อ ({memoOrder.buyerName}), ยอดโอนเงินสุทธิ ({formatBaht(memoOrder.total)} บาท), และรหัสธุรกรรมอัตโนมัติให้อย่างครบถ้วน สามารถตรวจสอบความถูกต้องแล้วกดบันทึกได้ทันทีโดยไม่ต้องพิมพ์เอง
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Section 2: Form to record audit memo */}
+              <form id="memo-form" className="memo-section-card" onSubmit={handleInitiateSaveMemo}>
+                <h4 className="memo-section-title">
+                  <ShieldCheckIcon style={{ width: 16, height: 16 }} />
+                  <span>บันทึกการตรวจสอบธุรกรรม</span>
+                </h4>
+
+                <div className="edit-form-field">
+                  <label htmlFor="memo-transfer-ref">
+                    เลขอ้างอิงการโอน / สลิปธนาคาร (ดึงอัตโนมัติ) <span className="required-mark">*</span>
+                  </label>
+                  <input
+                    id="memo-transfer-ref"
+                    type="text"
+                    className="edit-form-input"
+                    value={transferRef}
+                    onChange={(e) => setTransferRef(e.target.value)}
+                    placeholder="เช่น PP-20261105-0891 หรือ เลขรหัสสลิป"
+                    required
+                    data-testid="memo-transfer-ref-input"
+                  />
+                  <span className="memo-field-hint">ดึงรหัสอ้างอิงธุรกรรมจากระบบตรวจรับยอดเงินอัตโนมัติ</span>
+                </div>
+
+                <div className="edit-form-field">
+                  <label htmlFor="memo-verification-status">สถานะการตรวจสอบ</label>
+                  <select
+                    id="memo-verification-status"
+                    className="edit-form-input"
+                    value={verificationStatus}
+                    onChange={(e) => setVerificationStatus(e.target.value as TransactionVerificationStatus)}
+                    data-testid="memo-status-select"
+                  >
+                    <option value="verified">ยอดเงินถูกต้องครบถ้วน (Verified)</option>
+                    <option value="pending">รอดำเนินการตรวจสอบ (Pending)</option>
+                    <option value="discrepancy">ยอดไม่ตรง / ต้องตรวจสอบเพิ่มเติม (Discrepancy)</option>
+                  </select>
+                </div>
+
+                <div className="edit-form-field">
+                  <label htmlFor="memo-admin-notes">บันทึกช่วยจำ (หมายเหตุเจ้าหน้าที่)</label>
+                  <textarea
+                    id="memo-admin-notes"
+                    className="edit-form-textarea"
+                    rows={3}
+                    value={adminNotes}
+                    onChange={(e) => setAdminNotes(e.target.value)}
+                    placeholder="ระบุข้อความบันทึก เช่น ยืนยันสลิปผ่าน SCB Easy โอนตรงเวลา 14:32 น."
+                    data-testid="memo-admin-notes-textarea"
+                  />
+                </div>
+              </form>
+
+              {/* Section 3: Audit history logs */}
+              {drawerMemos.length > 0 && (
+                <div className="memo-section-card" data-testid="drawer-memos-history">
+                  <h4 className="memo-section-title">ประวัติการบันทึกก่อนหน้า ({drawerMemos.length})</h4>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                    {drawerMemos.map((m) => (
+                      <div key={m.id} className="audit-log-item">
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                          <strong style={{ fontSize: '0.85rem', color: '#0f172a' }}>{m.transferRef}</strong>
+                          <span
+                            className={`row-detail-pill ${
+                              m.verificationStatus === 'verified' ? 'payout-pill' : 'amendment-pill'
+                            }`}
+                          >
+                            {m.verificationStatus === 'verified' ? 'ตรวจสอบแล้ว' : m.verificationStatus}
+                          </span>
+                        </div>
+                        {m.adminNotes && (
+                          <p style={{ margin: '0.35rem 0 0 0', fontSize: '0.8125rem', color: '#475569' }}>
+                            {m.adminNotes}
+                          </p>
+                        )}
+                        <span style={{ fontSize: '0.72rem', color: '#94a3b8', marginTop: '0.25rem', display: 'block' }}>
+                          บันทึกโดย: {m.recordedByName || 'แอดมิน'} · {displayDate(m.createdAt)} {displayTime(m.createdAt)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="memo-drawer-footer">
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={handleCloseMemoDrawer}
+                data-testid="cancel-memo-btn"
+              >
+                ยกเลิก
+              </button>
+              <button
+                type="submit"
+                form="memo-form"
+                className="primary-button"
+                disabled={isSubmittingMemo}
+                data-testid="save-memo-btn"
+              >
+                {isSubmittingMemo ? 'กำลังบันทึก...' : 'บันทึกธุรกรรม'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Double-Check Confirmation Modal to Prevent Errors */}
+      {isConfirmingSave && memoOrder && (
+        <div
+          className="review-modal-backdrop"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="confirm-modal-title"
+          data-testid="memo-confirm-modal"
+        >
+          <div className="admin-full-dialog-modal memo-confirmation-dialog">
+            <div className="dialog-modal-header">
+              <div className="modal-header-titles">
+                <span className="modal-category-tag">ยืนยันความถูกต้อง</span>
+                <h3 id="confirm-modal-title" className="modal-concert-title">
+                  ยืนยันการบันทึกธุรกรรม
+                </h3>
+              </div>
+              <button
+                type="button"
+                className="modal-close-icon-btn"
+                onClick={() => setIsConfirmingSave(false)}
+                aria-label="ยกเลิกการยืนยัน"
+                data-testid="cancel-confirm-x-btn"
+              >
+                <XIcon />
+              </button>
+            </div>
+            <div className="dialog-modal-body">
+              <p style={{ fontSize: '0.9rem', color: '#334155', lineHeight: 1.5, margin: 0 }}>
+                คุณกำลังจะบันทึกข้อมูลธุรกรรมสำหรับคำสั่งซื้อ <strong>#{memoOrder.id}</strong> (ยอดสุทธิ{' '}
+                {formatBaht(memoOrder.total)} บาท)
+              </p>
+              <div className="modal-summary-card" style={{ marginTop: '1rem' }}>
+                <div className="summary-field">
+                  <span className="summary-label">เลขอ้างอิงสลิป:</span>
+                  <strong className="summary-val">{transferRef}</strong>
+                </div>
+                <div className="summary-field">
+                  <span className="summary-label">สถานะ:</span>
+                  <strong className="summary-val">
+                    {verificationStatus === 'verified'
+                      ? 'ยอดเงินถูกต้องครบถ้วน'
+                      : verificationStatus === 'pending'
+                        ? 'รอดำเนินการ'
+                        : 'ยอดไม่ตรง / ตรวจสอบเพิ่ม'}
+                  </strong>
+                </div>
+                {adminNotes && (
+                  <div className="summary-field" style={{ gridColumn: 'span 2' }}>
+                    <span className="summary-label">บันทึกช่วยจำ:</span>
+                    <strong className="summary-val">{adminNotes}</strong>
+                  </div>
+                )}
+              </div>
+              <p style={{ fontSize: '0.8rem', color: '#64748b', marginTop: '0.75rem', marginBottom: 0 }}>
+                กรุณาตรวจสอบความถูกต้องของสลิปและข้อมูลก่อนกดยืนยันเพื่อป้องกันข้อผิดพลาดในระบบ
+              </p>
+            </div>
+            <div className="dialog-modal-footer">
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => setIsConfirmingSave(false)}
+                disabled={isSubmittingMemo}
+                data-testid="back-to-edit-btn"
+              >
+                กลับไปแก้ไข
+              </button>
+              <button
+                type="button"
+                className="primary-button"
+                onClick={handleConfirmSaveMemo}
+                disabled={isSubmittingMemo}
+                data-testid="confirm-save-memo-btn"
+              >
+                {isSubmittingMemo ? 'กำลังบันทึก...' : 'ยืนยันและบันทึก'}
               </button>
             </div>
           </div>

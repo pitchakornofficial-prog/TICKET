@@ -161,10 +161,10 @@ export const DEFAULT_STATE: TicketDesignerState = {
       x: 36,
       y: 112,
       visible: true,
-      fontSize: 13,
+      fontSize: 14,
       fontWeight: '700',
-      color: '#ffffff',
-      bgColor: '#0f172a',
+      color: '#0f172a',
+      bgColor: 'transparent',
       borderColor: 'transparent',
       borderWidth: 0,
       text: 'VIP FRONT ROW - ZONE A',
@@ -421,7 +421,7 @@ const PRESETS: Record<string, { name: string; desc: string; apply: (s: TicketDes
         ...s.elements,
         brandLogo: { ...s.elements.brandLogo, color: '#0f172a' },
         eventTitle: { ...s.elements.eventTitle, color: '#0f172a' },
-        zoneBadge: { ...s.elements.zoneBadge, bgColor: '#0f172a', color: '#ffffff' },
+        zoneBadge: { ...s.elements.zoneBadge, bgColor: 'transparent', color: '#0f172a', borderWidth: 0, borderColor: 'transparent' },
         gateInfo: { ...s.elements.gateInfo, color: '#0f172a' },
         seatInfo: { ...s.elements.seatInfo, color: '#0f172a' },
         priceInfo: { ...s.elements.priceInfo, color: '#0f172a' },
@@ -459,7 +459,7 @@ const PRESETS: Record<string, { name: string; desc: string; apply: (s: TicketDes
         ...s.elements,
         brandLogo: { ...s.elements.brandLogo, color: '#f8fafc' },
         eventTitle: { ...s.elements.eventTitle, color: '#ffffff' },
-        zoneBadge: { ...s.elements.zoneBadge, bgColor: '#991b1b', color: '#ffffff' },
+        zoneBadge: { ...s.elements.zoneBadge, bgColor: 'transparent', color: '#f3f4f6', borderWidth: 0, borderColor: 'transparent' },
         gateInfo: { ...s.elements.gateInfo, color: '#f3f4f6' },
         seatInfo: { ...s.elements.seatInfo, color: '#f3f4f6' },
         priceInfo: { ...s.elements.priceInfo, color: '#f3f4f6' },
@@ -497,7 +497,7 @@ const PRESETS: Record<string, { name: string; desc: string; apply: (s: TicketDes
         ...s.elements,
         brandLogo: { ...s.elements.brandLogo, color: '#fbbf24' },
         eventTitle: { ...s.elements.eventTitle, color: '#fbbf24' },
-        zoneBadge: { ...s.elements.zoneBadge, bgColor: '#b45309', color: '#ffffff' },
+        zoneBadge: { ...s.elements.zoneBadge, bgColor: 'transparent', color: '#fbbf24', borderWidth: 0, borderColor: 'transparent' },
         gateInfo: { ...s.elements.gateInfo, color: '#fef3c7' },
         seatInfo: { ...s.elements.seatInfo, color: '#fef3c7' },
         priceInfo: { ...s.elements.priceInfo, color: '#fef3c7' },
@@ -535,7 +535,7 @@ const PRESETS: Record<string, { name: string; desc: string; apply: (s: TicketDes
         ...s.elements,
         brandLogo: { ...s.elements.brandLogo, color: '#2d1500' },
         eventTitle: { ...s.elements.eventTitle, color: '#2d1500' },
-        zoneBadge: { ...s.elements.zoneBadge, bgColor: '#9a3412', color: '#ffffff' },
+        zoneBadge: { ...s.elements.zoneBadge, bgColor: 'transparent', color: '#38281f', borderWidth: 0, borderColor: 'transparent' },
         gateInfo: { ...s.elements.gateInfo, color: '#38281f' },
         seatInfo: { ...s.elements.seatInfo, color: '#38281f' },
         priceInfo: { ...s.elements.priceInfo, color: '#38281f' },
@@ -573,7 +573,7 @@ const PRESETS: Record<string, { name: string; desc: string; apply: (s: TicketDes
         ...s.elements,
         brandLogo: { ...s.elements.brandLogo, color: '#0f172a' },
         eventTitle: { ...s.elements.eventTitle, color: '#0f172a' },
-        zoneBadge: { ...s.elements.zoneBadge, bgColor: '#334155', color: '#ffffff' },
+        zoneBadge: { ...s.elements.zoneBadge, bgColor: 'transparent', color: '#1e293b', borderWidth: 0, borderColor: 'transparent' },
         gateInfo: { ...s.elements.gateInfo, color: '#1e293b' },
         seatInfo: { ...s.elements.seatInfo, color: '#1e293b' },
         priceInfo: { ...s.elements.priceInfo, color: '#1e293b' },
@@ -1132,11 +1132,50 @@ export function AdminTicketDesigner() {
       const height = 500;
       const scaleFactor = 1200 / 1000; // ratio from preview 1000 to export 1200
 
+      const drawRoundedRect = (
+        c: CanvasRenderingContext2D,
+        x: number,
+        y: number,
+        w: number,
+        h: number,
+        r: number
+      ) => {
+        if (r <= 0) {
+          if (typeof c.rect === 'function') c.rect(x, y, w, h);
+          return;
+        }
+        if (typeof c.roundRect === 'function') {
+          c.roundRect(x, y, w, h, r);
+        } else if (typeof c.arcTo === 'function') {
+          c.moveTo(x + r, y);
+          c.lineTo(x + w - r, y);
+          c.arcTo(x + w, y, x + w, y + r, r);
+          c.lineTo(x + w, y + h - r);
+          c.arcTo(x + w, y + h, x + w - r, y + h, r);
+          c.lineTo(x + r, y + h);
+          c.arcTo(x, y + h, x, y + h - r, r);
+          c.lineTo(x, y + r);
+          c.arcTo(x, y, x + r, y, r);
+        } else if (typeof c.rect === 'function') {
+          c.rect(x, y, w, h);
+        }
+      };
+
       const canvas = document.createElement('canvas');
       canvas.width = width;
       canvas.height = height;
       const ctx = canvas.getContext('2d');
       if (!ctx) throw new Error('Canvas context not available');
+
+      const cardRadius = Math.max((typeof state.borderRadius === 'number' ? state.borderRadius : 4) * scaleFactor, 0);
+
+      // Clip canvas for rounded card corners
+      if (cardRadius > 0 && typeof ctx.clip === 'function') {
+        ctx.save();
+        ctx.beginPath();
+        drawRoundedRect(ctx, 0, 0, width, height, cardRadius);
+        ctx.clip();
+      }
 
       // 1. Background
       if (state.bgType === 'solid') {
@@ -1179,8 +1218,14 @@ export function AdminTicketDesigner() {
       // 3. Border
       if (state.borderWidth > 0) {
         ctx.strokeStyle = state.borderColor;
-        ctx.lineWidth = state.borderWidth * 2;
-        ctx.strokeRect(0, 0, width, height);
+        ctx.lineWidth = state.borderWidth * scaleFactor;
+        if (cardRadius > 0 && typeof ctx.beginPath === 'function') {
+          ctx.beginPath();
+          drawRoundedRect(ctx, (state.borderWidth * scaleFactor) / 2, (state.borderWidth * scaleFactor) / 2, width - state.borderWidth * scaleFactor, height - state.borderWidth * scaleFactor, cardRadius);
+          ctx.stroke();
+        } else {
+          ctx.strokeRect(0, 0, width, height);
+        }
       }
 
       // 4. Tear Line
@@ -1228,28 +1273,31 @@ export function AdminTicketDesigner() {
       if (badge?.visible && badge.text) {
         const badgeX = badge.x * scaleFactor;
         const badgeY = badge.y * scaleFactor;
-        ctx.font = `bold ${Math.round((badge.fontSize || 13) * scaleFactor)}px ${state.fontFamily}, Kanit, sans-serif`;
+        ctx.font = `bold ${Math.round((badge.fontSize || 14) * scaleFactor)}px ${state.fontFamily}, Kanit, sans-serif`;
         const textWidth = ctx.measureText(badge.text).width;
-        const padX = 12 * scaleFactor;
-        const boxW = textWidth + padX * 2;
-        const boxH = 30 * scaleFactor;
-
-        // Background (skip if transparent)
-        if (badge.bgColor && badge.bgColor !== 'transparent') {
-          ctx.fillStyle = badge.bgColor;
-          ctx.fillRect(badgeX, badgeY, boxW, boxH);
-        }
-
-        // Border / Outline
+        const hasBg = badge.bgColor && badge.bgColor !== 'transparent';
         const bWidth = badge.borderWidth ?? (badge.borderColor && badge.borderColor !== 'transparent' ? 1 : 0);
-        if (bWidth > 0 && badge.borderColor && badge.borderColor !== 'transparent') {
-          ctx.strokeStyle = badge.borderColor;
-          ctx.lineWidth = bWidth * scaleFactor;
-          ctx.strokeRect(badgeX, badgeY, boxW, boxH);
-        }
+        const hasBorder = bWidth > 0 && badge.borderColor && badge.borderColor !== 'transparent';
 
-        ctx.fillStyle = badge.color || '#ffffff';
-        ctx.fillText(badge.text, badgeX + padX, badgeY + 6 * scaleFactor);
+        if (hasBg || hasBorder) {
+          const padX = 8 * scaleFactor;
+          const boxW = textWidth + padX * 2;
+          const boxH = 30 * scaleFactor;
+          if (hasBg) {
+            ctx.fillStyle = badge.bgColor as string;
+            ctx.fillRect(badgeX, badgeY, boxW, boxH);
+          }
+          if (hasBorder) {
+            ctx.strokeStyle = badge.borderColor as string;
+            ctx.lineWidth = bWidth * scaleFactor;
+            ctx.strokeRect(badgeX, badgeY, boxW, boxH);
+          }
+          ctx.fillStyle = badge.color || '#0f172a';
+          ctx.fillText(badge.text, badgeX + padX, badgeY + 6 * scaleFactor);
+        } else {
+          ctx.fillStyle = badge.color || '#0f172a';
+          ctx.fillText(badge.text, badgeX, badgeY);
+        }
       }
 
       // Other Text Elements
@@ -1345,9 +1393,39 @@ export function AdminTicketDesigner() {
         const qrW = (qr.size || 155) * scaleFactor;
         const qrX = qr.x * scaleFactor;
         const qrY = qr.y * scaleFactor;
-        ctx.fillStyle = state.qrBgColor;
-        ctx.fillRect(qrX - 8, qrY - 8, qrW + 16, qrW + 16);
+        const qrPad = 8 * scaleFactor;
+        const qrRadius = 8 * scaleFactor;
+        const boxX = qrX - qrPad;
+        const boxY = qrY - qrPad;
+        const boxW = qrW + qrPad * 2;
+        const boxH = qrW + qrPad * 2;
+
+        ctx.save();
+        ctx.fillStyle = state.qrBgColor && state.qrBgColor !== 'transparent' ? state.qrBgColor : '#ffffff';
+        if (typeof ctx.beginPath === 'function') {
+          ctx.beginPath();
+          drawRoundedRect(ctx, boxX, boxY, boxW, boxH, qrRadius);
+          if (typeof ctx.fill === 'function') {
+            ctx.fill();
+          } else {
+            ctx.fillRect(boxX, boxY, boxW, boxH);
+          }
+          ctx.strokeStyle = '#e2e8f0';
+          ctx.lineWidth = 1 * scaleFactor;
+          if (typeof ctx.stroke === 'function') ctx.stroke();
+        } else {
+          ctx.fillRect(boxX, boxY, boxW, boxH);
+        }
+        ctx.restore();
+
+        ctx.save();
+        if (typeof ctx.beginPath === 'function' && typeof ctx.clip === 'function') {
+          ctx.beginPath();
+          drawRoundedRect(ctx, qrX, qrY, qrW, qrW, 4 * scaleFactor);
+          ctx.clip();
+        }
         ctx.drawImage(qrImg, qrX, qrY, qrW, qrW);
+        ctx.restore();
       }
 
       // Trigger Download
@@ -1485,12 +1563,10 @@ export function AdminTicketDesigner() {
             <div
               className="zone-badge-pill"
               style={{
-                fontSize: `${state.elements.zoneBadge.fontSize || 13}px`,
-                color: state.elements.zoneBadge.color,
-                backgroundColor: state.elements.zoneBadge.bgColor || 'transparent',
-                borderColor: state.elements.zoneBadge.borderColor && state.elements.zoneBadge.borderColor !== 'transparent' ? state.elements.zoneBadge.borderColor : 'transparent',
-                borderWidth: `${state.elements.zoneBadge.borderWidth !== undefined ? state.elements.zoneBadge.borderWidth : (state.elements.zoneBadge.borderColor && state.elements.zoneBadge.borderColor !== 'transparent' ? 1 : 0)}px`,
-                borderStyle: (state.elements.zoneBadge.borderWidth || (state.elements.zoneBadge.borderColor && state.elements.zoneBadge.borderColor !== 'transparent')) ? 'solid' : 'none',
+                fontSize: `${state.elements.zoneBadge.fontSize || 14}px`,
+                fontWeight: state.elements.zoneBadge.fontWeight || '700',
+                color: state.elements.zoneBadge.color || '#0f172a',
+                ...getElementBoxStyle(state.elements.zoneBadge),
               }}
             >
               {state.elements.zoneBadge.text}

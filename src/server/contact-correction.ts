@@ -3,6 +3,7 @@ import type { Pool, PoolClient } from 'pg';
 import { inTransaction } from './database.ts';
 import { ensureReservationSchema } from './reservation.ts';
 import { cleanPhoneNumber } from './guest-order-lookup.ts';
+import { ensureTransactionMemoSchema } from './transaction-memo.ts';
 
 export interface OrderContactAuditRecord {
   id: string;
@@ -32,6 +33,13 @@ export interface PaidOrderForCorrection {
   total: number;
   ticketCount: number;
   auditCount?: number;
+  hasTransactionMemo?: boolean;
+  latestVerificationStatus?: 'verified' | 'pending' | 'discrepancy';
+  latestTransferRef?: string;
+  autoTransferRef?: string;
+  latestAdminNotes?: string;
+  latestVerifiedAt?: string;
+  latestRecordedByName?: string;
   createdAt: string;
   updatedAt: string;
   auditLogs?: OrderContactAuditRecord[];
@@ -74,8 +82,10 @@ export async function ensureContactAuditSchema(pool: Pool): Promise<void> {
 export async function listPaidOrdersForOwner(
   pool: Pool,
   search?: string,
+  options?: { dateFrom?: string; dateTo?: string },
 ): Promise<PaidOrderForCorrection[]> {
   await ensureContactAuditSchema(pool);
+  await ensureTransactionMemoSchema(pool);
 
   let query = `
     SELECT o.id, o."eventId", o."sessionId", o."buyerName", o."buyerEmail", o."buyerPhone",
@@ -83,55 +93,107 @@ export async function listPaidOrdersForOwner(
            e.title as "eventTitle",
            es."startTime" as "sessionStartTime",
            COUNT(DISTINCT t.id)::int as "ticketCount",
-           COUNT(DISTINCT a.id)::int as "auditCount"
+           COUNT(DISTINCT a.id)::int as "auditCount",
+           COUNT(DISTINCT m.id)::int as "memoCount",
+           tm."latestVerificationStatus",
+           tm."latestTransferRef",
+           tm."latestAdminNotes",
+           tm."latestCreatedAt" as "latestVerifiedAt",
+           tm."latestRecordedByName",
+           pc."chargeId" as "paymentChargeId"
     FROM orders o
     JOIN events e ON o."eventId" = e.id
     JOIN event_sessions es ON o."sessionId" = es.id
     LEFT JOIN tickets t ON o.id = t."orderId"
     LEFT JOIN order_contact_audit_logs a ON o.id = a."orderId"
+    LEFT JOIN order_transaction_memos m ON o.id = m."orderId"
+    LEFT JOIN LATERAL (
+      SELECT "verificationStatus" as "latestVerificationStatus",
+             "transferRef" as "latestTransferRef",
+             "adminNotes" as "latestAdminNotes",
+             "createdAt" as "latestCreatedAt",
+             "recordedByName" as "latestRecordedByName"
+      FROM order_transaction_memos
+      WHERE "orderId" = o.id
+      ORDER BY "createdAt" DESC
+      LIMIT 1
+    ) tm ON true
+    LEFT JOIN LATERAL (
+      SELECT id as "chargeId"
+      FROM payment_charges
+      WHERE "orderId" = o.id
+      ORDER BY "createdAt" DESC
+      LIMIT 1
+    ) pc ON true
     WHERE o.status = 'paid'
   `;
 
   const params: unknown[] = [];
+  let paramIdx = 1;
+
   if (search?.trim()) {
     const term = `%${search.trim().toLowerCase()}%`;
     params.push(term);
     query += `
       AND (
-        LOWER(o.id) LIKE $1 OR
-        LOWER(o."buyerEmail") LIKE $1 OR
-        REPLACE(REPLACE(o."buyerPhone", '-', ''), ' ', '') LIKE $1 OR
-        LOWER(o."buyerName") LIKE $1 OR
-        LOWER(e.title) LIKE $1
+        LOWER(o.id) LIKE $${paramIdx} OR
+        LOWER(o."buyerEmail") LIKE $${paramIdx} OR
+        REPLACE(REPLACE(o."buyerPhone", '-', ''), ' ', '') LIKE $${paramIdx} OR
+        LOWER(o."buyerName") LIKE $${paramIdx} OR
+        LOWER(e.title) LIKE $${paramIdx}
       )
     `;
+    paramIdx++;
+  }
+
+  if (options?.dateFrom) {
+    params.push(options.dateFrom);
+    query += ` AND o."createdAt" >= $${paramIdx}`;
+    paramIdx++;
+  }
+
+  if (options?.dateTo) {
+    params.push(options.dateTo);
+    query += ` AND o."createdAt" <= $${paramIdx}`;
+    paramIdx++;
   }
 
   query += `
-    GROUP BY o.id, e.title, es."startTime"
+    GROUP BY o.id, e.title, es."startTime", tm."latestVerificationStatus", tm."latestTransferRef",
+             tm."latestAdminNotes", tm."latestCreatedAt", tm."latestRecordedByName", pc."chargeId"
     ORDER BY o."createdAt" DESC
-    LIMIT 50
+    LIMIT 200
   `;
 
   const res = await pool.query(query, params);
-  return res.rows.map(r => ({
-    id: r.id,
-    eventId: r.eventId,
-    eventTitle: r.eventTitle,
-    sessionId: r.sessionId,
-    sessionStartTime: new Date(r.sessionStartTime).toISOString(),
-    buyerName: r.buyerName,
-    buyerEmail: r.buyerEmail,
-    buyerPhone: r.buyerPhone,
-    status: r.status,
-    subtotal: Number(r.subtotal),
-    customerFee: Number(r.customerFee),
-    total: Number(r.total),
-    ticketCount: Number(r.ticketCount) || 0,
-    auditCount: Number(r.auditCount) || 0,
-    createdAt: new Date(r.createdAt).toISOString(),
-    updatedAt: new Date(r.updatedAt).toISOString(),
-  }));
+  return res.rows.map(r => {
+    const autoTransferRef = r.latestTransferRef || r.paymentChargeId || `PP-${String(r.id).replace(/^ORD-/, '')}`;
+    return {
+      id: r.id,
+      eventId: r.eventId,
+      eventTitle: r.eventTitle,
+      sessionId: r.sessionId,
+      sessionStartTime: new Date(r.sessionStartTime).toISOString(),
+      buyerName: r.buyerName,
+      buyerEmail: r.buyerEmail,
+      buyerPhone: r.buyerPhone,
+      status: r.status,
+      subtotal: Number(r.subtotal),
+      customerFee: Number(r.customerFee),
+      total: Number(r.total),
+      ticketCount: Number(r.ticketCount) || 0,
+      auditCount: Number(r.auditCount) || 0,
+      hasTransactionMemo: (Number(r.memoCount) || 0) > 0,
+      latestVerificationStatus: r.latestVerificationStatus || undefined,
+      latestTransferRef: r.latestTransferRef || undefined,
+      autoTransferRef,
+      latestAdminNotes: r.latestAdminNotes || undefined,
+      latestVerifiedAt: r.latestVerifiedAt ? new Date(r.latestVerifiedAt).toISOString() : undefined,
+      latestRecordedByName: r.latestRecordedByName || undefined,
+      createdAt: new Date(r.createdAt).toISOString(),
+      updatedAt: new Date(r.updatedAt).toISOString(),
+    };
+  });
 }
 
 /**

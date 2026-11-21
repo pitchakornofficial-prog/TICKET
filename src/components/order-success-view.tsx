@@ -601,7 +601,8 @@ export function OrderSuccessView({ orderId }: OrderSuccessViewProps) {
                               width: '100%',
                               height: 'auto',
                               display: 'block',
-                              borderRadius: 0,
+                              borderRadius: '8px',
+                              overflow: 'hidden',
                               boxShadow: '0 4px 18px rgba(15, 23, 42, 0.08)',
                             }}
                           />
@@ -672,7 +673,7 @@ export function OrderSuccessView({ orderId }: OrderSuccessViewProps) {
                                 data-qr-payload={tkt.qrPayload}
                                 width={160}
                                 height={160}
-                                style={{ display: 'block', margin: '0 auto' }}
+                                style={{ display: 'block', margin: '0 auto', borderRadius: '8px', border: '1px solid #e2e8f0', padding: '8px', background: '#ffffff' }}
                               />
                             </div>
 
