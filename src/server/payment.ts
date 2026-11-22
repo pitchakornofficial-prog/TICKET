@@ -808,6 +808,16 @@ export async function processStripeSuccessEvent(
       };
     }
 
+    if (retrievedIntent.amount_received !== expectedSatang) {
+      return {
+        success: false,
+        status: 'mismatch',
+        intentId: retrievedIntent.id,
+        orderId: charge.orderId,
+        message: 'Stripe amount received does not match the order total in satang (AC-119)',
+      };
+    }
+
     // 6. G-53 / P5 / AC-124: Decision time T = eventCreated * 1000 (ms)
     const T_ms = eventCreated * 1000;
     const paidAt = new Date(T_ms);

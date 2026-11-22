@@ -3,6 +3,7 @@ import type { Pool, PoolClient } from 'pg';
 import { inTransaction } from './database.ts';
 import { ensureReservationSchema } from './reservation.ts';
 import { cleanPhoneNumber } from './guest-order-lookup.ts';
+import { ensurePaymentSchema } from './payment.ts';
 import { ensureTransactionMemoSchema } from './transaction-memo.ts';
 
 export interface OrderContactAuditRecord {
@@ -86,6 +87,7 @@ export async function listPaidOrdersForOwner(
 ): Promise<PaidOrderForCorrection[]> {
   await ensureContactAuditSchema(pool);
   await ensureTransactionMemoSchema(pool);
+  await ensurePaymentSchema(pool);
 
   let query = `
     SELECT o.id, o."eventId", o."sessionId", o."buyerName", o."buyerEmail", o."buyerPhone",

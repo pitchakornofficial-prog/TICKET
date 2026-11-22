@@ -1,3 +1,4 @@
+import { isPayloadTooLargeError, payloadTooLargeResponse, readBoundedJson } from '@/server/http-body';
 import { createSafeErrorResponse } from '@/server/api-error';
 import { assertSameOrigin } from '@/server/origin';
 import { getAuth } from '@/server/auth';
@@ -30,9 +31,11 @@ export async function POST(
   try {
     let resolutionNotes: string | undefined;
     try {
-      const body = await request.json();
+      const body = await readBoundedJson<{ resolutionNotes?: string }>(request, 32 * 1024);
       resolutionNotes = body?.resolutionNotes;
-    } catch {
+    } catch (error) {
+      if (isPayloadTooLargeError(error)) return payloadTooLargeResponse();
+
       // Body is optional
     }
 

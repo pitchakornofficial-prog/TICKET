@@ -1,3 +1,4 @@
+import { isPayloadTooLargeError, payloadTooLargeResponse, readBoundedJson } from '@/server/http-body';
 import { createSafeErrorResponse } from '@/server/api-error';
 import { assertSameOrigin } from '@/server/origin';
 import { safeRevalidateTag } from '@/server/cache';
@@ -51,8 +52,9 @@ export async function PUT(
 
   let body: Record<string, unknown> = {};
   try {
-    body = await request.json();
-  } catch {
+    body = await readBoundedJson(request, 128 * 1024);
+  } catch (error) {
+    if (isPayloadTooLargeError(error)) return payloadTooLargeResponse();
     return Response.json({ message: 'Invalid JSON body' }, { status: 400 });
   }
 
@@ -148,7 +150,11 @@ export async function POST(
 
   if (action === 'submit-session') {
     let body: { sessionId?: string } = {};
-    try { body = await request.json(); } catch {}
+    try {
+      body = await readBoundedJson(request, 128 * 1024);
+    } catch (error) {
+      if (isPayloadTooLargeError(error)) return payloadTooLargeResponse();
+    }
     if (!body.sessionId) return Response.json({ message: 'กรุณาระบุ sessionId' }, { status: 400 });
 
     const pool = auth.options.database as Pool;

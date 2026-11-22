@@ -1,3 +1,4 @@
+import { isPayloadTooLargeError, payloadTooLargeResponse, readBoundedJson } from '@/server/http-body';
 import { createSafeErrorResponse } from '@/server/api-error';
 import { assertSameOrigin } from '@/server/origin';
 import { getAuth } from '@/server/auth';
@@ -71,8 +72,9 @@ export async function POST(
   const { id: eventId } = await params;
   let body: { scannerId?: string; deviceId?: string } = {};
   try {
-    body = await request.json();
-  } catch {
+    body = await readBoundedJson(request, 32 * 1024);
+  } catch (error) {
+    if (isPayloadTooLargeError(error)) return payloadTooLargeResponse();
     return Response.json({ message: 'ข้อมูล JSON ไม่ถูกต้อง' }, { status: 400 });
   }
 

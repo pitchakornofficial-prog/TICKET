@@ -1,5 +1,83 @@
 # Deployment — AWS Singapore
 
+## Production Release 2026-11-22 (ticket-production-web:27)
+
+Merged `origin/main` (`eb14211`, PR #18 — concert data integrity, emergency sales pause, and session amendment features) into `dev-phat` (`e7ff764`, including `ensurePaymentSchema` guard in `src/server/contact-correction.ts`) and deployed to `ticket-production` (`ap-southeast-1`, Account `901708383730`).
+
+### 1. Pre-Deployment Verification
+- **Production Integrity Checks**:
+  - Zero `SAMPLE_MOCK_*` or `INITIAL_SYSTEM_NEWS` references in `src/` (Data Integrity D-185).
+  - `src/app/back-office/ticket-designer/page.tsx` enforces `roleAccess(actor, 'owner')`.
+  - `src/server/ticket-master-template.ts` uses explicit `.ts` imports for operations runner compatibility.
+  - `src/server/contact-correction.ts` calls `await ensurePaymentSchema(pool)` in `listPaidOrdersForOwner` before querying `payment_charges`.
+  - `scripts/migrate-production-schemas.ts` covers all 12 schemas and paid-buckets backfill validation.
+- **Quality Gates**:
+  - `npm run typecheck`: passed
+  - `npm run lint`: passed (584 files, 0 warnings/errors)
+  - `npm run test:unit`: passed (155 files / 1,037 tests)
+  - `npm run build`: passed (61 static pages + standalone bundle)
+
+### 2. ARM64 ECR Images & CloudFormation Rollout
+- Built `linux/arm64` images from `Dockerfile` (`--provenance=false`) and pushed to `901708383730.dkr.ecr.ap-southeast-1.amazonaws.com/ticket-workload-test`:
+  - `WebImage` (`prod-web-20261122-e7ff764`): `901708383730.dkr.ecr.ap-southeast-1.amazonaws.com/ticket-workload-test@sha256:5a5d95638e769b1b7a2e1d27987ec2176cf2ef80bd86d35224e0e2ed9626a41e`
+  - `OperationsImage` (`prod-ops-20261122-e7ff764`): `901708383730.dkr.ecr.ap-southeast-1.amazonaws.com/ticket-workload-test@sha256:5b072034f398df382c03cd33672301b123311ec5830dda86b5a0c9647293662b`
+- Executed CloudFormation change set `release-20261122-e7ff764` (`infra/aws/ticket-production.json`) -> `UPDATE_COMPLETE`.
+- ECS service `ticket-production-web` stabilized at primary revision `ticket-production-web:27` (`COMPLETED`, `1/1` running task `64316dc51e8e4aa2aa8ecae02d0859b8`); ALB target `172.31.37.177:3000` (`ap-southeast-1a`) is `healthy` (prior target `172.31.35.227:3000` drained).
+- `OperationsTask` revision updated to `ticket-production-operations:20`.
+
+### 3. Production Schema Migration (`ticket-production-operations:20`)
+- Executed one-off `OperationsTask` (`arn:aws:ecs:ap-southeast-1:901708383730:task/ticket-production/a033429182974991a7a751c163c69105`, command `["node", "scripts/migrate-production-schemas.ts"]`, `exitCode: 0`):
+  - CloudWatch stream `ops/operations/a033429182974991a7a751c163c69105` confirmed all 12 schemas (`1. Auth` through `12. Order transaction memo`) + paid buckets backfill (`3 ticket types verified`) completed successfully.
+
+### 4. Post-Deployment Live Smoke Check (`https://ticket.phatysd.me`)
+- `GET /api/health` -> `HTTP 200`
+- `GET /` -> `HTTP 200`
+- `GET /news` -> `HTTP 200`
+- `GET /api/public/events` -> `HTTP 200`
+- `GET /api/public/ticket-master-template` -> `HTTP 200`
+- `POST /api/webhooks/stripe` (unsigned `{}`) -> `HTTP 400` (`{"error":"Missing Stripe-Signature header"}`)
+- `POST /api/webhooks/ses-inbound` (unauthenticated `{}`) -> `HTTP 401` (`{"error":"Unauthorized webhook secret"}`)
+- CloudWatch stream `web/web/64316dc51e8e4aa2aa8ecae02d0859b8` confirmed clean `Next.js 16.4.6` startup with zero unhandled errors.
+
+---
+
+## Production Release 2026-11-21 (ticket-production-web:26)
+
+Current live production release observed on `ticket-production` (`ap-southeast-1`, Account `901708383730`), verified read-only on 2026-11-22 (Asia/Bangkok).
+
+### 1. ECS Service, Task Definition & Auto Scaling
+- **ECS Service**: `ticket-production-web` — `ACTIVE`, rollout `COMPLETED` (`ecs-svc/9454457328136666071`, deployed `2026-11-21T15:47:27+07:00`, completed `2026-11-21T15:50:04+07:00`), desired/running/pending `1/1/0`.
+- **Task Definition**: `ticket-production-web:26` (`FARGATE`, `LINUX/ARM64`, `1024` CPU / `2048` MiB RAM, `DATABASE_POOL_MAX=15`, `TRUST_PROXY=cloudflare`).
+- **Web Image Digest**: `901708383730.dkr.ecr.ap-southeast-1.amazonaws.com/ticket-workload-test@sha256:972f04802b6efb0ccfd9a7f915204bc32e61150879750d83a454067614a6365d`.
+- **Running Task & ALB Target Health**: task `cceadbfa6da4466fbae1186fbf6a192b` (`172.31.35.227:3000`, `ap-southeast-1a`) is `RUNNING` and `healthy` on target group `ticket-production-web/5660edd3c363eef4`.
+- **Application Auto Scaling**: `MinCapacity: 1`, `MaxCapacity: 4` (dynamic scale-in/out and scheduled scaling all active, `SuspendedState: false`).
+
+### 2. Production Schema Migration (`ops/operations/98b7ef135a824241ba07f6e09216a444`)
+- CloudWatch ops log confirmed all 12 schemas and paid-buckets backfill succeeded (`Migration and schema verification completed successfully.`):
+  - `1. Auth schema: OK`
+  - `2. Fee schema: OK`
+  - `3. Queue schema: OK`
+  - `4. Guest OTP schema & atomic functions: OK`
+  - `5. Reservation schema, triggers, and atomic functions: OK`
+  - `6. Payment & Stripe webhook inbox schema: OK`
+  - `7. Upload finalization intent schema: OK`
+  - `8. Password reset token schema: OK`
+  - `9. Owner contact info schema: OK`
+  - `10. Inbound email mailbox schema: OK`
+  - `11. Ticket master template schema: OK`
+  - `12. Order transaction memo schema: OK`
+  - Paid buckets backfill validated successfully (`3 ticket types verified`).
+
+### 3. Read-Only Live Verification (`https://ticket.phatysd.me`, 2026-11-22)
+- `GET /api/health` -> `HTTP/2 200` (`{"status":"ok"}`, `cache-control: no-store`)
+- `GET /` -> `HTTP/2 200` (`cache-control: private, no-cache, no-store, max-age=0, must-revalidate`)
+- `GET /news` -> `HTTP/2 200` (`cache-control: s-maxage=60, stale-while-revalidate=31535940`)
+- `GET /api/public/events` -> `HTTP/2 200` (`cache-control: public, max-age=30`)
+- Security headers (`Strict-Transport-Security`, `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy`, `Permissions-Policy`, `Content-Security-Policy`) verified on all endpoints via Cloudflare (`cf-cache-status: DYNAMIC`).
+- CloudWatch stream `web/web/cceadbfa6da4466fbae1186fbf6a192b` confirmed clean `Next.js 16.4.6` startup with zero unhandled exceptions (only the non-blocking `pg` v9 SSL mode deprecation warning).
+
+---
+
 ## Production Release 2026-11-17 (ticket-production-web:19)
 
 Deployed security-hardened release from branch `dev-phat` (`41ebe48`) to `ticket-production` (`ap-southeast-1`, Account `901708383730`).

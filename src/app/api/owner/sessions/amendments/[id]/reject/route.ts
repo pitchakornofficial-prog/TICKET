@@ -1,3 +1,4 @@
+import { isPayloadTooLargeError, payloadTooLargeResponse, readOptionalBoundedJson } from '@/server/http-body';
 import { createSafeErrorResponse } from '@/server/api-error';
 import { assertSameOrigin } from '@/server/origin';
 import { headers } from 'next/headers';
@@ -25,7 +26,7 @@ export async function POST(
       );
     }
 
-    const body = await request.json().catch(() => ({}));
+    const body = await readOptionalBoundedJson<{ rejectionReason: string }>(request, 128 * 1024);
     const rejectionReason = typeof body.rejectionReason === 'string' ? body.rejectionReason : '';
 
     const result = await rejectSessionAmendment(getDatabasePool(), {
@@ -36,6 +37,7 @@ export async function POST(
 
     return Response.json(result, { status: 200 });
   } catch (error: unknown) {
+    if (isPayloadTooLargeError(error)) return payloadTooLargeResponse();
     return createSafeErrorResponse(error, 'เกิดข้อผิดพลาดในการปฏิเสธการแก้ไขรอบการแสดง', { defaultStatus: 400 });
   }
 }

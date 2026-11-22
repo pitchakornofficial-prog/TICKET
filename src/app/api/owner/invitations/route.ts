@@ -1,3 +1,4 @@
+import { isPayloadTooLargeError, payloadTooLargeResponse, readOptionalBoundedJson } from '@/server/http-body';
 import { createSafeErrorResponse } from '@/server/api-error';
 import { assertSameOrigin } from '@/server/origin';
 import { getAuth } from '@/server/auth';
@@ -46,11 +47,7 @@ export async function POST(request: Request) {
 
   const pool = getDatabasePool();
   try {
-    const body = (await request.json().catch(() => ({}))) as {
-      email?: string;
-      role?: string;
-      confirmPassword?: string;
-    };
+    const body = await readOptionalBoundedJson<{ email: string; role: string; confirmPassword: string }>(request, 32 * 1024);
     const email = typeof body.email === 'string' ? body.email.trim() : '';
     const invitedRole: 'organizer' | 'owner' = body.role === 'owner' ? 'owner' : 'organizer';
 
@@ -83,6 +80,7 @@ export async function POST(request: Request) {
       { status: 200, headers: { 'Cache-Control': 'private, no-store, no-cache, must-revalidate' } },
     );
   } catch (error: unknown) {
+    if (isPayloadTooLargeError(error)) return payloadTooLargeResponse();
     if (error instanceof InvitationSecurityError) {
       return Response.json({ message: error.message }, { status: error.status, headers: { 'Cache-Control': 'private, no-store, no-cache, must-revalidate' } });
     }

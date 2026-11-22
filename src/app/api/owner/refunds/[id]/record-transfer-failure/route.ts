@@ -1,3 +1,4 @@
+import { isPayloadTooLargeError, payloadTooLargeResponse, readOptionalBoundedJson } from '@/server/http-body';
 import { createSafeErrorResponse } from '@/server/api-error';
 import { assertSameOrigin } from '@/server/origin';
 import { headers } from 'next/headers';
@@ -25,7 +26,7 @@ export async function POST(
       );
     }
 
-    const body = await request.json().catch(() => ({}));
+    const body = await readOptionalBoundedJson<{ failureReason: string }>(request, 32 * 1024);
     const failureReason = typeof body.failureReason === 'string' ? body.failureReason : '';
 
     const result = await recordManualRefundFailure(getDatabasePool(), {
@@ -51,6 +52,7 @@ export async function POST(
       { status: 200 },
     );
   } catch (error: unknown) {
+    if (isPayloadTooLargeError(error)) return payloadTooLargeResponse();
     return createSafeErrorResponse(error, 'เกิดข้อผิดพลาดในการบันทึกการโอนเงินล้มเหลว', { defaultStatus: 500 });
   }
 }

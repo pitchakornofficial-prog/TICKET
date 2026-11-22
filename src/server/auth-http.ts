@@ -1,4 +1,5 @@
 import type { TicketAuth } from './auth.ts';
+import { isPayloadTooLargeError, payloadTooLargeResponse, readBoundedText } from './http-body.ts';
 import { extractClientIp } from './guest-otp.ts';
 import { createOrganizerInvitation, InvitationSecurityError } from './invitation.ts';
 
@@ -29,11 +30,28 @@ export async function handleAuthRequest(auth: TicketAuth, request: Request): Pro
     return Response.json({ message: 'ไม่อนุญาตคำขอจากแหล่งนี้' }, { status: 403, headers: { 'Cache-Control': 'private, no-store, no-cache, must-revalidate' } });
   }
 
+  let rawBody = '';
+  if (request.method === 'POST') {
+    try {
+      rawBody = await readBoundedText(request, 32 * 1024);
+    } catch (error) {
+      if (isPayloadTooLargeError(error)) return payloadTooLargeResponse();
+      return Response.json(
+        { message: 'Invalid request body' },
+        { status: 400, headers: { 'Cache-Control': 'private, no-store' } },
+      );
+    }
+  }
+
+  function forwardAuthRequest() {
+    if (request.method !== 'POST') return auth.handler(request);
+    return auth.handler(new Request(request, { body: rawBody || null }));
+  }
+
   // Intercept request-password-reset to enforce ADR-0004 rate limits & token invalidation
   if (request.method === 'POST' && path === '/api/auth/request-password-reset') {
-    const cloned = request.clone();
     let body: { email?: string; redirectTo?: string } = {};
-    try { body = await cloned.json(); } catch {}
+    try { body = JSON.parse(rawBody); } catch {}
     const email = typeof body.email === 'string' ? body.email.trim() : '';
 
     if (!email) {
@@ -47,7 +65,7 @@ export async function handleAuthRequest(auth: TicketAuth, request: Request): Pro
 
     // If check allowed, call auth.handler so Better Auth sends email with token
     if (check.allowed) {
-      await auth.handler(request);
+      await forwardAuthRequest();
     }
 
     // Always return generic response to avoid account enumeration (AC-56, ADR-0004)
@@ -80,9 +98,8 @@ export async function handleAuthRequest(auth: TicketAuth, request: Request): Pro
       });
     }
 
-    const cloned = request.clone();
     let body: { email?: string; role?: string; confirmPassword?: string } = {};
-    try { body = await cloned.json(); } catch {}
+    try { body = JSON.parse(rawBody); } catch {}
     const email = typeof body.email === 'string' ? body.email.trim() : '';
     const invitedRole: 'organizer' | 'owner' = body.role === 'owner' ? 'owner' : 'organizer';
 
@@ -112,9 +129,8 @@ export async function handleAuthRequest(auth: TicketAuth, request: Request): Pro
 
   // Accept invitation
   if (request.method === 'POST' && path === '/api/auth/accept-invitation') {
-    const cloned = request.clone();
     let body: { token?: string; name?: string; password?: string } = {};
-    try { body = await cloned.json(); } catch {}
+    try { body = JSON.parse(rawBody); } catch {}
     const token = typeof body.token === 'string' ? body.token.trim() : '';
     const name = typeof body.name === 'string' ? body.name.trim() : '';
     const password = typeof body.password === 'string' ? body.password : '';
@@ -137,7 +153,7 @@ export async function handleAuthRequest(auth: TicketAuth, request: Request): Pro
     }
   }
 
-  const response = await auth.handler(request);
+  const response = await forwardAuthRequest();
   response.headers.set('Cache-Control', 'no-store');
   return response;
 }

@@ -207,3 +207,16 @@ describe('Item 11: Owner Invitation Step-Up Authentication & Audit Trail', () =>
     }
   });
 });
+
+it('rejects oversized owner invitation JSON without treating it as an empty body', async () => {
+  const { POST } = await import('../../src/app/api/owner/invitations/route');
+  mockPoolInstance.query.mockClear();
+  const response = await POST(new Request('http://127.0.0.1:3000/api/owner/invitations', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email: 'x'.repeat(32 * 1024) }),
+  }));
+
+  expect(response.status).toBe(413);
+  expect(mockPoolInstance.query).not.toHaveBeenCalled();
+});

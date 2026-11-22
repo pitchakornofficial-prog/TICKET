@@ -1,3 +1,4 @@
+import { isPayloadTooLargeError, payloadTooLargeResponse, readBoundedJson } from '@/server/http-body';
 import { createSafeErrorResponse } from '@/server/api-error';
 import { assertSameOrigin } from '@/server/origin';
 import { headers } from 'next/headers';
@@ -29,10 +30,12 @@ export async function POST(
     let specialRefundWindowStart: string | null = null;
     let specialRefundWindowEnd: string | null = null;
     try {
-      const body = await request.json();
+      const body = await readBoundedJson<{ specialRefundWindowStart?: string; specialRefundWindowEnd?: string }>(request, 128 * 1024);
       specialRefundWindowStart = body.specialRefundWindowStart || null;
       specialRefundWindowEnd = body.specialRefundWindowEnd || null;
-    } catch {
+    } catch (error) {
+      if (isPayloadTooLargeError(error)) return payloadTooLargeResponse();
+
       // Empty or non-JSON body is valid
     }
 

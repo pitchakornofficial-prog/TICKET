@@ -65,3 +65,47 @@ describe('bounded HTTP body readers', () => {
     expect(mocks.getDatabasePool).not.toHaveBeenCalled();
   });
 });
+
+describe('auth HTTP body limits', () => {
+  it.each(['sign-in/email', 'request-password-reset'])(
+    'rejects oversized streamed JSON on %s before dispatch',
+    async (path) => {
+      const { handleAuthRequest } = await import('../../src/server/auth-http');
+      const handler = vi.fn();
+      const auth = { options: { baseURL: 'http://127.0.0.1:3000' }, handler } as unknown as
+        Parameters<typeof handleAuthRequest>[0];
+      const request = streamedRequest(
+        `http://127.0.0.1:3000/api/auth/${path}`,
+        [new Uint8Array(24 * 1024), new Uint8Array(12 * 1024)],
+        { origin: 'http://127.0.0.1:3000', 'content-type': 'application/json' },
+      );
+
+      expect((await handleAuthRequest(auth, request)).status).toBe(413);
+      expect(handler).not.toHaveBeenCalled();
+    },
+  );
+
+  it('forwards normal sign-in JSON and cookies after checking the body', async () => {
+    const { handleAuthRequest } = await import('../../src/server/auth-http');
+    const body = { email: 'buyer@example.test', password: 'example-password' };
+    const handler = vi.fn(async (request: Request) => {
+      expect(request.headers.get('cookie')).toBe('example=session');
+      expect(await request.json()).toEqual(body);
+      return new Response(null, { status: 204 });
+    });
+    const auth = { options: { baseURL: 'http://127.0.0.1:3000' }, handler } as unknown as
+      Parameters<typeof handleAuthRequest>[0];
+    const request = new Request('http://127.0.0.1:3000/api/auth/sign-in/email', {
+      method: 'POST',
+      headers: {
+        origin: 'http://127.0.0.1:3000',
+        'content-type': 'application/json',
+        cookie: 'example=session',
+      },
+      body: JSON.stringify(body),
+    });
+
+    expect((await handleAuthRequest(auth, request)).status).toBe(204);
+    expect(handler).toHaveBeenCalledOnce();
+  });
+});

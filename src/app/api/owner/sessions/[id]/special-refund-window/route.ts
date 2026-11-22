@@ -1,3 +1,4 @@
+import { isPayloadTooLargeError, payloadTooLargeResponse, readBoundedJson } from '@/server/http-body';
 import { createSafeErrorResponse } from '@/server/api-error';
 import { assertSameOrigin } from '@/server/origin';
 import { headers } from 'next/headers';
@@ -26,7 +27,7 @@ export async function POST(
       );
     }
 
-    const body = await request.json();
+    const body = await readBoundedJson<{ specialRefundWindowStart: string | null; specialRefundWindowEnd: string | null }>(request, 32 * 1024);
     const { specialRefundWindowStart, specialRefundWindowEnd } = body;
 
     const result = await configureSpecialRefundWindow(getDatabasePool(), {
@@ -39,6 +40,7 @@ export async function POST(
     safeRevalidateTag('public-events');
     return Response.json(result, { status: 200 });
   } catch (error: unknown) {
+    if (isPayloadTooLargeError(error)) return payloadTooLargeResponse();
     return createSafeErrorResponse(error, 'เกิดข้อผิดพลาดในการกำหนดช่วงเวลาขอคืนเงินพิเศษ', {
       defaultStatus: 400,
       statusResolver: (msg) => msg.includes('ไม่อนุญาต') ? 403 : 400,

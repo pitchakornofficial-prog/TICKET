@@ -1,3 +1,4 @@
+import { isPayloadTooLargeError, payloadTooLargeResponse, readOptionalBoundedJson } from '@/server/http-body';
 import { createSafeErrorResponse } from '@/server/api-error';
 import { assertSameOrigin } from '@/server/origin';
 import { getAuth } from '@/server/auth';
@@ -34,7 +35,7 @@ export async function POST(request: Request) {
 
   const pool = getDatabasePool();
   try {
-    const body = await request.json().catch(() => ({}));
+    const body = await readOptionalBoundedJson<{ deliveryId: string }>(request, 32 * 1024);
     if (!body.deliveryId) {
       return Response.json({ message: 'กรุณาระบุรหัสรายการจัดส่ง' }, { status: 400 });
     }
@@ -42,6 +43,7 @@ export async function POST(request: Request) {
     const result = await retryTicketEmailDelivery(pool, body.deliveryId);
     return Response.json({ result }, { status: 200, headers: { 'Cache-Control': 'private, no-store, no-cache, must-revalidate' } });
   } catch (error: unknown) {
+    if (isPayloadTooLargeError(error)) return payloadTooLargeResponse();
     return createSafeErrorResponse(error, 'เกิดข้อผิดพลาดในการลองส่งอีเมลใหม่', { defaultStatus: 500 });
   }
 }

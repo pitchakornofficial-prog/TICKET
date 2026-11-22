@@ -1,3 +1,4 @@
+import { isPayloadTooLargeError, payloadTooLargeResponse, readOptionalBoundedJson } from '@/server/http-body';
 import { createSafeErrorResponse } from '@/server/api-error';
 import { assertSameOrigin } from '@/server/origin';
 import { headers } from 'next/headers';
@@ -60,7 +61,7 @@ export async function POST(
       );
     }
 
-    const body = await request.json().catch(() => ({}));
+    const body = await readOptionalBoundedJson<Omit<Parameters<typeof submitSessionAmendment>[1], 'sessionId' | 'organizerId'>>(request, 128 * 1024);
     const ticketTypes = Array.isArray(body.ticketTypes) ? body.ticketTypes : [];
 
     if (ticketTypes.length === 0) {
@@ -89,6 +90,7 @@ export async function POST(
       { status: 201 },
     );
   } catch (error: unknown) {
+    if (isPayloadTooLargeError(error)) return payloadTooLargeResponse();
     return createSafeErrorResponse(error, 'เกิดข้อผิดพลาดในการยื่นแก้ไขรอบการแสดง', { defaultStatus: 400 });
   }
 }

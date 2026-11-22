@@ -1,3 +1,4 @@
+import { isPayloadTooLargeError, payloadTooLargeResponse, readBoundedJson } from '@/server/http-body';
 import { createSafeErrorResponse } from '@/server/api-error';
 import { assertSameOrigin } from '@/server/origin';
 import { headers } from 'next/headers';
@@ -33,8 +34,8 @@ export async function POST(
   }
 
   try {
-    const body = await request.json();
-    const { newEmail, newPhone, reason } = body || {};
+    const body = await readBoundedJson<{ newEmail: string; newPhone: string; reason: string }>(request, 32 * 1024);
+    const { newEmail = '', newPhone = '', reason = '' } = body || {};
 
     const pool = getDatabasePool();
     const result = await correctOrderContact(pool, {
@@ -58,6 +59,7 @@ export async function POST(
 
     return Response.json(result, { status: 200, headers: { 'Cache-Control': 'private, no-store, no-cache, must-revalidate' } });
   } catch (error: unknown) {
+    if (isPayloadTooLargeError(error)) return payloadTooLargeResponse();
     return createSafeErrorResponse(error, 'เกิดข้อผิดพลาดในการแก้ไขข้อมูลติดต่อ', { defaultStatus: 500 });
   }
 }

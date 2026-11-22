@@ -64,7 +64,26 @@ export async function readBoundedJson<T = unknown>(request: Request, maxBytes: n
   return JSON.parse(text) as T;
 }
 
+export async function readOptionalBoundedJson<T extends object>(
+  request: Request,
+  maxBytes: number,
+): Promise<Partial<T>> {
+  try {
+    return await readBoundedJson<T>(request, maxBytes);
+  } catch (error) {
+    if (isPayloadTooLargeError(error)) throw error;
+    return {};
+  }
+}
+
 export function isPayloadTooLargeError(error: unknown): boolean {
   return error instanceof PayloadTooLargeError
     || (error instanceof Error && error.message === 'PAYLOAD_TOO_LARGE');
+}
+
+export function payloadTooLargeResponse(): Response {
+  return Response.json(
+    { message: 'Payload too large' },
+    { status: 413, headers: { 'Cache-Control': 'private, no-store' } },
+  );
 }

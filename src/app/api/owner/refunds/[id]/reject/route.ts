@@ -1,3 +1,4 @@
+import { isPayloadTooLargeError, payloadTooLargeResponse, readOptionalBoundedJson } from '@/server/http-body';
 import { createSafeErrorResponse } from '@/server/api-error';
 import { assertSameOrigin } from '@/server/origin';
 import { getAuth } from '@/server/auth';
@@ -26,7 +27,7 @@ export async function POST(
 
   const pool = getDatabasePool();
   try {
-    const body = await request.json().catch(() => ({}));
+    const body = await readOptionalBoundedJson<{ rejectionReason: string }>(request, 32 * 1024);
     const rejectionReason = body.rejectionReason || '';
 
     const result = await rejectRefundRequest(pool, {
@@ -53,6 +54,7 @@ export async function POST(
       { status: 200 },
     );
   } catch (error: unknown) {
+    if (isPayloadTooLargeError(error)) return payloadTooLargeResponse();
     return createSafeErrorResponse(error, 'เกิดข้อผิดพลาดในการปฏิเสธการคืนเงิน', { defaultStatus: 500 });
   }
 }

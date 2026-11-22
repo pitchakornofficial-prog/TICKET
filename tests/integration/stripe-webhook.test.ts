@@ -530,6 +530,45 @@ describe('Stripe Verified Webhook Ticket Issuance Integration (TASK-043, AC-119,
     );
     expect(missingRes.status).toBe(400);
 
+    // The event claims full payment. The server-side Stripe lookup reports one satang less.
+    const shortPaymentEvent = { ...testEvent, id: `${testEvent.id}_short_payment` };
+    const shortPaymentBody = JSON.stringify(shortPaymentEvent);
+    const intent = await stripe.retrievePaymentIntent(charge.id);
+    expect(intent.amount).toBe(charge.amount);
+    expect(intent.amount_received).toBe(charge.amount);
+
+    const retrieveIntent = vi.spyOn(stripe, 'retrievePaymentIntent').mockResolvedValueOnce({
+      ...intent,
+      amount_received: charge.amount - 1,
+    });
+    try {
+      const shortPaymentResponse = await handleStripeWebhook(
+        new Request('http://localhost/api/webhooks/stripe', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'stripe-signature': generateStripeSignatureHeader(shortPaymentBody, webhookSecret),
+          },
+          body: shortPaymentBody,
+        }),
+      );
+      expect(shortPaymentResponse.status).toBe(400);
+      expect(await shortPaymentResponse.json()).toMatchObject({
+        status: 'mismatch',
+        error: expect.stringContaining('amount received'),
+      });
+      expect(retrieveIntent).toHaveBeenCalledWith(charge.id);
+    } finally {
+      retrieveIntent.mockRestore();
+    }
+    expect(await getOrderTickets(fixture.pool, reservation.id)).toHaveLength(0);
+    expect((await getPaymentChargeForOrder(fixture.pool, reservation.id, buyerToken))?.status).toBe('pending');
+    const rejectedDelivery = await fixture.pool.query<{ status: string }>(
+      'SELECT status FROM stripe_webhook_inbox WHERE id = $1',
+      [shortPaymentEvent.id],
+    );
+    expect(rejectedDelivery.rows[0]?.status).toBe('rejected');
+
     // 3. Valid signed webhook -> 200 OK and tickets issued (AC-119, AC-17)
     const validHeader = generateStripeSignatureHeader(rawBody, webhookSecret);
     const validRes = await handleStripeWebhook(
