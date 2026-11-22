@@ -1,5 +1,27 @@
 # Deployment — AWS Singapore
 
+## Production Release 2026-11-22 (ticket-production-web:29 — Auth Hotfix)
+
+Hotfix release from branch `dev-phat` (`e445c0e`) resolving the `POST /api/auth/*` HTTP 500 (`TypeError: Cannot read private member #state`) incident introduced in `ticket-production-web:28`.
+
+### 1. Root Cause & Fix
+- `forwardAuthRequest()` in `src/server/auth-http.ts` passed Next.js's proxied `Request` object directly to `new Request(request, { body: rawBody || null })`, triggering Undici private `#state` access failure under Next.js standalone runtime.
+- Fixed by constructing `new Request(request.url, { method: request.method, headers, body: rawBody || undefined })` with cloned headers (`content-length` removed), plus a proxied-`Request` regression test in `tests/unit/http-body-security.test.ts`.
+- Quality gates passed: `npm run typecheck`, `npm run lint` (585 files), `npm run test:unit` (156 files / 1,045 tests), `npm run build` (61 static pages).
+
+### 2. ARM64 ECR Images & CloudFormation Rollout
+- `WebImage` (`prod-web-20261122-e445c0e`): `901708383730.dkr.ecr.ap-southeast-1.amazonaws.com/ticket-workload-test@sha256:ddc23cc35528eb089af7ec64813bacb062f79714b1985047cbab389d0ddba1aa`
+- `OperationsImage` (`prod-ops-20261122-e445c0e`): `901708383730.dkr.ecr.ap-southeast-1.amazonaws.com/ticket-workload-test@sha256:85b77a5744f09403b67c23204dce8f6a67dd59631dea7a2c9f14e015b8b49dca`
+- CloudFormation change set `release-20261122-e445c0e` -> `UPDATE_COMPLETE`.
+- ECS service `ticket-production-web` stabilized at primary revision `ticket-production-web:29` (`COMPLETED`, `1/1` running task `b0287abd08d94c7487bd1daf741b1a73`); ALB target `172.31.45.14:3000` (`ap-southeast-1a`) is `healthy`.
+
+### 3. Post-Deployment Live Verification (`https://ticket.phatysd.me`)
+- `GET /api/health` -> `HTTP 200`
+- `POST /api/auth/sign-in/email` (with valid `Origin` and dummy credentials) -> `HTTP 401` (`{"message":"Invalid email or password","code":"INVALID_EMAIL_OR_PASSWORD"}`), confirming Better Auth handler processes proxied `POST` requests without `500` errors.
+- CloudWatch stream `web/web/b0287abd08d94c7487bd1daf741b1a73` confirmed clean startup with zero unhandled exceptions.
+
+---
+
 ## Production Release 2026-11-22 (ticket-production-web:28)
 
 Deployed Security Audit hardening release from branch `dev-phat` (`7042f48` — bounded HTTP body readers across 28 API routes + `auth-http.ts`, and Stripe `amount_received` verification) to `ticket-production` (`ap-southeast-1`, Account `901708383730`).
