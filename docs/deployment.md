@@ -1,5 +1,17 @@
 # Deployment — AWS Singapore
 
+## Production Release 2026-11-23 (ticket-production-web:34 — Live Scanner Camera & Mobile Responsive)
+
+Deployed from branch `dev-phat` (`1a4c752`) to `ticket-production` (`ap-southeast-1`, Account `901708383730`), enabling real rear-camera QR scanning (`getUserMedia` + `BarcodeDetector` / `jsQR` fallback) and fixing mobile responsive layout on `/back-office/scanner`.
+
+### 1. ARM64 ECR Images, CloudFormation Rollout & Pre-Scale
+- `WebImage` (`prod-web-20261123-1a4c752`): `901708383730.dkr.ecr.ap-southeast-1.amazonaws.com/ticket-workload-test@sha256:bd409e3f24a201af391a455c80cbdac470eb6ee059a73864a105074896e467c5`
+- `OperationsImage` (`prod-ops-20261123-1a4c752`): `901708383730.dkr.ecr.ap-southeast-1.amazonaws.com/ticket-workload-test@sha256:85e9fd995cdbf769387a9b6cdaa217951e3e9b44d168a0205a7e1832cb3322f4`
+- CloudFormation change set `release-20261123-1a4c752` -> `UPDATE_COMPLETE`; `ticket-production-web:34` re-scaled to `desiredCount: 4` (`MinCapacity: 4 / MaxCapacity: 4`).
+- Live smoke check: `GET /api/health`, `/`, `/api/public/events` -> `HTTP 200`.
+
+---
+
 ## Production Release 2026-11-23 (ticket-production-web:32 — Ticket Designer Upload & Fallback Fix)
 
 Deployed fix from branch `dev-phat` (`99c8088`) resolving the Ticket Master Template 413 payload issue (where Base64 background images exceeded the 128 KB route cap and failed silently, causing customer views to fall back to blank white `DEFAULT_STATE`) to `ticket-production` (`ap-southeast-1`, Account `901708383730`).
