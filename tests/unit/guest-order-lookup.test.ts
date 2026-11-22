@@ -182,9 +182,9 @@ describe('TASK-018: Guest Order Lookup Unit Tests', () => {
       expect(canvasSource).toContain('หมายเลขคำสั่งซื้อ (ORDER ID)');
       expect(canvasSource).toContain('* กรุณาแสดง QR Code ต่อเจ้าหน้าที่เพื่อสแกนเข้างาน · บัตรนี้สามารถสแกนได้ 1 ครั้ง');
 
-      // 6. Canvas download draws white background and sharp corners
+      // 6. Canvas download falls back to concert template/poster or white background
       expect(canvasSource).toContain("ctx.fillStyle = '#ffffff';");
-      expect(canvasSource).not.toContain('ticketTemplateUrl');
+      expect(canvasSource).toContain('ticket.ticketTemplateUrl || ticket.eventPosterUrl');
 
       // 7. D-14 Zero Emojis check
       const emojiRegex = /\p{Extended_Pictographic}/u;

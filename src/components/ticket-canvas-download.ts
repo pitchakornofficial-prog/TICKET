@@ -162,10 +162,38 @@ export async function generateTicketCanvas(
     ctx.clip();
   }
 
+  const tryDrawBackgroundImage = async (url: string): Promise<boolean> => {
+    if (!url || typeof Image === 'undefined') return false;
+    try {
+      const img = new Image();
+      img.crossOrigin = 'anonymous';
+      await new Promise<void>((resolve, reject) => {
+        img.onload = () => resolve();
+        img.onerror = () => reject();
+        img.src = url;
+      });
+      ctx.drawImage(img, 0, 0, width, height);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  const fallbackEventImage = ticket.ticketTemplateUrl || ticket.eventPosterUrl || '';
+
   // 1. Background rendering
   if (template.bgType === 'solid') {
-    ctx.fillStyle = template.bgColor || '#ffffff';
-    ctx.fillRect(0, 0, width, height);
+    const isDefaultBlankWhite =
+      template.presetId === 'classic-white' &&
+      !template.bgImageUrl &&
+      (template.bgColor || '#ffffff').toLowerCase() === '#ffffff';
+    const drewFallback = isDefaultBlankWhite && fallbackEventImage
+      ? await tryDrawBackgroundImage(fallbackEventImage)
+      : false;
+    if (!drewFallback) {
+      ctx.fillStyle = template.bgColor || '#ffffff';
+      ctx.fillRect(0, 0, width, height);
+    }
   } else if (template.bgType === 'gradient') {
     const rad = ((template.gradientAngle ?? 135) * Math.PI) / 180;
     const x2 = width * Math.abs(Math.cos(rad));
@@ -175,23 +203,25 @@ export async function generateTicketCanvas(
     grad.addColorStop(1, template.gradientEnd || '#0f172a');
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, width, height);
-  } else if (template.bgType === 'image' && template.bgImageUrl) {
-    try {
-      const img = new Image();
-      img.crossOrigin = 'anonymous';
-      await new Promise<void>((resolve, reject) => {
-        img.onload = () => resolve();
-        img.onerror = () => reject();
-        img.src = template.bgImageUrl;
-      });
-      ctx.drawImage(img, 0, 0, width, height);
-    } catch {
+  } else if (template.bgType === 'image') {
+    const drewPrimary = template.bgImageUrl
+      ? await tryDrawBackgroundImage(template.bgImageUrl)
+      : false;
+    const drewFallback = !drewPrimary && fallbackEventImage
+      ? await tryDrawBackgroundImage(fallbackEventImage)
+      : false;
+    if (!drewPrimary && !drewFallback) {
       ctx.fillStyle = '#ffffff';
       ctx.fillRect(0, 0, width, height);
     }
   } else {
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(0, 0, width, height);
+    const drewFallback = fallbackEventImage
+      ? await tryDrawBackgroundImage(fallbackEventImage)
+      : false;
+    if (!drewFallback) {
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, width, height);
+    }
   }
 
   // 2. Darkness Overlay

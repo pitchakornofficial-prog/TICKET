@@ -36,7 +36,7 @@ export async function POST(request: Request) {
   }
   let input: unknown;
   try {
-    input = await readBoundedJson(request, 128 * 1024);
+    input = await readBoundedJson(request, 1024 * 1024);
   } catch (error) {
     const status = error instanceof Error && error.message === 'PAYLOAD_TOO_LARGE' ? 413 : 400;
     return Response.json({ message: 'ข้อมูลแบบบัตรหลักไม่ถูกต้องหรือมีขนาดใหญ่เกินไป' }, { status });

@@ -962,36 +962,97 @@ export function AdminTicketDesigner() {
     }
   };
 
+  const uploadTicketBackgroundFile = async (file: File): Promise<string> => {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('visibility', 'public');
+
+    const res = await fetch('/api/upload', {
+      method: 'POST',
+      body: formData,
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || typeof data?.url !== 'string' || !data.url) {
+      throw new Error(
+        typeof data?.message === 'string' && data.message
+          ? data.message
+          : 'อัปโหลดรูปภาพพื้นหลังไม่สำเร็จ'
+      );
+    }
+    return data.url;
+  };
+
+  const dataUrlToImageFile = (dataUrl: string): File => {
+    const match = /^data:(image\/(?:png|jpeg|jpg|webp));base64,(.+)$/i.exec(dataUrl);
+    if (!match) {
+      throw new Error('รองรับเฉพาะไฟล์ภาพ PNG, JPEG หรือ WEBP เท่านั้น');
+    }
+    const rawMime = match[1].toLowerCase();
+    const mime = rawMime === 'image/jpg' ? 'image/jpeg' : rawMime;
+    const ext = mime === 'image/jpeg' ? 'jpg' : mime === 'image/webp' ? 'webp' : 'png';
+    const binary = atob(match[2]);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i += 1) {
+      bytes[i] = binary.charCodeAt(i);
+    }
+    return new File([bytes], `ticket-background.${ext}`, { type: mime });
+  };
+
   // Save Master Template
   const handleSaveMasterTemplate = async () => {
     try {
-      localStorage.setItem(MASTER_TEMPLATE_STORAGE_KEY, JSON.stringify(state));
+      let templateToSave = state;
+
+      // Auto-migrate legacy Base64 data URLs to uploaded media URLs so DB persistence succeeds
+      if (
+        templateToSave.bgType === 'image' &&
+        typeof templateToSave.bgImageUrl === 'string' &&
+        templateToSave.bgImageUrl.startsWith('data:image/')
+      ) {
+        const file = dataUrlToImageFile(templateToSave.bgImageUrl);
+        const uploadedUrl = await uploadTicketBackgroundFile(file);
+        templateToSave = {
+          ...templateToSave,
+          bgImageUrl: uploadedUrl,
+        };
+        setState(templateToSave);
+      }
+
+      // Synchronize with database first so errors are never masked as saved
+      const res = await fetch('/api/owner/ticket-master-template', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ template: templateToSave }),
+      });
+      const resData = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const errMsg =
+          typeof resData?.message === 'string' && resData.message
+            ? resData.message
+            : `รหัสข้อผิดพลาด ${res.status}`;
+        setMasterSavedToast(`บันทึกแบบบัตรหลักลงฐานข้อมูลไม่สำเร็จ: ${errMsg}`);
+        setTimeout(() => {
+          setMasterSavedToast(null);
+        }, 5000);
+        return;
+      }
+
+      localStorage.setItem(MASTER_TEMPLATE_STORAGE_KEY, JSON.stringify(templateToSave));
       window.dispatchEvent(
-        new CustomEvent('ticket_master_template_updated', { detail: state })
+        new CustomEvent('ticket_master_template_updated', { detail: templateToSave })
       );
       window.dispatchEvent(
-        new CustomEvent('ticket:master-template-changed', { detail: state })
+        new CustomEvent('ticket:master-template-changed', { detail: templateToSave })
       );
 
       if (typeof BroadcastChannel !== 'undefined') {
         try {
           const ch = new BroadcastChannel('ticket_master_template_channel');
-          ch.postMessage({ type: 'UPDATE', template: state });
+          ch.postMessage({ type: 'UPDATE', template: templateToSave });
           ch.close();
         } catch {
           // ignore channel error
         }
-      }
-
-      // Synchronize with database
-      try {
-        await fetch('/api/owner/ticket-master-template', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ template: state }),
-        });
-      } catch {
-        // server sync fallback
       }
 
       setMasterSavedToast(
@@ -1000,8 +1061,14 @@ export function AdminTicketDesigner() {
       setTimeout(() => {
         setMasterSavedToast(null);
       }, 4500);
-    } catch {
-      // ignore
+    } catch (error) {
+      const errMsg = error instanceof Error && error.message
+        ? error.message
+        : 'ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ได้';
+      setMasterSavedToast(`บันทึกแบบบัตรหลักไม่สำเร็จ: ${errMsg}`);
+      setTimeout(() => {
+        setMasterSavedToast(null);
+      }, 5000);
     }
   };
 
@@ -1060,21 +1127,32 @@ export function AdminTicketDesigner() {
     setState((prev) => preset.apply(prev));
   };
 
-  // File Upload for Ticket Background
-  const handleTicketImageUpload = (e: ChangeEvent<HTMLInputElement>) => {
+  // File Upload for Ticket Background (uploads to /api/upload for a compact persistent URL)
+  const applyUploadedBackgroundFile = async (file: File) => {
+    setMasterSavedToast('กำลังอัปโหลดรูปภาพพื้นหลังบัตร...');
+    try {
+      const uploadedUrl = await uploadTicketBackgroundFile(file);
+      setState((prev) => ({
+        ...prev,
+        bgType: 'image',
+        bgImageUrl: uploadedUrl,
+      }));
+      setMasterSavedToast('อัปโหลดรูปภาพพื้นหลังสำเร็จ กรุณากด "บันทึกแบบบัตรหลัก" เพื่อใช้งานจริง');
+      setTimeout(() => setMasterSavedToast(null), 4000);
+    } catch (error) {
+      const errMsg = error instanceof Error && error.message
+        ? error.message
+        : 'อัปโหลดรูปภาพพื้นหลังไม่สำเร็จ';
+      setMasterSavedToast(`อัปโหลดรูปภาพไม่สำเร็จ: ${errMsg}`);
+      setTimeout(() => setMasterSavedToast(null), 5000);
+    }
+  };
+
+  const handleTicketImageUpload = async (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
+    e.target.value = '';
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (evt) => {
-      if (typeof evt.target?.result === 'string') {
-        setState((prev) => ({
-          ...prev,
-          bgType: 'image',
-          bgImageUrl: evt.target?.result as string,
-        }));
-      }
-    };
-    reader.readAsDataURL(file);
+    await applyUploadedBackgroundFile(file);
   };
 
   // Drag & drop handlers for upload box
@@ -1088,22 +1166,12 @@ export function AdminTicketDesigner() {
     setIsDragOverDropzone(false);
   };
 
-  const handleDropzoneDrop = (e: DragEvent<HTMLElement>) => {
+  const handleDropzoneDrop = async (e: DragEvent<HTMLElement>) => {
     e.preventDefault();
     setIsDragOverDropzone(false);
     const file = e.dataTransfer.files?.[0];
     if (!file?.type.startsWith('image/')) return;
-    const reader = new FileReader();
-    reader.onload = (evt) => {
-      if (typeof evt.target?.result === 'string') {
-        setState((prev) => ({
-          ...prev,
-          bgType: 'image',
-          bgImageUrl: evt.target?.result as string,
-        }));
-      }
-    };
-    reader.readAsDataURL(file);
+    await applyUploadedBackgroundFile(file);
   };
 
   const handleClearCardImage = () => {

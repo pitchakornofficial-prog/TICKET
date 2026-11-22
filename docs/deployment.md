@@ -1,5 +1,42 @@
 # Deployment — AWS Singapore
 
+## Production Release 2026-11-22 (ticket-production-web:30)
+
+Merged `origin/main` (`1dc4f92`, PR #19 — manual `ticketCode` entry for admission scans in both online and offline contexts) into `dev-phat` (`bf7c7aa`) while preserving all production security hardening guards (`readBoundedJson`/`readBoundedText`, proxied `Request` handling in `src/server/auth-http.ts`, Stripe `amount_received` check, owner-only `ticket-designer` access, explicit `.ts` ops imports, and 12-schema migrations) and deployed to `ticket-production` (`ap-southeast-1`, Account `901708383730`).
+
+### 1. Pre-Deployment Verification
+- **Security & Integrity Checks**:
+  - Zero `SAMPLE_MOCK_*` or `INITIAL_SYSTEM_NEWS` in `src/` (D-185).
+  - Zero direct `request.json()` calls in `src/app/api/`.
+  - `src/server/auth-http.ts` preserves `new Request(request.url, ...)` for proxied Next.js requests.
+  - `src/server/payment.ts` preserves `retrievedIntent.amount_received !== expectedSatang`.
+  - `src/app/back-office/ticket-designer/page.tsx` preserves `roleAccess(actor, 'owner')`.
+- **Quality Gates**:
+  - `npm run typecheck`: passed
+  - `npm run lint`: passed (585 files, 0 warnings/errors)
+  - `npm run test:unit`: passed (156 files / 1,045 tests)
+  - `npm run build`: passed (61 static pages + standalone bundle)
+
+### 2. ARM64 ECR Images & CloudFormation Rollout
+- `WebImage` (`prod-web-20261122-bf7c7aa`): `901708383730.dkr.ecr.ap-southeast-1.amazonaws.com/ticket-workload-test@sha256:456b251aad8b0cc8d5a3c98e1e87e89cdf40a531d0468d15e5155c382bbfd9b8`
+- `OperationsImage` (`prod-ops-20261122-bf7c7aa`): `901708383730.dkr.ecr.ap-southeast-1.amazonaws.com/ticket-workload-test@sha256:cf08b0106647225e700e0c1168f6001efbd96fdc3edd9946ab4865390ebce67f`
+- CloudFormation change set `release-20261122-bf7c7aa` -> `UPDATE_COMPLETE`.
+- ECS service `ticket-production-web` stabilized at primary revision `ticket-production-web:30` (`COMPLETED`, `1/1` running task `c9f5f9e63ae8421fbd5009d73368bf0b`); ALB target `172.31.17.253:3000` (`ap-southeast-1b`) is `healthy`.
+- `OperationsTask` revision updated to `ticket-production-operations:23`.
+
+### 3. Production Schema Migration (`ticket-production-operations:23`)
+- Executed one-off `OperationsTask` (`arn:aws:ecs:ap-southeast-1:901708383730:task/ticket-production/8c9f0388538d42cfb8b46fd0f0183c1e`, command `["node", "scripts/migrate-production-schemas.ts"]`, `exitCode: 0`):
+  - CloudWatch stream `ops/operations/8c9f0388538d42cfb8b46fd0f0183c1e` confirmed all 12 schemas + paid buckets backfill (`3 ticket types verified`) completed successfully.
+
+### 4. Post-Deployment Live Smoke Check (`https://ticket.phatysd.me`)
+- `GET /api/health`, `/`, `/news`, `/api/public/events`, `/api/public/ticket-master-template` -> `HTTP 200`
+- `POST /api/auth/sign-in/email` (with `Origin: https://ticket.phatysd.me` and dummy credentials) -> `HTTP 401` (`INVALID_EMAIL_OR_PASSWORD`, zero `500` / `#state` errors)
+- `POST /api/webhooks/stripe` (unsigned) -> `HTTP 400` (`Missing Stripe-Signature header`)
+- `POST /api/webhooks/ses-inbound` (unauthenticated) -> `HTTP 401` (`Unauthorized webhook secret`)
+- CloudWatch stream `web/web/c9f5f9e63ae8421fbd5009d73368bf0b` confirmed clean `Next.js 16.4.6` startup with zero unhandled errors.
+
+---
+
 ## Production Release 2026-11-22 (ticket-production-web:29 — Auth Hotfix)
 
 Hotfix release from branch `dev-phat` (`e445c0e`) resolving the `POST /api/auth/*` HTTP 500 (`TypeError: Cannot read private member #state`) incident introduced in `ticket-production-web:28`.

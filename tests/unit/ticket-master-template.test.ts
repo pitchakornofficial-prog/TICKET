@@ -230,4 +230,102 @@ describe('Master Ticket Template System (D-275)', () => {
       expect(emojiRegex.test(content)).toBe(false);
     }
   });
+
+  it('uploads designer background images via /api/upload instead of Base64 FileReader and expands API limit to 1MB', () => {
+    const designerSrc = readFileSync(
+      join(rootDir, 'src/components/admin-ticket-designer.tsx'),
+      'utf8',
+    );
+    const ownerRouteSrc = readFileSync(
+      join(rootDir, 'src/app/api/owner/ticket-master-template/route.ts'),
+      'utf8',
+    );
+
+    expect(designerSrc).toContain("fetch('/api/upload'");
+    expect(designerSrc).not.toContain('readAsDataURL');
+    expect(designerSrc).toContain('if (!res.ok)');
+    expect(ownerRouteSrc).toContain('1024 * 1024');
+  });
+
+  it('falls back to ticket.ticketTemplateUrl or ticket.eventPosterUrl on blank default or broken image background', async () => {
+    const drawnSources: string[] = [];
+    const mockCtx = {
+      fillStyle: '',
+      strokeStyle: '',
+      lineWidth: 0,
+      font: '',
+      textAlign: '',
+      textBaseline: '',
+      fillRect: () => {},
+      strokeRect: () => {},
+      beginPath: () => {},
+      moveTo: () => {},
+      lineTo: () => {},
+      stroke: () => {},
+      fillText: () => {},
+      measureText: () => ({ width: 100 }),
+      save: () => {},
+      restore: () => {},
+      setLineDash: () => {},
+      createLinearGradient: () => ({ addColorStop: () => {} }),
+      drawImage: (img: { src?: string }) => {
+        if (img?.src) drawnSources.push(img.src);
+      },
+    };
+
+    const mockCanvas = {
+      width: 1200,
+      height: 500,
+      getContext: () => mockCtx,
+      toDataURL: () => 'data:image/png;base64,mock',
+    };
+
+    const origImage = globalThis.Image;
+    class MockImage {
+      crossOrigin = '';
+      onload: (() => void) | null = null;
+      onerror: (() => void) | null = null;
+      private _src = '';
+      get src() {
+        return this._src;
+      }
+      set src(val: string) {
+        this._src = val;
+        queueMicrotask(() => {
+          if (val.includes('broken')) {
+            this.onerror?.();
+          } else {
+            this.onload?.();
+          }
+        });
+      }
+    }
+
+    (globalThis as unknown as { document: unknown }).document = {
+      createElement: (tag: string) => (tag === 'canvas' ? mockCanvas : {}),
+    };
+    (globalThis as unknown as { Image: unknown }).Image = MockImage;
+
+    try {
+      const ticketWithPoster = {
+        ...mockTicket,
+        ticketTemplateUrl: null,
+        eventPosterUrl: '/api/media/posters%2Ffallback-poster.jpg',
+      };
+
+      // 1. Default blank classic-white template falls back to concert poster
+      await generateTicketCanvas(ticketWithPoster, { ...DEFAULT_STATE });
+      expect(drawnSources).toContain('/api/media/posters%2Ffallback-poster.jpg');
+
+      // 2. Broken custom image template falls back to ticketTemplateUrl / eventPosterUrl
+      drawnSources.length = 0;
+      await generateTicketCanvas(
+        { ...ticketWithPoster, ticketTemplateUrl: '/api/media/posters%2Fevent-ticket-bg.png' },
+        { ...DEFAULT_STATE, bgType: 'image', bgImageUrl: '/api/media/posters%2Fbroken.png' },
+      );
+      expect(drawnSources).toContain('/api/media/posters%2Fevent-ticket-bg.png');
+    } finally {
+      (globalThis as unknown as { Image: unknown }).Image = origImage;
+    }
+  });
 });
