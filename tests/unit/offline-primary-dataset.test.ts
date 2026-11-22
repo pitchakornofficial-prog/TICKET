@@ -1,8 +1,8 @@
 import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
-import { hashOfflineQrPayload, sha256Hex } from '@/lib/offline-qr-hash';
-import type { OfflineTicketItem, OfflineDataset } from '@/server/primary-scanner';
-import { createOfflineAssignmentToken } from '@/server/offline-assignment-token';
+import { hashOfflineQrPayload, sha256Hex } from '../../src/lib/offline-qr-hash';
+import type { OfflineTicketItem, OfflineDataset } from '../../src/server/primary-scanner';
+import { createOfflineAssignmentToken } from '../../src/server/offline-assignment-token';
 
 describe('TASK-032: Offline Primary Dataset Unit Tests (AC-94, AC-65, G-41)', () => {
   it('1. Offline dataset payload strictly forbids buyer PII and raw qrPayload (AC-65)', () => {

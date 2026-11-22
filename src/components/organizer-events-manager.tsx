@@ -28,8 +28,9 @@ import { AlertIcon } from './alert-icon';
 import { Button } from '@/components/ui';
 import { HeaderInfoTooltip } from './header-info-tooltip';
 import { OrganizerMoneyReportView } from './organizer-money-report-view';
+import { triggerToast } from './toast-notification';
 import { loadPayoutAccounts, getPrimaryPayoutAccount, type PayoutBankAccount } from '@/lib/organizer-payout-sync';
-import { formatBaht, formatDate, formatTime } from '@/lib/locale';
+import { formatBaht, formatDate, formatTime, toLocalDatetimeInputString } from '@/lib/locale';
 import { startAdaptivePoller } from '@/lib/adaptive-polling';
 
 interface TicketTypeDraft {
@@ -57,7 +58,14 @@ interface EventItem {
   location: string;
   status: string;
   description?: string;
+  artists?: string | null;
+  isSalesPaused?: boolean;
+  salesPausedReason?: string | null;
   posterUrl?: string | null;
+  coverBannerUrl?: string | null;
+  googleMapsUrl?: string | null;
+  salesStartTime?: string | null;
+  salesEndTime?: string | null;
   ticketTemplateUrl?: string | null;
   limitPerOrder?: number;
   sessionCount?: number;
@@ -83,17 +91,32 @@ interface EventDetailsSession {
   startTime: string;
   endTime: string;
   status: string;
+  admissionStartTime?: string | null;
+  admissionEndTime?: string | null;
   ticketTypes: {
     id: string;
     name: string;
     price: number;
     quota: number;
+    heldQuota?: number;
+    description?: string;
+    isStudentPrivilege?: boolean;
+    studentPrice?: number | null;
   }[];
 }
 
 interface EventDetails {
   id: string;
   title: string;
+  artists?: string;
+  location?: string;
+  description?: string;
+  posterUrl?: string;
+  coverBannerUrl?: string;
+  googleMapsUrl?: string;
+  ageRestriction?: string;
+  refundPolicy?: string;
+  entryGuidelines?: string;
   sessions: EventDetailsSession[];
 }
 
@@ -268,8 +291,8 @@ export function OrganizerEventsManager({
       setArtists(ev.artists || '');
       setLocation(ev.location || '');
       setGoogleMapsUrl(ev.googleMapsUrl || '');
-      setSalesStartTime(ev.salesStartTime ? new Date(ev.salesStartTime).toISOString().slice(0, 16) : '');
-      setSalesEndTime(ev.salesEndTime ? new Date(ev.salesEndTime).toISOString().slice(0, 16) : '');
+      setSalesStartTime(toLocalDatetimeInputString(ev.salesStartTime));
+      setSalesEndTime(toLocalDatetimeInputString(ev.salesEndTime));
       const lim = ev.limitPerOrder || 4;
       setLimitPerOrder(lim);
       setLimitMode(lim >= 99 ? 'unlimited' : 'custom');
@@ -284,10 +307,10 @@ export function OrganizerEventsManager({
       if (ev.sessions && ev.sessions.length > 0) {
         setSessions(ev.sessions.map((s: { id: string; startTime?: string; endTime?: string; admissionStartTime?: string; admissionEndTime?: string; ticketTypes?: TicketTypeDraft[] }) => ({
           id: s.id,
-          startTime: s.startTime ? new Date(s.startTime).toISOString().slice(0, 16) : '',
-          endTime: s.endTime ? new Date(s.endTime).toISOString().slice(0, 16) : '',
-          admissionStartTime: s.admissionStartTime ? new Date(s.admissionStartTime).toISOString().slice(0, 16) : '',
-          admissionEndTime: s.admissionEndTime ? new Date(s.admissionEndTime).toISOString().slice(0, 16) : '',
+          startTime: toLocalDatetimeInputString(s.startTime),
+          endTime: toLocalDatetimeInputString(s.endTime),
+          admissionStartTime: toLocalDatetimeInputString(s.admissionStartTime),
+          admissionEndTime: toLocalDatetimeInputString(s.admissionEndTime),
           ticketTypes: s.ticketTypes && s.ticketTypes.length > 0 ? s.ticketTypes : [{ id: `tt-${Date.now()}`, name: '', price: 0, quota: 0, description: '' }],
         })));
         setExpandedSessionIds({ [ev.sessions[0].id]: true });
@@ -317,10 +340,10 @@ export function OrganizerEventsManager({
         if (fullEvent.sessions && fullEvent.sessions.length > 0) {
           setSessions(fullEvent.sessions.map((s: { id: string; startTime?: string; endTime?: string; admissionStartTime?: string; admissionEndTime?: string; ticketTypes?: TicketTypeDraft[] }) => ({
             id: s.id,
-            startTime: s.startTime || '',
-            endTime: s.endTime || '',
-            admissionStartTime: s.admissionStartTime || '',
-            admissionEndTime: s.admissionEndTime || '',
+            startTime: toLocalDatetimeInputString(s.startTime),
+            endTime: toLocalDatetimeInputString(s.endTime),
+            admissionStartTime: toLocalDatetimeInputString(s.admissionStartTime),
+            admissionEndTime: toLocalDatetimeInputString(s.admissionEndTime),
             ticketTypes: s.ticketTypes && s.ticketTypes.length > 0 ? s.ticketTypes : [{ id: `tt-${Date.now()}`, name: '', price: 0, quota: 0, description: '' }],
           })));
         }
@@ -344,14 +367,39 @@ export function OrganizerEventsManager({
     });
   }
 
-  // Amendment modal state
+  // Amendment modal state (D-279)
   const [activeEventDetails, setActiveEventDetails] = useState<EventDetails | null>(null);
   const [loadingDetails, setLoadingDetails] = useState(false);
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
   const [amendmentStartTime, setAmendmentStartTime] = useState<string>('');
   const [amendmentEndTime, setAmendmentEndTime] = useState<string>('');
+  const [amendmentAdmissionStartTime, setAmendmentAdmissionStartTime] = useState<string>('');
+  const [amendmentAdmissionEndTime, setAmendmentAdmissionEndTime] = useState<string>('');
+
+  // Concert Details Amendments (D-279)
+  const [amendmentTitle, setAmendmentTitle] = useState<string>('');
+  const [amendmentArtists, setAmendmentArtists] = useState<string>('');
+  const [amendmentLocation, setAmendmentLocation] = useState<string>('');
+  const [amendmentDescription, setAmendmentDescription] = useState<string>('');
+  const [amendmentPosterUrl, setAmendmentPosterUrl] = useState<string>('');
+  const [amendmentCoverBannerUrl, setAmendmentCoverBannerUrl] = useState<string>('');
+  const [amendmentGoogleMapsUrl, setAmendmentGoogleMapsUrl] = useState<string>('');
+  const [amendmentAgeRestriction, setAmendmentAgeRestriction] = useState<string>('');
+  const [amendmentRefundPolicy, setAmendmentRefundPolicy] = useState<string>('');
+  const [amendmentEntryGuidelines, setAmendmentEntryGuidelines] = useState<string>('');
+
   const [amendmentTicketTypes, setAmendmentTicketTypes] = useState<
-    { id: string; name: string; price: number; quota: number }[]
+    {
+      id: string;
+      name: string;
+      price: number;
+      quota: number;
+      heldQuota?: number;
+      description?: string;
+      isStudentPrivilege?: boolean;
+      studentPrice?: number | null;
+      isNew?: boolean;
+    }[]
   >([]);
   const [amendmentSubmitting, setAmendmentSubmitting] = useState(false);
   const [amendmentFeedback, setAmendmentFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
@@ -608,6 +656,7 @@ export function OrganizerEventsManager({
       const payload = {
         title,
         description,
+        artists: artists.trim() || undefined,
         location,
         googleMapsUrl: googleMapsUrl.trim() || undefined,
         salesStartTime: salesStartTime ? new Date(salesStartTime).toISOString() : undefined,
@@ -621,8 +670,8 @@ export function OrganizerEventsManager({
         payoutAccountNumber: selectedAcc?.accountNumber || undefined,
         payoutAccountName: selectedAcc?.accountName || undefined,
         ubuPrivilegeMode: effectiveUbuPrivilegeMode,
-        posterUrl,
-        coverBannerUrl,
+        posterUrl: posterUrl ?? posterPreviewUrl ?? undefined,
+        coverBannerUrl: coverBannerUrl ?? coverBannerPreviewUrl ?? undefined,
         sessions: formattedSessions,
       };
 
@@ -745,7 +794,7 @@ export function OrganizerEventsManager({
     }
   }
 
-  // Open amendment modal
+  // Open amendment modal (D-279)
   async function handleOpenAmendment(eventId: string) {
     setLoadingDetails(true);
     setAmendmentFeedback(null);
@@ -759,17 +808,45 @@ export function OrganizerEventsManager({
       }
       const data = await res.json();
       setActiveEventDetails(data.event);
+
+      // Populate Concert Details (D-279)
+      setAmendmentTitle(data.event?.title || '');
+      setAmendmentArtists(data.event?.artists || '');
+      setAmendmentLocation(data.event?.location || '');
+      setAmendmentDescription(data.event?.description || '');
+      setAmendmentPosterUrl(data.event?.posterUrl || '');
+      setAmendmentCoverBannerUrl(data.event?.coverBannerUrl || '');
+      setAmendmentGoogleMapsUrl(data.event?.googleMapsUrl || '');
+      setAmendmentAgeRestriction(data.event?.ageRestriction || '');
+      setAmendmentRefundPolicy(data.event?.refundPolicy || '');
+      setAmendmentEntryGuidelines(data.event?.entryGuidelines || '');
+
       if (data.event?.sessions?.length > 0) {
         const firstSess = data.event.sessions[0];
         setSelectedSessionId(firstSess.id);
-        setAmendmentStartTime('');
-        setAmendmentEndTime('');
+        setAmendmentStartTime(firstSess.startTime ? toLocalDatetimeInputString(firstSess.startTime) : '');
+        setAmendmentEndTime(firstSess.endTime ? toLocalDatetimeInputString(firstSess.endTime) : '');
+        setAmendmentAdmissionStartTime(firstSess.admissionStartTime ? toLocalDatetimeInputString(firstSess.admissionStartTime) : '');
+        setAmendmentAdmissionEndTime(firstSess.admissionEndTime ? toLocalDatetimeInputString(firstSess.admissionEndTime) : '');
         setAmendmentTicketTypes(
-          firstSess.ticketTypes.map((tt: { id: string; name: string; price: number; quota: number }) => ({
+          firstSess.ticketTypes.map((tt: {
+            id: string;
+            name: string;
+            price: number;
+            quota: number;
+            heldQuota?: number;
+            description?: string;
+            isStudentPrivilege?: boolean;
+            studentPrice?: number | null;
+          }) => ({
             id: tt.id,
             name: tt.name,
             price: Number(tt.price),
             quota: Number(tt.quota),
+            heldQuota: Number(tt.heldQuota || 0),
+            description: tt.description || '',
+            isStudentPrivilege: Boolean(tt.isStudentPrivilege),
+            studentPrice: tt.studentPrice != null ? Number(tt.studentPrice) : null,
           })),
         );
       }
@@ -782,35 +859,110 @@ export function OrganizerEventsManager({
 
   function handleSelectSession(sessionId: string) {
     setSelectedSessionId(sessionId);
-    setAmendmentStartTime('');
-    setAmendmentEndTime('');
     const sess = activeEventDetails?.sessions.find(s => s.id === sessionId);
     if (sess) {
+      setAmendmentStartTime(sess.startTime ? toLocalDatetimeInputString(sess.startTime) : '');
+      setAmendmentEndTime(sess.endTime ? toLocalDatetimeInputString(sess.endTime) : '');
+      setAmendmentAdmissionStartTime(sess.admissionStartTime ? toLocalDatetimeInputString(sess.admissionStartTime) : '');
+      setAmendmentAdmissionEndTime(sess.admissionEndTime ? toLocalDatetimeInputString(sess.admissionEndTime) : '');
       setAmendmentTicketTypes(
         sess.ticketTypes.map(tt => ({
           id: tt.id,
           name: tt.name,
           price: Number(tt.price),
           quota: Number(tt.quota),
+          heldQuota: Number(tt.heldQuota || 0),
+          description: tt.description || '',
+          isStudentPrivilege: Boolean(tt.isStudentPrivilege),
+          studentPrice: tt.studentPrice != null ? Number(tt.studentPrice) : null,
         })),
       );
     }
+  }
+
+  function handleAddAmendmentTicketTier() {
+    const newId = `new-${Date.now()}`;
+    setAmendmentTicketTypes(prev => [
+      ...prev,
+      {
+        id: newId,
+        name: `ประเภทบัตรใหม่ ${prev.length + 1}`,
+        price: 500,
+        quota: 100,
+        heldQuota: 0,
+        description: '',
+        isStudentPrivilege: false,
+        studentPrice: null,
+        isNew: true,
+      },
+    ]);
+  }
+
+  function handleRemoveAmendmentTicketTier(index: number) {
+    const target = amendmentTicketTypes[index];
+    if (target && (target.heldQuota || 0) > 0) {
+      alert(`ไม่สามารถลบประเภทบัตร "${target.name}" ได้เนื่องจากมีผู้ซื้อหรือถือครองบัตรแล้ว (${target.heldQuota} ใบ)`);
+      return;
+    }
+    setAmendmentTicketTypes(prev => prev.filter((_, i) => i !== index));
   }
 
   async function handleSubmitAmendment(e: React.FormEvent) {
     e.preventDefault();
     if (!activeEventDetails || !selectedSessionId) return;
 
+    // Validate that quota is not less than heldQuota for each tier (D-279)
+    for (const tt of amendmentTicketTypes) {
+      if ((tt.heldQuota || 0) > 0 && tt.quota < (tt.heldQuota || 0)) {
+        setAmendmentFeedback({
+          type: 'error',
+          message: `โควตาของประเภทบัตร "${tt.name}" (${tt.quota} ใบ) ต้องไม่น้อยกว่าจำนวนที่จำหน่ายไปแล้ว (${tt.heldQuota} ใบ)`,
+        });
+        return;
+      }
+    }
+
     setAmendmentSubmitting(true);
     setAmendmentFeedback(null);
 
     try {
       const payload: {
-        ticketTypes: typeof amendmentTicketTypes;
+        ticketTypes: {
+          id?: string;
+          name: string;
+          price: number;
+          quota: number;
+          description?: string;
+          isStudentPrivilege?: boolean;
+          studentPrice?: number | null;
+        }[];
         startTime?: string;
         endTime?: string;
+        admissionStartTime?: string;
+        admissionEndTime?: string;
+        concertDetails?: Record<string, unknown>;
       } = {
-        ticketTypes: amendmentTicketTypes,
+        ticketTypes: amendmentTicketTypes.map(tt => ({
+          id: tt.id.startsWith('new-') ? undefined : tt.id,
+          name: tt.name.trim(),
+          price: tt.price,
+          quota: tt.quota,
+          description: tt.description,
+          isStudentPrivilege: tt.isStudentPrivilege,
+          studentPrice: tt.studentPrice,
+        })),
+        concertDetails: {
+          title: amendmentTitle.trim(),
+          artists: amendmentArtists.trim(),
+          location: amendmentLocation.trim(),
+          description: amendmentDescription.trim(),
+          posterUrl: amendmentPosterUrl.trim() || undefined,
+          coverBannerUrl: amendmentCoverBannerUrl.trim() || undefined,
+          googleMapsUrl: amendmentGoogleMapsUrl.trim() || undefined,
+          ageRestriction: amendmentAgeRestriction.trim() || undefined,
+          refundPolicy: amendmentRefundPolicy.trim() || undefined,
+          entryGuidelines: amendmentEntryGuidelines.trim() || undefined,
+        },
       };
 
       if (amendmentStartTime) {
@@ -818,6 +970,12 @@ export function OrganizerEventsManager({
       }
       if (amendmentEndTime) {
         payload.endTime = new Date(amendmentEndTime).toISOString();
+      }
+      if (amendmentAdmissionStartTime) {
+        payload.admissionStartTime = new Date(amendmentAdmissionStartTime).toISOString();
+      }
+      if (amendmentAdmissionEndTime) {
+        payload.admissionEndTime = new Date(amendmentAdmissionEndTime).toISOString();
       }
 
       const res = await fetch(
@@ -835,10 +993,12 @@ export function OrganizerEventsManager({
       } else {
         setAmendmentFeedback({
           type: 'success',
-          message: data.message || 'ส่งคำขอแก้ไขรอบการแสดงเรียบร้อยแล้ว รอการอนุมัติจากผู้ดูแลระบบ',
+          message: data.message || 'ส่งคำขอแก้ไขรอบการแสดงและข้อมูลคอนเสิร์ตเรียบร้อยแล้ว รอการอนุมัติจากผู้ดูแลระบบ',
         });
-        setAmendmentStartTime('');
-        setAmendmentEndTime('');
+        triggerToast({
+          type: 'success',
+          message: 'ส่งคำขอแก้ไขสำเร็จ รอการอนุมัติจากแอดมิน',
+        });
       }
     } catch {
       setAmendmentFeedback({ type: 'error', message: 'เกิดข้อผิดพลาดในการเชื่อมต่อ' });
@@ -2886,7 +3046,7 @@ export function OrganizerEventsManager({
         </div>
       )}
 
-      {/* 6. Modern Floating Amendment Form Modal (AC-34, AC-38, G-13, D-197) */}
+      {/* 6. Modern Floating Amendment Form Modal (AC-34, AC-38, G-13, D-197, D-279) */}
       {activeEventDetails && (
         <div className="organizer-modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="amendment-modal-title">
           <div className="organizer-modal-dialog amendment-modal-dialog">
@@ -2894,7 +3054,7 @@ export function OrganizerEventsManager({
               <div className="modal-title-group">
                 <ClockIcon width={20} height={20} style={{ color: 'var(--blue)' }} />
                 <h3 id="amendment-modal-title" className="modal-title">
-                  ขอแก้ไขรอบการแสดง: {activeEventDetails.title}
+                  ขอแก้ไขข้อมูลคอนเสิร์ตและรอบการแสดง: {activeEventDetails.title}
                 </h3>
               </div>
               <button
@@ -2910,7 +3070,7 @@ export function OrganizerEventsManager({
 
             <div className="modal-info-banner">
               <p style={{ margin: 0, fontSize: '0.85rem', lineHeight: 1.5, color: '#1e3a8a' }}>
-                สามารถยื่นขอแก้ไขวันเวลาการแสดง ราคาบัตร หรือโควตาบัตรได้ ข้อมูลเดิมจะยังคงเปิดขายตามปกติจนกว่าผู้ดูแลระบบ (Admin) จะอนุมัติคำขอ เพื่อรักษาความถูกต้องของคำสั่งซื้อที่จำหน่ายไปแล้ว
+                สามารถยื่นขอแก้ไขข้อมูลคอนเสิร์ต, กำหนดการแสดง, เวลาเปิดประตู, และราคา/โควตาประเภทบัตรได้ ข้อมูลเดิมจะยังคงเปิดขายตามปกติจนกว่าผู้ดูแลระบบ (Admin) จะอนุมัติคำขอ เพื่อรักษาความถูกต้องของคำสั่งซื้อที่จำหน่ายไปแล้ว
               </p>
             </div>
 
@@ -2938,36 +3098,193 @@ export function OrganizerEventsManager({
               <p style={{ textAlign: 'center', padding: '1.5rem', color: '#64748b' }}>กำลังโหลดข้อมูล...</p>
             ) : (
               <form onSubmit={handleSubmitAmendment}>
-                {activeEventDetails.sessions.length > 1 && (
-                  <div style={{ marginBottom: '1.25rem' }}>
-                    <label htmlFor="amendment-session-select" style={{ display: 'block', fontSize: '0.88rem', fontWeight: 600, color: '#0f172a', marginBottom: '0.4rem' }}>
-                      เลือกรอบการแสดง
-                    </label>
-                    <select
-                      id="amendment-session-select"
-                      value={selectedSessionId || ''}
-                      onChange={e => handleSelectSession(e.target.value)}
-                      className="form-input-text"
-                      style={{ width: '100%', fontSize: '0.88rem' }}
-                    >
-                      {activeEventDetails.sessions.map((s, idx) => (
-                        <option key={s.id} value={s.id}>
-                          รอบที่ {idx + 1}: {new Date(s.startTime).toLocaleString('th-TH')}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                )}
-
-                {/* Reschedule Session Section (AC-38, AC-108, G-13) */}
-                <div className="modal-form-section-card">
-                  <h4 className="modal-section-title">
-                    ขอเลื่อนวันเวลาการแสดง (Reschedule Session):
+                {/* SECTION 1: Concert Details Amendment (D-279) */}
+                <div className="modal-form-section-card" style={{ marginBottom: '1.25rem' }}>
+                  <h4 className="modal-section-title" style={{ color: '#0f172a', fontWeight: 700, fontSize: '0.95rem', marginBottom: '0.75rem' }}>
+                    1. ข้อมูลคอนเสิร์ต (Concert Details):
                   </h4>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '0.75rem', marginBottom: '0.75rem' }}>
+                    <div>
+                      <label htmlFor="amd-concert-title" style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: '#475569', marginBottom: '0.25rem' }}>
+                        ชื่อคอนเสิร์ต *
+                      </label>
+                      <input
+                        id="amd-concert-title"
+                        type="text"
+                        value={amendmentTitle}
+                        onChange={e => setAmendmentTitle(e.target.value)}
+                        className="modal-textarea"
+                        style={{ padding: '0.45rem 0.65rem', fontSize: '0.85rem' }}
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label htmlFor="amd-concert-artists" style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: '#475569', marginBottom: '0.25rem' }}>
+                        ศิลปิน / ศิลปินรับเชิญ (Artists Lineup)
+                      </label>
+                      <input
+                        id="amd-concert-artists"
+                        type="text"
+                        value={amendmentArtists}
+                        onChange={e => setAmendmentArtists(e.target.value)}
+                        className="modal-textarea"
+                        style={{ padding: '0.45rem 0.65rem', fontSize: '0.85rem' }}
+                        placeholder="เช่น Silly Fools, Bodyslam, Palmy"
+                      />
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '0.75rem', marginBottom: '0.75rem' }}>
+                    <div>
+                      <label htmlFor="amd-concert-location" style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: '#475569', marginBottom: '0.25rem' }}>
+                        สถานที่จัดงาน (Location / Venue) *
+                      </label>
+                      <input
+                        id="amd-concert-location"
+                        type="text"
+                        value={amendmentLocation}
+                        onChange={e => setAmendmentLocation(e.target.value)}
+                        className="modal-textarea"
+                        style={{ padding: '0.45rem 0.65rem', fontSize: '0.85rem' }}
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label htmlFor="amd-concert-maps" style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: '#475569', marginBottom: '0.25rem' }}>
+                        Google Maps URL
+                      </label>
+                      <input
+                        id="amd-concert-maps"
+                        type="url"
+                        value={amendmentGoogleMapsUrl}
+                        onChange={e => setAmendmentGoogleMapsUrl(e.target.value)}
+                        className="modal-textarea"
+                        style={{ padding: '0.45rem 0.65rem', fontSize: '0.85rem' }}
+                        placeholder="https://maps.google.com/..."
+                      />
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '0.75rem', marginBottom: '0.75rem' }}>
+                    <div>
+                      <label htmlFor="amd-concert-poster" style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: '#475569', marginBottom: '0.25rem' }}>
+                        URL รูปโปสเตอร์ (Poster Image)
+                      </label>
+                      <input
+                        id="amd-concert-poster"
+                        type="url"
+                        value={amendmentPosterUrl}
+                        onChange={e => setAmendmentPosterUrl(e.target.value)}
+                        className="modal-textarea"
+                        style={{ padding: '0.45rem 0.65rem', fontSize: '0.85rem' }}
+                      />
+                    </div>
+                    <div>
+                      <label htmlFor="amd-concert-cover" style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: '#475569', marginBottom: '0.25rem' }}>
+                        URL รูปแบนเนอร์ปก (Cover Banner Image)
+                      </label>
+                      <input
+                        id="amd-concert-cover"
+                        type="url"
+                        value={amendmentCoverBannerUrl}
+                        onChange={e => setAmendmentCoverBannerUrl(e.target.value)}
+                        className="modal-textarea"
+                        style={{ padding: '0.45rem 0.65rem', fontSize: '0.85rem' }}
+                      />
+                    </div>
+                  </div>
+
+                  <div style={{ marginBottom: '0.75rem' }}>
+                    <label htmlFor="amd-concert-desc" style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: '#475569', marginBottom: '0.25rem' }}>
+                      รายละเอียดคอนเสิร์ต
+                    </label>
+                    <textarea
+                      id="amd-concert-desc"
+                      value={amendmentDescription}
+                      onChange={e => setAmendmentDescription(e.target.value)}
+                      className="modal-textarea"
+                      rows={2}
+                      style={{ padding: '0.45rem 0.65rem', fontSize: '0.85rem', width: '100%' }}
+                    />
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.75rem' }}>
+                    <div>
+                      <label htmlFor="amd-concert-age" style={{ display: 'block', fontSize: '0.78rem', fontWeight: 600, color: '#475569', marginBottom: '0.2rem' }}>
+                        การจำกัดอายุ
+                      </label>
+                      <input
+                        id="amd-concert-age"
+                        type="text"
+                        value={amendmentAgeRestriction}
+                        onChange={e => setAmendmentAgeRestriction(e.target.value)}
+                        className="modal-textarea"
+                        style={{ padding: '0.4rem 0.6rem', fontSize: '0.82rem' }}
+                        placeholder="เช่น ไม่จำกัดอายุ หรือ 18+"
+                      />
+                    </div>
+                    <div>
+                      <label htmlFor="amd-concert-guide" style={{ display: 'block', fontSize: '0.78rem', fontWeight: 600, color: '#475569', marginBottom: '0.2rem' }}>
+                        กติกาการเข้างาน
+                      </label>
+                      <input
+                        id="amd-concert-guide"
+                        type="text"
+                        value={amendmentEntryGuidelines}
+                        onChange={e => setAmendmentEntryGuidelines(e.target.value)}
+                        className="modal-textarea"
+                        style={{ padding: '0.4rem 0.6rem', fontSize: '0.82rem' }}
+                        placeholder="เช่น ห้ามนำอาหารและเครื่องดื่มเข้า"
+                      />
+                    </div>
+                    <div>
+                      <label htmlFor="amd-concert-refund" style={{ display: 'block', fontSize: '0.78rem', fontWeight: 600, color: '#475569', marginBottom: '0.2rem' }}>
+                        นโยบายการคืนเงิน
+                      </label>
+                      <input
+                        id="amd-concert-refund"
+                        type="text"
+                        value={amendmentRefundPolicy}
+                        onChange={e => setAmendmentRefundPolicy(e.target.value)}
+                        className="modal-textarea"
+                        style={{ padding: '0.4rem 0.6rem', fontSize: '0.82rem' }}
+                        placeholder="เช่น คืนเงินเต็มจำนวนกรณีเลื่อนงาน"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* SECTION 2: Session Times & Door Opening (AC-38, AC-108, D-279) */}
+                <div className="modal-form-section-card" style={{ marginBottom: '1.25rem' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
+                    <h4 className="modal-section-title" style={{ color: '#0f172a', fontWeight: 700, fontSize: '0.95rem', margin: 0 }}>
+                      2. กำหนดการแสดงและเวลาเปิดประตู (Session Times & Admission):
+                    </h4>
+                    {activeEventDetails.sessions.length > 1 && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <label htmlFor="amendment-session-select" style={{ fontSize: '0.8rem', fontWeight: 600, color: '#0f172a' }}>
+                          เลือกรอบ:
+                        </label>
+                        <select
+                          id="amendment-session-select"
+                          value={selectedSessionId || ''}
+                          onChange={e => handleSelectSession(e.target.value)}
+                          className="form-input-text"
+                          style={{ fontSize: '0.82rem', padding: '0.2rem 0.5rem' }}
+                        >
+                          {activeEventDetails.sessions.map((s, idx) => (
+                            <option key={s.id} value={s.id}>
+                              รอบที่ {idx + 1}: {new Date(s.startTime).toLocaleString('th-TH')}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+                  </div>
                   <p style={{ fontSize: '0.78rem', color: '#64748b', margin: '0 0 0.85rem' }}>
-                    * กำหนดการแสดงเดิมจะยังคงมีผลจนกว่าผู้ดูแลระบบ (Owner) จะอนุมัติคำขอเลื่อนรอบ
+                    * หากขอเลื่อนวันเวลา ระบบจะเปิดสิทธิ์ยื่นขอคืนเงินพิเศษ (Special Refund Window) ให้ลูกค้าเดิมโดยอัตโนมัติตามนโยบาย
                   </p>
-                  <div className="form-grid-two">
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '0.75rem', marginBottom: '0.75rem' }}>
                     <div>
                       <label htmlFor="amendment-start-time" style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: '#475569', marginBottom: '0.3rem' }}>
                         วันเวลาเริ่มการแสดงใหม่
@@ -2979,7 +3296,7 @@ export function OrganizerEventsManager({
                         value={amendmentStartTime}
                         onChange={e => setAmendmentStartTime(e.target.value)}
                         className="modal-textarea"
-                        style={{ padding: '0.5rem 0.75rem', fontSize: '0.85rem' }}
+                        style={{ padding: '0.45rem 0.65rem', fontSize: '0.85rem' }}
                       />
                     </div>
                     <div>
@@ -2993,89 +3310,225 @@ export function OrganizerEventsManager({
                         value={amendmentEndTime}
                         onChange={e => setAmendmentEndTime(e.target.value)}
                         className="modal-textarea"
-                        style={{ padding: '0.5rem 0.75rem', fontSize: '0.85rem' }}
+                        style={{ padding: '0.45rem 0.65rem', fontSize: '0.85rem' }}
+                      />
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '0.75rem' }}>
+                    <div>
+                      <label htmlFor="amendment-door-open" style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: '#475569', marginBottom: '0.3rem' }}>
+                        เวลาเปิดประตูเข้างาน (Door Open)
+                      </label>
+                      <input
+                        id="amendment-door-open"
+                        data-testid="amendment-door-open"
+                        type="datetime-local"
+                        value={amendmentAdmissionStartTime}
+                        onChange={e => setAmendmentAdmissionStartTime(e.target.value)}
+                        className="modal-textarea"
+                        style={{ padding: '0.45rem 0.65rem', fontSize: '0.85rem' }}
+                      />
+                    </div>
+                    <div>
+                      <label htmlFor="amendment-door-close" style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: '#475569', marginBottom: '0.3rem' }}>
+                        เวลาปิดประตูเข้างาน (Door Close)
+                      </label>
+                      <input
+                        id="amendment-door-close"
+                        data-testid="amendment-door-close"
+                        type="datetime-local"
+                        value={amendmentAdmissionEndTime}
+                        onChange={e => setAmendmentAdmissionEndTime(e.target.value)}
+                        className="modal-textarea"
+                        style={{ padding: '0.45rem 0.65rem', fontSize: '0.85rem' }}
                       />
                     </div>
                   </div>
                 </div>
 
-                {/* Ticket Types Prices & Quotas Section */}
-                <div className="modal-form-section-card">
-                  <h4 className="modal-section-title">
-                    ปรับปรุงราคาและโควตาประเภทบัตร:
-                  </h4>
-
-                  <div style={{ display: 'grid', gap: '0.65rem' }}>
-                    {amendmentTicketTypes.map((tt, idx) => (
-                      <div
-                        key={tt.id}
-                        style={{
-                          display: 'grid',
-                          gridTemplateColumns: '1fr 130px 130px',
-                          gap: '0.65rem',
-                          alignItems: 'center',
-                          backgroundColor: '#ffffff',
-                          padding: '0.65rem 0.85rem',
-                          borderRadius: '8px',
-                          border: '1px solid #e2e8f0',
-                        }}
-                      >
-                        <div>
-                          <span style={{ fontSize: '0.88rem', fontWeight: 600, color: '#0f172a' }}>{tt.name}</span>
-                        </div>
-                        <div>
-                          <label htmlFor={`tt-price-${idx}`} style={{ display: 'block', fontSize: '0.72rem', color: '#64748b', marginBottom: '0.2rem' }}>
-                            ราคา (บาท)
-                          </label>
-                          <input
-                            id={`tt-price-${idx}`}
-                            data-testid={`amendment-price-${tt.id}`}
-                            type="number"
-                            min={0}
-                            value={tt.price}
-                            onChange={e => {
-                              const val = Number(e.target.value);
-                              setAmendmentTicketTypes(prev =>
-                                prev.map((item, i) => (i === idx ? { ...item, price: val } : item)),
-                              );
-                            }}
-                            className="modal-textarea"
-                            style={{ padding: '0.4rem 0.6rem', fontSize: '0.85rem' }}
-                          />
-                        </div>
-                        <div>
-                          <label htmlFor={`tt-quota-${idx}`} style={{ display: 'block', fontSize: '0.72rem', color: '#64748b', marginBottom: '0.2rem' }}>
-                            โควตา (ใบ)
-                          </label>
-                          <input
-                            id={`tt-quota-${idx}`}
-                            data-testid={`amendment-quota-${tt.id}`}
-                            type="number"
-                            min={1}
-                            value={tt.quota}
-                            onChange={e => {
-                              const val = Number(e.target.value);
-                              setAmendmentTicketTypes(prev =>
-                                prev.map((item, i) => (i === idx ? { ...item, quota: val } : item)),
-                              );
-                            }}
-                            className="modal-textarea"
-                            style={{ padding: '0.4rem 0.6rem', fontSize: '0.85rem' }}
-                          />
-                        </div>
-                      </div>
-                    ))}
+                {/* SECTION 3: Ticket Types Prices & Quotas Section (D-279) */}
+                <div className="modal-form-section-card" style={{ marginBottom: '1.25rem' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
+                    <div>
+                      <h4 className="modal-section-title" style={{ color: '#0f172a', fontWeight: 700, fontSize: '0.95rem', margin: 0 }}>
+                        3. ประเภทบัตร โควตา และสิทธิ์พิเศษ (Ticket Tiers & Quota Governance):
+                      </h4>
+                      <p style={{ fontSize: '0.78rem', color: '#64748b', margin: '0.2rem 0 0' }}>
+                        * ป้องกันผู้ซื้อเดิม: โควตาใหม่ต้องไม่ต่ำกว่าจำนวนที่ขายแล้ว และห้ามลบประเภทบัตรที่มียอดจำหน่ายแล้ว
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleAddAmendmentTicketTier}
+                      data-testid="amendment-add-tier-btn"
+                      className="primary-button outline"
+                      style={{ fontSize: '0.8rem', height: '32px', padding: '0 0.75rem', display: 'flex', alignItems: 'center', gap: '0.35rem' }}
+                    >
+                      <span>+ เพิ่มประเภทบัตรใหม่</span>
+                    </button>
                   </div>
-                  <p style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '0.5rem', marginBottom: 0 }}>
-                    * โควตาใหม่ต้องไม่ต่ำกว่าจำนวนสิทธิ์ที่จำหน่ายหรือกันไว้แล้วในรอบนี้
-                  </p>
+
+                  <div style={{ display: 'grid', gap: '0.75rem' }}>
+                    {amendmentTicketTypes.map((tt, idx) => {
+                      const isSold = (tt.heldQuota || 0) > 0;
+                      return (
+                        <div
+                          key={tt.id}
+                          style={{
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '0.5rem',
+                            backgroundColor: '#ffffff',
+                            padding: '0.85rem 1rem',
+                            borderRadius: '8px',
+                            border: '1px solid #e2e8f0',
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.5rem' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flex: 1, minWidth: '220px' }}>
+                              <input
+                                type="text"
+                                value={tt.name}
+                                data-testid={`amendment-name-${tt.id}`}
+                                onChange={e => {
+                                  const val = e.target.value;
+                                  setAmendmentTicketTypes(prev =>
+                                    prev.map((item, i) => (i === idx ? { ...item, name: val } : item)),
+                                  );
+                                }}
+                                className="modal-textarea"
+                                style={{ padding: '0.4rem 0.6rem', fontSize: '0.88rem', fontWeight: 600, flex: 1 }}
+                                placeholder="ชื่อประเภทบัตร"
+                                required
+                              />
+                              {isSold ? (
+                                <span className="status-badge" style={{ background: '#dbeafe', color: '#1e40af', fontSize: '0.75rem', whiteSpace: 'nowrap' }}>
+                                  จำหน่ายแล้ว {tt.heldQuota} ใบ (ล็อกขั้นต่ำ)
+                                </span>
+                              ) : (
+                                <span className="status-badge" style={{ background: '#f1f5f9', color: '#64748b', fontSize: '0.75rem', whiteSpace: 'nowrap' }}>
+                                  {tt.isNew ? 'เพิ่มใหม่' : 'ยังไม่มียอดขาย'}
+                                </span>
+                              )}
+                            </div>
+
+                            <button
+                              type="button"
+                              disabled={isSold}
+                              title={isSold ? 'ไม่สามารถลบประเภทบัตรที่มียอดจำหน่ายแล้วได้' : 'ลบประเภทบัตรนี้'}
+                              data-testid={`amendment-delete-tier-btn-${tt.id}`}
+                              onClick={() => handleRemoveAmendmentTicketTier(idx)}
+                              className="primary-button danger outline"
+                              style={{
+                                fontSize: '0.75rem',
+                                height: '32px',
+                                padding: '0 0.6rem',
+                                opacity: isSold ? 0.4 : 1,
+                                cursor: isSold ? 'not-allowed' : 'pointer',
+                              }}
+                            >
+                              {isSold ? 'ลบไม่ได้' : 'ลบประเภทบัตร'}
+                            </button>
+                          </div>
+
+                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '0.65rem' }}>
+                            <div>
+                              <label htmlFor={`tt-price-${idx}`} style={{ display: 'block', fontSize: '0.72rem', color: '#64748b', marginBottom: '0.2rem' }}>
+                                ราคาปกติ (บาท) *
+                              </label>
+                              <input
+                                id={`tt-price-${idx}`}
+                                data-testid={`amendment-price-${tt.id}`}
+                                type="number"
+                                min={0}
+                                value={tt.price}
+                                onChange={e => {
+                                  const val = Number(e.target.value);
+                                  setAmendmentTicketTypes(prev =>
+                                    prev.map((item, i) => (i === idx ? { ...item, price: val } : item)),
+                                  );
+                                }}
+                                className="modal-textarea"
+                                style={{ padding: '0.35rem 0.5rem', fontSize: '0.85rem' }}
+                                required
+                              />
+                            </div>
+                            <div>
+                              <label htmlFor={`tt-quota-${idx}`} style={{ display: 'block', fontSize: '0.72rem', color: '#64748b', marginBottom: '0.2rem' }}>
+                                โควตา (ใบ) * {isSold ? `(ขั้นต่ำ ${tt.heldQuota})` : ''}
+                              </label>
+                              <input
+                                id={`tt-quota-${idx}`}
+                                data-testid={`amendment-quota-${tt.id}`}
+                                type="number"
+                                min={tt.heldQuota || 1}
+                                value={tt.quota}
+                                onChange={e => {
+                                  const val = Number(e.target.value);
+                                  setAmendmentTicketTypes(prev =>
+                                    prev.map((item, i) => (i === idx ? { ...item, quota: val } : item)),
+                                  );
+                                }}
+                                className="modal-textarea"
+                                style={{ padding: '0.35rem 0.5rem', fontSize: '0.85rem' }}
+                                required
+                              />
+                            </div>
+                            <div>
+                              <label htmlFor={`tt-student-toggle-${idx}`} style={{ display: 'block', fontSize: '0.72rem', color: '#64748b', marginBottom: '0.2rem' }}>
+                                สิทธิ์ ม.อุบลฯ (@ubu.ac.th)
+                              </label>
+                              <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', cursor: 'pointer', height: '32px' }}>
+                                <input
+                                  id={`tt-student-toggle-${idx}`}
+                                  type="checkbox"
+                                  checked={Boolean(tt.isStudentPrivilege)}
+                                  onChange={e => {
+                                    const checked = e.target.checked;
+                                    setAmendmentTicketTypes(prev =>
+                                      prev.map((item, i) => (i === idx ? { ...item, isStudentPrivilege: checked } : item)),
+                                    );
+                                  }}
+                                />
+                                <span style={{ fontSize: '0.8rem', color: '#0f172a' }}>เปิดสิทธิ์</span>
+                              </label>
+                            </div>
+                            {tt.isStudentPrivilege && (
+                              <div>
+                                <label htmlFor={`tt-student-price-${idx}`} style={{ display: 'block', fontSize: '0.72rem', color: '#64748b', marginBottom: '0.2rem' }}>
+                                  ราคานักศึกษา (บาท)
+                                </label>
+                                <input
+                                  id={`tt-student-price-${idx}`}
+                                  type="number"
+                                  min={0}
+                                  value={tt.studentPrice ?? ''}
+                                  onChange={e => {
+                                    const val = e.target.value === '' ? null : Number(e.target.value);
+                                    setAmendmentTicketTypes(prev =>
+                                      prev.map((item, i) => (i === idx ? { ...item, studentPrice: val } : item)),
+                                    );
+                                  }}
+                                  className="modal-textarea"
+                                  style={{ padding: '0.35rem 0.5rem', fontSize: '0.85rem' }}
+                                  placeholder="ระบุราคานักศึกษา"
+                                />
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
 
-                <div className="organizer-modal-actions">
+                <div className="organizer-modal-actions" style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '1.25rem' }}>
                   <button
                     type="button"
                     className="btn-cancel-modal"
                     onClick={() => setActiveEventDetails(null)}
+                    style={{ height: '38px', padding: '0 1.25rem' }}
                   >
                     ยกเลิก
                   </button>
@@ -3084,9 +3537,10 @@ export function OrganizerEventsManager({
                     disabled={amendmentSubmitting}
                     data-testid="submit-amendment-btn"
                     className="btn-submit-modal"
+                    style={{ height: '38px', padding: '0 1.25rem' }}
                   >
                     <ClockIcon width={16} height={16} />
-                    <span>{amendmentSubmitting ? 'กำลังส่งคำขอ...' : 'ส่งคำขอแก้ไขรอบ'}</span>
+                    <span>{amendmentSubmitting ? 'กำลังส่งคำขอ...' : 'ส่งคำขอแก้ไขข้อมูลและรอบการแสดง'}</span>
                   </button>
                 </div>
               </form>

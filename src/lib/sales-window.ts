@@ -6,9 +6,11 @@ export interface EventSalesWindowInput {
   salesStartTime?: Date | string | null;
   salesEndTime?: Date | string | null;
   sessions?: SalesWindowSessionInput[];
+  isSalesPaused?: boolean | null;
+  salesPausedReason?: string | null;
 }
 
-export type EventSalesWindowReason = 'open' | 'not_started' | 'ended' | 'sessions_ended';
+export type EventSalesWindowReason = 'open' | 'not_started' | 'ended' | 'sessions_ended' | 'paused';
 
 export interface EventSalesWindowStatus {
   isOpen: boolean;
@@ -45,6 +47,16 @@ export function getEventSalesStatus(
 ): EventSalesWindowStatus {
   const opensAt = toValidDate(event.salesStartTime);
   const closesAt = toValidDate(event.salesEndTime);
+
+  if (event.isSalesPaused) {
+    return {
+      isOpen: false,
+      reason: 'paused',
+      message: event.salesPausedReason?.trim() || 'การจำหน่ายบัตรถูกระงับชั่วคราวโดยผู้ดูแลระบบ',
+      opensAt,
+      closesAt,
+    };
+  }
 
   if (opensAt && now.getTime() < opensAt.getTime()) {
     return {

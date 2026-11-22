@@ -11,6 +11,11 @@ export interface ConcertSnapshotData {
   organizerName?: string;
   organizerEmail?: string;
   status?: string;
+  artists?: string;
+  salesStartTime?: string;
+  salesEndTime?: string;
+  isSalesPaused?: boolean;
+  salesPausedReason?: string;
   description?: string;
   ageRestriction?: string;
   refundPolicy?: string;
@@ -55,10 +60,15 @@ export function generateConcertCsvSnapshot(concert: ConcertSnapshotData): string
     ['Snapshot Timestamp (UTC)', timestamp],
     ['Concert ID', concert.id],
     ['Concert Title', concert.title],
+    ['Artists / Lineup', concert.artists || '-'],
     ['Organizer Name', concert.organizerName || '-'],
     ['Organizer Email', concert.organizerEmail || '-'],
     ['Location / Venue', concert.location],
     ['Current Status', concert.status || 'draft'],
+    ['Emergency Sales Status', concert.isSalesPaused ? 'PAUSED' : 'ACTIVE'],
+    ['Sales Paused Reason', concert.salesPausedReason || '-'],
+    ['Sales Start Time', concert.salesStartTime || '-'],
+    ['Sales End Time', concert.salesEndTime || '-'],
     ['Description', concert.description || '-'],
     ['Age Restriction', concert.ageRestriction || 'all_ages'],
     ['Refund Policy', concert.refundPolicy || 'standard'],

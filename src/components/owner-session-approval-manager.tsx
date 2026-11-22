@@ -3,8 +3,9 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import type { SessionAmendmentRecord, SessionCancellationRecord } from '@/server/events';
 import type { OrganizerFeeMode, CustomerFeeMode } from '@/server/fees';
-import { formatBaht, formatDateTime } from '@/lib/locale';
+import { formatBaht, formatDateTime, toLocalDatetimeInputString } from '@/lib/locale';
 import { sanitizeGoogleMapsUrl } from '@/lib/google-maps-url';
+import { triggerToast } from './toast-notification';
 import {
   CheckCircleIcon,
   EyeIcon,
@@ -105,6 +106,11 @@ export interface PlatformConcertItem {
   location: string;
   posterUrl?: string;
   status?: string;
+  artists?: string;
+  salesStartTime?: string;
+  salesEndTime?: string;
+  isSalesPaused?: boolean;
+  salesPausedReason?: string;
   organizerId?: string;
   organizerName?: string;
   organizerEmail?: string;
@@ -196,6 +202,11 @@ export function OwnerSessionApprovalManager() {
   const [editFormData, setEditFormData] = useState<Partial<PlatformConcertItem>>({});
   const [auditLogs, setAuditLogs] = useState<Record<string, AuditLogEntry[]>>({});
   const [savingEdit, setSavingEdit] = useState<boolean>(false);
+
+  // Emergency Sales Toggle State (D-278)
+  const [togglingEvent, setTogglingEvent] = useState<PlatformConcertItem | null>(null);
+  const [toggleReason, setToggleReason] = useState<string>('');
+  const [isSubmittingToggle, setIsSubmittingToggle] = useState<boolean>(false);
 
   // Search Query State (D-235)
   const [searchQuery, setSearchQuery] = useState('');
@@ -605,13 +616,18 @@ export function OwnerSessionApprovalManager() {
     setActionMessage(`ส่งออกไฟล์ CSV สำหรับ "${event.title}" เรียบร้อยแล้ว`);
   };
 
-  // Open Admin Edit Drawer (D-227)
+  // Open Admin Edit Drawer (D-227, D-278)
   const handleOpenEditDrawer = (event: PlatformConcertItem) => {
     setEditingEvent(event);
     setEditFormData({
       title: event.title,
+      artists: event.artists || '',
       location: event.location,
       description: event.description || '',
+      salesStartTime: toLocalDatetimeInputString(event.salesStartTime),
+      salesEndTime: toLocalDatetimeInputString(event.salesEndTime),
+      isSalesPaused: Boolean(event.isSalesPaused),
+      salesPausedReason: event.salesPausedReason || '',
       ageRestriction: event.ageRestriction || 'all_ages',
       refundPolicy: event.refundPolicy || 'standard',
       entryGuidelines: event.entryGuidelines || '',
@@ -622,7 +638,59 @@ export function OwnerSessionApprovalManager() {
     });
   };
 
-  // Save Admin Edit with Auto-Generated CSV Snapshot & Audit Trail (D-227)
+  // Emergency Sales Quick Toggle (D-278)
+  const handleOpenEmergencyToggle = (event: PlatformConcertItem) => {
+    setTogglingEvent(event);
+    setToggleReason(event.salesPausedReason || 'ระงับการจำหน่ายบัตรชั่วคราวโดยผู้ดูแลระบบ');
+  };
+
+  const handleConfirmEmergencyToggle = async () => {
+    if (!togglingEvent) return;
+    setIsSubmittingToggle(true);
+    const nextPaused = !togglingEvent.isSalesPaused;
+    const nextReason = nextPaused ? (toggleReason.trim() || 'ระงับการจำหน่ายบัตรชั่วคราวโดยผู้ดูแลระบบ') : null;
+
+    try {
+      const res = await fetch(`/api/events/${togglingEvent.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          isSalesPaused: nextPaused,
+          salesPausedReason: nextReason,
+        }),
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.message || 'เปลี่ยนสถานะการจำหน่ายบัตรไม่สำเร็จ');
+      }
+
+      setAllEvents(prev =>
+        prev.map(ev =>
+          ev.id === togglingEvent.id
+            ? { ...ev, isSalesPaused: nextPaused, salesPausedReason: nextReason || undefined }
+            : ev
+        )
+      );
+
+      triggerToast({
+        type: 'success',
+        message: nextPaused
+          ? `ระงับการจำหน่ายบัตรของ "${togglingEvent.title}" ชั่วคราวเรียบร้อยแล้ว`
+          : `เปิดการจำหน่ายบัตรของ "${togglingEvent.title}" ตามปกติเรียบร้อยแล้ว`,
+      });
+
+      setTogglingEvent(null);
+    } catch (err: unknown) {
+      triggerToast({
+        type: 'error',
+        message: err instanceof Error ? err.message : 'เกิดข้อผิดพลาดในการปรับสถานะการขายบัตร',
+      });
+    } finally {
+      setIsSubmittingToggle(false);
+    }
+  };
+
+  // Save Admin Edit with Auto-Generated CSV Snapshot & Audit Trail (D-227, D-278)
   const handleSaveAdminEdit = async () => {
     if (!editingEvent) return;
     setSavingEdit(true);
@@ -634,10 +702,15 @@ export function OwnerSessionApprovalManager() {
       const preEditSnapshot: ConcertSnapshotData = {
         id: editingEvent.id,
         title: editingEvent.title,
+        artists: editingEvent.artists,
         location: editingEvent.location,
         organizerName: editingEvent.organizerName,
         status: editingEvent.status,
         description: editingEvent.description,
+        salesStartTime: editingEvent.salesStartTime,
+        salesEndTime: editingEvent.salesEndTime,
+        isSalesPaused: editingEvent.isSalesPaused,
+        salesPausedReason: editingEvent.salesPausedReason,
         ageRestriction: editingEvent.ageRestriction,
         refundPolicy: editingEvent.refundPolicy,
         entryGuidelines: editingEvent.entryGuidelines,
@@ -660,8 +733,20 @@ export function OwnerSessionApprovalManager() {
       if (editFormData.title && editFormData.title !== editingEvent.title) {
         changesList.push(`ชื่อคอนเสิร์ต: "${editingEvent.title}" -> "${editFormData.title}"`);
       }
+      if (editFormData.artists !== undefined && editFormData.artists !== (editingEvent.artists || '')) {
+        changesList.push(`รายชื่อศิลปิน: "${editFormData.artists}"`);
+      }
       if (editFormData.location && editFormData.location !== editingEvent.location) {
         changesList.push(`สถานที่: "${editingEvent.location}" -> "${editFormData.location}"`);
+      }
+      if (editFormData.salesStartTime !== undefined && editFormData.salesStartTime !== (editingEvent.salesStartTime || '')) {
+        changesList.push(`เวลาเริ่มขายบัตร: ${editFormData.salesStartTime}`);
+      }
+      if (editFormData.salesEndTime !== undefined && editFormData.salesEndTime !== (editingEvent.salesEndTime || '')) {
+        changesList.push(`เวลาปิดขายบัตร: ${editFormData.salesEndTime}`);
+      }
+      if (editFormData.isSalesPaused !== undefined && editFormData.isSalesPaused !== Boolean(editingEvent.isSalesPaused)) {
+        changesList.push(`สถานะขายบัตร: ${editFormData.isSalesPaused ? 'ระงับการขายด่วน' : 'เปิดจำหน่ายปกติ'}`);
       }
       if (editFormData.ageRestriction && editFormData.ageRestriction !== editingEvent.ageRestriction) {
         changesList.push(`การจำกัดอายุ: ${editFormData.ageRestriction}`);
@@ -698,10 +783,16 @@ export function OwnerSessionApprovalManager() {
       }));
 
       // 4. Save to API
+      const apiPayload = {
+        ...editFormData,
+        salesStartTime: editFormData.salesStartTime ? new Date(editFormData.salesStartTime).toISOString() : null,
+        salesEndTime: editFormData.salesEndTime ? new Date(editFormData.salesEndTime).toISOString() : null,
+      };
+
       const res = await fetch(`/api/events/${editingEvent.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(editFormData),
+        body: JSON.stringify(apiPayload),
       });
 
       if (!res.ok) {
@@ -1246,6 +1337,17 @@ export function OwnerSessionApprovalManager() {
                             </span>
                           </div>
 
+                          {amd.concertDetails && (
+                            <div className="row-tags-strip" style={{ marginTop: '0.35rem' }}>
+                              <span className="row-detail-pill" style={{ background: '#f8fafc', border: '1px solid #cbd5e1', color: '#0f172a' }}>
+                                <strong>ขอแก้ไขข้อมูลคอนเสิร์ต:</strong>
+                                {amd.concertDetails.title ? ` ชื่อ: "${String(amd.concertDetails.title)}"` : ''}
+                                {amd.concertDetails.artists ? ` · ศิลปิน: "${String(amd.concertDetails.artists)}"` : ''}
+                                {amd.concertDetails.location ? ` · สถานที่: "${String(amd.concertDetails.location)}"` : ''}
+                              </span>
+                            </div>
+                          )}
+
                           <details open className="special-refund-accordion" style={{ marginTop: '0.35rem', fontSize: '0.78rem', color: '#64748b' }}>
                             <summary style={{ cursor: 'pointer', padding: '0.15rem 0' }}>
                               กำหนดช่วงเวลาคืนเงินพิเศษเพิ่มเติม (ระบุวันเวลาด้วยตนเอง)
@@ -1477,9 +1579,21 @@ export function OwnerSessionApprovalManager() {
                   sortedApprovedEvents.map((ev) => (
                     <article key={ev.id} className="concert-horizontal-row-card approved-row">
                       <div className="row-card-center">
-                        {/* Row 1: Status Badge (D-243) */}
+                        {/* Row 1: Status Badge (D-243, D-278) */}
                         <div className="row-card-badge-row">
-                          <span className="status-badge approved">กำลังเปิดขาย</span>
+                          <span className={`status-badge ${ev.isSalesPaused ? 'paused' : 'approved'}`}>
+                            {ev.isSalesPaused ? 'ระงับการขายด่วน' : 'กำลังเปิดขาย'}
+                          </span>
+                          {ev.isSalesPaused && (
+                            <span className="emergency-paused-tag" title={ev.salesPausedReason || undefined}>
+                              {ev.salesPausedReason || 'ระงับการขายชั่วคราว'}
+                            </span>
+                          )}
+                          {ev.artists && (
+                            <span className="row-artist-tag" title={ev.artists}>
+                              ศิลปิน: {ev.artists.length > 25 ? `${ev.artists.slice(0, 25)}...` : ev.artists}
+                            </span>
+                          )}
                           {ev.ubuPrivilegeMode && (
                             <span className="status-badge ubu-badge">สิทธิ์ ม.อุบลฯ</span>
                           )}
@@ -1522,6 +1636,18 @@ export function OwnerSessionApprovalManager() {
                       </div>
 
                       <div className="row-card-right">
+                        {/* Emergency Sales Quick Toggle (D-278 Q1 -> A1) */}
+                        <button
+                          type="button"
+                          className={`row-action-btn emergency-sales-toggle-btn ${ev.isSalesPaused ? 'sales-paused' : 'sales-active'}`}
+                          onClick={() => handleOpenEmergencyToggle(ev)}
+                          title={ev.isSalesPaused ? 'คลิกเพื่อเปิดการจำหน่ายบัตรตามปกติ' : 'คลิกเพื่อระงับการจำหน่ายบัตรด่วน'}
+                          data-testid={`emergency-toggle-btn-${ev.id}`}
+                        >
+                          <span className="sales-toggle-dot" />
+                          <span>{ev.isSalesPaused ? 'เปิดการจำหน่ายบัตร' : 'ระงับการขายด่วน'}</span>
+                        </button>
+
                         <button
                           type="button"
                           className="primary-button row-action-btn"
@@ -2090,6 +2216,18 @@ export function OwnerSessionApprovalManager() {
                 </div>
 
                 <div className="form-field">
+                  <label htmlFor="edit-concert-artists">รายชื่อศิลปิน / ไลน์อัป (Artists Lineup)</label>
+                  <input
+                    id="edit-concert-artists"
+                    type="text"
+                    value={editFormData.artists || ''}
+                    onChange={(e) => setEditFormData({ ...editFormData, artists: e.target.value })}
+                    className="text-input"
+                    placeholder="เช่น THE NEON BAND, ELECTRIC DREAMS (คั่นด้วยจุลภาค)"
+                  />
+                </div>
+
+                <div className="form-field">
                   <label htmlFor="edit-concert-location">สถานที่จัดงาน</label>
                   <input
                     id="edit-concert-location"
@@ -2098,6 +2236,59 @@ export function OwnerSessionApprovalManager() {
                     onChange={(e) => setEditFormData({ ...editFormData, location: e.target.value })}
                     className="text-input"
                   />
+                </div>
+
+                <div className="form-row-two-col">
+                  <div className="form-field">
+                    <label htmlFor="edit-sales-start">วันเวลาเริ่มจำหน่ายบัตร</label>
+                    <input
+                      id="edit-sales-start"
+                      type="datetime-local"
+                      value={editFormData.salesStartTime || ''}
+                      onChange={(e) => setEditFormData({ ...editFormData, salesStartTime: e.target.value })}
+                      className="text-input"
+                    />
+                  </div>
+                  <div className="form-field">
+                    <label htmlFor="edit-sales-end">วันเวลาปิดจำหน่ายบัตร</label>
+                    <input
+                      id="edit-sales-end"
+                      type="datetime-local"
+                      value={editFormData.salesEndTime || ''}
+                      onChange={(e) => setEditFormData({ ...editFormData, salesEndTime: e.target.value })}
+                      className="text-input"
+                    />
+                  </div>
+                </div>
+
+                <div className="emergency-pause-control-card">
+                  <div className="emergency-pause-header">
+                    <div>
+                      <strong className="emergency-pause-title">สวิตช์เปิด/ปิดการจำหน่ายบัตรด่วน (Emergency Sales)</strong>
+                      <p className="emergency-pause-sub">เมื่อเปิดการระงับ ระบบจะหยุดรับคำสั่งซื้อบัตรทันทีทั้งในหน้าเว็บและระบบจอง</p>
+                    </div>
+                    <label className="switch-toggle-label">
+                      <input
+                        type="checkbox"
+                        checked={Boolean(editFormData.isSalesPaused)}
+                        onChange={(e) => setEditFormData({ ...editFormData, isSalesPaused: e.target.checked })}
+                      />
+                      <span className="switch-toggle-slider" />
+                    </label>
+                  </div>
+                  {editFormData.isSalesPaused && (
+                    <div className="form-field" style={{ marginTop: '0.75rem' }}>
+                      <label htmlFor="edit-paused-reason">เหตุผลการระงับการจำหน่ายบัตร (แสดงให้ลูกค้าทราบบนหน้าเว็บ)</label>
+                      <input
+                        id="edit-paused-reason"
+                        type="text"
+                        value={editFormData.salesPausedReason || ''}
+                        onChange={(e) => setEditFormData({ ...editFormData, salesPausedReason: e.target.value })}
+                        className="text-input"
+                        placeholder="เช่น ระงับการจำหน่ายบัตรชั่วคราวเพื่อตรวจสอบโควตา..."
+                      />
+                    </div>
+                  )}
                 </div>
 
                 <div className="form-field">
@@ -2251,6 +2442,83 @@ export function OwnerSessionApprovalManager() {
                 <span>{savingEdit ? 'กำลังบันทึก...' : 'บันทึกการแก้ไขและสำรอง CSV'}</span>
               </button>
             </footer>
+          </div>
+        </div>
+      )}
+      {/* =========================================================
+          MODAL 3: EMERGENCY SALES TOGGLE CONFIRMATION (D-278)
+          ========================================================= */}
+      {togglingEvent && (
+        <div
+          className="review-modal-backdrop"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="emergency-toggle-modal-title"
+          data-testid="emergency-toggle-modal"
+        >
+          <div className="admin-full-dialog-modal emergency-sales-dialog">
+            <div className="dialog-modal-header">
+              <div className="modal-header-titles">
+                <span className="modal-category-tag">ระบบควบคุมฉุกเฉิน</span>
+                <h3 id="emergency-toggle-modal-title" className="modal-concert-title">
+                  {togglingEvent.isSalesPaused ? 'เปิดการจำหน่ายบัตรคอนเสิร์ต' : 'ระงับการจำหน่ายบัตรด่วน (Emergency Pause)'}
+                </h3>
+              </div>
+              <button
+                type="button"
+                className="modal-close-icon-btn"
+                onClick={() => setTogglingEvent(null)}
+                aria-label="ยกเลิก"
+              >
+                <XIcon />
+              </button>
+            </div>
+            <div className="dialog-modal-body">
+              <p style={{ fontSize: '0.95rem', color: '#1e293b', lineHeight: 1.5, margin: 0 }}>
+                {togglingEvent.isSalesPaused
+                  ? `คุณต้องการเปิดการจำหน่ายบัตรของคอนเสิร์ต "${togglingEvent.title}" กลับคืนมาให้ลูกค้าซื้อได้ตามปกติทันทีหรือไม่?`
+                  : `คุณต้องการระงับการจำหน่ายบัตรของคอนเสิร์ต "${togglingEvent.title}" ด่วนทันทีหรือไม่? ระบบจะหยุดการจองและแจ้งเตือนลูกค้าบนหน้าเว็บทันที`}
+              </p>
+              {!togglingEvent.isSalesPaused && (
+                <div style={{ marginTop: '1rem' }}>
+                  <label htmlFor="toggle-reason-input" style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: '#475569', marginBottom: '0.35rem' }}>
+                    ข้อความเหตุผลแจ้งลูกค้า (แสดงบนป้ายเตือนในหน้าคอนเสิร์ต):
+                  </label>
+                  <input
+                    id="toggle-reason-input"
+                    type="text"
+                    value={toggleReason}
+                    onChange={(e) => setToggleReason(e.target.value)}
+                    className="text-input"
+                    placeholder="เช่น ระงับการจำหน่ายบัตรชั่วคราวเพื่อตรวจสอบโควตา..."
+                    style={{ width: '100%', padding: '0.5rem 0.75rem', fontSize: '0.9rem' }}
+                  />
+                </div>
+              )}
+            </div>
+            <div className="dialog-modal-footer">
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => setTogglingEvent(null)}
+                disabled={isSubmittingToggle}
+              >
+                ยกเลิก
+              </button>
+              <button
+                type="button"
+                className={`primary-button ${togglingEvent.isSalesPaused ? '' : 'danger-btn'}`}
+                onClick={handleConfirmEmergencyToggle}
+                disabled={isSubmittingToggle}
+                data-testid="confirm-emergency-toggle-btn"
+              >
+                {isSubmittingToggle
+                  ? 'กำลังดำเนินการ...'
+                  : togglingEvent.isSalesPaused
+                    ? 'ยืนยันเปิดการจำหน่าย'
+                    : 'ยืนยันระงับการขายด่วน'}
+              </button>
+            </div>
           </div>
         </div>
       )}

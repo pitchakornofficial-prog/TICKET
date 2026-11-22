@@ -56,6 +56,8 @@ interface EventCheckoutFlowProps {
   limitPerOrder: number;
   salesStartTime?: string | Date | null;
   salesEndTime?: string | Date | null;
+  isSalesPaused?: boolean | null;
+  salesPausedReason?: string | null;
   sessions: SessionInfo[];
   feeSettings?: {
     customerFeeMode?: 'percentage' | 'per_ticket' | 'per_order';
@@ -75,6 +77,8 @@ export function EventCheckoutFlow({
   limitPerOrder,
   salesStartTime,
   salesEndTime,
+  isSalesPaused,
+  salesPausedReason,
   sessions,
   feeSettings,
 }: EventCheckoutFlowProps) {
@@ -202,7 +206,13 @@ export function EventCheckoutFlow({
 
   const selectedSession = sessions.find(s => s.id === selectedSessionId) || sessions[0];
   const ticketTypes = selectedSession?.ticketTypes || [];
-  const salesStatus = getEventSalesStatus({ salesStartTime, salesEndTime, sessions });
+  const salesStatus = getEventSalesStatus({
+    salesStartTime,
+    salesEndTime,
+    sessions,
+    isSalesPaused,
+    salesPausedReason,
+  });
   const selectedSessionEnded = isSessionEnded(selectedSession);
   const salesClosedMessage = !salesStatus.isOpen
     ? (salesStatus.reason === 'not_started' && salesStatus.opensAt

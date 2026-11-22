@@ -156,14 +156,16 @@ export const DEFAULT_STATE: TicketDesignerState = {
     },
     zoneBadge: {
       id: 'zoneBadge',
-      label: 'ป้ายโซน / ประเภทบัตร (Zone & Category)',
+      label: 'โซน / ประเภทบัตร (Zone & Category)',
       section: 'event',
       x: 36,
       y: 112,
       visible: true,
-      fontSize: 14,
+      fontSize: 16,
       fontWeight: '700',
       color: '#0f172a',
+      secondaryColor: '#64748b',
+      secondaryText: 'โซน / ประเภทบัตร (ZONE & CATEGORY)',
       bgColor: 'transparent',
       borderColor: 'transparent',
       borderWidth: 0,
@@ -1560,16 +1562,13 @@ export function AdminTicketDesigner() {
             }}
             onPointerDown={(e) => handlePointerDown('zoneBadge', e)}
           >
-            <div
-              className="zone-badge-pill"
-              style={{
-                fontSize: `${state.elements.zoneBadge.fontSize || 14}px`,
-                fontWeight: state.elements.zoneBadge.fontWeight || '700',
-                color: state.elements.zoneBadge.color || '#0f172a',
-                ...getElementBoxStyle(state.elements.zoneBadge),
-              }}
-            >
-              {state.elements.zoneBadge.text}
+            <div className="meta-block" style={{ ...getElementBoxStyle(state.elements.zoneBadge) }}>
+              <span className="meta-label" style={{ color: state.elements.zoneBadge.secondaryColor || '#64748b' }}>
+                {state.elements.zoneBadge.secondaryText || 'โซน / ประเภทบัตร (ZONE & CATEGORY)'}
+              </span>
+              <strong className="meta-val" style={{ color: state.elements.zoneBadge.color || '#0f172a', fontSize: `${state.elements.zoneBadge.fontSize || 16}px` }}>
+                {state.elements.zoneBadge.text}
+              </strong>
             </div>
             {isInteractive && selectedId === 'zoneBadge' && (
               <span className="coord-chip">X: {state.elements.zoneBadge.x} Y: {state.elements.zoneBadge.y}</span>
@@ -1815,6 +1814,10 @@ export function AdminTicketDesigner() {
                 backgroundColor: state.qrBgColor,
                 width: `${state.qrSize}px`,
                 height: `${state.qrSize}px`,
+                borderRadius: '12px',
+                padding: '8px',
+                border: '1px solid #e2e8f0',
+                overflow: 'hidden',
               }}
               onClick={(e) => {
                 e.stopPropagation();
@@ -1826,7 +1829,7 @@ export function AdminTicketDesigner() {
               <img
                 src={qrSvgDataUrl}
                 alt="Ticket QR Code"
-                style={{ width: '100%', height: '100%', display: 'block' }}
+                style={{ width: '100%', height: '100%', display: 'block', borderRadius: '8px' }}
               />
             </button>
             {isInteractive && selectedId === 'qrCode' && (

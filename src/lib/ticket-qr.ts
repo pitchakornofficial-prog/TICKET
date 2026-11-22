@@ -237,7 +237,8 @@ export function generateCustomQrSvg(
     .replaceAll('"', '&quot;')
     .replaceAll("'", '&apos;');
 
-  const bgRect = bg !== 'transparent' ? `<rect width="${totalSize}" height="${totalSize}" fill="${escapeXml(bg)}"/>` : '';
+  const rx = Math.round(moduleSize * 1.5);
+  const bgRect = bg !== 'transparent' ? `<rect width="${totalSize}" height="${totalSize}" rx="${rx}" ry="${rx}" fill="${escapeXml(bg)}"/>` : '';
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${totalSize} ${totalSize}" width="${totalSize}" height="${totalSize}" role="img" aria-label="Ticket QR code"><desc>${escapeXml(safePayload)}</desc>${bgRect}<path fill="${escapeXml(fg)}" d="${pathD}"/></svg>`;
 
   return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;

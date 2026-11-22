@@ -78,6 +78,7 @@ export async function POST(
       admissionStartTime: body.admissionStartTime,
       admissionEndTime: body.admissionEndTime,
       ticketTypes,
+      concertDetails: body.concertDetails,
     });
 
     return Response.json(
