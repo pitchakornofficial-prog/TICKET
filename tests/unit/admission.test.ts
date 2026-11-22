@@ -213,37 +213,38 @@ describe('Admission scan unit logic (TASK-020, AC-08, AC-39, AC-49, AC-95, AC-10
     expect(ticketJson).not.toContain('0899999999');
   });
 
-  it('rejects scan using ticketCode and strictly requires authentic qrPayload (Issue 14)', async () => {
+  it('accepts scan using ticketCode as well as qrPayload (manual ticketCode entry support)', async () => {
     const mockClient = {
       query: async (queryText: string, values?: unknown[]) => {
         if (queryText === 'BEGIN' || queryText === 'COMMIT' || queryText === 'ROLLBACK') return { rows: [] };
         if (queryText.includes('SELECT t.id')) {
-          // WHERE t."qrPayload" = $1: if values[0] is ticketCode, no matching row found
-          if (values && values[0] === 'TK-SECRET-01') {
-            return { rowCount: 0, rows: [] };
+          if (values && (values[0] === 'TK-SECRET-01' || values[0] === 'QR-SECRET-01')) {
+            return {
+              rowCount: 1,
+              rows: [
+                {
+                  id: 't-123',
+                  orderId: 'ord-123',
+                  eventId: 'ev-1',
+                  sessionId: 'sess-1',
+                  ticketTypeId: 'tt-1',
+                  ticketCode: 'TK-SECRET-01',
+                  qrPayload: 'QR-SECRET-01',
+                  status: 'valid',
+                  admissionStatus: 'outside',
+                  ticketTypeName: 'VIP Zone A',
+                  ticketPrice: 3500,
+                  eventTitle: 'มหกรรมคอนเสิร์ตใหญ่',
+                  sessionStartTime: new Date('2026-12-31T18:00:00Z'),
+                  sessionEndTime: new Date('2026-12-31T22:00:00Z'),
+                },
+              ],
+            };
           }
-          return {
-            rowCount: 1,
-            rows: [
-              {
-                id: 't-123',
-                orderId: 'ord-123',
-                eventId: 'ev-1',
-                sessionId: 'sess-1',
-                ticketTypeId: 'tt-1',
-                ticketCode: 'TK-SECRET-01',
-                qrPayload: 'QR-SECRET-01',
-                status: 'valid',
-                admissionStatus: 'outside',
-                ticketTypeName: 'VIP Zone A',
-                ticketPrice: 3500,
-                eventTitle: 'มหกรรมคอนเสิร์ตใหญ่',
-                sessionStartTime: new Date('2026-12-31T18:00:00Z'),
-                sessionEndTime: new Date('2026-12-31T22:00:00Z'),
-              },
-            ],
-          };
+          return { rowCount: 0, rows: [] };
         }
+        if (queryText.includes('UPDATE tickets')) return { rowCount: 1, rows: [] };
+        if (queryText.includes('INSERT INTO ticket_admission_logs')) return { rowCount: 1, rows: [] };
         return { rowCount: 0, rows: [] };
       },
       release: () => {},
@@ -278,7 +279,7 @@ describe('Admission scan unit logic (TASK-020, AC-08, AC-39, AC-49, AC-95, AC-10
       connect: async () => mockClient,
     } as unknown as Pool;
 
-    // Attempting scan with guessable ticketCode must fail
+    // Scanning with human-readable ticketCode succeeds
     const res = await recordAdmissionScan(mockPool, {
       scannerId: 'scanner-1',
       scannerName: 'สแกนเนอร์',
@@ -289,9 +290,22 @@ describe('Admission scan unit logic (TASK-020, AC-08, AC-39, AC-49, AC-95, AC-10
       now: new Date('2026-12-31T19:00:00Z'),
     });
 
-    expect(res.success).toBe(false);
-    expect(res.status).toBe('rejected');
-    expect(res.reason).toBe('TICKET_NOT_FOUND');
-    expect(res.message).toContain('ไม่พบบัตรในระบบ');
+    expect(res.success).toBe(true);
+    expect(res.status).toBe('success');
+    expect(res.ticket?.ticketCode).toBe('TK-SECRET-01');
+
+    // Scanning non-existent ticketCode fails with TICKET_NOT_FOUND
+    const notFoundRes = await recordAdmissionScan(mockPool, {
+      scannerId: 'scanner-1',
+      scannerName: 'สแกนเนอร์',
+      scannerRole: 'scanner',
+      sessionId: 'sess-1',
+      qrPayloadOrCode: 'TK-DOES-NOT-EXIST',
+      action: 'entry',
+      now: new Date('2026-12-31T19:00:00Z'),
+    });
+    expect(notFoundRes.success).toBe(false);
+    expect(notFoundRes.status).toBe('rejected');
+    expect(notFoundRes.reason).toBe('TICKET_NOT_FOUND');
   });
 });
