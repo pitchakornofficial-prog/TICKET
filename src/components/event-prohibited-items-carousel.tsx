@@ -11,54 +11,62 @@ import {
   ChevronLeftIcon,
   ChevronRightIcon,
 } from './icons';
+import type { ProhibitedItemData } from '@/server/prohibited-items';
 
-interface ProhibitedItem {
-  id: string;
-  icon: typeof CameraOffIcon;
-  title: string;
-  desc: string;
-}
+const ICON_MAP: Record<string, typeof CameraOffIcon> = {
+  CameraOffIcon,
+  AlertTriangleIcon,
+  CrossCircleIcon,
+  SparklesIcon,
+  ShieldCheckIcon,
+  InfoIcon,
+};
 
-const PROHIBITED_ITEMS: ProhibitedItem[] = [
+const DEFAULT_PROHIBITED_ITEMS: ProhibitedItemData[] = [
   {
     id: 'cameras',
-    icon: CameraOffIcon,
+    iconName: 'CameraOffIcon',
     title: 'กล้องและอุปกรณ์บันทึกภาพ',
     desc: 'ไม่อนุญาตให้นำกล้อง DSLR, กล้อง Mirrorless, เลนส์ซูมระยะไกล, ขาตั้งกล้อง, ไม้เซลฟี่ และโดรนเข้าพื้นที่จัดงาน',
   },
   {
     id: 'weapons',
-    icon: AlertTriangleIcon,
+    iconName: 'AlertTriangleIcon',
     title: 'อาวุธและของมีคมทุกชนิด',
     desc: 'ห้ามนำอาวุธปืน, มีดพก, กรรไกร, คัตเตอร์, วัตถุปลายแหลม และสิ่งเทียมอาวุธทุกประเภทเข้าสู่สถานที่จัดงานโดยเด็ดขาด',
   },
   {
     id: 'food',
-    icon: CrossCircleIcon,
+    iconName: 'CrossCircleIcon',
     title: 'อาหารและเครื่องดื่มภายนอก',
     desc: 'ไม่อนุญาตให้นำอาหารกล่อง, ขนม, ขวดแก้ว, กระป๋องโลหะ หรือเครื่องดื่มแอลกอฮอล์จากภายนอกเข้างาน (มีจุดบริการจำหน่ายภายในงาน)',
   },
   {
     id: 'banners',
-    icon: SparklesIcon,
+    iconName: 'SparklesIcon',
     title: 'ป้ายไฟขนาดใหญ่และเลเซอร์',
     desc: 'ห้ามนำป้ายไฟหรือป้ายผ้าขนาดเกิน A4 (21x29.7 ซม.), ปากกาเลเซอร์พอยเตอร์, โทรโข่ง หรืออุปกรณ์ส่งเสียงรบกวนการแสดง',
   },
   {
     id: 'drugs',
-    icon: ShieldCheckIcon,
+    iconName: 'ShieldCheckIcon',
     title: 'สารเสพติดและวัตถุไวไฟ',
     desc: 'ห้ามนำสารเสพติดทุกประเภท, บุหรี่ไฟฟ้า, น้ำยาบุหรี่ไฟฟ้า, ดอกไม้ไฟ, พลุ, ประทัด และสารเคมีไวไฟเข้าพื้นที่โดยเด็ดขาด',
   },
   {
     id: 'luggage',
-    icon: InfoIcon,
+    iconName: 'InfoIcon',
     title: 'กระเป๋าขนาดใหญ่และสัมภาระ',
     desc: 'ไม่อนุญาตให้นำกระเป๋าเดินทางขนาดเกิน 40x30 ซม., เก้าอี้พับ, บันไดพับ, ร่มก้านยาวปลายแหลม และสัตว์เลี้ยงทุกชนิดเข้างาน',
   },
 ];
 
-export function EventProhibitedItemsCarousel() {
+export interface EventProhibitedItemsCarouselProps {
+  items?: ProhibitedItemData[];
+}
+
+export function EventProhibitedItemsCarousel({ items }: EventProhibitedItemsCarouselProps) {
+  const displayItems = items && items.length > 0 ? items : DEFAULT_PROHIBITED_ITEMS;
   const trackRef = useRef<HTMLDivElement | null>(null);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(true);
@@ -131,8 +139,8 @@ export function EventProhibitedItemsCarousel() {
           ref={trackRef}
           className="prohibited-items-scroll-track"
         >
-          {PROHIBITED_ITEMS.map(item => {
-            const Icon = item.icon;
+          {displayItems.map((item) => {
+            const Icon = (item.iconName && ICON_MAP[item.iconName]) || ShieldCheckIcon;
             return (
               <div key={item.id} className="prohibited-item-card">
                 <div className="prohibited-standalone-icon" aria-hidden="true">

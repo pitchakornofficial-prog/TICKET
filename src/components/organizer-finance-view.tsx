@@ -741,10 +741,18 @@ export function OrganizerFinanceView({
 
                 {/* Platform Fee */}
                 <div className="finance-event-metric-card">
-                  <span className="finance-event-metric-label">ค่าบริการระบบ (Platform Fee)<FinanceTooltip text="ค่าธรรมเนียมบริการแพลตฟอร์มตามสัญญา (คิดตาม % ยอดขาย, อัตราต่อใบ หรือเหมาจ่าย)" /></span>
+                  <span className="finance-event-metric-label">
+                    ค่าบริการระบบ (Platform Fee {currentReport.organizerFeeMode === 'percentage' ? `${currentReport.organizerFeeRate}%` : `${currentReport.organizerFeeRate} ฿`})
+                    <FinanceTooltip text={`ค่าธรรมเนียมบริการแพลตฟอร์มตามสัญญาคิดที่ ${currentReport.organizerFeeRate}% จากยอดขายสุทธิ`} />
+                  </span>
                   <div className="finance-event-metric-num value-negative" data-testid="organizer-fee-amount">
                     -{formatBaht(currentReport.organizerFee)}
                   </div>
+                  <span className="finance-event-metric-hint">
+                    {currentReport.organizerFeeMode === 'percentage'
+                      ? `อัตรา ${currentReport.organizerFeeRate}% จากยอดขายสุทธิ`
+                      : `อัตรา ${currentReport.organizerFeeRate} บาท/ใบ`}
+                  </span>
                   {currentReport.flatFeeCarry > 0 && (
                     <span className="finance-event-metric-hint text-warning">
                       ค้างหักเหมาจ่าย: {formatBaht(currentReport.flatFeeCarry)}

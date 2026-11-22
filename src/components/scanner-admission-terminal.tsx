@@ -303,6 +303,8 @@ export function ScannerAdmissionTerminal({
         });
 
         setScanResult(offResult);
+        playScanBeep(offResult.success);
+
         if (typeof offResult.pendingCount === 'number') {
           setPendingSyncCount(offResult.pendingCount);
         }
@@ -369,6 +371,7 @@ export function ScannerAdmissionTerminal({
       const data = await res.json();
       if (res.ok && data.result) {
         setScanResult(data.result);
+        playScanBeep(Boolean(data.result.success));
       } else {
         setScanResult({
           success: false,
@@ -377,6 +380,7 @@ export function ScannerAdmissionTerminal({
           reason: data.error || 'ERROR',
           message: data.message || 'เกิดข้อผิดพลาดในการตรวจสอบบัตร',
         });
+        playScanBeep(false);
       }
       setTicketInput('');
       fetchStats();
@@ -388,6 +392,7 @@ export function ScannerAdmissionTerminal({
         reason: 'NETWORK_ERROR',
         message: 'ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ กรุณาลองใหม่อีกครั้ง',
       });
+      playScanBeep(false);
     } finally {
       setLoading(false);
     }

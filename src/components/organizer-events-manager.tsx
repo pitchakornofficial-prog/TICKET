@@ -28,6 +28,7 @@ import { AlertIcon } from './alert-icon';
 import { Button } from '@/components/ui';
 import { HeaderInfoTooltip } from './header-info-tooltip';
 import { OrganizerMoneyReportView } from './organizer-money-report-view';
+import { DateTimePicker24h } from './datetime-picker-24h';
 import { triggerToast } from './toast-notification';
 import { loadPayoutAccounts, getPrimaryPayoutAccount, type PayoutBankAccount } from '@/lib/organizer-payout-sync';
 import { formatBaht, formatDate, formatTime, toLocalDatetimeInputString } from '@/lib/locale';
@@ -1521,15 +1522,13 @@ export function OrganizerEventsManager({
                         <span>วันและเวลาเริ่มต้นเปิดขายบัตร</span>
                         <HeaderInfoTooltip text="กำหนดเวลาเริ่มจำหน่าย หากปล่อยว่างจะเปิดขายทันทีหลังได้รับการอนุมัติ" />
                       </label>
-                      <input
+                      <DateTimePicker24h
                         id="event-sales-start"
-                        type="datetime-local"
                         value={salesStartTime}
-                        onChange={e => {
-                          setSalesStartTime(e.target.value);
+                        onChange={val => {
+                          setSalesStartTime(val);
                           setDraftSaved(false);
                         }}
-                        className="form-input-text"
                       />
                       <small className="form-field-helper">
                         * หากเว้นว่าง บัตรจะเริ่มจำหน่ายทันทีหลังได้รับการอนุมัติ
@@ -1538,18 +1537,16 @@ export function OrganizerEventsManager({
 
                     <div className="form-group">
                       <label htmlFor="event-sales-end" style={{ fontWeight: 700, fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '0.35rem', marginBottom: '0.35rem' }}>
-                        <span>วันและเวลาสิ้นสุดการขายบัตร</span>
+                        <span>วันและเวลาสิ้นสุดการขายบัตร (24 ชม.)</span>
                         <HeaderInfoTooltip text="กำหนดเวลาปิดจำหน่าย หากปล่อยว่างจะปิดการขายตามเวลาเริ่มการแสดงแต่ละรอบ" />
                       </label>
-                      <input
+                      <DateTimePicker24h
                         id="event-sales-end"
-                        type="datetime-local"
                         value={salesEndTime}
-                        onChange={e => {
-                          setSalesEndTime(e.target.value);
+                        onChange={val => {
+                          setSalesEndTime(val);
                           setDraftSaved(false);
                         }}
-                        className="form-input-text"
                       />
                       <small className="form-field-helper">
                         * หากเว้นว่าง การขายจะปิดตามเวลาเริ่มการแสดงของแต่ละรอบ
@@ -1993,17 +1990,13 @@ export function OrganizerEventsManager({
                                     <span>วันเวลาเริ่มการแสดง (Show Start) *</span>
                                     <HeaderInfoTooltip text="วันและเวลาที่การแสดงเริ่มต้นขึ้นจริง" />
                                   </label>
-                                  <input
+                                  <DateTimePicker24h
                                     id={`sess-start-${sess.id}`}
-                                    type="datetime-local"
-                                    required
                                     value={sess.startTime}
-                                    onChange={e => {
-                                      handleUpdateSession(sess.id, { startTime: e.target.value });
+                                    onChange={val => {
+                                      handleUpdateSession(sess.id, { startTime: val });
                                       setDraftSaved(false);
                                     }}
-                                    className="form-input-text"
-                                    style={{ fontSize: '0.85rem' }}
                                   />
                                 </div>
                                 <div>
@@ -2011,17 +2004,13 @@ export function OrganizerEventsManager({
                                     <span>วันเวลาสิ้นสุดการแสดง (Show End) *</span>
                                     <HeaderInfoTooltip text="วันและเวลาที่การแสดงเสร็จสิ้นโดยประมาณ" />
                                   </label>
-                                  <input
+                                  <DateTimePicker24h
                                     id={`sess-end-${sess.id}`}
-                                    type="datetime-local"
-                                    required
                                     value={sess.endTime}
-                                    onChange={e => {
-                                      handleUpdateSession(sess.id, { endTime: e.target.value });
+                                    onChange={val => {
+                                      handleUpdateSession(sess.id, { endTime: val });
                                       setDraftSaved(false);
                                     }}
-                                    className="form-input-text"
-                                    style={{ fontSize: '0.85rem' }}
                                   />
                                 </div>
                               </div>
@@ -2032,16 +2021,13 @@ export function OrganizerEventsManager({
                                     <span>เวลาประตูเปิด / รับเข้างาน (Doors Open)</span>
                                     <HeaderInfoTooltip text="เวลาเปิดประตูให้ผู้ชมเริ่มเข้าสู่บริเวณฮอลล์การแสดง" />
                                   </label>
-                                  <input
+                                  <DateTimePicker24h
                                     id={`sess-adm-start-${sess.id}`}
-                                    type="datetime-local"
                                     value={sess.admissionStartTime}
-                                    onChange={e => {
-                                      handleUpdateSession(sess.id, { admissionStartTime: e.target.value });
+                                    onChange={val => {
+                                      handleUpdateSession(sess.id, { admissionStartTime: val });
                                       setDraftSaved(false);
                                     }}
-                                    className="form-input-text"
-                                    style={{ fontSize: '0.85rem' }}
                                   />
                                 </div>
                                 <div>
@@ -2049,16 +2035,13 @@ export function OrganizerEventsManager({
                                     <span>สิ้นสุดช่วงเวลารับเข้างาน</span>
                                     <HeaderInfoTooltip text="เวลาปิดรับผู้ชมเข้างานเพื่อความเรียบร้อยของการแสดง" />
                                   </label>
-                                  <input
+                                  <DateTimePicker24h
                                     id={`sess-adm-end-${sess.id}`}
-                                    type="datetime-local"
                                     value={sess.admissionEndTime}
-                                    onChange={e => {
-                                      handleUpdateSession(sess.id, { admissionEndTime: e.target.value });
+                                    onChange={val => {
+                                      handleUpdateSession(sess.id, { admissionEndTime: val });
                                       setDraftSaved(false);
                                     }}
-                                    className="form-input-text"
-                                    style={{ fontSize: '0.85rem' }}
                                   />
                                 </div>
                               </div>
@@ -3289,28 +3272,22 @@ export function OrganizerEventsManager({
                       <label htmlFor="amendment-start-time" style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: '#475569', marginBottom: '0.3rem' }}>
                         วันเวลาเริ่มการแสดงใหม่
                       </label>
-                      <input
+                      <DateTimePicker24h
                         id="amendment-start-time"
                         data-testid="amendment-start-time"
-                        type="datetime-local"
                         value={amendmentStartTime}
-                        onChange={e => setAmendmentStartTime(e.target.value)}
-                        className="modal-textarea"
-                        style={{ padding: '0.45rem 0.65rem', fontSize: '0.85rem' }}
+                        onChange={val => setAmendmentStartTime(val)}
                       />
                     </div>
                     <div>
                       <label htmlFor="amendment-end-time" style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: '#475569', marginBottom: '0.3rem' }}>
-                        วันเวลาสิ้นสุดการแสดงใหม่
+                        วันเวลาสิ้นสุดการแสดงใหม่ (24 ชม.)
                       </label>
-                      <input
+                      <DateTimePicker24h
                         id="amendment-end-time"
                         data-testid="amendment-end-time"
-                        type="datetime-local"
                         value={amendmentEndTime}
-                        onChange={e => setAmendmentEndTime(e.target.value)}
-                        className="modal-textarea"
-                        style={{ padding: '0.45rem 0.65rem', fontSize: '0.85rem' }}
+                        onChange={val => setAmendmentEndTime(val)}
                       />
                     </div>
                   </div>
@@ -3320,28 +3297,22 @@ export function OrganizerEventsManager({
                       <label htmlFor="amendment-door-open" style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: '#475569', marginBottom: '0.3rem' }}>
                         เวลาเปิดประตูเข้างาน (Door Open)
                       </label>
-                      <input
+                      <DateTimePicker24h
                         id="amendment-door-open"
                         data-testid="amendment-door-open"
-                        type="datetime-local"
                         value={amendmentAdmissionStartTime}
-                        onChange={e => setAmendmentAdmissionStartTime(e.target.value)}
-                        className="modal-textarea"
-                        style={{ padding: '0.45rem 0.65rem', fontSize: '0.85rem' }}
+                        onChange={val => setAmendmentAdmissionStartTime(val)}
                       />
                     </div>
                     <div>
                       <label htmlFor="amendment-door-close" style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: '#475569', marginBottom: '0.3rem' }}>
                         เวลาปิดประตูเข้างาน (Door Close)
                       </label>
-                      <input
+                      <DateTimePicker24h
                         id="amendment-door-close"
                         data-testid="amendment-door-close"
-                        type="datetime-local"
                         value={amendmentAdmissionEndTime}
-                        onChange={e => setAmendmentAdmissionEndTime(e.target.value)}
-                        className="modal-textarea"
-                        style={{ padding: '0.45rem 0.65rem', fontSize: '0.85rem' }}
+                        onChange={val => setAmendmentAdmissionEndTime(val)}
                       />
                     </div>
                   </div>

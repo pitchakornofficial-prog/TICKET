@@ -374,8 +374,8 @@ const ORDER_FEES_CTE = `
   WITH event_fee_cfg AS (
     SELECT e.id AS "eventId",
            COALESCE(f."organizerFeeMode", 'percentage') AS "defaultFeeMode",
-           COALESCE(f."organizerFeeRate", 0)::numeric AS "defaultFeeRate",
-           COALESCE(f."organizerFeePrivilegeRate", CASE WHEN f."eventId" IS NULL THEN 3 ELSE 0 END)::numeric AS "defaultPrivRate",
+           COALESCE(f."organizerFeeRate", 3)::numeric AS "defaultFeeRate",
+           COALESCE(f."organizerFeePrivilegeRate", 3)::numeric AS "defaultPrivRate",
            COALESCE(f."ubuPrivilegeMode", FALSE) AS "ubuPrivilegeMode"
     FROM events e
     LEFT JOIN event_fee_settings f ON f."eventId" = e.id
@@ -557,7 +557,7 @@ async function readEventMoneyReport(
   const isOrganizerActor = actor.role === 'organizer';
   const isOwner = actor.role === 'owner';
   const organizerFeeMode: OrganizerFeeMode = (event.organizerFeeMode || 'percentage') as OrganizerFeeMode;
-  const organizerFeeRate = event.organizerFeeRate != null ? Number(event.organizerFeeRate) : 0;
+  const organizerFeeRate = event.organizerFeeRate != null ? Number(event.organizerFeeRate) : 3;
   const reservePercentage = event.reservePercentage != null ? Number(event.reservePercentage) : 0;
 
   const includeOrders = options?.includeOrders !== false;

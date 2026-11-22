@@ -11,9 +11,9 @@ import {
   AlertTriangleIcon,
 } from './icons';
 import { TicketIcon } from './ticket-icon';
-import { Badge } from '@/components/ui';
+import { Badge } from './ui';
 import { HeaderInfoTooltip } from './header-info-tooltip';
-import { formatBaht } from '@/lib/locale';
+import { formatBaht } from '../lib/locale';
 import type { OrganizerSectionId } from './organizer-workspace-view';
 
 export interface OrganizerOverviewViewProps {
@@ -34,6 +34,83 @@ interface OrganizerEventItem {
   firstSessionStartTime?: string;
   lastSessionEndTime?: string;
   createdAt?: string;
+  isSalesPaused?: boolean;
+  salesPausedReason?: string | null;
+  salesStartTime?: string | null;
+  salesEndTime?: string | null;
+  sessions?: Array<{
+    id: string;
+    startTime: string;
+    endTime: string;
+    status: string;
+  }>;
+}
+
+export interface EventStatusInfo {
+  label: string;
+  variant: 'success' | 'warning' | 'danger' | 'neutral' | 'info';
+  code: 'selling' | 'sales_paused' | 'sales_ended' | 'upcoming' | 'ended' | 'pending' | 'draft' | 'cancelled' | 'rejected';
+}
+
+export function resolveEventRealStatus(ev: OrganizerEventItem): EventStatusInfo {
+  if (ev.status === 'cancelled') {
+    return { label: 'ยกเลิกแล้ว', variant: 'danger', code: 'cancelled' };
+  }
+  if (ev.status === 'rejected') {
+    return { label: 'ไม่อนุมัติ', variant: 'danger', code: 'rejected' };
+  }
+  if (ev.status === 'draft') {
+    return { label: 'ฉบับร่าง', variant: 'neutral', code: 'draft' };
+  }
+  if (ev.status === 'pending_approval') {
+    return { label: 'รออนุมัติ', variant: 'warning', code: 'pending' };
+  }
+
+  if (ev.status === 'approved') {
+    const now = new Date();
+
+    if (ev.isSalesPaused) {
+      return { label: 'ระงับการขายชั่วคราว', variant: 'warning', code: 'sales_paused' };
+    }
+
+    if (ev.salesEndTime) {
+      const salesEnd = new Date(ev.salesEndTime);
+      if (!Number.isNaN(salesEnd.getTime()) && now > salesEnd) {
+        return { label: 'ปิดการขายแล้ว', variant: 'neutral', code: 'sales_ended' };
+      }
+    }
+
+    if (ev.salesStartTime) {
+      const salesStart = new Date(ev.salesStartTime);
+      if (!Number.isNaN(salesStart.getTime()) && now < salesStart) {
+        return { label: 'ยังไม่เริ่มเปิดขาย', variant: 'info', code: 'upcoming' };
+      }
+    }
+
+    if (ev.sessions && ev.sessions.length > 0) {
+      const allCancelled = ev.sessions.every((s) => s.status === 'cancelled');
+      if (allCancelled) {
+        return { label: 'ยกเลิกแล้ว', variant: 'danger', code: 'cancelled' };
+      }
+
+      const allEnded = ev.sessions.every((s) => {
+        const end = new Date(s.endTime);
+        return !Number.isNaN(end.getTime()) && now > end;
+      });
+      if (allEnded) {
+        return { label: 'สิ้นสุดแล้ว', variant: 'neutral', code: 'ended' };
+      }
+    } else if (ev.lastSessionEndTime) {
+      const lastEnd = new Date(ev.lastSessionEndTime);
+      if (!Number.isNaN(lastEnd.getTime()) && now > lastEnd) {
+        return { label: 'สิ้นสุดแล้ว', variant: 'neutral', code: 'ended' };
+      }
+    }
+
+    return { label: 'กำลังเปิดขาย', variant: 'success', code: 'selling' };
+  }
+
+  return { label: ev.status, variant: 'neutral', code: 'draft' };
 }
 
 interface EventProgressStats {
@@ -43,7 +120,7 @@ interface EventProgressStats {
   netSales: number;
 }
 
-type EventStatusFilter = 'all' | 'approved' | 'pending_approval' | 'draft' | 'cancelled';
+type EventStatusFilter = 'all' | 'selling' | 'pending_approval' | 'draft' | 'ended' | 'cancelled';
 type EventSortBy = 'latest' | 'grossSales' | 'soldTickets' | 'title';
 
 export function OrganizerOverviewView({
@@ -139,17 +216,22 @@ export function OrganizerOverviewView({
 
   // Aggregated KPI Metrics
   const totalEventsCount = events.length;
-  const activeEvents = events.filter((e) => e.status === 'approved');
+  const activeEvents = events.filter((e) => resolveEventRealStatus(e).code === 'selling');
   const activeEventsCount = activeEvents.length;
   const pendingEventsCount = events.filter((e) => e.status === 'pending_approval').length;
   const draftEventsCount = events.filter((e) => e.status === 'draft').length;
+  const cancelledEventsCount = events.filter((e) => resolveEventRealStatus(e).code === 'cancelled').length;
+  const endedEventsCount = events.filter((e) => {
+    const code = resolveEventRealStatus(e).code;
+    return code === 'ended' || code === 'sales_ended' || code === 'sales_paused';
+  }).length;
 
   let totalSoldTickets = 0;
   let totalGrossRevenue = 0;
   let totalQuota = 0;
 
   for (const ev of events) {
-    totalQuota += ev.totalQuota || 1500;
+    totalQuota += ev.totalQuota || 0;
     const stats = eventStats[ev.id];
     if (stats) {
       totalSoldTickets += stats.soldTickets;
@@ -163,27 +245,12 @@ export function OrganizerOverviewView({
   const remainingQuota = Math.max(0, totalQuota - totalSoldTickets);
 
   // Multi-Period Sales Breakdown (D-212)
-  const todaySales = totalGrossRevenue > 0 ? Math.round(totalGrossRevenue * 0.08) : 45000;
-  const thisWeekSales = totalGrossRevenue > 0 ? Math.round(totalGrossRevenue * 0.38) : 320000;
-  const thisMonthSales = totalGrossRevenue > 0 ? totalGrossRevenue : 1150000;
+  const todaySales = totalGrossRevenue > 0 ? Math.round(totalGrossRevenue * 0.08) : 0;
+  const thisWeekSales = totalGrossRevenue > 0 ? Math.round(totalGrossRevenue * 0.38) : 0;
+  const thisMonthSales = totalGrossRevenue > 0 ? totalGrossRevenue : 0;
 
   const soldPercentage =
     totalQuota > 0 ? Math.min(100, Math.round((totalSoldTickets / totalQuota) * 100)) : 0;
-
-  const getStatusLabel = (status: string) => {
-    switch (status) {
-      case 'approved':
-        return 'กำลังเปิดขาย';
-      case 'pending_approval':
-        return 'รออนุมัติ';
-      case 'draft':
-        return 'ฉบับร่าง';
-      case 'cancelled':
-        return 'ยกเลิกแล้ว';
-      default:
-        return status;
-    }
-  };
 
   // Filter, Search & Sort
   const filteredEvents = useMemo(() => {
@@ -199,7 +266,25 @@ export function OrganizerOverviewView({
     }
 
     if (statusFilter !== 'all') {
-      result = result.filter((ev) => ev.status === statusFilter);
+      result = result.filter((ev) => {
+        const info = resolveEventRealStatus(ev);
+        if (statusFilter === 'selling') {
+          return info.code === 'selling';
+        }
+        if (statusFilter === 'pending_approval') {
+          return ev.status === 'pending_approval';
+        }
+        if (statusFilter === 'draft') {
+          return ev.status === 'draft';
+        }
+        if (statusFilter === 'cancelled') {
+          return info.code === 'cancelled';
+        }
+        if (statusFilter === 'ended') {
+          return info.code === 'ended' || info.code === 'sales_ended' || info.code === 'sales_paused';
+        }
+        return ev.status === statusFilter;
+      });
     }
 
     result.sort((a, b) => {
@@ -468,9 +553,15 @@ export function OrganizerOverviewView({
                 aria-label="กรองตามสถานะงาน"
               >
                 <option value="all">ทั้งหมด ({events.length})</option>
-                <option value="approved">กำลังเปิดขาย ({activeEventsCount})</option>
+                <option value="selling">กำลังเปิดขาย ({activeEventsCount})</option>
                 <option value="pending_approval">รออนุมัติ ({pendingEventsCount})</option>
                 <option value="draft">ฉบับร่าง ({draftEventsCount})</option>
+                {endedEventsCount > 0 && (
+                  <option value="ended">ปิดการขาย/สิ้นสุด ({endedEventsCount})</option>
+                )}
+                {cancelledEventsCount > 0 && (
+                  <option value="cancelled">ยกเลิกแล้ว ({cancelledEventsCount})</option>
+                )}
               </select>
             </div>
 
@@ -537,12 +628,14 @@ export function OrganizerOverviewView({
                   fee: 0,
                   netSales: 0,
                 };
-                const quota = ev.totalQuota || 1500;
+                const quota = ev.totalQuota || 0;
                 const sold = stats.soldTickets;
                 const pct = quota > 0 ? Math.min(100, Math.round((sold / quota) * 100)) : 0;
                 const gross = stats.grossSales;
                 const fee = stats.fee;
                 const net = stats.netSales;
+
+                const statusInfo = resolveEventRealStatus(ev);
 
                 return (
                   <div
@@ -554,20 +647,12 @@ export function OrganizerOverviewView({
                     <div className="concert-card-zone-info">
                       <div className="concert-status-badge-row">
                         <Badge
-                          variant={
-                            ev.status === 'approved'
-                              ? 'success'
-                              : ev.status === 'pending_approval'
-                                ? 'warning'
-                                : ev.status === 'cancelled'
-                                  ? 'danger'
-                                  : 'neutral'
-                          }
+                          variant={statusInfo.variant}
                           size="sm"
                         >
-                          {getStatusLabel(ev.status)}
+                          {statusInfo.label}
                         </Badge>
-                        <span className="concert-meta-sessions">{ev.sessionCount || 1} รอบการแสดง</span>
+                        <span className="concert-meta-sessions">{ev.sessionCount || (ev.sessions?.length || 1)} รอบการแสดง</span>
                       </div>
 
                       <h3 className="concert-card-title" title={ev.title}>

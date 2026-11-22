@@ -50,103 +50,41 @@ export function OrderPaymentView({ orderId }: OrderPaymentViewProps) {
   const [isDownloadingQr, setIsDownloadingQr] = useState(false);
 
   const handleDownloadQrCode = useCallback(async () => {
-    if (!charge?.qrCodeUrl || !reservation) return;
+    if (!reservation) return;
     setIsDownloadingQr(true);
-    let tempObjectUrl: string | null = null;
-    let downloadUrl: string | null = null;
+
+    const token =
+      typeof window !== 'undefined'
+        ? sessionStorage.getItem('ticket_guest_otp_token') || ''
+        : '';
+    const downloadEndpoint = `/api/public/checkout/orders/${reservation.id}/payment-qr/download?token=${encodeURIComponent(token)}`;
 
     try {
-      const filename = `promptpay-qr-${reservation.id}.png`;
-      let imageSrc = charge.qrCodeUrl;
-
-      // Handle SVG data URI by converting to safe Blob object URL
-      if (imageSrc.startsWith('data:image/svg+xml')) {
-        const svgContent = decodeURIComponent(
-          imageSrc.replace(/^data:image\/svg\+xml;?(utf8|charset=utf-8)?,/i, ''),
-        );
-        const svgBlob = new Blob([svgContent], { type: 'image/svg+xml;charset=utf-8' });
-        tempObjectUrl = URL.createObjectURL(svgBlob);
-        imageSrc = tempObjectUrl;
+      const res = await fetch(downloadEndpoint);
+      if (!res.ok) {
+        throw new Error('ไม่สามารถดาวน์โหลดภาพ QR Code ได้');
       }
 
-      // Load image without crossOrigin on data/blob URLs to avoid browser CORS rejection
-      const img = new Image();
-      if (imageSrc.startsWith('http://') || imageSrc.startsWith('https://')) {
-        img.crossOrigin = 'anonymous';
-      }
-
-      await new Promise<void>((resolve, reject) => {
-        img.onload = () => resolve();
-        img.onerror = () => reject(new Error('โหลดภาพ QR Code ไม่สำเร็จ'));
-        img.src = imageSrc;
-      });
-
-      const canvas = document.createElement('canvas');
-      const padding = 28;
-      const size = Math.max(img.width || 280, 280);
-      canvas.width = size + padding * 2;
-      canvas.height = size + padding * 2;
-      const ctx = canvas.getContext('2d');
-      if (!ctx) {
-        throw new Error('ไม่สามารถสร้าง context รูปภาพได้');
-      }
-
-      ctx.fillStyle = '#ffffff';
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-      ctx.drawImage(img, padding, padding, size, size);
-
-      // Prefer canvas.toBlob with ObjectURL for bulletproof download without data URL navigation block
-      const blob = await new Promise<Blob | null>((resolve) => {
-        canvas.toBlob(resolve, 'image/png');
-      });
-
-      if (blob) {
-        downloadUrl = URL.createObjectURL(blob);
-      } else {
-        downloadUrl = canvas.toDataURL('image/png');
-      }
-
+      const blob = await res.blob();
+      const downloadUrl = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = downloadUrl;
-      link.download = filename;
+      link.download = `promptpay-qr-${reservation.id}.png`;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
+      setTimeout(() => URL.revokeObjectURL(downloadUrl), 2000);
     } catch {
-      // Fallback: download as SVG blob or trigger direct download
+      // Direct navigation fallback triggering native browser file attachment
       try {
-        let fallbackBlob: Blob;
-        if (charge.qrCodeUrl.startsWith('data:image/svg+xml')) {
-          const svgContent = decodeURIComponent(
-            charge.qrCodeUrl.replace(/^data:image\/svg\+xml;?(utf8|charset=utf-8)?,/i, ''),
-          );
-          fallbackBlob = new Blob([svgContent], { type: 'image/svg+xml;charset=utf-8' });
-        } else {
-          const res = await fetch(charge.qrCodeUrl);
-          fallbackBlob = await res.blob();
-        }
-        const fallbackUrl = URL.createObjectURL(fallbackBlob);
-        const link = document.createElement('a');
-        link.href = fallbackUrl;
-        link.download = `promptpay-qr-${reservation.id}.svg`;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        setTimeout(() => URL.revokeObjectURL(fallbackUrl), 2000);
+        window.location.href = downloadEndpoint;
       } catch {
         alert('ไม่สามารถดาวน์โหลดภาพ QR Code ได้');
       }
     } finally {
-      if (tempObjectUrl) {
-        URL.revokeObjectURL(tempObjectUrl);
-      }
-      if (downloadUrl?.startsWith('blob:')) {
-        const urlToRevoke = downloadUrl;
-        setTimeout(() => URL.revokeObjectURL(urlToRevoke), 2000);
-      }
       setIsDownloadingQr(false);
     }
-  }, [charge?.qrCodeUrl, reservation]);
+  }, [reservation]);
 
   const handleGeneratePaymentQr = useCallback(async (targetOrderId?: string) => {
     const targetId = targetOrderId || reservation?.id;

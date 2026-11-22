@@ -14,6 +14,7 @@ import {
 } from '@/components/icons';
 import { getDatabasePool } from '@/server/database';
 import { getPublicEventWithApprovedSessions } from '@/server/events';
+import { readProhibitedItems, type ProhibitedItemData } from '@/server/prohibited-items';
 import { formatDate, formatTime, formatBaht } from '@/lib/locale';
 import { getEventSalesStatus } from '@/lib/sales-window';
 import { PurchaseStepIndicator } from '@/components/purchase-step-indicator';
@@ -41,9 +42,16 @@ export default async function EventDetailPage({ params, searchParams }: EventDet
   const orderId = resolvedSearchParams.orderId;
   const isExpired = resolvedSearchParams.expired === 'true';
   let event = null;
+  let prohibitedItems: ProhibitedItemData[] | undefined;
 
   try {
-    event = await getCachedPublicEvent(id);
+    const pool = getDatabasePool();
+    const [ev, pItems] = await Promise.all([
+      getCachedPublicEvent(id),
+      readProhibitedItems(pool, id).catch(() => undefined),
+    ]);
+    event = ev;
+    prohibitedItems = pItems;
   } catch (error) {
     const err = error as { code?: string; message?: string };
     if (err?.code !== 'ECONNREFUSED') {
@@ -398,7 +406,7 @@ export default async function EventDetailPage({ params, searchParams }: EventDet
         <hr className="detail-section-divider" />
 
         {/* Category 5: กฎระเบียบและสิ่งของต้องห้ามนำเข้างาน (Regulations & Prohibited Items Carousel) (D-146) */}
-        <EventProhibitedItemsCarousel />
+        <EventProhibitedItemsCarousel items={prohibitedItems} />
 
         <hr className="detail-section-divider" />
 

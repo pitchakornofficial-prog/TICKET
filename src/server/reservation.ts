@@ -555,7 +555,7 @@ export async function ensureReservationSchema(pool: Pool): Promise<void> {
       v_eff_cf_mode := COALESCE(v_fee."customerFeeMode", 'percentage');
       v_eff_cf_rate := COALESCE(v_fee."customerFeeRate"::numeric, 5);
       v_eff_of_mode := COALESCE(v_fee."organizerFeeMode", 'percentage');
-      v_eff_of_rate := COALESCE(v_fee."organizerFeeRate"::numeric, 2);
+      v_eff_of_rate := COALESCE(v_fee."organizerFeeRate"::numeric, 3);
       v_eff_of_priv_rate := COALESCE(v_fee."organizerFeePrivilegeRate"::numeric, 3);
       v_eff_ubu := COALESCE(v_fee."ubuPrivilegeMode", FALSE);
 
@@ -806,7 +806,7 @@ function resolveFeeSettings(row?: {
     customerFeeMode: (row?.customerFeeMode || 'percentage') as CustomerFeeMode,
     customerFeeRate: row?.customerFeeRate != null ? Number(row.customerFeeRate) : 5,
     organizerFeeMode: (row?.organizerFeeMode || 'percentage') as OrganizerFeeMode,
-    organizerFeeRate: row?.organizerFeeRate != null ? Number(row.organizerFeeRate) : 2,
+    organizerFeeRate: row?.organizerFeeRate != null ? Number(row.organizerFeeRate) : 3,
     organizerFeePrivilegeRate: row?.organizerFeePrivilegeRate != null ? Number(row.organizerFeePrivilegeRate) : 3,
     ubuPrivilegeMode: Boolean(row?.ubuPrivilegeMode),
   };
@@ -1513,7 +1513,7 @@ export async function createReservation(
         customerFeeMode = (row.customerFeeMode || 'percentage') as CustomerFeeMode;
         customerFeeRate = row.customerFeeRate != null ? Number(row.customerFeeRate) : 5;
         organizerFeeMode = (row.organizerFeeMode || 'percentage') as OrganizerFeeMode;
-        organizerFeeRate = row.organizerFeeRate != null ? Number(row.organizerFeeRate) : 2;
+        organizerFeeRate = row.organizerFeeRate != null ? Number(row.organizerFeeRate) : 3;
         organizerFeePrivilegeRate = row.organizerFeePrivilegeRate != null ? Number(row.organizerFeePrivilegeRate) : 3;
         ubuPrivilegeModeFlag = Boolean(row.ubuPrivilegeMode);
 
