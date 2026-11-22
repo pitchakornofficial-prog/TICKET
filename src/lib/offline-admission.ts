@@ -419,7 +419,7 @@ function evaluateOfflineTicketCandidate(params: {
     reason: null,
     deviceMode: 'offline',
     scannedAt,
-    qrHash: hashOfflineQrPayload(input.eventId, input.qrPayloadOrCode.trim()),
+    qrHash: ticket.qrHash || hashOfflineQrPayload(input.eventId, input.qrPayloadOrCode.trim()),
     assignmentEpoch,
     assignmentToken,
   };
@@ -514,7 +514,10 @@ export function performOfflineAdmissionScan(
     };
   }
   const ticketIndex = dataset.tickets.findIndex(
-    (t: OfflineTicketItem) => typeof t.qrHash === 'string' && t.qrHash === inputHash,
+    (t: OfflineTicketItem) =>
+      (typeof t.qrHash === 'string' && t.qrHash === inputHash) ||
+      (typeof t.ticketCode === 'string' &&
+        (t.ticketCode === cleanInput || t.ticketCode.toUpperCase() === cleanInput.toUpperCase())),
   );
 
   if (ticketIndex === -1) {
@@ -791,9 +794,33 @@ export async function performOfflineAdmissionScanAsync(
 
     const cleanInput = input.qrPayloadOrCode.trim();
     const inputHash = hashOfflineQrPayload(input.eventId, cleanInput);
-    const ticket = await idbReq<StoredOfflineTicketRecord | undefined>(
+    let ticket = await idbReq<StoredOfflineTicketRecord | undefined>(
       ticketsStore.index(INDEX_TICKETS_BY_EVENT_QR).get([input.eventId, inputHash]),
     );
+
+    if (!ticket) {
+      await new Promise<void>((resolve, reject) => {
+        const req = ticketsStore.index(INDEX_BY_EVENT).openCursor(IDBKeyRange.only(input.eventId));
+        req.onsuccess = () => {
+          const cursor = req.result;
+          if (!cursor) {
+            resolve();
+            return;
+          }
+          const rec = cursor.value as StoredOfflineTicketRecord;
+          if (
+            rec.ticketCode === cleanInput ||
+            rec.ticketCode?.toUpperCase() === cleanInput.toUpperCase()
+          ) {
+            ticket = rec;
+            resolve();
+            return;
+          }
+          cursor.continue();
+        };
+        req.onerror = () => reject(req.error || new Error('Cursor search failed'));
+      });
+    }
 
     if (!ticket) {
       return {
