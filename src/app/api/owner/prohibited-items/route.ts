@@ -2,6 +2,7 @@ import type { Pool } from 'pg';
 import { getAuth } from '@/server/auth';
 import { assertSameOrigin } from '@/server/origin';
 import { createSafeErrorResponse } from '@/server/api-error';
+import { isPayloadTooLargeError, payloadTooLargeResponse, readBoundedJson } from '@/server/http-body';
 import {
   readProhibitedItems,
   saveProhibitedItems,
@@ -46,8 +47,9 @@ export async function PUT(request: Request) {
 
   let body: { items?: ProhibitedItemData[] };
   try {
-    body = (await request.json()) as { items?: ProhibitedItemData[] };
-  } catch {
+    body = await readBoundedJson<{ items?: ProhibitedItemData[] }>(request, 64 * 1024);
+  } catch (error) {
+    if (isPayloadTooLargeError(error)) return payloadTooLargeResponse();
     return Response.json({ message: 'ข้อมูล JSON ไม่ถูกต้อง' }, { status: 400 });
   }
 

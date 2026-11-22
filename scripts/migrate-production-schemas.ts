@@ -11,6 +11,7 @@ import { ensureOwnerContactInfoSchema } from '../src/server/owner-contact-info.t
 import { ensureInboundEmailSchema } from '../src/server/inbound-email.ts';
 import { ensureTicketMasterTemplateSchema } from '../src/server/ticket-master-template.ts';
 import { ensureTransactionMemoSchema } from '../src/server/transaction-memo.ts';
+import { ensureProhibitedItemsSchema } from '../src/server/prohibited-items.ts';
 
 const pool = createDatabasePool();
 try {
@@ -40,6 +41,8 @@ try {
   console.log('11. Ticket master template schema: OK');
   await ensureTransactionMemoSchema(pool);
   console.log('12. Order transaction memo schema: OK');
+  await ensureProhibitedItemsSchema(pool);
+  console.log('13. Site prohibited items schema: OK');
 
   // Verify backfill consistency
   const expectedRes = await pool.query<{ ticketTypeId: string; expected: number }>(`

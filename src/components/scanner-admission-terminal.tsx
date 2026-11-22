@@ -82,6 +82,29 @@ interface ScannerAdmissionTerminalProps {
   onClose?: () => void;
 }
 
+function playScanBeep(success: boolean): void {
+  if (typeof window === 'undefined') return;
+  try {
+    const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (!AudioCtx) return;
+    const ctx = new AudioCtx();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = success ? 'sine' : 'sawtooth';
+    osc.frequency.value = success ? 880 : 280;
+    gain.gain.value = 0.12;
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start();
+    osc.stop(ctx.currentTime + (success ? 0.12 : 0.25));
+    osc.onended = () => {
+      void ctx.close().catch(() => undefined);
+    };
+  } catch {
+    // ignore audio playback restrictions
+  }
+}
+
 export function ScannerAdmissionTerminal({
   eventId,
   eventTitle,
@@ -750,6 +773,7 @@ export function ScannerAdmissionTerminal({
               <div className="camera-viewfinder" id="camera-viewfinder">
                 <video
                   ref={videoRef}
+                  id="scanner-live-video"
                   className="camera-video-feed"
                   autoPlay
                   playsInline

@@ -285,28 +285,6 @@ export function OwnerSessionApprovalManager() {
   const [submittingApproval, setSubmittingApproval] = useState<boolean>(false);
 
   // Dedicated Concert Analytics View State (D-226)
-  interface ConcertAnalyticsReportSummary {
-    grossSales: number;
-    netSales: number;
-    organizerFee: number;
-    organizerFeeRate: number;
-    totalTicketsValidCount: number;
-    totalTicketsIssuedCount: number;
-    totalTicketsRefundedCount: number;
-    approvedRefundDeductions: number;
-    totalOrdersCount: number;
-  }
-
-  interface ConcertAnalyticsTierItem {
-    id: string;
-    name: string;
-    price: number;
-    quota: number;
-    isStudentPrivilege: boolean;
-    soldCount: number;
-    grossSales: number;
-  }
-
   const [viewingAnalyticsEvent, setViewingAnalyticsEvent] = useState<PlatformConcertItem | null>(null);
   const analyticsEventId = viewingAnalyticsEvent?.id;
   const [analytics, setAnalytics] = useState<ConcertAnalytics | null>(null);
