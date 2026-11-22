@@ -80,7 +80,8 @@ export function generateTicketQrSvg(ticketCode: string, qrPayload: string): stri
     .replaceAll('>', '&gt;')
     .replaceAll('"', '&quot;')
     .replaceAll("'", '&apos;');
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${totalSize} ${totalSize}" width="${totalSize}" height="${totalSize}" role="img" aria-label="Ticket QR code"><desc>${escapeXml(qrPayload)}</desc><rect width="${totalSize}" height="${totalSize}" fill="#ffffff"/><path fill="#0f172a" d="${pathD}"/><text x="${totalSize / 2}" y="${totalSize - 4}" font-family="monospace" font-size="7" fill="#64748b" text-anchor="middle" style="display:none">${escapeXml(ticketCode || 'TK-000000-0000-00')}</text></svg>`;
+  const rx = Math.round(moduleSize * 1.5);
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${totalSize} ${totalSize}" width="${totalSize}" height="${totalSize}" role="img" aria-label="Ticket QR code"><desc>${escapeXml(qrPayload)}</desc><rect width="${totalSize}" height="${totalSize}" rx="${rx}" ry="${rx}" fill="#ffffff"/><path fill="#0f172a" d="${pathD}"/><text x="${totalSize / 2}" y="${totalSize - 4}" font-family="monospace" font-size="7" fill="#64748b" text-anchor="middle" style="display:none">${escapeXml(ticketCode || 'TK-000000-0000-00')}</text></svg>`;
 
   return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
 }

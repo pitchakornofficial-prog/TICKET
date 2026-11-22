@@ -66,6 +66,7 @@ export async function PUT(
       {
         title: typeof body.title === 'string' ? body.title : undefined,
         description: typeof body.description === 'string' ? body.description : undefined,
+        artists: typeof body.artists === 'string' ? body.artists : undefined,
         location: typeof body.location === 'string' ? body.location : undefined,
         posterUrl: typeof body.posterUrl === 'string' ? body.posterUrl : undefined,
         ticketTemplateUrl: typeof body.ticketTemplateUrl === 'string' ? body.ticketTemplateUrl : undefined,
@@ -82,6 +83,8 @@ export async function PUT(
         payoutAccountNumber: typeof body.payoutAccountNumber === 'string' ? body.payoutAccountNumber : undefined,
         payoutAccountName: typeof body.payoutAccountName === 'string' ? body.payoutAccountName : undefined,
         ubuPrivilegeMode: typeof body.ubuPrivilegeMode === 'boolean' ? body.ubuPrivilegeMode : undefined,
+        isSalesPaused: typeof body.isSalesPaused === 'boolean' ? body.isSalesPaused : undefined,
+        salesPausedReason: typeof body.salesPausedReason === 'string' ? body.salesPausedReason : undefined,
       },
       Array.isArray(body.sessions) ? (body.sessions as SessionDraftInput[]) : undefined,
       isOwner,

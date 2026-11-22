@@ -1214,8 +1214,11 @@ export function GuestOrderLookupView({ initialOrderId }: GuestOrderLookupViewPro
                                               {/* Left: Main Ticket Stub Area */}
                                               <div className="stub-main-body">
                                                 <div className="stub-event-title">{tkt.eventTitle || order.eventTitle}</div>
-                                                <div className="stub-zone-badge">
-                                                  {tkt.ticketTypeName}
+                                                <div className="stub-meta-item" style={{ marginBottom: '0.75rem' }}>
+                                                  <span className="stub-meta-label">โซน / ประเภทบัตร (ZONE & CATEGORY)</span>
+                                                  <div className="stub-zone-badge">
+                                                    {tkt.ticketTypeName}
+                                                  </div>
                                                 </div>
 
                                                 <div className="stub-meta-grid">
@@ -1262,7 +1265,7 @@ export function GuestOrderLookupView({ initialOrderId }: GuestOrderLookupViewPro
                                                     data-qr-payload={tkt.qrPayload}
                                                     width={160}
                                                     height={160}
-                                                    style={{ display: 'block', margin: '0 auto', borderRadius: '8px', border: '1px solid #e2e8f0', padding: '8px', background: '#ffffff' }}
+                                                    style={{ display: 'block', margin: '0 auto', borderRadius: '12px', border: '1px solid #e2e8f0', padding: '8px', background: '#ffffff' }}
                                                   />
                                                 </div>
 

@@ -33,6 +33,7 @@ export async function POST(request: Request) {
   let body: {
     title?: string;
     description?: string;
+    artists?: string;
     location?: string;
     posterUrl?: string;
     ticketTemplateUrl?: string;
@@ -82,6 +83,7 @@ export async function POST(request: Request) {
       {
         title: body.title,
         description: body.description,
+        artists: body.artists,
         location: body.location,
         posterUrl: body.posterUrl,
         ticketTemplateUrl: body.ticketTemplateUrl,
