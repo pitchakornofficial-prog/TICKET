@@ -416,7 +416,7 @@ describe('TASK-033: Offline Admission Engine Unit Tests (AC-40, AC-41, AC-50, AC
     expect(tooEarlyRes.reason).toBe('OUTSIDE_ADMISSION_WINDOW');
     expect(tooEarlyRes.message).toContain('ยังไม่ถึงช่วงเวลาเปิดรับเข้างาน');
   });
-  it("rejects offline scan using ticketCode and strictly requires qrPayload (Issue 14)", () => {
+  it("accepts offline scan using ticketCode as well as qrPayload (manual ticketCode entry support)", () => {
     const storage = createMockStorage({
       [getOfflineDatasetKey(eventId)]: JSON.stringify(baseDataset),
     });
@@ -428,16 +428,34 @@ describe('TASK-033: Offline Admission Engine Unit Tests (AC-40, AC-41, AC-50, AC
         scannerId: "SCAN-PRI",
         scannerName: "ทีมสแกน 1",
         isPrimary: true,
-        qrPayloadOrCode: "TK-11111111", // guessable ticketCode must not be accepted
+        qrPayloadOrCode: "TK-11111111",
         action: "entry",
         now,
       },
       storage,
     );
 
-    expect(result.success).toBe(false);
-    expect(result.status).toBe("rejected");
-    expect(result.reason).toBe("OFFLINE_TICKET_NOT_FOUND");
+    expect(result.success).toBe(true);
+    expect(result.status).toBe("success");
+    expect(result.ticket?.ticketCode).toBe("TK-11111111");
+
+    const unknownResult = performOfflineAdmissionScan(
+      {
+        eventId,
+        sessionId,
+        scannerId: "SCAN-PRI",
+        scannerName: "ทีมสแกน 1",
+        isPrimary: true,
+        qrPayloadOrCode: "TK-NOT-FOUND",
+        action: "entry",
+        now,
+      },
+      storage,
+    );
+
+    expect(unknownResult.success).toBe(false);
+    expect(unknownResult.status).toBe("rejected");
+    expect(unknownResult.reason).toBe("OFFLINE_TICKET_NOT_FOUND");
   });
 
   it("rejects offline scan when raw qrHash from dataset is replayed instead of real qrPayload", () => {
