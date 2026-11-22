@@ -45,7 +45,15 @@ export async function handleAuthRequest(auth: TicketAuth, request: Request): Pro
 
   function forwardAuthRequest() {
     if (request.method !== 'POST') return auth.handler(request);
-    return auth.handler(new Request(request, { body: rawBody || null }));
+    const headers = new Headers(request.headers);
+    headers.delete('content-length');
+    return auth.handler(
+      new Request(request.url, {
+        method: request.method,
+        headers,
+        body: rawBody || undefined,
+      }),
+    );
   }
 
   // Intercept request-password-reset to enforce ADR-0004 rate limits & token invalidation

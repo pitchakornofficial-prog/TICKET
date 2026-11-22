@@ -1,5 +1,34 @@
 # Deployment — AWS Singapore
 
+## Production Release 2026-11-22 (ticket-production-web:28)
+
+Deployed Security Audit hardening release from branch `dev-phat` (`7042f48` — bounded HTTP body readers across 28 API routes + `auth-http.ts`, and Stripe `amount_received` verification) to `ticket-production` (`ap-southeast-1`, Account `901708383730`).
+
+### 1. Pre-Deployment Quality Gates
+- `npm run typecheck`: passed
+- `npm run lint`: passed (585 files, 0 warnings/errors)
+- `npm run test:unit`: passed (156 files / 1,044 tests)
+- `npm run build`: passed (61 static pages + standalone bundle)
+
+### 2. ARM64 ECR Images & CloudFormation Rollout
+- Built `linux/arm64` images from `Dockerfile` (`--provenance=false`) and pushed to `901708383730.dkr.ecr.ap-southeast-1.amazonaws.com/ticket-workload-test`:
+  - `WebImage` (`prod-web-20261122-7042f48`): `901708383730.dkr.ecr.ap-southeast-1.amazonaws.com/ticket-workload-test@sha256:06be3653bfa16b72f97fc511a9e27583a8dc57f7b8ab88d6182f1781c9ab2883`
+  - `OperationsImage` (`prod-ops-20261122-7042f48`): `901708383730.dkr.ecr.ap-southeast-1.amazonaws.com/ticket-workload-test@sha256:71cdfd31bf1dbbe9aeefe7764d766b1d49c54951954e8bc38f6897d4f5a9c97e`
+- Executed CloudFormation change set `release-20261122-7042f48` (`infra/aws/ticket-production.json`) -> `UPDATE_COMPLETE`.
+- ECS service `ticket-production-web` stabilized at primary revision `ticket-production-web:28` (`COMPLETED`, `1/1` running task `d6cd7ace39ff4258b2805532ecf1c975`); ALB target `172.31.24.9:3000` (`ap-southeast-1b`) is `healthy` (prior target `172.31.37.177:3000` drained).
+- `OperationsTask` revision updated to `ticket-production-operations:21`.
+
+### 3. Post-Deployment Live Smoke Check (`https://ticket.phatysd.me`)
+- `GET /api/health` -> `HTTP 200`
+- `GET /` -> `HTTP 200`
+- `GET /news` -> `HTTP 200`
+- `GET /api/public/events` -> `HTTP 200`
+- `POST /api/webhooks/stripe` (unsigned `{}`) -> `HTTP 400` (`{"error":"Missing Stripe-Signature header"}`)
+- `POST /api/webhooks/ses-inbound` (unauthenticated `{}`) -> `HTTP 401` (`{"error":"Unauthorized webhook secret"}`)
+- **CloudWatch Incident Detected (`web/web/d6cd7ace39ff4258b2805532ecf1c975`)**: Repeated `TypeError: Cannot read private member #state from an object whose class did not declare it` in `forwardAuthRequest()` (`src/server/auth-http.ts:48`) when calling `new Request(request, { body: rawBody || null })` on Next.js's proxied `Request` object during `POST /api/auth/*`. Hotfix required: construct `new Request(request.url, { method: request.method, headers, body: rawBody || undefined })`.
+
+---
+
 ## Production Release 2026-11-22 (ticket-production-web:27)
 
 Merged `origin/main` (`eb14211`, PR #18 — concert data integrity, emergency sales pause, and session amendment features) into `dev-phat` (`e7ff764`, including `ensurePaymentSchema` guard in `src/server/contact-correction.ts`) and deployed to `ticket-production` (`ap-southeast-1`, Account `901708383730`).

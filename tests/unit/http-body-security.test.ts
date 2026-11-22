@@ -108,4 +108,34 @@ describe('auth HTTP body limits', () => {
     expect((await handleAuthRequest(auth, request)).status).toBe(204);
     expect(handler).toHaveBeenCalledOnce();
   });
+
+  it('forwards proxied Request objects (Next.js runtime) without touching Request private #state', async () => {
+    const { handleAuthRequest } = await import('../../src/server/auth-http');
+    const body = { email: 'owner@example.test', password: 'example-password' };
+    const handler = vi.fn(async (request: Request) => {
+      expect(request.headers.get('cookie')).toBe('example=proxied');
+      expect(await request.json()).toEqual(body);
+      return new Response(null, { status: 204 });
+    });
+    const auth = { options: { baseURL: 'http://127.0.0.1:3000' }, handler } as unknown as
+      Parameters<typeof handleAuthRequest>[0];
+    const underlying = new Request('http://127.0.0.1:3000/api/auth/sign-in/email', {
+      method: 'POST',
+      headers: {
+        origin: 'http://127.0.0.1:3000',
+        'content-type': 'application/json',
+        cookie: 'example=proxied',
+      },
+      body: JSON.stringify(body),
+    });
+    const proxied = new Proxy(underlying, {
+      get(target, prop) {
+        const value = Reflect.get(target, prop, target);
+        return typeof value === 'function' ? value.bind(target) : value;
+      },
+    });
+
+    expect((await handleAuthRequest(auth, proxied)).status).toBe(204);
+    expect(handler).toHaveBeenCalledOnce();
+  });
 });
