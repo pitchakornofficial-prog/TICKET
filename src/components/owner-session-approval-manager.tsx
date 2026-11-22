@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import type { SessionAmendmentRecord, SessionCancellationRecord } from '@/server/events';
 import type { OrganizerFeeMode, CustomerFeeMode } from '@/server/fees';
 import { formatBaht, formatDateTime, toLocalDatetimeInputString } from '@/lib/locale';
+import { getEventSalesStatus } from '@/lib/sales-window';
 import { sanitizeGoogleMapsUrl } from '@/lib/google-maps-url';
 import { triggerToast } from './toast-notification';
 import {
@@ -115,6 +116,9 @@ export interface PlatformConcertItem {
   organizerName?: string;
   organizerEmail?: string;
   sessionCount?: number | string;
+  approvedSessionCount?: number;
+  cancelledSessionCount?: number;
+  lastApprovedSessionEndTime?: string | null;
   totalQuota?: number | string;
   minPrice?: number | string;
   maxPrice?: number | string;
@@ -131,6 +135,39 @@ export interface PlatformConcertItem {
   customerFeeRate?: number;
   reservePercentage?: number;
   createdAt?: string;
+}
+
+interface ConcertAnalytics {
+  grossSales: number;
+  netEntitlement: number;
+  organizerFee: number;
+  issuedTickets: number;
+  refundedTickets: number;
+  approvedRefunds: number;
+  ubuOrders: number;
+  discountedOrders: number;
+  tiers: {
+    id: string; name: string; price: number; quota: number; sold: number;
+    gross: number; status: string; startTime: string;
+  }[];
+}
+
+function concertSalesStatus(event: PlatformConcertItem) {
+  if (event.status !== 'approved') return { label: 'รออนุมัติ', open: false };
+  if (event.isSalesPaused) return { label: 'ระงับการขายด่วน', open: false };
+  if (!event.approvedSessionCount) {
+    return {
+      label: event.cancelledSessionCount && Number(event.sessionCount) === event.cancelledSessionCount
+        ? 'ยกเลิกทุกรอบแล้ว' : 'ไม่มีรอบที่อนุมัติ',
+      open: false,
+    };
+  }
+
+  const sales = getEventSalesStatus({
+    ...event,
+    sessions: [{ endTime: event.lastApprovedSessionEndTime }],
+  });
+  return { label: sales.message ?? 'กำลังเปิดขาย', open: sales.isOpen };
 }
 
 interface AuditLogEntry {
@@ -196,6 +233,28 @@ export function OwnerSessionApprovalManager() {
 
   // Dedicated Concert Analytics View State (D-226)
   const [viewingAnalyticsEvent, setViewingAnalyticsEvent] = useState<PlatformConcertItem | null>(null);
+  const analyticsEventId = viewingAnalyticsEvent?.id;
+  const [analytics, setAnalytics] = useState<ConcertAnalytics | null>(null);
+  const [analyticsError, setAnalyticsError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!analyticsEventId) return;
+    const controller = new AbortController();
+    fetch(`/api/owner/events/${encodeURIComponent(analyticsEventId)}/analytics`, {
+      cache: 'no-store',
+      signal: controller.signal,
+    })
+      .then(async (response) => {
+        if (!response.ok) throw new Error('โหลดสถิติคอนเสิร์ตไม่สำเร็จ');
+        const data: ConcertAnalytics = await response.json();
+        if (!controller.signal.aborted) setAnalytics(data);
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) setAnalyticsError('โหลดสถิติคอนเสิร์ตไม่สำเร็จ');
+      });
+    return () => controller.abort();
+  }, [analyticsEventId]);
+
 
   // Admin Override & Audit Trail with CSV Snapshot State (D-227)
   const [editingEvent, setEditingEvent] = useState<PlatformConcertItem | null>(null);
@@ -853,11 +912,11 @@ export function OwnerSessionApprovalManager() {
               </button>
               <h2 className="analytics-event-title">{viewingAnalyticsEvent.title}</h2>
               <p className="analytics-event-meta">
-                <span>ผู้จัดงาน: {viewingAnalyticsEvent.organizerName || 'ผู้จัดงานในระบบ'}</span>
+                <span>ผู้จัดงาน: {viewingAnalyticsEvent.organizerName || '-'}</span>
                 <span>·</span>
                 <span>สถานที่: {viewingAnalyticsEvent.location}</span>
                 <span>·</span>
-                <span>สถานะ: {viewingAnalyticsEvent.status === 'approved' ? 'กำลังเปิดขาย' : 'รออนุมัติ'}</span>
+                <span>สถานะ: {concertSalesStatus(viewingAnalyticsEvent).label}</span>
               </p>
             </div>
             <div className="analytics-header-right">
@@ -867,121 +926,93 @@ export function OwnerSessionApprovalManager() {
                 onClick={() => handleExportCurrentCsv(viewingAnalyticsEvent)}
               >
                 <DownloadIcon className="btn-icon" />
-                <span>ดาวน์โหลดสรุปสถิติ CSV</span>
+                <span>ดาวน์โหลดข้อมูลคอนเสิร์ต CSV</span>
               </button>
             </div>
           </header>
 
-          {/* 4 Analytics KPI Cards (D-226) */}
-          <div className="concert-analytics-kpi-grid">
-            {/* KPI 1: Gross Revenue */}
-            <div className="analytics-kpi-card">
-              <div className="kpi-card-head">
-                <span className="kpi-card-label">รายได้รวมจากการขายบัตร</span>
-                <BanknotesIcon className="borderless-kpi-icon" />
+          {analyticsError && <p role="alert">{analyticsError}</p>}
+          {!analytics && !analyticsError && <p role="status">กำลังโหลดสถิติคอนเสิร์ต...</p>}
+          {analytics && (
+            <>
+              <div className="concert-analytics-kpi-grid">
+                <div className="analytics-kpi-card">
+                  <div className="kpi-card-head">
+                    <span className="kpi-card-label">รายได้รวมจากการขายบัตร</span>
+                    <BanknotesIcon className="borderless-kpi-icon" />
+                  </div>
+                  <div className="kpi-card-value">{formatBaht(analytics.grossSales)}</div>
+                  <p className="kpi-card-sub">ยอดขายบัตรก่อนหักเงินคืนและค่าบริการ</p>
+                </div>
+                <div className="analytics-kpi-card">
+                  <div className="kpi-card-head">
+                    <span className="kpi-card-label">รายได้สุทธิหลังหักค่าบริการ</span>
+                    <CheckCircleIcon className="borderless-kpi-icon" />
+                  </div>
+                  <div className="kpi-card-value">{formatBaht(analytics.netEntitlement)}</div>
+                  <p className="kpi-card-sub">ค่าบริการผู้จัด {formatBaht(analytics.organizerFee)}</p>
+                </div>
+                <div className="analytics-kpi-card">
+                  <div className="kpi-card-head">
+                    <span className="kpi-card-label">ยอดจำหน่ายบัตรจริง</span>
+                    <TicketIcon className="borderless-kpi-icon" />
+                  </div>
+                  <div className="kpi-card-value">{analytics.issuedTickets} ใบ</div>
+                  <p className="kpi-card-sub">จำนวนบัตรที่ออกทั้งหมด รวมบัตรที่คืนเงินแล้ว</p>
+                </div>
+                <div className="analytics-kpi-card">
+                  <div className="kpi-card-head">
+                    <span className="kpi-card-label">สิทธิ์พิเศษ โค้ดส่วนลด และคืนบัตร</span>
+                    <SlidersIcon className="borderless-kpi-icon" />
+                  </div>
+                  <div className="kpi-exceptions-list">
+                    <div className="kpi-exception-item">
+                      <span>คำสั่งซื้อที่ใช้สิทธิ์ ม.อุบลฯ</span><strong>{analytics.ubuOrders} รายการ</strong>
+                    </div>
+                    <div className="kpi-exception-item">
+                      <span>คำสั่งซื้อที่มีส่วนลด</span><strong>{analytics.discountedOrders} รายการ</strong>
+                    </div>
+                    <div className="kpi-exception-item">
+                      <span>คืนเงินแล้ว</span>
+                      <strong>{analytics.refundedTickets} ใบ ({formatBaht(analytics.approvedRefunds)})</strong>
+                    </div>
+                  </div>
+                </div>
               </div>
-              <div className="kpi-card-value">
-                {formatBaht(
-                  (Number(viewingAnalyticsEvent.minPrice) || 800) *
-                    Math.round((Number(viewingAnalyticsEvent.totalQuota) || 1200) * 0.72),
+
+              <div className="analytics-tier-breakdown-card">
+                <h3 className="card-inner-heading">แจกแจงยอดขายตามประเภทบัตร / โซน</h3>
+                {analytics.tiers.length === 0 ? <p>ยังไม่มีประเภทบัตร</p> : (
+                  <div className="table-responsive">
+                    <table className="enterprise-analytics-table">
+                      <thead>
+                        <tr>
+                          <th>ประเภทบัตร / โซน</th>
+                          <th>รอบการแสดง</th>
+                          <th>ราคาบัตร</th>
+                          <th>บัตรที่ออก</th>
+                          <th>โควตาทั้งหมด</th>
+                          <th>ยอดขายรวม</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {analytics.tiers.map((tier) => (
+                          <tr key={tier.id}>
+                            <td><strong>{tier.name}</strong></td>
+                            <td>{safeFormatDateTime(tier.startTime)}{tier.status === 'cancelled' && ' (ยกเลิก)'}</td>
+                            <td>{formatBaht(tier.price)}</td>
+                            <td>{tier.sold} ใบ</td>
+                            <td>{tier.quota} ใบ</td>
+                            <td>{formatBaht(tier.gross)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
                 )}
               </div>
-              <p className="kpi-card-sub">ยอดเงินรับชำระผ่านระบบทั้งหมด</p>
-            </div>
-
-            {/* KPI 2: Net Revenue */}
-            <div className="analytics-kpi-card">
-              <div className="kpi-card-head">
-                <span className="kpi-card-label">รายได้สุทธิหลังหักค่าบริการ</span>
-                <CheckCircleIcon className="borderless-kpi-icon" />
-              </div>
-              <div className="kpi-card-value">
-                {formatBaht(
-                  (Number(viewingAnalyticsEvent.minPrice) || 800) *
-                    Math.round((Number(viewingAnalyticsEvent.totalQuota) || 1200) * 0.72) *
-                    0.97,
-                )}
-              </div>
-              <p className="kpi-card-sub">
-                หักค่าบริการผู้จัด {viewingAnalyticsEvent.organizerFeeRate ?? 3.0}% (ส่วนแบ่งระบบ: 3%)
-              </p>
-            </div>
-
-            {/* KPI 3: Ticket Sales Capacity */}
-            <div className="analytics-kpi-card">
-              <div className="kpi-card-head">
-                <span className="kpi-card-label">ยอดจำหน่ายบัตรจริง</span>
-                <TicketIcon className="borderless-kpi-icon" />
-              </div>
-              <div className="kpi-card-value">
-                {Math.round((Number(viewingAnalyticsEvent.totalQuota) || 1200) * 0.72)} /{' '}
-                {Number(viewingAnalyticsEvent.totalQuota) || 1200} ใบ
-              </div>
-              <div className="kpi-progress-bar-wrap">
-                <div className="kpi-progress-fill" style={{ width: '72%' }} />
-              </div>
-              <p className="kpi-card-sub">จำหน่ายแล้ว 72.0% ของความจุรอบทั้งหมด</p>
-            </div>
-
-            {/* KPI 4: Privileges & Exceptions */}
-            <div className="analytics-kpi-card">
-              <div className="kpi-card-head">
-                <span className="kpi-card-label">สิทธิ์พิเศษ โค้ดส่วนลด และคืนบัตร</span>
-                <SlidersIcon className="borderless-kpi-icon" />
-              </div>
-              <div className="kpi-exceptions-list">
-                <div className="kpi-exception-item">
-                  <span>สิทธิ์ ม.อุบลฯ (@ubu.ac.th):</span>
-                  <strong>{viewingAnalyticsEvent.ubuPrivilegeMode ? '48 สิทธิ์' : 'ไม่ได้เปิดใช้'}</strong>
-                </div>
-                <div className="kpi-exception-item">
-                  <span>การใช้โค้ดส่วนลดโปรโมชั่น:</span>
-                  <strong>14 รายการ</strong>
-                </div>
-                <div className="kpi-exception-item">
-                  <span>การขอคืนเงิน / ยกเลิกบัตร:</span>
-                  <strong>2 ใบ (฿1,600.00)</strong>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Ticket Tier Breakdown Table */}
-          <div className="analytics-tier-breakdown-card">
-            <h3 className="card-inner-heading">แจกแจงยอดขายตามประเภทบัตร / โซน</h3>
-            <div className="table-responsive">
-              <table className="enterprise-analytics-table">
-                <thead>
-                  <tr>
-                    <th>ประเภทบัตร / โซน</th>
-                    <th>ราคาบัตร</th>
-                    <th>จำหน่ายแล้ว</th>
-                    <th>โควตาทั้งหมด</th>
-                    <th>สถานะโควตา</th>
-                    <th>ยอดขายรวม</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr>
-                    <td><strong>บัตรยืนปกติ (Regular Standing)</strong></td>
-                    <td>{formatBaht(Number(viewingAnalyticsEvent.minPrice) || 800)}</td>
-                    <td>{Math.round((Number(viewingAnalyticsEvent.totalQuota) || 1200) * 0.58)} ใบ</td>
-                    <td>{Math.round((Number(viewingAnalyticsEvent.totalQuota) || 1200) * 0.8)} ใบ</td>
-                    <td><span className="stock-pill in-stock">เปิดขายปกติ</span></td>
-                    <td>{formatBaht((Number(viewingAnalyticsEvent.minPrice) || 800) * Math.round((Number(viewingAnalyticsEvent.totalQuota) || 1200) * 0.58))}</td>
-                  </tr>
-                  <tr>
-                    <td><strong>บัตรสิทธิ์พิเศษ นศ. ม.อุบลฯ (UBU Student)</strong></td>
-                    <td>{formatBaht(Math.round((Number(viewingAnalyticsEvent.minPrice) || 800) * 0.85))}</td>
-                    <td>48 ใบ</td>
-                    <td>100 ใบ</td>
-                    <td><span className="stock-pill in-stock">เปิดขายปกติ</span></td>
-                    <td>{formatBaht(Math.round((Number(viewingAnalyticsEvent.minPrice) || 800) * 0.85) * 48)}</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
-          </div>
+            </>
+          )}
         </section>
       ) : (
         /* =========================================================
@@ -1581,8 +1612,8 @@ export function OwnerSessionApprovalManager() {
                       <div className="row-card-center">
                         {/* Row 1: Status Badge (D-243, D-278) */}
                         <div className="row-card-badge-row">
-                          <span className={`status-badge ${ev.isSalesPaused ? 'paused' : 'approved'}`}>
-                            {ev.isSalesPaused ? 'ระงับการขายด่วน' : 'กำลังเปิดขาย'}
+                          <span className={`status-badge ${concertSalesStatus(ev).open ? 'approved' : 'paused'}`}>
+                            {concertSalesStatus(ev).label}
                           </span>
                           {ev.isSalesPaused && (
                             <span className="emergency-paused-tag" title={ev.salesPausedReason || undefined}>
@@ -1616,7 +1647,7 @@ export function OwnerSessionApprovalManager() {
                         {/* Row 4: Schedule / Rounds & Capacity (D-243) */}
                         <div className="row-meta-strip">
                           <span className="row-meta-item">
-                            <strong>รอบการแสดง:</strong> {ev.sessionCount ? `${ev.sessionCount} รอบ` : '1 รอบ'}
+                            <strong>รอบการแสดง:</strong> {Number(ev.sessionCount ?? 0)} รอบ
                           </span>
                           <span className="row-meta-dot">·</span>
                           <span className="row-meta-item">
@@ -1640,6 +1671,7 @@ export function OwnerSessionApprovalManager() {
                         <button
                           type="button"
                           className={`row-action-btn emergency-sales-toggle-btn ${ev.isSalesPaused ? 'sales-paused' : 'sales-active'}`}
+                          disabled={!ev.approvedSessionCount}
                           onClick={() => handleOpenEmergencyToggle(ev)}
                           title={ev.isSalesPaused ? 'คลิกเพื่อเปิดการจำหน่ายบัตรตามปกติ' : 'คลิกเพื่อระงับการจำหน่ายบัตรด่วน'}
                           data-testid={`emergency-toggle-btn-${ev.id}`}
@@ -1651,7 +1683,11 @@ export function OwnerSessionApprovalManager() {
                         <button
                           type="button"
                           className="primary-button row-action-btn"
-                          onClick={() => setViewingAnalyticsEvent(ev)}
+                          onClick={() => {
+                            setAnalytics(null);
+                            setAnalyticsError(null);
+                            setViewingAnalyticsEvent(ev);
+                          }}
                         >
                           <TrendingUpIcon className="btn-icon" />
                           <span>ดูสถิติเชิงลึก (Analytics)</span>

@@ -1,7 +1,8 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import Link from 'next/link';
+import jsQR from 'jsqr';
 import {
   CheckCircleIcon,
   CrossCircleIcon,
@@ -109,7 +110,16 @@ export function ScannerAdmissionTerminal({
   const [recentLogs, setRecentLogs] = useState<AdmissionLogItem[]>([]);
   const [loadingStats, setLoadingStats] = useState(false);
   const [cameraActive, setCameraActive] = useState(true);
+  const [cameraStatus, setCameraStatus] = useState<'idle' | 'starting' | 'active' | 'error'>('idle');
+  const [cameraError, setCameraError] = useState<string | null>(null);
+  const [cameraRetryNonce, setCameraRetryNonce] = useState(0);
   const [activeTerminalTab, setActiveTerminalTab] = useState<'scan' | 'logs' | 'offline'>('scan');
+
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const decodeCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const lastScannedRef = useRef<{ code: string; at: number } | null>(null);
+  const scanPausedRef = useRef(false);
+  scanPausedRef.current = loading || Boolean(scanResult);
 
   // Connectivity & Offline mode state (AC-40, AC-42, AC-96, AC-103)
   const [isOfflineMode, setIsOfflineMode] = useState(false);
@@ -275,9 +285,9 @@ export function ScannerAdmissionTerminal({
     fetchStats();
   }, [fetchStats]);
 
-  async function handleScanSubmit(e?: React.FormEvent) {
-    if (e) e.preventDefault();
-    if (!ticketInput.trim() || loading) return;
+  const submitScanCode = useCallback(async (rawCode: string) => {
+    const cleanCode = rawCode.trim();
+    if (!cleanCode || loading) return;
 
     if (isOfflineMode) {
       setLoading(true);
@@ -288,7 +298,7 @@ export function ScannerAdmissionTerminal({
           scannerId: scannerId || 'scanner',
           scannerName: scannerName || (isPrimary ? 'เครื่องหลัก' : 'เครื่องสแกน'),
           isPrimary,
-          qrPayloadOrCode: ticketInput.trim(),
+          qrPayloadOrCode: cleanCode,
           action,
         });
 
@@ -300,7 +310,7 @@ export function ScannerAdmissionTerminal({
         const newLog: AdmissionLogItem = {
           id: `off-${Date.now()}`,
           ticketId: offResult.ticket?.ticketId || '',
-          ticketCode: offResult.ticket?.ticketCode || ticketInput.trim(),
+          ticketCode: offResult.ticket?.ticketCode || cleanCode,
           scannerName: scannerName || (isPrimary ? 'เครื่องหลัก' : 'เครื่องสแกน'),
           action,
           status: offResult.status,
@@ -351,7 +361,7 @@ export function ScannerAdmissionTerminal({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           sessionId,
-          qrPayloadOrCode: ticketInput.trim(),
+          qrPayloadOrCode: cleanCode,
           action,
         }),
       });
@@ -381,7 +391,166 @@ export function ScannerAdmissionTerminal({
     } finally {
       setLoading(false);
     }
+  }, [action, eventId, fetchStats, isOfflineMode, isPrimary, loading, offlineDataset?.totalTickets, scannerId, scannerName, sessionId]);
+
+  const submitScanCodeRef = useRef(submitScanCode);
+  submitScanCodeRef.current = submitScanCode;
+
+  async function handleScanSubmit(e?: React.FormEvent) {
+    if (e) e.preventDefault();
+    await submitScanCode(ticketInput);
   }
+
+  // Real camera stream + QR code decoding (BarcodeDetector with jsQR fallback for iOS Safari/Firefox)
+  useEffect(() => {
+    if (!hydrated || !cameraActive || activeTerminalTab !== 'scan' || cameraRetryNonce < 0) {
+      setCameraStatus('idle');
+      setCameraError(null);
+      return;
+    }
+
+    let cancelled = false;
+    let stream: MediaStream | null = null;
+    let scanTimer: ReturnType<typeof setTimeout> | null = null;
+
+    type BarcodeDetectorCtor = new (opts?: { formats?: string[] }) => {
+      detect: (source: ImageBitmapSource) => Promise<Array<{ rawValue?: string }>>;
+    };
+    const nativeBarcodeDetectorCtor =
+      typeof window !== 'undefined'
+        ? (window as unknown as { BarcodeDetector?: BarcodeDetectorCtor }).BarcodeDetector
+        : undefined;
+    let barcodeDetector: InstanceType<BarcodeDetectorCtor> | null = null;
+    if (nativeBarcodeDetectorCtor) {
+      try {
+        barcodeDetector = new nativeBarcodeDetectorCtor({ formats: ['qr_code'] });
+      } catch {
+        barcodeDetector = null;
+      }
+    }
+
+    const decodeFrame = async () => {
+      if (cancelled) return;
+      const video = videoRef.current;
+      if (video && !scanPausedRef.current && video.readyState >= 2 && video.videoWidth > 0 && video.videoHeight > 0) {
+        let decoded: string | null = null;
+        if (barcodeDetector) {
+          try {
+            const barcodes = await barcodeDetector.detect(video);
+            const raw = barcodes.find(b => typeof b.rawValue === 'string' && b.rawValue.trim())?.rawValue?.trim();
+            if (raw) decoded = raw;
+          } catch {
+            // Fall through to jsQR if BarcodeDetector fails on this device
+            barcodeDetector = null;
+          }
+        }
+        if (!decoded) {
+          const canvas = decodeCanvasRef.current || document.createElement('canvas');
+          decodeCanvasRef.current = canvas;
+          const maxWidth = 640;
+          const scale = video.videoWidth > maxWidth ? maxWidth / video.videoWidth : 1;
+          const targetW = Math.max(1, Math.round(video.videoWidth * scale));
+          const targetH = Math.max(1, Math.round(video.videoHeight * scale));
+          if (canvas.width !== targetW) canvas.width = targetW;
+          if (canvas.height !== targetH) canvas.height = targetH;
+          const ctx = canvas.getContext('2d', { willReadFrequently: true });
+          if (ctx) {
+            ctx.drawImage(video, 0, 0, targetW, targetH);
+            const imageData = ctx.getImageData(0, 0, targetW, targetH);
+            const qr = jsQR(imageData.data, targetW, targetH, { inversionAttempts: 'dontInvert' });
+            if (qr?.data?.trim()) {
+              decoded = qr.data.trim();
+            }
+          }
+        }
+
+        if (decoded && !cancelled) {
+          const nowMs = Date.now();
+          const last = lastScannedRef.current;
+          if (!last || last.code !== decoded || nowMs - last.at > 2500) {
+            lastScannedRef.current = { code: decoded, at: nowMs };
+            void submitScanCodeRef.current(decoded);
+          }
+        }
+      }
+
+      if (!cancelled) {
+        scanTimer = setTimeout(() => {
+          void decodeFrame();
+        }, 160);
+      }
+    };
+
+    const startCamera = async () => {
+      if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
+        setCameraStatus('error');
+        setCameraError('เบราว์เซอร์ไม่รองรับการเปิดกล้อง (ต้องใช้งานผ่าน HTTPS) สามารถกรอกรหัสบัตรด้านล่างได้');
+        return;
+      }
+
+      setCameraStatus('starting');
+      setCameraError(null);
+
+      try {
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({
+            video: {
+              facingMode: { ideal: 'environment' },
+              width: { ideal: 1280 },
+              height: { ideal: 720 },
+            },
+            audio: false,
+          });
+        } catch {
+          // Fallback for desktop webcams or browsers that reject facingMode constraints
+          stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+        }
+
+        if (cancelled) {
+          for (const track of stream.getTracks()) {
+            track.stop();
+          }
+          return;
+        }
+
+        const video = videoRef.current;
+        if (video) {
+          video.srcObject = stream;
+          await video.play().catch(() => undefined);
+        }
+
+        setCameraStatus('active');
+        void decodeFrame();
+      } catch (err) {
+        if (cancelled) return;
+        const name = err instanceof Error ? err.name : '';
+        if (name === 'NotAllowedError' || name === 'PermissionDeniedError') {
+          setCameraError('ไม่ได้รับอนุญาตให้เข้าถึงกล้อง กรุณาอนุญาตสิทธิ์กล้องในเบราว์เซอร์แล้วลองใหม่');
+        } else if (name === 'NotFoundError' || name === 'DevicesNotFoundError') {
+          setCameraError('ไม่พบกล้องบนอุปกรณ์นี้ สามารถกรอกรหัสบัตรด้วยมือด้านล่างได้');
+        } else {
+          setCameraError('ไม่สามารถเปิดกล้องได้ในขณะนี้ กรุณาลองใหม่หรือกรอกรหัสบัตรด้านล่าง');
+        }
+        setCameraStatus('error');
+      }
+    };
+
+    void startCamera();
+
+    return () => {
+      cancelled = true;
+      if (scanTimer) clearTimeout(scanTimer);
+      if (stream) {
+        for (const track of stream.getTracks()) {
+          track.stop();
+        }
+      }
+      const video = videoRef.current;
+      if (video?.srcObject) {
+        video.srcObject = null;
+      }
+    };
+  }, [hydrated, cameraActive, activeTerminalTab, cameraRetryNonce]);
 
   return (
     <div className="terminal-centered-wrapper" style={{ minWidth: 0 }}>
@@ -571,12 +740,38 @@ export function ScannerAdmissionTerminal({
               </button>
             </div>
 
-            {/* Camera Viewfinder (Auto-Active by Default) */}
+            {/* Camera Viewfinder (Live Rear Camera + Automatic QR Scanner) */}
             {cameraActive && (
               <div className="camera-viewfinder" id="camera-viewfinder">
-                <div className="viewfinder-frame">
-                  <div className="viewfinder-laser" />
-                  <p className="viewfinder-hint">นำ QR Code บัตรมาส่องในกรอบเพื่อสแกนอัตโนมัติ</p>
+                <video
+                  ref={videoRef}
+                  className="camera-video-feed"
+                  autoPlay
+                  playsInline
+                  muted
+                />
+                <div className="camera-overlay-layer">
+                  {cameraStatus === 'error' ? (
+                    <div className="camera-status-box">
+                      <p className="camera-error-text">{cameraError}</p>
+                      <button
+                        type="button"
+                        className="secondary-button mini-btn camera-retry-btn"
+                        onClick={() => setCameraRetryNonce(n => n + 1)}
+                      >
+                        ลองเปิดกล้องอีกครั้ง
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="viewfinder-frame">
+                      <div className="viewfinder-laser" />
+                      <p className="viewfinder-hint">
+                        {cameraStatus === 'starting'
+                          ? 'กำลังเปิดกล้อง...'
+                          : 'นำ QR Code บัตรมาส่องในกรอบเพื่อสแกนอัตโนมัติ'}
+                      </p>
+                    </div>
+                  )}
                 </div>
               </div>
             )}

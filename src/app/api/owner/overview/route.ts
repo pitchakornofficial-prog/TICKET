@@ -1,7 +1,7 @@
 import { createSafeErrorResponse } from '@/server/api-error';
 import { getAuth } from '@/server/auth';
 import { getDatabasePool } from '@/server/database';
-import { getOwnerOverviewCounts } from '@/server/overview';
+import { getOwnerOverviewCounts, getOwnerOverviewSales } from '@/server/overview';
 
 export const runtime = 'nodejs';
 
@@ -20,7 +20,10 @@ export async function GET(request: Request) {
   const pool = getDatabasePool();
   try {
     const counts = await getOwnerOverviewCounts(pool);
-    return Response.json(counts, {
+    const sales = new URL(request.url).searchParams.get('sales') === 'true'
+      ? await getOwnerOverviewSales(pool, session.user.id)
+      : undefined;
+    return Response.json({ ...counts, ...(sales && { sales }) }, {
       status: 200,
       headers: { 'Cache-Control': 'private, no-store, no-cache, must-revalidate' },
     });

@@ -629,7 +629,10 @@ export async function listOrganizerEvents(pool: Pool, organizerId: string) {
 export async function listAllEventsForOwner(pool: Pool) {
   await ensureEventSchema(pool);
   const res = await pool.query(
-    `SELECT e.*, 
+    `SELECT e.*, u.name AS "organizerName", u.email AS "organizerEmail",
+            COUNT(DISTINCT s.id) FILTER (WHERE s.status = 'approved')::int AS "approvedSessionCount",
+            COUNT(DISTINCT s.id) FILTER (WHERE s.status = 'cancelled')::int AS "cancelledSessionCount",
+            MAX(s."endTime") FILTER (WHERE s.status = 'approved') AS "lastApprovedSessionEndTime",
             COUNT(DISTINCT s.id) AS "sessionCount",
             COALESCE(SUM(tt.quota), 0) AS "totalQuota",
             MIN(tt.price) AS "minPrice",
@@ -637,9 +640,10 @@ export async function listAllEventsForOwner(pool: Pool) {
             MIN(s."startTime") AS "firstSessionStartTime",
             MAX(s."endTime") AS "lastSessionEndTime"
      FROM events e
+     LEFT JOIN auth_user u ON u.id = e."organizerId"
      LEFT JOIN event_sessions s ON s."eventId" = e.id
      LEFT JOIN ticket_types tt ON tt."sessionId" = s.id
-     GROUP BY e.id
+     GROUP BY e.id, u.id
      ORDER BY e."createdAt" DESC`,
   );
   return res.rows;

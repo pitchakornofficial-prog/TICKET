@@ -1,5 +1,23 @@
 # Deployment — AWS Singapore
 
+## Production Release 2026-11-23 (ticket-production-web:32 — Ticket Designer Upload & Fallback Fix)
+
+Deployed fix from branch `dev-phat` (`99c8088`) resolving the Ticket Master Template 413 payload issue (where Base64 background images exceeded the 128 KB route cap and failed silently, causing customer views to fall back to blank white `DEFAULT_STATE`) to `ticket-production` (`ap-southeast-1`, Account `901708383730`).
+
+### 1. Summary of Fixes & Quality Gates
+- `src/components/admin-ticket-designer.tsx`: switched background file upload and drag-and-drop from `FileReader.readAsDataURL()` to `POST /api/upload` (`visibility: 'public'`), added automatic Base64-to-upload migration on save, and verified `res.ok` before showing save success.
+- `src/app/api/owner/ticket-master-template/route.ts`: raised `readBoundedJson` ceiling from `128 KB` to `1 MB`.
+- `src/components/ticket-canvas-download.ts`: restored `ticket.ticketTemplateUrl || ticket.eventPosterUrl` fallback when the master template is uncustomized blank white or its background image fails to load.
+- Quality gates passed: `npm run typecheck`, `npm run lint` (586 files), `npm run test:unit` (156 files / 1,047 tests), `npm run build` (61 static pages).
+
+### 2. ARM64 ECR Images, CloudFormation Rollout & Pre-Scale
+- `WebImage` (`prod-web-20261123-99c8088`): `901708383730.dkr.ecr.ap-southeast-1.amazonaws.com/ticket-workload-test@sha256:5decdf040a5ace7378789aba714103ccc5bcb30e078f46ffe8a121938ea7038f`
+- `OperationsImage` (`prod-ops-20261123-99c8088`): `901708383730.dkr.ecr.ap-southeast-1.amazonaws.com/ticket-workload-test@sha256:5aefdf6118062acbc1f97f546f1fb7a3476a9fabaa548ea3116920348d011c31`
+- CloudFormation change set `release-20261123-99c8088` -> `UPDATE_COMPLETE`; `ticket-production-web:32` rolled out and re-scaled to `desiredCount: 4` (`MinCapacity: 4 / MaxCapacity: 4` preserved).
+- Live smoke check: `GET /api/health`, `/api/public/ticket-master-template`, `/api/public/events` all returned `HTTP 200`.
+
+---
+
 ## Production Release 2026-11-22 (ticket-production-web:30)
 
 Merged `origin/main` (`1dc4f92`, PR #19 — manual `ticketCode` entry for admission scans in both online and offline contexts) into `dev-phat` (`bf7c7aa`) while preserving all production security hardening guards (`readBoundedJson`/`readBoundedText`, proxied `Request` handling in `src/server/auth-http.ts`, Stripe `amount_received` check, owner-only `ticket-designer` access, explicit `.ts` ops imports, and 12-schema migrations) and deployed to `ticket-production` (`ap-southeast-1`, Account `901708383730`).

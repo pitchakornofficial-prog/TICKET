@@ -62,7 +62,7 @@ describe('D-221 to D-224: Admin/Owner Workspace Modernization & Dual-Mode Analyt
     expect(dashboardContent).toContain('data-testid="owner-kpi-pending"');
     expect(dashboardContent).toContain('data-testid="owner-kpi-revenue"');
     expect(dashboardContent).toContain('data-testid="owner-kpi-system"');
-    expect(dashboardContent).toContain('ส่วนแบ่งค่าบริการแพลตฟอร์ม (3%)');
+    expect(dashboardContent).toContain('ค่าบริการที่เรียกเก็บจากผู้จัดงาน');
 
     // Dual-Mode Analytics Charts
     expect(dashboardContent).toContain('data-testid="owner-charts-panel"');
@@ -70,7 +70,7 @@ describe('D-221 to D-224: Admin/Owner Workspace Modernization & Dual-Mode Analyt
     expect(dashboardContent).toContain('กราฟเส้นแนวโน้มยอดขาย');
     expect(dashboardContent).toContain('data-testid="owner-barchart"');
     expect(dashboardContent).toContain('data-testid="owner-linechart"');
-    expect(dashboardContent).toContain('วันนี้ (24 ชม.)');
+    expect(dashboardContent).toContain('วันนี้');
     expect(dashboardContent).toContain('7 วันล่าสุด');
     expect(dashboardContent).toContain('30 วันล่าสุด');
 

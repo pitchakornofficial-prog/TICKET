@@ -1,4 +1,5 @@
 import { Pool } from 'pg';
+import { getOwnerOverviewSales } from '../../src/server/overview';
 import { getOrderTickets } from '../../src/server/tickets';
 import { randomUUID } from 'node:crypto';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
@@ -174,6 +175,22 @@ describe('TASK-028: Organizer Money Report Integration Tests (AC-28, AC-64, AC-7
     expect(report.approvedRefundDeductions).toBe(1000);
     // Net sales = 3000 - 1000 = 2000 THB
     expect(report.netSales).toBe(2000);
+
+    const overview = await getOwnerOverviewSales(fixture.pool, fixture.ids.owner);
+    expect(overview).toMatchObject({ totalEvents: 1, openEvents: 1, grossSales: 3000, platformFee: 100 });
+    expect(overview.concerts).toEqual([
+      expect.objectContaining({ id: event.id, soldCount: 3, quota: 20, sales: 3000, open: true }),
+    ]);
+    for (const range of Object.values(overview.trend)) {
+      expect(range.reduce((total, point) => total + point.value, 0)).toBe(3000);
+    }
+
+    const cancelled = await createEventForOrganizer(fixture.ids.organizer);
+    await fixture.pool.query("UPDATE event_sessions SET status = 'cancelled' WHERE id = $1", [cancelled.sessionId]);
+    const updatedOverview = await getOwnerOverviewSales(fixture.pool, fixture.ids.owner);
+    expect(updatedOverview).toMatchObject({ totalEvents: 2, openEvents: 1, grossSales: 3000 });
+    expect(updatedOverview.concerts.map(concert => concert.id)).toEqual([event.id]);
+
 
     // Order fees (AC-78, AC-80, G-28, G-48):
     // Order 1 adjusted fee: R(1000 * 5%) = 50.00 THB

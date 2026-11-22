@@ -41,6 +41,11 @@ test.describe('Owner Full Overview Workspace & Modern Sub-Nav (D-115)', () => {
     await expect(page.locator('[data-testid="owner-kpi-revenue"]')).toBeVisible();
     await expect(page.locator('[data-testid="owner-kpi-system"]')).toBeVisible();
 
+    await expect(page.getByTestId('owner-kpi-revenue')).toContainText('฿0.00');
+    await expect(page.getByTestId('owner-linechart')).toBeVisible();
+    await page.getByRole('tab', { name: 'กราฟแท่งเปรียบเทียบรายคอนเสิร์ต' }).click();
+    await expect(page.getByTestId('owner-charts-panel')).toContainText('ยังไม่มีรายการขายบัตร');
+
     // 5. Verify 5 Action Items Cards
     await expect(page.locator('[data-testid="overview-card-pending-sessions"]')).toBeVisible();
     await expect(page.locator('[data-testid="overview-card-pending-refunds"]')).toBeVisible();

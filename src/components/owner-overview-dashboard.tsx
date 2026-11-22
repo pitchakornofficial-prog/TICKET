@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import type { OwnerOverviewCounts } from '@/server/overview';
+import type { OwnerOverviewCounts, OwnerOverviewSales } from '@/server/overview';
 import type { OwnerSectionId } from '@/components/owner-workspace-view';
 import {
   ClipboardCheckIcon,
@@ -86,16 +86,6 @@ const METRIC_CARDS: MetricCardConfig[] = [
   },
 ];
 
-interface EventSummaryItem {
-  id: string;
-  title: string;
-  location?: string;
-  status?: string;
-  minPrice?: number;
-  maxPrice?: number;
-  totalQuota?: number;
-}
-
 interface RecentActivityItem {
   id: string;
   type: 'session' | 'refund' | 'payout' | 'news' | 'customer';
@@ -119,10 +109,7 @@ export function OwnerOverviewDashboard({
   isFullOverview = false,
 }: OwnerOverviewDashboardProps) {
   const [counts, setCounts] = useState<OwnerOverviewCounts | null>(null);
-  const [events, setEvents] = useState<EventSummaryItem[]>([]);
-  const [totalEventsCount, setTotalEventsCount] = useState(0);
-  const [activeEventsCount, setActiveEventsCount] = useState(0);
-  const [totalGrossRevenue, setTotalGrossRevenue] = useState(0);
+  const [sales, setSales] = useState<OwnerOverviewSales | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -134,52 +121,20 @@ export function OwnerOverviewDashboard({
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch('/api/owner/overview', { cache: 'no-store' });
-      if (res.ok) {
-        const data: OwnerOverviewCounts = await res.json();
-        setCounts(data);
-      } else {
-        // Graceful fallback to initial zero counts
-        setCounts({
-          pendingSessions: 0,
-          pendingRefunds: 0,
-          paymentExceptions: 0,
-          failedEmails: 0,
-          syncConflicts: 0,
-          totalPending: 0,
-        });
-      }
-
-      // Fetch events for platform summary KPIs
-      try {
-        const eventsRes = await fetch('/api/events', { cache: 'no-store' });
-        if (eventsRes.ok) {
-          const eventsData = await eventsRes.json();
-          const evList: EventSummaryItem[] = eventsData.events || [];
-          setEvents(evList);
-          setTotalEventsCount(evList.length);
-          const activeList = evList.filter((e) => e.status === 'approved');
-          setActiveEventsCount(activeList.length);
-
-          // Calculate platform gross revenue
-          let sumGross = 0;
-          for (const ev of evList) {
-            if (typeof ev.minPrice === 'number' && typeof ev.totalQuota === 'number') {
-              sumGross += ev.minPrice * Math.round(ev.totalQuota * 0.45);
-            }
-          }
-          setTotalGrossRevenue(sumGross);
-        }
-      } catch {
-        // Non-blocking fallback
-        setTotalGrossRevenue(0);
-      }
+      const res = await fetch(isFullOverview ? '/api/owner/overview?sales=true' : '/api/owner/overview', {
+        cache: 'no-store',
+      });
+      if (!res.ok) throw new Error('โหลดข้อมูลภาพรวมไม่สำเร็จ');
+      const { sales, ...counts }: OwnerOverviewCounts & { sales?: OwnerOverviewSales } = await res.json();
+      if (isFullOverview && !sales) throw new Error('โหลดข้อมูลยอดขายไม่สำเร็จ');
+      setCounts(counts);
+      setSales(sales ?? null);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'เกิดข้อผิดพลาดในการดึงข้อมูล');
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [isFullOverview]);
 
   useEffect(() => {
     fetchOverview();
@@ -191,68 +146,14 @@ export function OwnerOverviewDashboard({
 
   const totalPending = counts?.totalPending ?? 0;
 
-  // Bar chart metrics (D-224, D-256)
-  const barChartEvents = useMemo(() => {
-    return events.map((ev, index) => {
-      const quota = ev.totalQuota || 0;
-      const price = ev.minPrice || 0;
-      const soldRatio = 0.35 + (index % 5) * 0.12;
-      const soldCount = Math.round(quota * Math.min(0.95, soldRatio));
-      const estimatedSales = soldCount * price;
-      return {
-        id: ev.id,
-        title: ev.title,
-        status: ev.status || 'approved',
-        soldCount,
-        quota,
-        sales: estimatedSales,
-      };
-    });
-  }, [events]);
-
-  const maxBarSales = useMemo(() => {
-    return Math.max(...barChartEvents.map((e) => e.sales), 1);
-  }, [barChartEvents]);
-
-  // Top 5 Performing Concerts (D-256)
-  const topPerformingConcerts = useMemo(() => {
-    const sorted = [...barChartEvents].sort((a, b) => b.sales - a.sales);
-    return sorted.slice(0, 5);
-  }, [barChartEvents]);
-
-  // Line chart trend data (D-224, D-256)
-  const lineChartData = useMemo(() => {
-    const baseRevenue = totalGrossRevenue;
-    if (timeRange === 'today') {
-      return [
-        { label: '00:00', value: Math.round(baseRevenue * 0.005), date: 'วันนี้ 00:00' },
-        { label: '04:00', value: Math.round(baseRevenue * 0.008), date: 'วันนี้ 04:00' },
-        { label: '08:00', value: Math.round(baseRevenue * 0.022), date: 'วันนี้ 08:00' },
-        { label: '12:00', value: Math.round(baseRevenue * 0.045), date: 'วันนี้ 12:00' },
-        { label: '16:00', value: Math.round(baseRevenue * 0.072), date: 'วันนี้ 16:00' },
-        { label: '20:00', value: Math.round(baseRevenue * 0.098), date: 'วันนี้ 20:00' },
-      ];
-    }
-    if (timeRange === '7d') {
-      return [
-        { label: 'จันทร์', value: Math.round(baseRevenue * 0.11), date: 'จันทร์ที่ผ่านมา' },
-        { label: 'อังคาร', value: Math.round(baseRevenue * 0.13), date: 'อังคารที่ผ่านมา' },
-        { label: 'พุธ', value: Math.round(baseRevenue * 0.12), date: 'พุธที่ผ่านมา' },
-        { label: 'พฤหัสฯ', value: Math.round(baseRevenue * 0.16), date: 'พฤหัสบดีที่ผ่านมา' },
-        { label: 'ศุกร์', value: Math.round(baseRevenue * 0.22), date: 'ศุกร์ที่ผ่านมา' },
-        { label: 'เสาร์', value: Math.round(baseRevenue * 0.28), date: 'เสาร์ที่ผ่านมา' },
-        { label: 'อาทิตย์', value: Math.round(baseRevenue * 0.25), date: 'อาทิตย์ที่ผ่านมา' },
-      ];
-    }
-    // 30 days
-    return [
-      { label: 'สัปดาห์ 1', value: Math.round(baseRevenue * 0.18), date: 'สัปดาห์ที่ 1' },
-      { label: 'สัปดาห์ 2', value: Math.round(baseRevenue * 0.26), date: 'สัปดาห์ที่ 2' },
-      { label: 'สัปดาห์ 3', value: Math.round(baseRevenue * 0.35), date: 'สัปดาห์ที่ 3' },
-      { label: 'สัปดาห์ 4', value: Math.round(baseRevenue * 0.48), date: 'สัปดาห์ที่ 4' },
-      { label: 'ปัจจุบัน', value: baseRevenue, date: 'ปัจจุบัน' },
-    ];
-  }, [timeRange, totalGrossRevenue]);
+  const barChartEvents = useMemo(() => sales?.concerts ?? [], [sales]);
+  const maxBarSales = Math.max(...barChartEvents.map(event => event.sales), 1);
+  const topPerformingConcerts = useMemo(
+    () => [...barChartEvents].sort((a, b) => b.sales - a.sales || b.soldCount - a.soldCount || a.id.localeCompare(b.id)).slice(0, 5),
+    [barChartEvents],
+  );
+  const lineChartData = useMemo(() => sales?.trend[timeRange] ?? [], [sales, timeRange]);
+  const totalGrossRevenue = sales?.grossSales ?? 0;
 
   const maxLineValue = useMemo(() => {
     return Math.max(...lineChartData.map((d) => d.value), 1);
@@ -323,7 +224,7 @@ export function OwnerOverviewDashboard({
   const getStatusLabel = (status: string) => {
     switch (status) {
       case 'approved':
-        return 'กำลังเปิดขาย';
+        return 'อนุมัติแล้ว';
       case 'pending_approval':
         return 'รออนุมัติ';
       case 'rejected':
@@ -395,11 +296,11 @@ export function OwnerOverviewDashboard({
               <TicketIcon className="overview-borderless-icon text-blue" />
             </div>
             <div className="overview-kpi-value">
-              {activeEventsCount}{' '}
+              {sales?.openEvents ?? '–'}{' '}
               <span className="overview-kpi-unit">งานเปิดขาย</span>
             </div>
             <div className="overview-kpi-footer">
-              <span className="overview-kpi-subtext">จากทั้งหมด {totalEventsCount} งาน</span>
+              <span className="overview-kpi-subtext">จากทั้งหมด {sales?.totalEvents ?? '–'} งาน</span>
               <span className="overview-trend-badge success">พร้อมให้บริการ</span>
             </div>
           </div>
@@ -443,11 +344,10 @@ export function OwnerOverviewDashboard({
               <BanknotesIcon className="overview-borderless-icon text-indigo" />
             </div>
             <div className="overview-kpi-value text-indigo">
-              {formatBaht(totalGrossRevenue)}
+              {sales ? formatBaht(totalGrossRevenue) : '–'}
             </div>
             <div className="overview-kpi-footer">
               <span className="overview-kpi-subtext">ยอดขายรวมก่อนหักค่าบริการ</span>
-              <span className="overview-trend-badge success">+14.2% สะสม</span>
             </div>
           </div>
 
@@ -458,17 +358,16 @@ export function OwnerOverviewDashboard({
           >
             <div className="overview-kpi-header">
               <span className="overview-kpi-title">
-                ส่วนแบ่งค่าบริการแพลตฟอร์ม (3%)
-                <HeaderInfoTooltip text="รายได้ค่าธรรมเนียมการให้บริการระบบมาตรฐาน 3% ที่แพลตฟอร์มได้รับจากยอดจำหน่ายบัตร" />
+                ค่าบริการที่เรียกเก็บจากผู้จัดงาน
+                <HeaderInfoTooltip text="ยอดค่าบริการผู้จัดงานรวมตามรายงานการเงินของแต่ละงาน" />
               </span>
               <ShieldCheckIcon className="overview-borderless-icon text-emerald" />
             </div>
             <div className="overview-kpi-value">
-              {formatBaht(Math.round(totalGrossRevenue * 0.03))}
+              {sales ? formatBaht(sales.platformFee) : '–'}
             </div>
             <div className="overview-kpi-footer">
-              <span className="overview-kpi-subtext">ค่าบริการแพลตฟอร์มสุทธิ</span>
-              <span className="overview-trend-badge success">มาตรฐาน 3%</span>
+              <span className="overview-kpi-subtext">รวมตามรายงานการเงิน</span>
             </div>
           </div>
         </section>
@@ -610,7 +509,7 @@ export function OwnerOverviewDashboard({
               <div className="charts-card-title-wrap">
                 <h2 id="owner-charts-title" className="charts-card-title">
                   กราฟวิเคราะห์ยอดขายและการเงินแพลตฟอร์ม (Platform Analytics)
-                  <HeaderInfoTooltip text="วิเคราะห์เปรียบเทียบสัดส่วนยอดขายระหว่างคอนเสิร์ตต่างๆ และแนวโน้มรายได้รวมทั้งแพลตฟอร์มตามช่วงเวลา" />
+                  <HeaderInfoTooltip text="วิเคราะห์เปรียบเทียบสัดส่วนยอดขายระหว่างคอนเสิร์ตต่างๆ และแนวโน้มยอดขายตามเวลาออกบัตร (เวลาไทย)" />
                 </h2>
                 <p className="charts-card-subtitle">
                   สลับมุมมองระหว่างกราฟแท่งเปรียบเทียบสัดส่วนรายได้แต่ละคอนเสิร์ต หรือกราฟเส้นแนวโน้มยอดขายตามช่วงเวลา
@@ -648,7 +547,7 @@ export function OwnerOverviewDashboard({
                       className={`time-pill-btn ${timeRange === 'today' ? 'active' : ''}`}
                       onClick={() => setTimeRange('today')}
                     >
-                      วันนี้ (24 ชม.)
+                      วันนี้
                     </button>
                     <button
                       type="button"
@@ -671,7 +570,9 @@ export function OwnerOverviewDashboard({
 
             {/* Chart Viewport */}
             <div className="charts-content-viewport">
-              {chartMode === 'bar' ? (
+              {!sales ? <p>{loading ? 'กำลังโหลดยอดขาย...' : 'ไม่สามารถแสดงยอดขายได้'}</p> :
+              chartMode === 'bar' && barChartEvents.length === 0 ? <p>ยังไม่มีรายการขายบัตร</p> :
+              chartMode === 'bar' ? (
                 /* Mode 1: Bar Chart Comparison Across Concerts */
                 <div className="overview-barchart-container" data-testid="owner-barchart">
                   <div className="barchart-bars-stack">
@@ -693,7 +594,7 @@ export function OwnerOverviewDashboard({
                               }
                               size="sm"
                             >
-                              {getStatusLabel(ev.status)}
+                              {ev.open ? 'กำลังเปิดขาย' : getStatusLabel(ev.status)}
                             </Badge>
                           </div>
 
@@ -804,7 +705,7 @@ export function OwnerOverviewDashboard({
                   คอนเสิร์ตยอดขายสูงสุด
                   <HeaderInfoTooltip text="5 อันดับคอนเสิร์ตที่มียอดจำหน่ายบัตรและความจุที่ขายได้สูงสุดในระบบ" />
                 </h3>
-                <p className="top-concerts-subtitle">5 อันดับแรกตามรายได้และความจุ</p>
+                <p className="top-concerts-subtitle">สูงสุด 5 งานตามยอดขายบัตร</p>
               </div>
               <button
                 type="button"
@@ -817,6 +718,7 @@ export function OwnerOverviewDashboard({
             </div>
 
             <div className="top-concerts-list">
+              {sales && topPerformingConcerts.length === 0 && <p>ยังไม่มีรายการขายบัตร</p>}
               {topPerformingConcerts.map((concert, idx) => {
                 const soldPct = concert.quota > 0 ? Math.round((concert.soldCount / concert.quota) * 100) : 0;
                 return (
@@ -872,7 +774,7 @@ export function OwnerOverviewDashboard({
 
             <span className="activity-live-indicator">
               <span className="activity-live-dot" />
-              <span>อัปเดตแบบสด</span>
+              <span>ตามข้อมูลที่โหลดล่าสุด</span>
             </span>
           </div>
 

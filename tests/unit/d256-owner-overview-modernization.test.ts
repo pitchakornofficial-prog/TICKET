@@ -15,7 +15,7 @@ describe('D-256: Back-Office Owner Overview Modernization & Flat Canvas Layout',
     expect(overviewSrc).toContain('data-testid="owner-kpi-revenue"');
     expect(overviewSrc).toContain('data-testid="owner-kpi-system"');
     expect(overviewSrc).toContain('pure-kpi');
-    expect(overviewSrc).toContain('ส่วนแบ่งค่าบริการแพลตฟอร์ม (3%)');
+    expect(overviewSrc).toContain('ค่าบริการที่เรียกเก็บจากผู้จัดงาน');
   });
 
   it('preserves all 5 actionable work queues with required test IDs', () => {
