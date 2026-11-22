@@ -19,6 +19,7 @@ export interface MovableItem {
   text?: string;
   secondaryText?: string;
   size?: number;
+  align?: 'left' | 'center' | 'right';
 }
 
 export interface WorkspaceStageSettings {

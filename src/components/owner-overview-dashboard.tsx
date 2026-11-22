@@ -123,6 +123,7 @@ export function OwnerOverviewDashboard({
   const [totalEventsCount, setTotalEventsCount] = useState(0);
   const [activeEventsCount, setActiveEventsCount] = useState(0);
   const [totalGrossRevenue, setTotalGrossRevenue] = useState(0);
+  const [eventStatsMap, setEventStatsMap] = useState<Record<string, { grossSales: number; validTicketsCount: number }>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -150,6 +151,27 @@ export function OwnerOverviewDashboard({
         });
       }
 
+      // Fetch financial summaries for real platform revenue and real event sold stats
+      const statsMap: Record<string, { grossSales: number; validTicketsCount: number }> = {};
+      try {
+        const finRes = await fetch('/api/owner/finance/summaries', { cache: 'no-store' });
+        if (finRes.ok) {
+          const finData = await finRes.json();
+          const summaries = Array.isArray(finData?.summaries) ? finData.summaries : [];
+          let sumGross = 0;
+          for (const s of summaries) {
+            const gross = Number(s.grossSales) || 0;
+            const valid = Number(s.totalTicketsValidCount ?? s.validTicketsCount) || 0;
+            sumGross += gross;
+            statsMap[s.eventId] = { grossSales: gross, validTicketsCount: valid };
+          }
+          setTotalGrossRevenue(sumGross);
+          setEventStatsMap(statsMap);
+        }
+      } catch {
+        // Non-blocking fallback
+      }
+
       // Fetch events for platform summary KPIs
       try {
         const eventsRes = await fetch('/api/events', { cache: 'no-store' });
@@ -160,19 +182,9 @@ export function OwnerOverviewDashboard({
           setTotalEventsCount(evList.length);
           const activeList = evList.filter((e) => e.status === 'approved');
           setActiveEventsCount(activeList.length);
-
-          // Calculate platform gross revenue
-          let sumGross = 0;
-          for (const ev of evList) {
-            if (typeof ev.minPrice === 'number' && typeof ev.totalQuota === 'number') {
-              sumGross += ev.minPrice * Math.round(ev.totalQuota * 0.45);
-            }
-          }
-          setTotalGrossRevenue(sumGross);
         }
       } catch {
         // Non-blocking fallback
-        setTotalGrossRevenue(0);
       }
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'เกิดข้อผิดพลาดในการดึงข้อมูล');
@@ -193,22 +205,21 @@ export function OwnerOverviewDashboard({
 
   // Bar chart metrics (D-224, D-256)
   const barChartEvents = useMemo(() => {
-    return events.map((ev, index) => {
+    return events.map((ev) => {
       const quota = ev.totalQuota || 0;
-      const price = ev.minPrice || 0;
-      const soldRatio = 0.35 + (index % 5) * 0.12;
-      const soldCount = Math.round(quota * Math.min(0.95, soldRatio));
-      const estimatedSales = soldCount * price;
+      const stats = eventStatsMap[ev.id];
+      const soldCount = stats?.validTicketsCount ?? 0;
+      const sales = stats?.grossSales ?? 0;
       return {
         id: ev.id,
         title: ev.title,
         status: ev.status || 'approved',
         soldCount,
         quota,
-        sales: estimatedSales,
+        sales,
       };
     });
-  }, [events]);
+  }, [events, eventStatsMap]);
 
   const maxBarSales = useMemo(() => {
     return Math.max(...barChartEvents.map((e) => e.sales), 1);
@@ -223,6 +234,36 @@ export function OwnerOverviewDashboard({
   // Line chart trend data (D-224, D-256)
   const lineChartData = useMemo(() => {
     const baseRevenue = totalGrossRevenue;
+    if (baseRevenue === 0) {
+      if (timeRange === 'today') {
+        return [
+          { label: '00:00', value: 0, date: 'วันนี้ 00:00' },
+          { label: '04:00', value: 0, date: 'วันนี้ 04:00' },
+          { label: '08:00', value: 0, date: 'วันนี้ 08:00' },
+          { label: '12:00', value: 0, date: 'วันนี้ 12:00' },
+          { label: '16:00', value: 0, date: 'วันนี้ 16:00' },
+          { label: '20:00', value: 0, date: 'วันนี้ 20:00' },
+        ];
+      }
+      if (timeRange === '7d') {
+        return [
+          { label: 'จันทร์', value: 0, date: 'จันทร์ที่ผ่านมา' },
+          { label: 'อังคาร', value: 0, date: 'อังคารที่ผ่านมา' },
+          { label: 'พุธ', value: 0, date: 'พุธที่ผ่านมา' },
+          { label: 'พฤหัสฯ', value: 0, date: 'พฤหัสบดีที่ผ่านมา' },
+          { label: 'ศุกร์', value: 0, date: 'ศุกร์ที่ผ่านมา' },
+          { label: 'เสาร์', value: 0, date: 'เสาร์ที่ผ่านมา' },
+          { label: 'อาทิตย์', value: 0, date: 'อาทิตย์ที่ผ่านมา' },
+        ];
+      }
+      return [
+        { label: 'สัปดาห์ 1', value: 0, date: 'สัปดาห์ที่ 1' },
+        { label: 'สัปดาห์ 2', value: 0, date: 'สัปดาห์ที่ 2' },
+        { label: 'สัปดาห์ 3', value: 0, date: 'สัปดาห์ที่ 3' },
+        { label: 'สัปดาห์ 4', value: 0, date: 'สัปดาห์ที่ 4' },
+        { label: 'ปัจจุบัน', value: 0, date: 'ปัจจุบัน' },
+      ];
+    }
     if (timeRange === 'today') {
       return [
         { label: '00:00', value: Math.round(baseRevenue * 0.005), date: 'วันนี้ 00:00' },

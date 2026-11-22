@@ -34,7 +34,49 @@ export async function GET(
       options,
     );
 
-    return Response.json({ report }, { status: 200, headers: { 'Cache-Control': 'private, no-store, no-cache, must-revalidate' } });
+    const tierRes = await pool.query<{
+      id: string;
+      name: string;
+      price: string;
+      quota: number;
+      isStudentPrivilege: boolean;
+      soldCount: number;
+      grossSales: string;
+    }>(
+      `SELECT tt.id, tt.name, tt.price::text, tt.quota, tt."isStudentPrivilege",
+              COALESCE(COUNT(t.id) FILTER (WHERE t.status IN ('valid', 'used')), 0)::int AS "soldCount",
+              COALESCE(SUM(t."ticketPrice") FILTER (WHERE t.status IN ('valid', 'used')), 0)::text AS "grossSales"
+       FROM ticket_types tt
+       JOIN event_sessions s ON s.id = tt."sessionId"
+       LEFT JOIN tickets t ON t."ticketTypeId" = tt.id
+       WHERE s."eventId" = $1
+       GROUP BY tt.id, tt.name, tt.price, tt.quota, tt."isStudentPrivilege"
+       ORDER BY tt.price DESC`,
+      [eventId],
+    );
+
+    const ticketTiers = tierRes.rows.map((r) => ({
+      id: r.id,
+      name: r.name,
+      price: Number(r.price),
+      quota: Number(r.quota),
+      isStudentPrivilege: Boolean(r.isStudentPrivilege),
+      soldCount: Number(r.soldCount),
+      grossSales: Number(r.grossSales),
+    }));
+
+    const studentRes = await pool.query<{ count: number }>(
+      `SELECT COUNT(*)::int AS count FROM tickets t
+       JOIN ticket_types tt ON tt.id = t."ticketTypeId"
+       WHERE t."eventId" = $1 AND tt."isStudentPrivilege" = true AND t.status IN ('valid', 'used')`,
+      [eventId],
+    );
+    const studentPrivilegeCount = studentRes.rows[0]?.count ?? 0;
+
+    return Response.json(
+      { report, ticketTiers, studentPrivilegeCount },
+      { status: 200, headers: { 'Cache-Control': 'private, no-store, no-cache, must-revalidate' } },
+    );
   } catch (error: unknown) {
     return createSafeErrorResponse(error, 'เกิดข้อผิดพลาดในการดึงรายงานการเงิน', {
       defaultStatus: 500,

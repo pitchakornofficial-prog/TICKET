@@ -14,6 +14,7 @@ import {
   issueScannerAccessTokenWithClient,
   revokeScannerAccessTokens,
 } from './scanner-access.ts';
+import { safeRevalidateTag } from './cache.ts';
 
 export type EventStatus = 'draft' | 'pending_approval' | 'approved' | 'rejected' | 'cancelled';
 export type SessionStatus = 'draft' | 'pending_approval' | 'approved' | 'rejected' | 'cancelled';
@@ -662,7 +663,13 @@ export async function getEventDetails(clientOrPool: { query: Pool['query'] }, ev
   const ticketTypesBySession = new Map<string, Record<string, unknown>[]>();
   if (sessionIds.length > 0) {
     const ttRes = await clientOrPool.query(
-      'SELECT * FROM ticket_types WHERE "sessionId" = ANY($1::text[]) ORDER BY price ASC',
+      `SELECT tt.*,
+         COALESCE((
+           SELECT COUNT(*)::int FROM tickets t WHERE t."ticketTypeId" = tt.id AND t.status != 'refunded'
+         ), 0) AS "soldCount"
+       FROM ticket_types tt
+       WHERE tt."sessionId" = ANY($1::text[])
+       ORDER BY tt.price ASC`,
       [sessionIds],
     );
     for (const tt of ttRes.rows) {
@@ -672,6 +679,7 @@ export async function getEventDetails(clientOrPool: { query: Pool['query'] }, ev
       else ticketTypesBySession.set(sid, [tt]);
     }
   }
+
   const sessions = sessRes.rows.map((sess) => ({
     ...sess,
     ticketTypes: ticketTypesBySession.get(sess.id as string) ?? [],
@@ -1048,6 +1056,10 @@ export interface ScannerAssignedEvent {
   location: string;
   posterUrl: string | null;
   status: string;
+  isSalesPaused?: boolean;
+  salesPausedReason?: string | null;
+  salesStartTime?: string | null;
+  salesEndTime?: string | null;
   assignedAt: string;
   isPrimary?: boolean;
   primaryScannerId?: string | null;
@@ -1381,6 +1393,10 @@ export async function listEventsForScanner(
       location: string;
       posterUrl: string | null;
       status: string;
+      isSalesPaused: boolean | null;
+      salesPausedReason: string | null;
+      salesStartTime: Date | null;
+      salesEndTime: Date | null;
       assignedAt: Date;
       primaryScannerId: string | null;
       primaryScannerName: string | null;
@@ -1389,7 +1405,9 @@ export async function listEventsForScanner(
 
   if (role === 'organizer') {
     evRes = await pool.query(
-      `SELECT e.id, e.title, e.location, e."posterUrl", e.status, e."createdAt" as "assignedAt",
+      `SELECT e.id, e.title, e.location, e."posterUrl", e.status,
+              e."isSalesPaused", e."salesPausedReason", e."salesStartTime", e."salesEndTime",
+              e."createdAt" as "assignedAt",
               e."organizerId" as "primaryScannerId", u.name as "primaryScannerName"
        FROM events e
        JOIN auth_user u ON u.id = e."organizerId"
@@ -1399,7 +1417,9 @@ export async function listEventsForScanner(
     );
   } else if (role === 'owner') {
     evRes = await pool.query(
-      `SELECT e.id, e.title, e.location, e."posterUrl", e.status, e."createdAt" as "assignedAt",
+      `SELECT e.id, e.title, e.location, e."posterUrl", e.status,
+              e."isSalesPaused", e."salesPausedReason", e."salesStartTime", e."salesEndTime",
+              e."createdAt" as "assignedAt",
               e."organizerId" as "primaryScannerId", u.name as "primaryScannerName"
        FROM events e
        JOIN auth_user u ON u.id = e."organizerId"
@@ -1407,7 +1427,9 @@ export async function listEventsForScanner(
     );
   } else {
     evRes = await pool.query(
-      `SELECT e.id, e.title, e.location, e."posterUrl", e.status, es."assignedAt",
+      `SELECT e.id, e.title, e.location, e."posterUrl", e.status,
+              e."isSalesPaused", e."salesPausedReason", e."salesStartTime", e."salesEndTime",
+              es."assignedAt",
               ps."scannerId" as "primaryScannerId", ps."scannerName" as "primaryScannerName"
        FROM events e
        JOIN event_scanners es ON es."eventId" = e.id
@@ -1441,6 +1463,10 @@ export async function listEventsForScanner(
       location: ev.location,
       posterUrl: ev.posterUrl,
       status: ev.status,
+      isSalesPaused: Boolean(ev.isSalesPaused),
+      salesPausedReason: ev.salesPausedReason,
+      salesStartTime: ev.salesStartTime instanceof Date ? ev.salesStartTime.toISOString() : ev.salesStartTime ? String(ev.salesStartTime) : null,
+      salesEndTime: ev.salesEndTime instanceof Date ? ev.salesEndTime.toISOString() : ev.salesEndTime ? String(ev.salesEndTime) : null,
       assignedAt: ev.assignedAt instanceof Date ? ev.assignedAt.toISOString() : String(ev.assignedAt),
       isPrimary: role === 'organizer' || role === 'owner' || ev.primaryScannerId === scannerId,
       primaryScannerId: ev.primaryScannerId,
@@ -2912,4 +2938,400 @@ export async function deleteEventDraft(
 
   return { success: true, eventId };
 }
+
+export interface AdminOverrideTicketTypeInput {
+  id?: string;
+  name: string;
+  price: number;
+  quota: number;
+  description?: string;
+  isStudentPrivilege?: boolean;
+  studentPrice?: number | null;
+}
+
+export interface AdminOverrideSessionInput {
+  id?: string;
+  startTime: string;
+  endTime: string;
+  admissionStartTime?: string | null;
+  admissionEndTime?: string | null;
+  ticketTypes: AdminOverrideTicketTypeInput[];
+}
+
+export interface AdminOverrideConcertInput {
+  title?: string;
+  description?: string;
+  artists?: string;
+  location?: string;
+  posterUrl?: string | null;
+  coverBannerUrl?: string | null;
+  ticketTemplateUrl?: string | null;
+  googleMapsUrl?: string | null;
+  salesStartTime?: string | null;
+  salesEndTime?: string | null;
+  limitPerOrder?: number;
+  ageRestriction?: string;
+  refundPolicy?: string;
+  entryGuidelines?: string | null;
+  payoutBankName?: string | null;
+  payoutAccountNumber?: string | null;
+  payoutAccountName?: string | null;
+  ubuPrivilegeMode?: boolean;
+  isSalesPaused?: boolean;
+  salesPausedReason?: string | null;
+  organizerFeeRate?: number;
+  customerFeeRate?: number;
+  reservePercentage?: number;
+  sessions?: AdminOverrideSessionInput[];
+}
+
+/**
+ * Admin Override All-in-One: Full concert update by platform owner
+ * Atomically updates general info, visual assets, policies, fees, sessions, and ticket zones
+ * with strict buyer protection against deleting sold zones or reducing quota below sold count.
+ */
+export async function adminOverrideConcertFull(
+  pool: Pool,
+  eventId: string,
+  ownerId: string,
+  input: AdminOverrideConcertInput,
+) {
+  await ensureEventSchema(pool);
+  await ensureReservationSchema(pool);
+  await ensureTicketSchema(pool);
+  await ensureFeeSchema(pool);
+
+  return inTransaction(pool, async (client) => {
+    // 1. Role verification
+    const userRes = await client.query('SELECT role FROM auth_user WHERE id = $1', [ownerId]);
+    if (userRes.rowCount === 0 || userRes.rows[0].role !== 'owner') {
+      throw new Error('ไม่อนุญาต: เฉพาะเจ้าของระบบ (Owner) เท่านั้นที่สามารถใช้คำสั่ง Admin Override ได้');
+    }
+
+    // 2. Lock event
+    const evLock = await client.query<{ id: string; status: string; organizerId: string }>(
+      'SELECT id, status, "organizerId" FROM events WHERE id = $1 FOR UPDATE',
+      [eventId],
+    );
+    if (evLock.rowCount === 0) {
+      throw new Error('ไม่พบงานคอนเสิร์ตที่ต้องการแก้ไข');
+    }
+    const organizerId = evLock.rows[0].organizerId;
+
+    // 3. Update event fields
+    if (input.title !== undefined) {
+      await client.query('UPDATE events SET title = $1, "updatedAt" = now() WHERE id = $2', [
+        input.title.trim(),
+        eventId,
+      ]);
+    }
+    if (input.description !== undefined) {
+      await client.query('UPDATE events SET description = $1, "updatedAt" = now() WHERE id = $2', [
+        input.description ? input.description.trim() : '',
+        eventId,
+      ]);
+    }
+    if (input.artists !== undefined) {
+      await client.query('UPDATE events SET artists = $1, "updatedAt" = now() WHERE id = $2', [
+        input.artists ? input.artists.trim() : null,
+        eventId,
+      ]);
+    }
+    if (input.location !== undefined) {
+      await client.query('UPDATE events SET location = $1, "updatedAt" = now() WHERE id = $2', [
+        input.location.trim(),
+        eventId,
+      ]);
+    }
+    if (input.posterUrl !== undefined) {
+      await client.query('UPDATE events SET "posterUrl" = $1, "updatedAt" = now() WHERE id = $2', [
+        input.posterUrl || null,
+        eventId,
+      ]);
+    }
+    if (input.coverBannerUrl !== undefined) {
+      await client.query('UPDATE events SET "coverBannerUrl" = $1, "updatedAt" = now() WHERE id = $2', [
+        input.coverBannerUrl || null,
+        eventId,
+      ]);
+    }
+    if (input.ticketTemplateUrl !== undefined) {
+      await client.query('UPDATE events SET "ticketTemplateUrl" = $1, "updatedAt" = now() WHERE id = $2', [
+        input.ticketTemplateUrl || null,
+        eventId,
+      ]);
+    }
+    if (input.googleMapsUrl !== undefined) {
+      const safeMaps = input.googleMapsUrl ? parseSafeGoogleMapsUrl(input.googleMapsUrl) : null;
+      await client.query('UPDATE events SET "googleMapsUrl" = $1, "updatedAt" = now() WHERE id = $2', [
+        safeMaps,
+        eventId,
+      ]);
+    }
+    if (input.salesStartTime !== undefined) {
+      await client.query('UPDATE events SET "salesStartTime" = $1, "updatedAt" = now() WHERE id = $2', [
+        input.salesStartTime ? new Date(input.salesStartTime) : null,
+        eventId,
+      ]);
+    }
+    if (input.salesEndTime !== undefined) {
+      await client.query('UPDATE events SET "salesEndTime" = $1, "updatedAt" = now() WHERE id = $2', [
+        input.salesEndTime ? new Date(input.salesEndTime) : null,
+        eventId,
+      ]);
+    }
+    if (input.limitPerOrder !== undefined) {
+      await client.query('UPDATE events SET "limitPerOrder" = $1, "updatedAt" = now() WHERE id = $2', [
+        input.limitPerOrder,
+        eventId,
+      ]);
+    }
+    if (input.ageRestriction !== undefined) {
+      await client.query('UPDATE events SET "ageRestriction" = $1, "updatedAt" = now() WHERE id = $2', [
+        input.ageRestriction,
+        eventId,
+      ]);
+    }
+    if (input.refundPolicy !== undefined) {
+      await client.query('UPDATE events SET "refundPolicy" = $1, "updatedAt" = now() WHERE id = $2', [
+        input.refundPolicy,
+        eventId,
+      ]);
+    }
+    if (input.entryGuidelines !== undefined) {
+      await client.query('UPDATE events SET "entryGuidelines" = $1, "updatedAt" = now() WHERE id = $2', [
+        input.entryGuidelines || null,
+        eventId,
+      ]);
+    }
+    if (
+      input.payoutBankName !== undefined ||
+      input.payoutAccountNumber !== undefined ||
+      input.payoutAccountName !== undefined
+    ) {
+      await client.query(
+        `UPDATE events 
+         SET "payoutBankName" = COALESCE($1, "payoutBankName"), 
+             "payoutAccountNumber" = COALESCE($2, "payoutAccountNumber"), 
+             "payoutAccountName" = COALESCE($3, "payoutAccountName"), 
+             "updatedAt" = now() 
+         WHERE id = $4`,
+        [
+          input.payoutBankName || null,
+          input.payoutAccountNumber || null,
+          input.payoutAccountName || null,
+          eventId,
+        ],
+      );
+    }
+    if (input.ubuPrivilegeMode !== undefined) {
+      await client.query('UPDATE events SET "ubuPrivilegeMode" = $1, "updatedAt" = now() WHERE id = $2', [
+        Boolean(input.ubuPrivilegeMode),
+        eventId,
+      ]);
+    }
+    if (input.isSalesPaused !== undefined) {
+      await client.query('UPDATE events SET "isSalesPaused" = $1, "updatedAt" = now() WHERE id = $2', [
+        Boolean(input.isSalesPaused),
+        eventId,
+      ]);
+    }
+    if (input.salesPausedReason !== undefined) {
+      await client.query('UPDATE events SET "salesPausedReason" = $1, "updatedAt" = now() WHERE id = $2', [
+        input.salesPausedReason ? input.salesPausedReason.trim() : null,
+        eventId,
+      ]);
+    }
+
+    // 4. Update fee settings if provided
+    if (
+      input.organizerFeeRate !== undefined ||
+      input.customerFeeRate !== undefined ||
+      input.reservePercentage !== undefined ||
+      input.ubuPrivilegeMode !== undefined
+    ) {
+      await client.query(
+        `INSERT INTO event_fee_settings (
+           "eventId", "organizerFeeMode", "organizerFeeRate", "organizerFeePrivilegeRate",
+           "ubuPrivilegeMode", "customerFeeMode", "customerFeeRate", "reservePercentage",
+           "organizerFeeLocked", "createdAt", "updatedAt"
+         )
+         VALUES ($1, 'percentage', COALESCE($2, 3), 3, COALESCE($3, FALSE), 'percentage', COALESCE($4, 0), COALESCE($5, 0), FALSE, now(), now())
+         ON CONFLICT ("eventId") DO UPDATE SET
+           "organizerFeeRate" = COALESCE($2, event_fee_settings."organizerFeeRate"),
+           "ubuPrivilegeMode" = COALESCE($3, event_fee_settings."ubuPrivilegeMode"),
+           "customerFeeMode" = 'percentage',
+           "customerFeeRate" = COALESCE($4, event_fee_settings."customerFeeRate"),
+           "reservePercentage" = COALESCE($5, event_fee_settings."reservePercentage"),
+           "updatedAt" = now()`,
+        [
+          eventId,
+          input.organizerFeeRate != null ? Number(input.organizerFeeRate) : null,
+          input.ubuPrivilegeMode != null ? Boolean(input.ubuPrivilegeMode) : null,
+          input.customerFeeRate != null ? Number(input.customerFeeRate) : null,
+          input.reservePercentage != null ? Number(input.reservePercentage) : null,
+        ],
+      );
+    }
+
+    // 5. Update sessions & ticket types if provided
+    if (input.sessions && Array.isArray(input.sessions)) {
+      const retainedSessionIds: string[] = [];
+
+      for (const sess of input.sessions) {
+        let currentSessionId = sess.id;
+
+        if (currentSessionId) {
+          // Update existing session
+          await client.query(
+            `UPDATE event_sessions
+             SET "startTime" = $2, "endTime" = $3,
+                 "admissionStartTime" = $4, "admissionEndTime" = $5,
+                 "updatedAt" = now()
+             WHERE id = $1 AND "eventId" = $6`,
+            [
+              currentSessionId,
+              new Date(sess.startTime),
+              new Date(sess.endTime),
+              sess.admissionStartTime ? new Date(sess.admissionStartTime) : null,
+              sess.admissionEndTime ? new Date(sess.admissionEndTime) : null,
+              eventId,
+            ],
+          );
+        } else {
+          // Add new session
+          currentSessionId = randomUUID();
+          await client.query(
+            `INSERT INTO event_sessions (id, "eventId", "startTime", "endTime", "admissionStartTime", "admissionEndTime", status, "createdAt", "updatedAt")
+             VALUES ($1, $2, $3, $4, $5, $6, 'approved', now(), now())`,
+            [
+              currentSessionId,
+              eventId,
+              new Date(sess.startTime),
+              new Date(sess.endTime),
+              sess.admissionStartTime ? new Date(sess.admissionStartTime) : null,
+              sess.admissionEndTime ? new Date(sess.admissionEndTime) : null,
+            ],
+          );
+        }
+        retainedSessionIds.push(currentSessionId);
+
+        // Manage ticket types / zones for this session
+        const retainedTtIds: string[] = [];
+        for (const tt of sess.ticketTypes) {
+          validateTicketTypeDraft(tt);
+
+          if (tt.id) {
+            // Check quota against sold/held tickets (Buyer protection)
+            const heldRes = await client.query<{ heldQuota: number }>(
+              `SELECT GREATEST(0, COALESCE(
+                (SELECT SUM(oi.quantity)::int
+                 FROM order_items oi
+                 JOIN orders o ON oi."orderId" = o.id
+                 WHERE oi."ticketTypeId" = $1
+                   AND (o.status = 'paid' OR (o.status = 'reserved' AND o."expiresAt" > now()))
+                ), 0
+              ) - COALESCE(
+                (SELECT COUNT(*)::int
+                 FROM tickets t
+                 WHERE t."ticketTypeId" = $1 AND t.status = 'refunded'
+                ), 0
+              )) AS "heldQuota"`,
+              [tt.id],
+            );
+            const currentHeld = heldRes.rows[0]?.heldQuota ? Number(heldRes.rows[0].heldQuota) : 0;
+            if (tt.quota < currentHeld) {
+              throw new Error(
+                `โควตาใหม่ (${tt.quota}) สำหรับประเภทบัตร "${tt.name}" น้อยกว่าจำนวนสิทธิ์ที่จำหน่ายหรือกันไว้แล้ว (${currentHeld} ใบ) ไม่สามารถลดโควตาได้`,
+              );
+            }
+
+            // Update existing ticket type
+            await client.query(
+              `UPDATE ticket_types
+               SET name = $2, price = $3, quota = $4, description = COALESCE($5, description),
+                   "isStudentPrivilege" = COALESCE($6, "isStudentPrivilege"),
+                   "studentPrice" = $7, "updatedAt" = now()
+               WHERE id = $1 AND "sessionId" = $8`,
+              [
+                tt.id,
+                tt.name.trim(),
+                tt.price,
+                tt.quota,
+                tt.description || null,
+                tt.isStudentPrivilege != null ? Boolean(tt.isStudentPrivilege) : null,
+                tt.studentPrice != null ? Number(tt.studentPrice) : null,
+                currentSessionId,
+              ],
+            );
+            retainedTtIds.push(tt.id);
+          } else {
+            // Insert new ticket type
+            const newTtId = randomUUID();
+            await client.query(
+              `INSERT INTO ticket_types (id, "sessionId", name, price, quota, description, "isStudentPrivilege", "studentPrice", "createdAt", "updatedAt")
+               VALUES ($1, $2, $3, $4, $5, $6, $7, $8, now(), now())`,
+              [
+                newTtId,
+                currentSessionId,
+                tt.name.trim(),
+                tt.price,
+                tt.quota,
+                tt.description || '',
+                Boolean(tt.isStudentPrivilege),
+                tt.studentPrice != null ? Number(tt.studentPrice) : null,
+              ],
+            );
+            retainedTtIds.push(newTtId);
+          }
+        }
+
+        // Check if any omitted ticket_types had sales before deleting
+        const extTts = await client.query<{ id: string; name: string }>(
+          'SELECT id, name FROM ticket_types WHERE "sessionId" = $1',
+          [currentSessionId],
+        );
+        for (const ext of extTts.rows) {
+          if (!retainedTtIds.includes(ext.id)) {
+            const checkSold = await client.query<{ cnt: number }>(
+              `SELECT COUNT(*)::int AS cnt FROM tickets WHERE "ticketTypeId" = $1 AND status != 'refunded'`,
+              [ext.id],
+            );
+            const soldCount = checkSold.rows[0]?.cnt ? Number(checkSold.rows[0].cnt) : 0;
+            if (soldCount > 0) {
+              throw new Error(
+                `ไม่สามารถลบโซน "${ext.name}" ได้เนื่องจากมีผู้ซื้อบัตรไปแล้ว (${soldCount} ใบ)`,
+              );
+            }
+            await client.query('DELETE FROM ticket_types WHERE id = $1', [ext.id]);
+          }
+        }
+      }
+
+      // Check if any omitted sessions had sales before deleting
+      const extSessions = await client.query<{ id: string }>(
+        'SELECT id FROM event_sessions WHERE "eventId" = $1',
+        [eventId],
+      );
+      for (const extSess of extSessions.rows) {
+        if (!retainedSessionIds.includes(extSess.id)) {
+          const checkSold = await client.query<{ cnt: number }>(
+            `SELECT COUNT(*)::int AS cnt FROM tickets WHERE "sessionId" = $1 AND status != 'refunded'`,
+            [extSess.id],
+          );
+          const soldCount = checkSold.rows[0]?.cnt ? Number(checkSold.rows[0].cnt) : 0;
+          if (soldCount > 0) {
+            throw new Error(`ไม่สามารถลบรอบการแสดงนี้ได้เนื่องจากมีผู้ซื้อบัตรไปแล้ว (${soldCount} ใบ)`);
+          }
+          await client.query('DELETE FROM ticket_types WHERE "sessionId" = $1', [extSess.id]);
+          await client.query('DELETE FROM event_sessions WHERE id = $1', [extSess.id]);
+        }
+      }
+    }
+
+    safeRevalidateTag('public-events');
+    return getEventDetails(client, eventId, organizerId);
+  });
+}
+
 

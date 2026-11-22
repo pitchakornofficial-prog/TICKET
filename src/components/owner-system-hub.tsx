@@ -19,7 +19,13 @@ import {
   PencilSquareIcon,
   ChevronUpIcon,
   ChevronDownIcon,
+  ShieldCheckIcon,
+  CameraOffIcon,
+  CrossCircleIcon,
+  SparklesIcon,
+  InfoIcon,
 } from './icons';
+import type { ProhibitedItemData } from '@/server/prohibited-items';
 import { formatDate } from '@/lib/locale';
 import {
   EMPTY_OWNER_CONTACT_INFO,
@@ -39,7 +45,7 @@ import {
 } from '@/lib/home-banners-sync';
 import { OwnerSyncConflictManager } from './owner-sync-conflict-manager';
 
-export type SystemHubTab = 'news' | 'banners' | 'contacts' | 'conflicts';
+export type SystemHubTab = 'news' | 'banners' | 'contacts' | 'conflicts' | 'regulations';
 export type NewsStatusFilter = 'all' | 'published' | 'pending' | 'draft' | 'rejected';
 export type NewsSourceFilter = 'all' | 'admin' | 'organizer';
 
@@ -137,6 +143,16 @@ export function OwnerSystemHub() {
   const [contactInfo, setContactInfo] = useState<OwnerContactInfo>(EMPTY_OWNER_CONTACT_INFO);
   const [isSavingContacts, setIsSavingContacts] = useState(false);
 
+  // Tab 5: Prohibited Items (Regulations)
+  const [prohibitedItemsList, setProhibitedItemsList] = useState<ProhibitedItemData[]>([]);
+  const [editingProhibitedId, setEditingProhibitedId] = useState<string | null>(null);
+  const [isProhibitedModalOpen, setIsProhibitedModalOpen] = useState(false);
+  const [itemTitle, setItemTitle] = useState('');
+  const [itemDesc, setItemDesc] = useState('');
+  const [itemIcon, setItemIcon] = useState<ProhibitedItemData['iconName']>('ShieldCheckIcon');
+  const [isSavingProhibited, setIsSavingProhibited] = useState(false);
+  const [prohibitedFeedback, setProhibitedFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+
   // IDs for accessibility
   const createNewsTitleId = useId();
   const reviewNewsTitleId = useId();
@@ -192,12 +208,27 @@ export function OwnerSystemHub() {
     }
   }, []);
 
+  const fetchProhibitedItems = useCallback(async () => {
+    try {
+      const res = await fetch('/api/owner/prohibited-items');
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data.items)) {
+          setProhibitedItemsList(data.items);
+        }
+      }
+    } catch {
+      // Ignore initial load error
+    }
+  }, []);
+
   useEffect(() => {
     fetchNews();
+    fetchProhibitedItems();
     loadSharedOwnerContactInfo().then(setContactInfo).catch(() => {
       window.dispatchEvent(new CustomEvent('app-toast', { detail: { type: 'error', message: 'โหลดข้อมูลติดต่อไม่สำเร็จ' } }));
     });
-  }, [fetchNews]);
+  }, [fetchNews, fetchProhibitedItems]);
 
   // Toast trigger helper (D-251 Top-Center Floating Toast)
   const triggerToast = (type: 'success' | 'error', message: string) => {
@@ -698,6 +729,19 @@ export function OwnerSystemHub() {
             title="ข้อขัดแย้งออฟไลน์"
           >
             <span>ข้อขัดแย้งออฟไลน์</span>
+          </button>
+
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeTab === 'regulations'}
+            className={`hub-filter-tab ${activeTab === 'regulations' ? 'active' : ''}`}
+            onClick={() => setActiveTab('regulations')}
+            data-testid="tab-regulations"
+            title="กฎระเบียบและสิ่งของต้องห้าม (Regulations & Prohibited Items)"
+          >
+            <span>สิ่งของต้องห้าม</span>
+            <span className="hub-tab-count-badge">{prohibitedItemsList.length}</span>
           </button>
         </div>
 
@@ -1596,6 +1640,238 @@ export function OwnerSystemHub() {
       )}
 
       {/* ==========================================================================
+          TAB 5: กฎระเบียบและสิ่งของต้องห้าม (Regulations & Prohibited Items)
+          ========================================================================== */}
+      {activeTab === 'regulations' && (
+        <section
+          id="owner-prohibited-items-manager"
+          className="hub-list-container"
+          aria-label="จัดการกฎระเบียบและสิ่งของต้องห้ามสำหรับคอนเสิร์ตทั้งหมด"
+          data-testid="owner-prohibited-items-manager"
+        >
+          {prohibitedFeedback && (
+            <div
+              style={{
+                padding: '0.75rem 1rem',
+                borderRadius: '8px',
+                marginBottom: '1rem',
+                background: prohibitedFeedback.type === 'success' ? '#f0fdf4' : '#fef2f2',
+                border: `1px solid ${prohibitedFeedback.type === 'success' ? '#86efac' : '#fecaca'}`,
+                color: prohibitedFeedback.type === 'success' ? '#166534' : '#991b1b',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.5rem',
+                fontSize: '0.9rem',
+              }}
+            >
+              {prohibitedFeedback.type === 'success' ? (
+                <CheckCircleIcon style={{ width: '18px', height: '18px', flexShrink: 0 }} />
+              ) : (
+                <AlertTriangleIcon style={{ width: '18px', height: '18px', flexShrink: 0 }} />
+              )}
+              <span>{prohibitedFeedback.message}</span>
+            </div>
+          )}
+
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              marginBottom: '1.25rem',
+              background: '#ffffff',
+              padding: '1rem 1.25rem',
+              borderRadius: '12px',
+              border: '1px solid var(--line)',
+            }}
+          >
+            <div>
+              <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 700, color: '#0f172a' }}>
+                กฎระเบียบและสิ่งของต้องห้ามนำเข้างาน (Regulations & Prohibited Items)
+              </h3>
+              <p style={{ margin: '0.25rem 0 0', fontSize: '0.85rem', color: '#64748b' }}>
+                กำหนดรายการสิ่งของต้องห้ามที่นำไปแสดงในการ์ดหน้ารายละเอียดคอนเสิร์ตทุกงานบนแพลตฟอร์ม
+              </p>
+            </div>
+            <div style={{ display: 'flex', gap: '0.5rem' }}>
+              <button
+                type="button"
+                className="button button-secondary"
+                onClick={() => {
+                  setEditingProhibitedId(null);
+                  setItemTitle('');
+                  setItemDesc('');
+                  setItemIcon('ShieldCheckIcon');
+                  setIsProhibitedModalOpen(true);
+                }}
+              >
+                <PlusIcon style={{ width: '16px', height: '16px' }} />
+                <span>เพิ่มสิ่งของต้องห้าม</span>
+              </button>
+              <button
+                type="button"
+                className="button button-primary"
+                disabled={isSavingProhibited}
+                onClick={async () => {
+                  setIsSavingProhibited(true);
+                  setProhibitedFeedback(null);
+                  try {
+                    const res = await fetch('/api/owner/prohibited-items', {
+                      method: 'PUT',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ items: prohibitedItemsList }),
+                    });
+                    const data = await res.json();
+                    if (res.ok) {
+                      setProhibitedFeedback({ type: 'success', message: 'บันทึกรายการสิ่งของต้องห้ามสำหรับทุกคอนเสิร์ตสำเร็จ' });
+                      triggerToast('success', 'บันทึกสำเร็จ');
+                    } else {
+                      setProhibitedFeedback({ type: 'error', message: data.message || 'บันทึกไม่สำเร็จ' });
+                    }
+                  } catch {
+                    setProhibitedFeedback({ type: 'error', message: 'เกิดข้อผิดพลาดในการเชื่อมต่อเซิร์ฟเวอร์' });
+                  } finally {
+                    setIsSavingProhibited(false);
+                  }
+                }}
+              >
+                <CheckIcon style={{ width: '16px', height: '16px' }} />
+                <span>{isSavingProhibited ? 'กำลังบันทึก...' : 'บันทึกการเปลี่ยนแปลงทั้งหมด'}</span>
+              </button>
+            </div>
+          </div>
+
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))',
+              gap: '1rem',
+            }}
+          >
+            {prohibitedItemsList.map((item, idx) => {
+              const renderItemIcon = () => {
+                const style = { width: '24px', height: '24px', color: '#dc2626' };
+                switch (item.iconName) {
+                  case 'CameraOffIcon': return <CameraOffIcon style={style} />;
+                  case 'AlertTriangleIcon': return <AlertTriangleIcon style={style} />;
+                  case 'CrossCircleIcon': return <CrossCircleIcon style={style} />;
+                  case 'SparklesIcon': return <SparklesIcon style={style} />;
+                  case 'InfoIcon': return <InfoIcon style={style} />;
+                  default: return <ShieldCheckIcon style={style} />;
+                }
+              };
+
+              return (
+                <div
+                  key={item.id}
+                  style={{
+                    background: '#ffffff',
+                    border: '1px solid var(--line)',
+                    borderRadius: '10px',
+                    padding: '1rem',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    justifyContent: 'space-between',
+                  }}
+                >
+                  <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'flex-start' }}>
+                    <div
+                      style={{
+                        padding: '8px',
+                        background: '#fef2f2',
+                        borderRadius: '8px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        flexShrink: 0,
+                      }}
+                    >
+                      {renderItemIcon()}
+                    </div>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <strong style={{ display: 'block', fontSize: '0.95rem', color: '#0f172a', marginBottom: '0.25rem' }}>
+                        {item.title}
+                      </strong>
+                      <p style={{ margin: 0, fontSize: '0.82rem', color: '#475569', lineHeight: 1.4 }}>
+                        {item.desc}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'flex-end',
+                      gap: '0.35rem',
+                      marginTop: '0.85rem',
+                      paddingTop: '0.65rem',
+                      borderTop: '1px solid #f1f5f9',
+                    }}
+                  >
+                    <button
+                      type="button"
+                      className="button button-sm button-secondary"
+                      disabled={idx === 0}
+                      onClick={() => {
+                        const copy = [...prohibitedItemsList];
+                        const temp = copy[idx - 1];
+                        copy[idx - 1] = copy[idx];
+                        copy[idx] = temp;
+                        setProhibitedItemsList(copy);
+                      }}
+                      title="เลื่อนขึ้น"
+                    >
+                      <ChevronUpIcon style={{ width: '14px', height: '14px' }} />
+                    </button>
+                    <button
+                      type="button"
+                      className="button button-sm button-secondary"
+                      disabled={idx === prohibitedItemsList.length - 1}
+                      onClick={() => {
+                        const copy = [...prohibitedItemsList];
+                        const temp = copy[idx + 1];
+                        copy[idx + 1] = copy[idx];
+                        copy[idx] = temp;
+                        setProhibitedItemsList(copy);
+                      }}
+                      title="เลื่อนลง"
+                    >
+                      <ChevronDownIcon style={{ width: '14px', height: '14px' }} />
+                    </button>
+                    <button
+                      type="button"
+                      className="button button-sm button-secondary"
+                      onClick={() => {
+                        setEditingProhibitedId(item.id);
+                        setItemTitle(item.title);
+                        setItemDesc(item.desc);
+                        setItemIcon(item.iconName || 'ShieldCheckIcon');
+                        setIsProhibitedModalOpen(true);
+                      }}
+                    >
+                      <PencilSquareIcon style={{ width: '14px', height: '14px' }} />
+                      <span>แก้ไข</span>
+                    </button>
+                    <button
+                      type="button"
+                      className="button button-sm button-danger"
+                      onClick={() => {
+                        if (confirm(`ต้องการลบรายการ "${item.title}" ใช่หรือไม่?`)) {
+                          setProhibitedItemsList(prev => prev.filter(p => p.id !== item.id));
+                        }
+                      }}
+                    >
+                      <TrashIcon style={{ width: '14px', height: '14px' }} />
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      )}
+
+      {/* ==========================================================================
           MODAL 1: Create News Modal Dialog (All-in-One News Modal, Q2 -> A2, D-255)
           ========================================================================== */}
       {isCreateNewsModalOpen && (
@@ -2209,6 +2485,147 @@ export function OwnerSystemHub() {
                 >
                   <CheckIcon style={{ width: '14px', height: '14px' }} />
                   <span>{editingBannerId ? 'บันทึกการแก้ไข' : 'สร้างแบนเนอร์'}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ==========================================================================
+          MODAL 4: Create / Edit Prohibited Item
+          ========================================================================== */}
+      {isProhibitedModalOpen && (
+        /* biome-ignore lint/a11y/useKeyWithClickEvents: Backdrop click dismiss */
+        <div
+          className="review-modal-backdrop"
+          onClick={e => {
+            if (e.target === e.currentTarget) setIsProhibitedModalOpen(false);
+          }}
+          role="dialog"
+          aria-modal="true"
+        >
+          <div className="dialog-modal-card" style={{ maxWidth: '520px' }}>
+            <div className="dialog-modal-header">
+              <div className="dialog-modal-title-row">
+                <ShieldCheckIcon className="modal-title-icon" style={{ width: '20px', height: '20px', color: 'var(--blue)' }} />
+                <h3 className="dialog-modal-title">
+                  {editingProhibitedId ? 'แก้ไขสิ่งของต้องห้าม' : 'เพิ่มสิ่งของต้องห้ามใหม่'}
+                </h3>
+              </div>
+              <button
+                type="button"
+                className="modal-close-icon-btn"
+                onClick={() => setIsProhibitedModalOpen(false)}
+                aria-label="ปิดหน้าต่าง"
+              >
+                <XIcon />
+              </button>
+            </div>
+
+            <form
+              onSubmit={e => {
+                e.preventDefault();
+                if (!itemTitle.trim()) return;
+
+                if (editingProhibitedId) {
+                  setProhibitedItemsList(prev =>
+                    prev.map(p =>
+                      p.id === editingProhibitedId
+                        ? { ...p, title: itemTitle.trim(), desc: itemDesc.trim(), iconName: itemIcon }
+                        : p,
+                    ),
+                  );
+                } else {
+                  setProhibitedItemsList(prev => [
+                    ...prev,
+                    {
+                      id: `item-${Date.now()}`,
+                      title: itemTitle.trim(),
+                      desc: itemDesc.trim(),
+                      iconName: itemIcon,
+                    },
+                  ]);
+                }
+                setIsProhibitedModalOpen(false);
+              }}
+              className="dialog-modal-body"
+            >
+              <div className="form-group" style={{ marginBottom: '1rem' }}>
+                <label htmlFor="prohibited-item-title" className="form-label">หัวข้อสิ่งของต้องห้าม *</label>
+                <input
+                  id="prohibited-item-title"
+                  type="text"
+                  className="text-input"
+                  style={{ width: '100%' }}
+                  placeholder="เช่น กล้องและอุปกรณ์บันทึกภาพ"
+                  value={itemTitle}
+                  onChange={e => setItemTitle(e.target.value)}
+                  required
+                />
+              </div>
+
+              <div className="form-group" style={{ marginBottom: '1rem' }}>
+                <label htmlFor="prohibited-item-desc" className="form-label">คำอธิบายรายละเอียด</label>
+                <textarea
+                  id="prohibited-item-desc"
+                  className="text-input"
+                  style={{ width: '100%', minHeight: '80px' }}
+                  placeholder="เช่น ไม่อนุญาตให้นำกล้อง DSLR, ไม้เซลฟี่ และโดรนเข้าพื้นที่..."
+                  value={itemDesc}
+                  onChange={e => setItemDesc(e.target.value)}
+                />
+              </div>
+
+              <div className="form-group" style={{ marginBottom: '1.25rem' }}>
+                <span className="form-label" style={{ display: 'block', marginBottom: '0.35rem' }}>ไอคอนสัญลักษณ์</span>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.5rem' }}>
+                  {[
+                    { id: 'CameraOffIcon', label: 'กล้อง/บันทึก' },
+                    { id: 'AlertTriangleIcon', label: 'อาวุธ/ของมีคม' },
+                    { id: 'CrossCircleIcon', label: 'อาหาร/เครื่องดื่ม' },
+                    { id: 'SparklesIcon', label: 'ป้ายไฟ/เลเซอร์' },
+                    { id: 'ShieldCheckIcon', label: 'สารเสพติด/ไวไฟ' },
+                    { id: 'InfoIcon', label: 'สัมภาระ/สัตว์' },
+                  ].map(ico => (
+                    <button
+                      key={ico.id}
+                      type="button"
+                      style={{
+                        padding: '0.5rem',
+                        border: `1.5px solid ${itemIcon === ico.id ? 'var(--blue)' : 'var(--line)'}`,
+                        borderRadius: '6px',
+                        background: itemIcon === ico.id ? '#eff6ff' : '#ffffff',
+                        cursor: 'pointer',
+                        fontSize: '0.78rem',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        gap: '4px',
+                      }}
+                      onClick={() => setItemIcon(ico.id as ProhibitedItemData['iconName'])}
+                    >
+                      <span style={{ fontWeight: itemIcon === ico.id ? 700 : 400 }}>{ico.label}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="dialog-modal-footer">
+                <button
+                  type="button"
+                  className="secondary-button modal-footer-btn"
+                  onClick={() => setIsProhibitedModalOpen(false)}
+                >
+                  ยกเลิก
+                </button>
+                <button
+                  type="submit"
+                  className="primary-button modal-footer-btn"
+                  disabled={!itemTitle.trim()}
+                >
+                  <CheckIcon style={{ width: '14px', height: '14px' }} />
+                  <span>{editingProhibitedId ? 'บันทึกการแก้ไข' : 'เพิ่มรายการ'}</span>
                 </button>
               </div>
             </form>

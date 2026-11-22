@@ -283,12 +283,13 @@ export function EventCheckoutFlow({
 
   const finalTicketSubtotal = Math.max(0, selectedSubtotal - ubuDiscountAmount);
 
-  // Customer service fee calculation (using feeSettings when available, 0.06 or 0.05 default)
+  // Customer service fee calculation (using feeSettings when available, 0.06 / 6% or 0.05 / 5% default)
   const customerFeeMode = feeSettings?.customerFeeMode || 'percentage';
-  const customerFeeRate = feeSettings?.customerFeeRate != null
-    ? feeSettings.customerFeeRate
-    : (isUbuFreshyEvent ? 6 : 5);
-  const _SERVICE_FEE_RATE = customerFeeRate / 100 || 0.06;
+  const defaultCustomerFeeRate = isUbuFreshyEvent ? 0.06 * 100 : 0.05 * 100;
+  const customerFeeRate =
+    feeSettings?.customerFeeRate !== undefined && feeSettings.customerFeeRate !== null
+      ? Number(feeSettings.customerFeeRate)
+      : defaultCustomerFeeRate;
   const baseTicketSubtotal = hasUbuPrivilege ? finalTicketSubtotal : selectedSubtotal;
 
   let serviceFee = 0;
@@ -300,6 +301,13 @@ export function EventCheckoutFlow({
     serviceFee = Math.round(customerFeeRate);
   }
   const grandTotal = baseTicketSubtotal + serviceFee;
+
+  const feeRateLabel =
+    customerFeeMode === 'percentage'
+      ? `${customerFeeRate}%`
+      : customerFeeMode === 'per_ticket'
+        ? `${customerFeeRate} ฿/ใบ`
+        : `${customerFeeRate} ฿`;
 
   const effectiveLimit = buyerQuota ? buyerQuota.remainingQuota : limitPerOrder;
 
@@ -922,7 +930,7 @@ export function EventCheckoutFlow({
               </div>
 
               <div className="breakdown-fee-row">
-                <span>ค่าธรรมเนียมบริการ ({isUbuFreshyEvent ? '6%' : '5%'})</span>
+                <span>ค่าธรรมเนียมบริการ ({feeRateLabel})</span>
                 <span>+{formatBaht(serviceFee)}</span>
               </div>
 
@@ -972,7 +980,7 @@ export function EventCheckoutFlow({
                 </div>
                 {serviceFee > 0 && (
                   <div className="checkout-sticky-fee-subnote">
-                    (รวมค่าบริการ {isUbuFreshyEvent ? '6%' : '5%'} {formatBaht(serviceFee)})
+                    (รวมค่าบริการ {feeRateLabel} {formatBaht(serviceFee)})
                   </div>
                 )}
               </div>

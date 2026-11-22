@@ -382,6 +382,7 @@ export async function generateTicketCanvas(
   if (bcode?.visible) {
     const bcX = bcode.x * scaleFactor;
     const bcY = bcode.y * scaleFactor;
+    ctx.save();
     ctx.fillStyle = bcode.secondaryColor || '#64748b';
     ctx.font = `11px ${fontFam}`;
     ctx.fillText(bcode.secondaryText || 'SECURITY VERIFICATION', bcX, bcY);
@@ -392,8 +393,13 @@ export async function generateTicketCanvas(
       ctx.fillRect(bcX + barOffset, bcY + 16, w, 20 * scaleFactor);
       barOffset += w + 2 * scaleFactor;
     }
+    const totalBarsWidth = Math.max(barOffset - 2 * scaleFactor, 100);
+    const codeString = `*${ticket.ticketCode}*`;
     ctx.font = `11px ${FONT_MONO}`;
-    ctx.fillText(`*${ticket.ticketCode}*`, bcX, bcY + 16 + 24 * scaleFactor);
+    const codeW = ctx.measureText(codeString).width;
+    // Align code directly under center of barcode bars matching designer
+    ctx.fillText(codeString, bcX + Math.max(0, (totalBarsWidth - codeW) / 2), bcY + 16 + 24 * scaleFactor);
+    ctx.restore();
   }
 
   // Footer Disclaimer Note
@@ -411,12 +417,24 @@ export async function generateTicketCanvas(
   if (ses?.visible) {
     const sesX = ses.x * scaleFactor;
     const sesY = ses.y * scaleFactor;
+    const isCenter = ses.align === 'center';
+    ctx.save();
     ctx.fillStyle = ses.secondaryColor || '#64748b';
     ctx.font = `11px ${fontFam}`;
-    ctx.fillText(ses.secondaryText || 'ADMISSION STUB', sesX, sesY);
-    ctx.fillStyle = ses.color || '#0f172a';
+    const badgeText = ses.secondaryText || 'ADMISSION STUB';
     const sumText = `${ticket.eventTitle} · ${ticket.ticketTypeName}`;
-    renderTextFitted(ctx, sumText, sesX, sesY + 16, width - sesX - 20, Math.round((ses.fontSize || 12) * scaleFactor), 10, fontFam, true);
+    const availableWidth = width - sesX - 20;
+    if (isCenter) {
+      ctx.textAlign = 'center';
+      ctx.fillText(badgeText, sesX + availableWidth / 2, sesY);
+      ctx.fillStyle = ses.color || '#0f172a';
+      renderTextFitted(ctx, sumText, sesX + availableWidth / 2, sesY + 16, availableWidth, Math.round((ses.fontSize || 12) * scaleFactor), 10, fontFam, true);
+    } else {
+      ctx.fillText(badgeText, sesX, sesY);
+      ctx.fillStyle = ses.color || '#0f172a';
+      renderTextFitted(ctx, sumText, sesX, sesY + 16, availableWidth, Math.round((ses.fontSize || 12) * scaleFactor), 10, fontFam, true);
+    }
+    ctx.restore();
   }
 
   // 6. Right Scan Stub Area: QR Code
@@ -504,12 +522,33 @@ export async function generateTicketCanvas(
   if (qrl?.visible) {
     const qrlX = qrl.x * scaleFactor;
     const qrlY = qrl.y * scaleFactor;
+    const isCenter = qrl.align !== 'left'; // default centered in stub block
+    ctx.save();
+    const tagText = qrl.secondaryText || 'รหัสบัตรสำหรับเข้างาน';
+    const codeText = ticket.ticketCode;
     ctx.font = `13px ${fontFam}`;
     ctx.fillStyle = qrl.secondaryColor || '#64748b';
-    ctx.fillText(qrl.secondaryText || 'รหัสบัตรสำหรับเข้างาน', qrlX, qrlY);
-    ctx.font = `bold 18px ${FONT_MONO}`;
-    ctx.fillStyle = qrl.color || '#0f172a';
-    ctx.fillText(ticket.ticketCode, qrlX, qrlY + 20);
+
+    if (isCenter) {
+      const tagW = ctx.measureText(tagText).width;
+      ctx.font = `bold 18px ${FONT_MONO}`;
+      const codeW = ctx.measureText(codeText).width;
+      const blockCenter = qrlX + Math.max(tagW, codeW) / 2;
+
+      ctx.textAlign = 'center';
+      ctx.font = `13px ${fontFam}`;
+      ctx.fillText(tagText, blockCenter, qrlY);
+      ctx.font = `bold 18px ${FONT_MONO}`;
+      ctx.fillStyle = qrl.color || '#0f172a';
+      ctx.fillText(codeText, blockCenter, qrlY + 20);
+    } else {
+      ctx.textAlign = 'left';
+      ctx.fillText(tagText, qrlX, qrlY);
+      ctx.font = `bold 18px ${FONT_MONO}`;
+      ctx.fillStyle = qrl.color || '#0f172a';
+      ctx.fillText(codeText, qrlX, qrlY + 20);
+    }
+    ctx.restore();
   }
 
   // Scan Instruction Hint
@@ -517,9 +556,20 @@ export async function generateTicketCanvas(
   if (sh?.visible) {
     const shX = sh.x * scaleFactor;
     const shY = sh.y * scaleFactor;
+    const isCenter = sh.align !== 'left'; // default centered in stub caption
+    ctx.save();
     ctx.font = `11px ${fontFam}`;
     ctx.fillStyle = sh.color || '#64748b';
-    ctx.fillText(sh.text || 'แสดง QR เพื่อสแกนเข้างาน', shX, shY);
+    const hintText = sh.text || 'แสดง QR เพื่อสแกนเข้างาน';
+    if (isCenter) {
+      const hintW = ctx.measureText(hintText).width;
+      ctx.textAlign = 'center';
+      ctx.fillText(hintText, shX + hintW / 2, shY);
+    } else {
+      ctx.textAlign = 'left';
+      ctx.fillText(hintText, shX, shY);
+    }
+    ctx.restore();
   }
 
   // Order ID
@@ -527,12 +577,33 @@ export async function generateTicketCanvas(
   if (oid?.visible) {
     const oX = oid.x * scaleFactor;
     const oY = oid.y * scaleFactor;
+    const isCenter = oid.align !== 'left'; // default centered in stub block
+    ctx.save();
+    const tagText = oid.secondaryText || 'หมายเลขคำสั่งซื้อ (ORDER ID)';
+    const orderText = ticket.orderId || oid.text || '-';
     ctx.font = `11px ${fontFam}`;
     ctx.fillStyle = oid.secondaryColor || '#64748b';
-    ctx.fillText('หมายเลขคำสั่งซื้อ (ORDER ID)', oX, oY);
-    ctx.font = `bold 13px ${FONT_MONO}`;
-    ctx.fillStyle = oid.color || '#0f172a';
-    ctx.fillText(ticket.orderId, oX, oY + 16);
+
+    if (isCenter) {
+      const tagW = ctx.measureText(tagText).width;
+      ctx.font = `bold 13px ${FONT_MONO}`;
+      const orderW = ctx.measureText(orderText).width;
+      const blockCenter = oX + Math.max(tagW, orderW) / 2;
+
+      ctx.textAlign = 'center';
+      ctx.font = `11px ${fontFam}`;
+      ctx.fillText(tagText, blockCenter, oY);
+      ctx.font = `bold 13px ${FONT_MONO}`;
+      ctx.fillStyle = oid.color || '#0f172a';
+      ctx.fillText(orderText, blockCenter, oY + 16);
+    } else {
+      ctx.textAlign = 'left';
+      ctx.fillText(tagText, oX, oY);
+      ctx.font = `bold 13px ${FONT_MONO}`;
+      ctx.fillStyle = oid.color || '#0f172a';
+      ctx.fillText(orderText, oX, oY + 16);
+    }
+    ctx.restore();
   }
 
   return canvas;

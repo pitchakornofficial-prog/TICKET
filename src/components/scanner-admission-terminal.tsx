@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import {
   CheckCircleIcon,
@@ -109,6 +109,10 @@ export function ScannerAdmissionTerminal({
   const [recentLogs, setRecentLogs] = useState<AdmissionLogItem[]>([]);
   const [loadingStats, setLoadingStats] = useState(false);
   const [cameraActive, setCameraActive] = useState(true);
+  const [facingMode, setFacingMode] = useState<'environment' | 'user'>('environment');
+  const [cameraError, setCameraError] = useState<string | null>(null);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const isProcessingScanRef = useRef(false);
   const [activeTerminalTab, setActiveTerminalTab] = useState<'scan' | 'logs' | 'offline'>('scan');
 
   // Connectivity & Offline mode state (AC-40, AC-42, AC-96, AC-103)
@@ -275,9 +279,33 @@ export function ScannerAdmissionTerminal({
     fetchStats();
   }, [fetchStats]);
 
-  async function handleScanSubmit(e?: React.FormEvent) {
-    if (e) e.preventDefault();
-    if (!ticketInput.trim() || loading) return;
+  const playScanBeep = useCallback((success: boolean) => {
+    try {
+      if (typeof window === 'undefined') return;
+      const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+      if (!AudioCtx) return;
+      const ctx = new AudioCtx();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = success ? 'sine' : 'square';
+      osc.frequency.setValueAtTime(success ? 880 : 330, ctx.currentTime);
+      gain.gain.setValueAtTime(0.12, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + (success ? 0.15 : 0.25));
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + (success ? 0.15 : 0.25));
+      if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+        navigator.vibrate(success ? [70] : [120, 60, 120]);
+      }
+    } catch {
+      // AudioContext playback error ignored
+    }
+  }, []);
+
+  const executeScan = useCallback(async (rawCode: string) => {
+    const code = rawCode.trim();
+    if (!code || loading) return;
 
     if (isOfflineMode) {
       setLoading(true);
@@ -288,11 +316,13 @@ export function ScannerAdmissionTerminal({
           scannerId: scannerId || 'scanner',
           scannerName: scannerName || (isPrimary ? 'เครื่องหลัก' : 'เครื่องสแกน'),
           isPrimary,
-          qrPayloadOrCode: ticketInput.trim(),
+          qrPayloadOrCode: code,
           action,
         });
 
         setScanResult(offResult);
+        playScanBeep(offResult.success);
+
         if (typeof offResult.pendingCount === 'number') {
           setPendingSyncCount(offResult.pendingCount);
         }
@@ -300,7 +330,7 @@ export function ScannerAdmissionTerminal({
         const newLog: AdmissionLogItem = {
           id: `off-${Date.now()}`,
           ticketId: offResult.ticket?.ticketId || '',
-          ticketCode: offResult.ticket?.ticketCode || ticketInput.trim(),
+          ticketCode: offResult.ticket?.ticketCode || code,
           scannerName: scannerName || (isPrimary ? 'เครื่องหลัก' : 'เครื่องสแกน'),
           action,
           status: offResult.status,
@@ -351,7 +381,7 @@ export function ScannerAdmissionTerminal({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           sessionId,
-          qrPayloadOrCode: ticketInput.trim(),
+          qrPayloadOrCode: code,
           action,
         }),
       });
@@ -359,6 +389,7 @@ export function ScannerAdmissionTerminal({
       const data = await res.json();
       if (res.ok && data.result) {
         setScanResult(data.result);
+        playScanBeep(Boolean(data.result.success));
       } else {
         setScanResult({
           success: false,
@@ -367,6 +398,7 @@ export function ScannerAdmissionTerminal({
           reason: data.error || 'ERROR',
           message: data.message || 'เกิดข้อผิดพลาดในการตรวจสอบบัตร',
         });
+        playScanBeep(false);
       }
       setTicketInput('');
       fetchStats();
@@ -378,10 +410,121 @@ export function ScannerAdmissionTerminal({
         reason: 'NETWORK_ERROR',
         message: 'ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ กรุณาลองใหม่อีกครั้ง',
       });
+      playScanBeep(false);
     } finally {
       setLoading(false);
     }
+  }, [loading, isOfflineMode, eventId, sessionId, scannerId, scannerName, isPrimary, action, offlineDataset, fetchStats, playScanBeep]);
+
+  async function handleScanSubmit(e?: React.FormEvent) {
+    if (e) e.preventDefault();
+    if (!ticketInput.trim() || loading) return;
+    await executeScan(ticketInput);
   }
+
+  // Camera stream and QR Code barcode detector lifecycle
+  useEffect(() => {
+    if (!cameraActive) {
+      if (videoRef.current) {
+        videoRef.current.srcObject = null;
+      }
+      return;
+    }
+
+    let isMounted = true;
+    let stream: MediaStream | null = null;
+    let animationFrameId: number | null = null;
+    let barcodeDetector: { detect: (source: HTMLVideoElement) => Promise<Array<{ rawValue?: string }>> } | null = null;
+
+    async function initCamera() {
+      setCameraError(null);
+      if (typeof navigator === 'undefined' || !navigator.mediaDevices?.getUserMedia) {
+        setCameraError('เบราว์เซอร์นี้ไม่รองรับการเปิดกล้อง หรือต้องเข้าใช้งานผ่าน HTTPS');
+        return;
+      }
+
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: {
+            facingMode: { ideal: facingMode },
+            width: { ideal: 1280 },
+            height: { ideal: 720 },
+          },
+          audio: false,
+        });
+
+        if (!isMounted) {
+          stream.getTracks().forEach(t => {
+            t.stop();
+          });
+          return;
+        }
+
+        if (videoRef.current) {
+          videoRef.current.srcObject = stream;
+          await videoRef.current.play().catch(() => {});
+        }
+
+        if (typeof window !== 'undefined' && 'BarcodeDetector' in window) {
+          try {
+            const DetectorClass = (window as unknown as { BarcodeDetector: new (opts: { formats: string[] }) => typeof barcodeDetector }).BarcodeDetector;
+            barcodeDetector = new DetectorClass({ formats: ['qr_code', 'code_128', 'code_39'] });
+          } catch {
+            barcodeDetector = null;
+          }
+        }
+
+        const scanLoop = async () => {
+          if (!isMounted || !videoRef.current) return;
+          if (barcodeDetector && videoRef.current.readyState >= 2 && !isProcessingScanRef.current) {
+            try {
+              const barcodes = await barcodeDetector.detect(videoRef.current);
+              if (barcodes && barcodes.length > 0 && !isProcessingScanRef.current) {
+                const detectedCode = barcodes[0].rawValue?.trim();
+                if (detectedCode) {
+                  isProcessingScanRef.current = true;
+                  await executeScan(detectedCode);
+                  setTimeout(() => {
+                    isProcessingScanRef.current = false;
+                  }, 2200);
+                }
+              }
+            } catch {
+              // Ignore detection failures between video frames
+            }
+          }
+          animationFrameId = requestAnimationFrame(scanLoop);
+        };
+
+        animationFrameId = requestAnimationFrame(scanLoop);
+      } catch (err: unknown) {
+        if (!isMounted) return;
+        const errorObj = err as { name?: string; message?: string };
+        if (errorObj.name === 'NotAllowedError' || errorObj.name === 'PermissionDeniedError') {
+          setCameraError('เบราว์เซอร์ถูกปฏิเสธการเข้าถึงกล้อง กรุณาอนุญาตการใช้งานกล้องในเบราว์เซอร์');
+        } else if (errorObj.name === 'NotFoundError' || errorObj.name === 'DevicesNotFoundError') {
+          setCameraError('ไม่พบอุปกรณ์กล้องบนอุปกรณ์นี้');
+        } else {
+          setCameraError(`ไม่สามารถเปิดกล้องได้: ${errorObj.message || 'โปรดตรวจสอบการเชื่อมต่อกล้องหรือสิทธิ์ความปลอดภัย'}`);
+        }
+      }
+    }
+
+    initCamera();
+
+    return () => {
+      isMounted = false;
+      if (animationFrameId) cancelAnimationFrame(animationFrameId);
+      if (stream) {
+        stream.getTracks().forEach(t => {
+          t.stop();
+        });
+      }
+      if (videoRef.current) {
+        videoRef.current.srcObject = null;
+      }
+    };
+  }, [cameraActive, facingMode, executeScan]);
 
   return (
     <div className="terminal-centered-wrapper" style={{ minWidth: 0 }}>
@@ -573,10 +716,64 @@ export function ScannerAdmissionTerminal({
 
             {/* Camera Viewfinder (Auto-Active by Default) */}
             {cameraActive && (
-              <div className="camera-viewfinder" id="camera-viewfinder">
-                <div className="viewfinder-frame">
+              <div
+                className="camera-viewfinder"
+                id="camera-viewfinder"
+                style={{
+                  position: 'relative',
+                  overflow: 'hidden',
+                  minHeight: '260px',
+                  backgroundColor: '#0f172a',
+                  borderRadius: '12px',
+                }}
+              >
+                <video
+                  ref={videoRef}
+                  playsInline
+                  muted
+                  autoPlay
+                  className="scanner-live-video"
+                  style={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    width: '100%',
+                    height: '100%',
+                    objectFit: 'cover',
+                    zIndex: 1,
+                  }}
+                />
+                <div className="viewfinder-frame" style={{ position: 'relative', zIndex: 2 }}>
                   <div className="viewfinder-laser" />
-                  <p className="viewfinder-hint">นำ QR Code บัตรมาส่องในกรอบเพื่อสแกนอัตโนมัติ</p>
+                  <p className="viewfinder-hint">
+                    {cameraError ? cameraError : 'นำ QR Code บัตรมาส่องในกรอบเพื่อสแกนอัตโนมัติ'}
+                  </p>
+                </div>
+                <div
+                  style={{
+                    position: 'absolute',
+                    bottom: '10px',
+                    right: '10px',
+                    zIndex: 3,
+                    display: 'flex',
+                    gap: '6px',
+                  }}
+                >
+                  <button
+                    type="button"
+                    className="button button-sm button-secondary"
+                    style={{
+                      fontSize: '0.78rem',
+                      padding: '4px 8px',
+                      background: 'rgba(15, 23, 42, 0.75)',
+                      color: '#ffffff',
+                      borderColor: 'rgba(255, 255, 255, 0.25)',
+                    }}
+                    onClick={() => setFacingMode(prev => prev === 'environment' ? 'user' : 'environment')}
+                    title="สลับกล้องหน้า/กล้องหลัง"
+                  >
+                    สลับกล้อง ({facingMode === 'environment' ? 'หลัง' : 'หน้า'})
+                  </button>
                 </div>
               </div>
             )}

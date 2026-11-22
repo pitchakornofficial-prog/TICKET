@@ -55,6 +55,7 @@ export interface MovableItem {
   text?: string;
   secondaryText?: string;
   size?: number; // for QR
+  align?: 'left' | 'center' | 'right';
 }
 
 export interface TicketDesignerState {
@@ -1351,17 +1352,39 @@ export function AdminTicketDesigner() {
           }
         }
 
-        if (el.secondaryText) {
-          ctx.fillStyle = el.secondaryColor || '#64748b';
+        const isCenter = el.align === 'center' || el.id === 'qrCodeLabel' || el.id === 'orderId' || el.id === 'scanHint';
+        ctx.save();
+        if (isCenter) {
           ctx.font = `12px ${state.fontFamily}, Kanit, sans-serif`;
-          ctx.fillText(el.secondaryText, posX, posY);
-        }
-
-        if (el.text) {
-          ctx.fillStyle = el.color || '#0f172a';
+          const sW = el.secondaryText ? ctx.measureText(el.secondaryText).width : 0;
           ctx.font = `${el.fontWeight || 'normal'} ${Math.round((el.fontSize || 14) * scaleFactor)}px ${state.fontFamily}, Kanit, sans-serif`;
-          ctx.fillText(el.text, posX, el.secondaryText ? posY + 18 : posY);
+          const tW = el.text ? ctx.measureText(el.text).width : 0;
+          const blockCenter = posX + Math.max(sW, tW) / 2;
+          ctx.textAlign = 'center';
+
+          if (el.secondaryText) {
+            ctx.fillStyle = el.secondaryColor || '#64748b';
+            ctx.font = `12px ${state.fontFamily}, Kanit, sans-serif`;
+            ctx.fillText(el.secondaryText, blockCenter, posY);
+          }
+          if (el.text) {
+            ctx.fillStyle = el.color || '#0f172a';
+            ctx.font = `${el.fontWeight || 'normal'} ${Math.round((el.fontSize || 14) * scaleFactor)}px ${state.fontFamily}, Kanit, sans-serif`;
+            ctx.fillText(el.text, blockCenter, el.secondaryText ? posY + 18 : posY);
+          }
+        } else {
+          if (el.secondaryText) {
+            ctx.fillStyle = el.secondaryColor || '#64748b';
+            ctx.font = `12px ${state.fontFamily}, Kanit, sans-serif`;
+            ctx.fillText(el.secondaryText, posX, posY);
+          }
+          if (el.text) {
+            ctx.fillStyle = el.color || '#0f172a';
+            ctx.font = `${el.fontWeight || 'normal'} ${Math.round((el.fontSize || 14) * scaleFactor)}px ${state.fontFamily}, Kanit, sans-serif`;
+            ctx.fillText(el.text, posX, el.secondaryText ? posY + 18 : posY);
+          }
         }
+        ctx.restore();
       }
 
       // Barcode element
@@ -1380,7 +1403,10 @@ export function AdminTicketDesigner() {
           ctx.fillRect(bX + barOffset, bY + 16, w, 24 * scaleFactor);
           barOffset += w + 2 * scaleFactor;
         }
-        ctx.fillText(`*${bcode.text}*`, bX, bY + 16 + 26 * scaleFactor);
+        const totalBarsWidth = Math.max(barOffset - 2 * scaleFactor, 100);
+        const codeString = `*${bcode.text}*`;
+        const codeW = ctx.measureText(codeString).width;
+        ctx.fillText(codeString, bX + Math.max(0, (totalBarsWidth - codeW) / 2), bY + 16 + 26 * scaleFactor);
       }
 
       // 6. Draw QR Code
