@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useTransition } from 'react';
 import type { TicketEmailDeliveryRecord } from '@/server/ticket-delivery';
 import { AlertIcon } from './alert-icon';
 import { CheckCircleIcon, RefreshIcon } from './icons';
+import { triggerRefreshToast } from './toast-notification';
 
 export function OwnerEmailDeliveriesManager() {
   const [deliveries, setDeliveries] = useState<TicketEmailDeliveryRecord[]>([]);
@@ -92,7 +93,10 @@ export function OwnerEmailDeliveriesManager() {
         </div>
         <button
           type="button"
-          onClick={loadDeliveries}
+          onClick={async () => {
+            await loadDeliveries();
+            triggerRefreshToast('จัดส่งอีเมล');
+          }}
           disabled={isLoading}
           className="action-button"
           style={{
@@ -101,7 +105,7 @@ export function OwnerEmailDeliveriesManager() {
             background: 'var(--white)',
             border: '1px solid var(--line)',
             borderRadius: '4px',
-            fontWeight: 500,
+            fontWeight: 400,
             fontSize: '0.85rem',
             cursor: isLoading ? 'not-allowed' : 'pointer',
           }}
@@ -198,7 +202,7 @@ export function OwnerEmailDeliveriesManager() {
                         padding: '0.2rem 0.6rem',
                         borderRadius: '4px',
                         fontSize: '0.75rem',
-                        fontWeight: 600,
+                        fontWeight: 400,
                       }}
                     >
                       จัดส่งล้มเหลว
@@ -225,7 +229,7 @@ export function OwnerEmailDeliveriesManager() {
                     color: 'var(--white)',
                     border: 'none',
                     borderRadius: '4px',
-                    fontWeight: 600,
+                    fontWeight: 400,
                     fontSize: '0.85rem',
                     cursor: isPending ? 'not-allowed' : 'pointer',
                     display: 'flex',

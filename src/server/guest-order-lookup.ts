@@ -75,6 +75,7 @@ export async function findMatchingOrderByContact(
        WHERE id = $1
          AND LOWER("buyerEmail") = $2
          AND REPLACE(REPLACE("buyerPhone", '-', ''), ' ', '') = $3
+         AND COALESCE("orderSource", 'web') <> 'direct_issue'
        LIMIT 1`,
       [orderId.trim(), cleanEmail, cleanPhone],
     );
@@ -87,6 +88,7 @@ export async function findMatchingOrderByContact(
      FROM orders
      WHERE LOWER("buyerEmail") = $1
        AND REPLACE(REPLACE("buyerPhone", '-', ''), ' ', '') = $2
+       AND COALESCE("orderSource", 'web') <> 'direct_issue'
      ORDER BY "createdAt" DESC
      LIMIT 1`,
     [cleanEmail, cleanPhone],
@@ -271,6 +273,7 @@ export async function lookupGuestOrders(
      WHERE LOWER(o."buyerEmail") = $1
        AND REPLACE(REPLACE(o."buyerPhone", '-', ''), ' ', '') = $2
        AND ($3::text IS NULL OR o.id = $3)
+       AND COALESCE(o."orderSource", 'web') <> 'direct_issue'
      ORDER BY o."createdAt" DESC`,
     [cleanEmail, cleanPhone, session.purpose.startsWith('order_lookup:') ? session.purpose.slice('order_lookup:'.length) : null],
   );
@@ -387,7 +390,8 @@ export async function getGuestOrderDetail(
      FROM orders o
      JOIN events e ON o."eventId" = e.id
      JOIN event_sessions es ON o."sessionId" = es.id
-     WHERE o.id = $1`,
+     WHERE o.id = $1
+       AND COALESCE(o."orderSource", 'web') <> 'direct_issue'`,
     [input.orderId],
   );
 
@@ -506,6 +510,7 @@ async function resolveOrderForLinkToken(
     `SELECT id, "buyerName", "buyerEmail", "buyerPhone", status
      FROM orders
      WHERE id = $1
+       AND COALESCE("orderSource", 'web') <> 'direct_issue'
      LIMIT 1`,
     [cleanOrderId],
   );

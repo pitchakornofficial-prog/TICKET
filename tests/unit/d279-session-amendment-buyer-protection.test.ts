@@ -41,14 +41,14 @@ describe('D-279: All-in-One Session & Concert Amendment Suite, Ticket Design Uni
     expect(content).toContain('innerQrRadius');
   });
 
-  it('4. Verifies admin-ticket-designer renders zoneBadge as meta-block and has rounded QR', () => {
+  it('4. Verifies admin-ticket-designer renders zoneBadge as meta-block and borderless QR (D-289)', () => {
     const designerFilePath = path.resolve(process.cwd(), 'src/components/admin-ticket-designer.tsx');
     const content = fs.readFileSync(designerFilePath, 'utf8');
 
     expect(content).toContain("label: 'โซน / ประเภทบัตร (Zone & Category)'");
     expect(content).toContain("secondaryText: 'โซน / ประเภทบัตร (ZONE & CATEGORY)'");
     expect(content).toContain('className="surface-qr-btn"');
-    expect(content).toContain("borderRadius: '12px'");
+    expect(content).toContain('borderRadius: 0');
   });
 
   it('5. Verifies organizer amendment modal has 3 sections, add tier button, and quota protection', () => {

@@ -216,7 +216,7 @@ export function OwnerFeeSettingsManager() {
         <div>
           {/* Event Selector */}
           <div style={{ marginBottom: '1.5rem' }}>
-            <label htmlFor="event-select" style={{ display: 'block', fontWeight: 600, marginBottom: '0.5rem' }}>
+            <label htmlFor="event-select" style={{ display: 'block', fontWeight: 400, marginBottom: '0.5rem' }}>
               เลือกคอนเสิร์ต
             </label>
             <select
@@ -250,7 +250,7 @@ export function OwnerFeeSettingsManager() {
           {selectedEvent && (
             <form onSubmit={handleSave} style={{ background: '#fafafb', border: '1px solid var(--line)', borderRadius: '8px', padding: '1.5rem' }}>
               <div style={{ marginBottom: '1.2rem', paddingBottom: '0.8rem', borderBottom: '1px solid var(--line)' }}>
-                <span style={{ fontSize: '0.85rem', color: 'var(--blue)', fontWeight: 600, textTransform: 'uppercase' }}>
+                <span style={{ fontSize: '0.85rem', color: 'var(--blue)', fontWeight: 400, textTransform: 'uppercase' }}>
                   งานที่เลือก
                 </span>
                 <h3 style={{ margin: '0.3rem 0 0.2rem', fontSize: '1.15rem' }}>{selectedEvent.title}</h3>
@@ -261,7 +261,7 @@ export function OwnerFeeSettingsManager() {
                 {/* Tickets Breakdown for Admin Visibility */}
                 <div style={{ marginTop: '0.6rem', padding: '0.75rem 0.9rem', background: '#f1f5f9', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.45rem', flexWrap: 'wrap', gap: '0.5rem' }}>
-                    <span style={{ fontSize: '0.85rem', fontWeight: 600, color: '#0f172a' }}>
+                    <span style={{ fontSize: '0.85rem', fontWeight: 400, color: '#0f172a' }}>
                       ประเภทบัตรและราคาที่ผู้จัดสร้างไว้ (Ticket Breakdown & Shared Quota)
                     </span>
                     <span style={{ fontSize: '0.75rem', color: '#64748b' }}>
@@ -274,7 +274,7 @@ export function OwnerFeeSettingsManager() {
                         <div key={tt.id} style={{ background: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '6px', padding: '0.55rem 0.75rem' }}>
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.25rem' }}>
                             <strong style={{ fontSize: '0.88rem', color: '#0f172a' }}>{tt.name}</strong>
-                            <span style={{ fontSize: '0.74rem', background: '#eff6ff', color: '#1848ed', padding: '2px 6px', borderRadius: '4px', fontWeight: 600 }}>
+                            <span style={{ fontSize: '0.74rem', background: '#eff6ff', color: '#1848ed', padding: '2px 6px', borderRadius: '4px', fontWeight: 400 }}>
                               โควตารวม {tt.quota} ใบ
                             </span>
                           </div>
@@ -312,13 +312,13 @@ export function OwnerFeeSettingsManager() {
               {/* Organizer Fee Settings (AC-23) */}
               <div style={{ marginBottom: '1.5rem', background: 'var(--white)', border: '1px solid var(--line)', borderRadius: '6px', padding: '1.2rem' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.6rem' }}>
-                  <h4 style={{ margin: 0, fontSize: '1rem', fontWeight: 600 }}>1. ค่าบริการฝั่งผู้จัดงาน (Organizer Platform Fee)</h4>
+                  <h4 style={{ margin: 0, fontSize: '1rem', fontWeight: 400 }}>1. ค่าบริการฝั่งผู้จัดงาน (Organizer Platform Fee)</h4>
                   {organizerFeeLocked ? (
-                    <span style={{ fontSize: '0.8rem', background: '#fee2e2', color: '#991b1b', padding: '0.2rem 0.6rem', borderRadius: '4px', fontWeight: 500 }}>
+                    <span style={{ fontSize: '0.8rem', background: '#fee2e2', color: '#991b1b', padding: '0.2rem 0.6rem', borderRadius: '4px', fontWeight: 400 }}>
                       ล็อกแล้ว (มีคำสั่งซื้อหรือกันบัตรแล้ว)
                     </span>
                   ) : (
-                    <span style={{ fontSize: '0.8rem', background: '#e0e7ff', color: 'var(--blue)', padding: '0.2rem 0.6rem', borderRadius: '4px', fontWeight: 500 }}>
+                    <span style={{ fontSize: '0.8rem', background: '#e0e7ff', color: 'var(--blue)', padding: '0.2rem 0.6rem', borderRadius: '4px', fontWeight: 400 }}>
                       แก้ไขได้ (ยังไม่มีคำสั่งซื้อ)
                     </span>
                   )}
@@ -330,7 +330,7 @@ export function OwnerFeeSettingsManager() {
 
                 {/* UBU Privilege Mode Switch (D-181) */}
                 <div style={{ marginBottom: '1.2rem', padding: '0.8rem 1rem', background: '#f8fafc', border: '1px solid var(--line)', borderRadius: '6px' }}>
-                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', cursor: organizerFeeLocked ? 'default' : 'pointer', fontWeight: 600, fontSize: '0.92rem' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', cursor: organizerFeeLocked ? 'default' : 'pointer', fontWeight: 400, fontSize: '0.92rem' }}>
                     <input
                       id="ubu-privilege-mode-switch"
                       type="checkbox"
@@ -424,8 +424,8 @@ export function OwnerFeeSettingsManager() {
               {/* Customer Fee Settings (AC-24) */}
               <div style={{ marginBottom: '1.5rem', background: 'var(--white)', border: '1px solid var(--line)', borderRadius: '6px', padding: '1.2rem' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.6rem' }}>
-                  <h4 style={{ margin: 0, fontSize: '1rem', fontWeight: 600 }}>2. ค่าบริการฝั่งลูกค้า (Customer Service Fee)</h4>
-                  <span style={{ fontSize: '0.8rem', background: '#e0e7ff', color: 'var(--blue)', padding: '0.2rem 0.6rem', borderRadius: '4px', fontWeight: 500 }}>
+                  <h4 style={{ margin: 0, fontSize: '1rem', fontWeight: 400 }}>2. ค่าบริการฝั่งลูกค้า (Customer Service Fee)</h4>
+                  <span style={{ fontSize: '0.8rem', background: '#e0e7ff', color: 'var(--blue)', padding: '0.2rem 0.6rem', borderRadius: '4px', fontWeight: 400 }}>
                     แก้ไขได้
                   </span>
                 </div>
@@ -483,7 +483,7 @@ export function OwnerFeeSettingsManager() {
 
               {/* Reserve Percentage Settings (AC-29) */}
               <div style={{ marginBottom: '1.5rem', background: 'var(--white)', border: '1px solid var(--line)', borderRadius: '6px', padding: '1.2rem' }}>
-                <h4 style={{ margin: '0 0 0.6rem', fontSize: '1rem', fontWeight: 600 }}>3. เปอร์เซ็นต์เงินสำรองรายงาน (Reserve Fund Rate)</h4>
+                <h4 style={{ margin: '0 0 0.6rem', fontSize: '1rem', fontWeight: 400 }}>3. เปอร์เซ็นต์เงินสำรองรายงาน (Reserve Fund Rate)</h4>
                 <p style={{ margin: '0 0 1rem', fontSize: '0.85rem', color: 'var(--muted)' }}>
                   กันไว้จากรายได้สุทธิเพื่อรองรับการคืนเงินหลังหักค่าบริการผู้จัดงาน (0 ถึง 100%)
                 </p>
@@ -524,7 +524,7 @@ export function OwnerFeeSettingsManager() {
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
                   <InfoIcon style={{ width: '18px', height: '18px', color: 'var(--blue)' }} />
-                  <span style={{ fontWeight: 600, fontSize: '0.95rem' }}>สรุปค่าตั้งที่มีผลสำหรับงานนี้</span>
+                  <span style={{ fontWeight: 400, fontSize: '0.95rem' }}>สรุปค่าตั้งที่มีผลสำหรับงานนี้</span>
                 </div>
                 <ul style={{ margin: '0 0 0.5rem', paddingLeft: '1.4rem', fontSize: '0.9rem', lineHeight: 1.6 }}>
                   <li>
@@ -564,7 +564,7 @@ export function OwnerFeeSettingsManager() {
                   color: 'var(--white)',
                   border: 'none',
                   borderRadius: '4px',
-                  fontWeight: 600,
+                  fontWeight: 400,
                   cursor: isPending ? 'not-allowed' : 'pointer',
                   opacity: isPending ? 0.7 : 1,
                 }}

@@ -144,7 +144,7 @@ export function OwnerContactCorrectionManager() {
       }}
     >
       <div style={{ marginBottom: '20px' }}>
-        <h2 style={{ fontSize: '18px', fontWeight: 'bold', color: '#0f172a', margin: '0 0 6px 0' }}>
+        <h2 style={{ fontSize: '18px', fontWeight: 400, color: '#0f172a', margin: '0 0 6px 0' }}>
           แก้ไขข้อมูลติดต่อคำสั่งซื้อที่ชำระแล้ว
         </h2>
         <p style={{ color: '#64748b', fontSize: '14px', margin: 0 }}>
@@ -222,7 +222,7 @@ export function OwnerContactCorrectionManager() {
             borderRadius: '6px',
             padding: '8px 16px',
             fontSize: '14px',
-            fontWeight: 'bold',
+            fontWeight: 400,
             cursor: 'pointer',
             display: 'inline-flex',
             alignItems: 'center',
@@ -265,7 +265,7 @@ export function OwnerContactCorrectionManager() {
             marginBottom: '24px',
           }}
         >
-          <h3 style={{ fontSize: '16px', fontWeight: 'bold', color: '#0f172a', margin: '0 0 12px 0' }}>
+          <h3 style={{ fontSize: '16px', fontWeight: 400, color: '#0f172a', margin: '0 0 12px 0' }}>
             แก้ไขข้อมูลติดต่อคำสั่งซื้อ: {editingOrder.id}
           </h3>
 
@@ -290,7 +290,7 @@ export function OwnerContactCorrectionManager() {
               <div>
                 <label
                   htmlFor="new-buyer-email"
-                  style={{ display: 'block', fontSize: '13px', fontWeight: 'bold', color: '#334155', marginBottom: '6px' }}
+                  style={{ display: 'block', fontSize: '13px', fontWeight: 400, color: '#334155', marginBottom: '6px' }}
                 >
                   อีเมลใหม่ *
                 </label>
@@ -314,7 +314,7 @@ export function OwnerContactCorrectionManager() {
               <div>
                 <label
                   htmlFor="new-buyer-phone"
-                  style={{ display: 'block', fontSize: '13px', fontWeight: 'bold', color: '#334155', marginBottom: '6px' }}
+                  style={{ display: 'block', fontSize: '13px', fontWeight: 400, color: '#334155', marginBottom: '6px' }}
                 >
                   เบอร์โทรศัพท์ใหม่ *
                 </label>
@@ -339,7 +339,7 @@ export function OwnerContactCorrectionManager() {
             <div style={{ marginBottom: '16px' }}>
               <label
                 htmlFor="correction-reason"
-                style={{ display: 'block', fontSize: '13px', fontWeight: 'bold', color: '#334155', marginBottom: '6px' }}
+                style={{ display: 'block', fontSize: '13px', fontWeight: 400, color: '#334155', marginBottom: '6px' }}
               >
                 บันทึกเหตุผลและการตรวจสอบตัวตน *
               </label>
@@ -372,7 +372,7 @@ export function OwnerContactCorrectionManager() {
                   borderRadius: '6px',
                   padding: '8px 18px',
                   fontSize: '14px',
-                  fontWeight: 'bold',
+                  fontWeight: 400,
                   cursor: isSubmitting ? 'not-allowed' : 'pointer',
                 }}
               >
@@ -426,23 +426,23 @@ export function OwnerContactCorrectionManager() {
             <tbody>
               {orders.map(order => (
                 <tr key={order.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                  <td style={{ padding: '12px', fontFamily: 'monospace', fontWeight: 'bold', color: '#0f172a' }}>
+                  <td style={{ padding: '12px', fontFamily: 'monospace', fontWeight: 400, color: '#0f172a' }}>
                     {order.id}
                   </td>
                   <td style={{ padding: '12px', color: '#334155' }}>
-                    <div style={{ fontWeight: 'bold' }}>{order.eventTitle}</div>
+                    <div style={{ fontWeight: 400 }}>{order.eventTitle}</div>
                     <div style={{ fontSize: '11px', color: '#64748b' }}>
                       {formatDate(new Date(order.sessionStartTime))}
                     </div>
                   </td>
                   <td style={{ padding: '12px', color: '#334155' }}>{order.buyerName}</td>
-                  <td style={{ padding: '12px', color: '#1848ed', fontWeight: 'bold' }}>
+                  <td style={{ padding: '12px', color: '#1848ed', fontWeight: 400 }}>
                     <span id={`buyer-email-${order.id}`}>{order.buyerEmail}</span>
                   </td>
                   <td style={{ padding: '12px', color: '#334155' }}>
                     <span id={`buyer-phone-${order.id}`}>{order.buyerPhone}</span>
                   </td>
-                  <td style={{ padding: '12px', fontWeight: 'bold', color: '#0f172a' }}>
+                  <td style={{ padding: '12px', fontWeight: 400, color: '#0f172a' }}>
                     {formatBaht(order.total)}
                   </td>
                   <td style={{ padding: '12px', color: '#475569' }}>{order.ticketCount} ใบ</td>
@@ -459,7 +459,7 @@ export function OwnerContactCorrectionManager() {
                           borderRadius: '4px',
                           padding: '4px 10px',
                           fontSize: '12px',
-                          fontWeight: 'bold',
+                          fontWeight: 400,
                           cursor: 'pointer',
                         }}
                       >
@@ -503,7 +503,7 @@ export function OwnerContactCorrectionManager() {
           }}
         >
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-            <h4 style={{ fontSize: '14px', fontWeight: 'bold', color: '#0f172a', margin: 0 }}>
+            <h4 style={{ fontSize: '14px', fontWeight: 400, color: '#0f172a', margin: 0 }}>
               ประวัติการแก้ไขข้อมูลติดต่อสำหรับคำสั่งซื้อ: {viewingAuditOrderId}
             </h4>
             <button

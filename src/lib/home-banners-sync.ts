@@ -100,13 +100,38 @@ export function loadHomeBanners(): HeroBannerItem[] {
     const raw = localStorage.getItem(STORAGE_KEY_HOME_BANNERS);
     if (!raw) return DEFAULT_HERO_BANNERS;
     const parsed = JSON.parse(raw);
-    if (Array.isArray(parsed) && parsed.length > 0) {
+    if (Array.isArray(parsed)) {
       return parsed.sort((a, b) => a.order - b.order);
     }
     return DEFAULT_HERO_BANNERS;
   } catch {
     return DEFAULT_HERO_BANNERS;
   }
+}
+
+/**
+ * Fetch banners from the central database API and update local cache
+ */
+export async function loadSharedHomeBanners(): Promise<HeroBannerItem[]> {
+  try {
+    const res = await fetch('/api/public/banners', { cache: 'no-store' });
+    if (res.ok) {
+      const data = await res.json();
+      if (Array.isArray(data.banners)) {
+        if (typeof window !== 'undefined') {
+          try {
+            localStorage.setItem(STORAGE_KEY_HOME_BANNERS, JSON.stringify(data.banners));
+          } catch {
+            // ignore
+          }
+        }
+        return data.banners;
+      }
+    }
+  } catch {
+    // fallback to local
+  }
+  return loadHomeBanners();
 }
 
 /**
@@ -120,6 +145,25 @@ export function saveHomeBanners(banners: HeroBannerItem[]): void {
     window.dispatchEvent(new CustomEvent(EVENT_HOME_BANNERS_CHANGED, { detail: sorted }));
   } catch (error) {
     console.warn('Failed to save home hero banners to storage', error);
+  }
+}
+
+/**
+ * Save hero banners to central database and broadcast change event across all devices
+ */
+export async function saveSharedHomeBanners(banners: HeroBannerItem[]): Promise<void> {
+  const sorted = [...banners].sort((a, b) => a.order - b.order);
+  saveHomeBanners(sorted);
+
+  const res = await fetch('/api/owner/banners', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ banners: sorted }),
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err.message || 'บันทึกแบนเนอร์ไม่สำเร็จ');
   }
 }
 

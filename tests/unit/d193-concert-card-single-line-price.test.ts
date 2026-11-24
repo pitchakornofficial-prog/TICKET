@@ -25,12 +25,12 @@ describe('D-193 Concert Card Single-Line Price Display & Redundant Label Removal
   it('verifies Item 3: balanced layout, single-line nowrap, and overflow protection in globals.css', () => {
     const globalsCss = readFileSync(join(rootDir, 'src/app/globals.css'), 'utf8');
 
-    // Desktop .card-split-price and .price-amount styling
+    // Desktop .card-split-price and .price-amount styling (Standardized to font-weight: 400 under D-281)
     expect(globalsCss).toContain('.card-split-price { display: flex; align-items: baseline; min-width: 0; overflow: hidden; white-space: nowrap; flex: 1; }');
-    expect(globalsCss).toContain('.card-split-price .price-amount { font-size: 1.02rem; font-weight: 600; color: var(--blue); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }');
+    expect(globalsCss).toContain('.card-split-price .price-amount { font-size: 1.02rem; font-weight: 400; color: var(--blue); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }');
 
-    // Buy button has flex-shrink: 0 to prevent squeezing
-    expect(globalsCss).toContain('.card-split-buy-btn { font-size: .85rem; font-weight: 600; color: #ffffff; background: #0f172a; border: 1px solid #0f172a;');
+    // Buy button has flex-shrink: 0 to prevent squeezing (Standardized to font-weight: 400 under D-281)
+    expect(globalsCss).toContain('.card-split-buy-btn { font-size: .85rem; font-weight: 400; color: #ffffff; background: #0f172a; border: 1px solid #0f172a;');
     expect(globalsCss).toContain('flex-shrink: 0;');
 
     // Mobile media query has compact nowrap and overflow protection

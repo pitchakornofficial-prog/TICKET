@@ -17,7 +17,7 @@ import {
   SearchIcon,
 } from './icons';
 import { AlertIcon } from './alert-icon';
-import { triggerToast } from './toast-notification';
+import { triggerToast, triggerRefreshToast } from './toast-notification';
 import { formatDate, formatTime } from '@/lib/locale';
 
 export interface OrganizerInvitationItem {
@@ -430,7 +430,10 @@ export function OwnerInvitationsView() {
           <button
             type="button"
             className="hub-refresh-btn"
-            onClick={loadInvitations}
+            onClick={async () => {
+              await loadInvitations();
+              triggerRefreshToast('ระบบคำเชิญ');
+            }}
             disabled={isLoadingHistory}
             title="รีเฟรชข้อมูล"
             aria-label="รีเฟรชข้อมูล"
@@ -480,7 +483,7 @@ export function OwnerInvitationsView() {
                     {/* Row 1: Badges & Timestamps */}
                     <div className="row-card-badge-row">
                       {isPending && (
-                        <span className="row-detail-pill" style={{ backgroundColor: '#fffbeb', color: '#b45309', borderColor: '#fde68a', fontWeight: 600 }}>
+                        <span className="row-detail-pill" style={{ backgroundColor: '#fffbeb', color: '#b45309', borderColor: '#fde68a', fontWeight: 400 }}>
                           <ClockIcon style={{ width: '13px', height: '13px' }} />
                           รอการตอบรับ
                         </span>
@@ -503,7 +506,7 @@ export function OwnerInvitationsView() {
                           backgroundColor: inv.role === 'owner' ? '#0f172a' : '#eff6ff',
                           color: inv.role === 'owner' ? '#ffffff' : '#1d4ed8',
                           borderColor: inv.role === 'owner' ? '#0f172a' : '#bfdbfe',
-                          fontWeight: 600,
+                          fontWeight: 400,
                         }}
                       >
                         {inv.role === 'owner' ? 'ผู้ดูแลระบบ (Admin)' : 'ผู้จัดงาน (Organizer)'}
@@ -517,7 +520,7 @@ export function OwnerInvitationsView() {
                       {isPending && (
                         <>
                           <span className="row-meta-dot" aria-hidden="true">•</span>
-                          <span className="row-meta-item" style={{ color: '#b45309', fontWeight: 600 }}>
+                          <span className="row-meta-item" style={{ color: '#b45309', fontWeight: 400 }}>
                             หมดอายุ: {formatDate(new Date(inv.expiresAt))} (48 ชม.)
                           </span>
                         </>
@@ -559,7 +562,7 @@ export function OwnerInvitationsView() {
                         boxSizing: 'border-box',
                       }}
                     >
-                      <span style={{ color: '#64748b', fontWeight: 600, whiteSpace: 'nowrap', flexShrink: 0 }}>
+                      <span style={{ color: '#64748b', fontWeight: 400, whiteSpace: 'nowrap', flexShrink: 0 }}>
                         ลิงก์คำเชิญ:
                       </span>
                       <code
@@ -871,7 +874,7 @@ export function OwnerInvitationsView() {
                 <div style={{ marginBottom: '1.25rem' }}>
                   <label
                     htmlFor="invite-role-select"
-                    style={{ display: 'block', fontWeight: 600, fontSize: '0.875rem', color: '#0f172a', marginBottom: '0.5rem' }}
+                    style={{ display: 'block', fontWeight: 400, fontSize: '0.875rem', color: '#0f172a', marginBottom: '0.5rem' }}
                   >
                     บทบาทผู้ใช้งานที่ต้องการเชิญ *
                   </label>
@@ -912,7 +915,7 @@ export function OwnerInvitationsView() {
                       }}
                     >
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.35rem' }}>
-                        <span style={{ fontWeight: 700, fontSize: '0.925rem', color: '#0f172a' }}>
+                        <span style={{ fontWeight: 400, fontSize: '0.925rem', color: '#0f172a' }}>
                           ผู้จัดงาน (Organizer)
                         </span>
                         {role === 'organizer' && (
@@ -942,7 +945,7 @@ export function OwnerInvitationsView() {
                       }}
                     >
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.35rem' }}>
-                        <span style={{ fontWeight: 700, fontSize: '0.925rem', color: '#0f172a' }}>
+                        <span style={{ fontWeight: 400, fontSize: '0.925rem', color: '#0f172a' }}>
                           ผู้ดูแลระบบ (Admin)
                         </span>
                         {role === 'owner' && (
@@ -962,7 +965,7 @@ export function OwnerInvitationsView() {
                 <div className="form-group" style={{ marginBottom: '1.25rem' }}>
                   <label
                     htmlFor="organizer-email"
-                    style={{ display: 'block', fontWeight: 600, fontSize: '0.875rem', color: '#0f172a', marginBottom: '0.4rem' }}
+                    style={{ display: 'block', fontWeight: 400, fontSize: '0.875rem', color: '#0f172a', marginBottom: '0.4rem' }}
                   >
                     อีเมลผู้รับคำเชิญ *
                   </label>
@@ -1009,7 +1012,7 @@ export function OwnerInvitationsView() {
                         display: 'flex',
                         alignItems: 'center',
                         gap: '0.4rem',
-                        fontWeight: 600,
+                        fontWeight: 400,
                         fontSize: '0.875rem',
                         color: '#0f172a',
                         marginBottom: '0.4rem',
@@ -1112,7 +1115,7 @@ export function OwnerInvitationsView() {
                       marginBottom: '1rem',
                     }}
                   >
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 600, marginBottom: '0.5rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 400, marginBottom: '0.5rem' }}>
                       <CheckCircleIcon style={{ width: '18px', height: '18px', color: '#16a34a' }} />
                       <span>{message}</span>
                     </div>
@@ -1281,7 +1284,7 @@ export function OwnerInvitationsView() {
                     fontSize: '0.825rem',
                   }}
                 >
-                  <span style={{ display: 'block', color: '#64748b', fontWeight: 600, marginBottom: '0.25rem' }}>
+                  <span style={{ display: 'block', color: '#64748b', fontWeight: 400, marginBottom: '0.25rem' }}>
                     บันทึกประวัติบัญชี:
                   </span>
                   <p style={{ margin: 0, color: '#334155', lineHeight: 1.5 }}>

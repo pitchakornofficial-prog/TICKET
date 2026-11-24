@@ -22,16 +22,19 @@ import {
   EyeOffIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
+  ChevronUpIcon,
+  ChevronDownIcon,
+  XIcon,
 } from '@/components/icons';
 import { TicketIcon } from '@/components/ticket-icon';
 import { generateCustomQrSvg } from '@/lib/ticket-qr';
 
 export type TearLineStyle = 'dashed' | 'dotted' | 'notched' | 'solid' | 'none';
-export type BackgroundType = 'solid' | 'gradient' | 'pattern' | 'image';
-export type FontFamilyChoice = 'Kanit' | 'Sarabun' | 'Prompt' | 'Chakra Petch' | 'monospace' | 'sans-serif';
+export type BackgroundType = 'solid' | 'gradient' | 'image';
+export type FontFamilyChoice = string;
 export type ElementSection = 'header' | 'event' | 'access' | 'schedule' | 'security' | 'stub' | 'footer';
-export type DesignerTabId = 'elements' | 'cardBg' | 'stageBg' | 'tearLine' | 'allElements';
-export type WorkspaceStageStyle = 'dots' | 'white' | 'light-slate' | 'grid' | 'dark-neutral';
+export type DesignerTabId = 'elements' | 'layers' | 'card' | 'font' | 'cardBg' | 'stageBg' | 'tearLine' | 'allElements';
+export type WorkspaceStageStyle = 'grid' | 'white' | 'dark-neutral' | 'dots' | 'light-slate';
 
 export interface WorkspaceStageSettings {
   style: WorkspaceStageStyle;
@@ -46,12 +49,16 @@ export interface MovableItem {
   y: number;
   visible: boolean;
   fontSize?: number;
-  fontWeight?: '600' | '700' | '800';
+  fontWeight?: string;
+  secondaryFontSize?: number;
+  secondaryFontWeight?: string;
+  showSecondaryText?: boolean;
   color?: string;
   secondaryColor?: string;
   bgColor?: string;
   borderColor?: string;
   borderWidth?: number;
+  borderRadius?: number;
   text?: string;
   secondaryText?: string;
   size?: number; // for QR
@@ -60,7 +67,7 @@ export interface MovableItem {
 
 export interface TicketDesignerState {
   presetId: string;
-  // Card Shape & Boundary
+  // Card Shape & Boundary (Forced Square Edges per D-289)
   borderRadius: number;
   borderWidth: number;
   borderColor: string;
@@ -68,10 +75,17 @@ export interface TicketDesignerState {
   tearLineStyle: TearLineStyle;
   tearLineColor: string;
 
-  // Global Typography & Font
+  // Global Typography & Custom Font
   fontFamily: FontFamilyChoice;
+  titleFontWeight?: number;
+  bodyFontWeight?: number;
+  customFontName?: string;
+  customFontUrl?: string;
 
-  // Background & Testing (Clean Solid or Stage Contrast Testing)
+  // Layer Painting Order (index 0 = bottom-most, last = top-most)
+  layerOrder?: string[];
+
+  // Background & Testing
   bgType: BackgroundType;
   bgColor: string;
   gradientStart: string;
@@ -95,21 +109,46 @@ export interface TicketDesignerState {
 
 export const MASTER_TEMPLATE_STORAGE_KEY = 'ticket_master_template_v1';
 
+export const DEFAULT_LAYER_ORDER: string[] = [
+  'brandLogo',
+  'eventTitle',
+  'zoneBadge',
+  'gateInfo',
+  'seatInfo',
+  'priceInfo',
+  'dateTime',
+  'venue',
+  'buyerName',
+  'ticketCode',
+  'barcode',
+  'footerNote',
+  'stubEventSummary',
+  'qrCode',
+  'qrCodeLabel',
+  'scanHint',
+  'orderId',
+];
+
 export const DEFAULT_WORKSPACE_STAGE: WorkspaceStageSettings = {
-  style: 'dots',
+  style: 'grid',
   customColor: '#f8fafc',
 };
 
 export const DEFAULT_STATE: TicketDesignerState = {
   presetId: 'classic-white',
-  borderRadius: 4,
-  borderWidth: 1,
+  borderRadius: 0,
+  borderWidth: 0,
   borderColor: '#cbd5e1',
   tearLineX: 720,
-  tearLineStyle: 'dashed',
+  tearLineStyle: 'none',
   tearLineColor: '#94a3b8',
 
   fontFamily: 'Kanit',
+  titleFontWeight: 400,
+  bodyFontWeight: 400,
+  customFontName: '',
+  customFontUrl: '',
+  layerOrder: DEFAULT_LAYER_ORDER,
 
   bgType: 'solid',
   bgColor: '#ffffff',
@@ -136,6 +175,9 @@ export const DEFAULT_STATE: TicketDesignerState = {
       x: 36,
       y: 26,
       visible: true,
+      fontSize: 16,
+      secondaryFontSize: 10,
+      showSecondaryText: true,
       color: '#0f172a',
       secondaryColor: '#64748b',
       text: 'TICKET',
@@ -151,8 +193,11 @@ export const DEFAULT_STATE: TicketDesignerState = {
       y: 68,
       visible: true,
       fontSize: 26,
-      fontWeight: '700',
+      secondaryFontSize: 11,
+      showSecondaryText: true,
       color: '#0f172a',
+      secondaryColor: '#64748b',
+      secondaryText: 'คอนเสิร์ต (CONCERT)',
       text: 'Isan Indy Rock Fest 2026',
     },
     zoneBadge: {
@@ -163,13 +208,11 @@ export const DEFAULT_STATE: TicketDesignerState = {
       y: 112,
       visible: true,
       fontSize: 16,
-      fontWeight: '700',
+      secondaryFontSize: 11,
+      showSecondaryText: true,
       color: '#0f172a',
       secondaryColor: '#64748b',
       secondaryText: 'โซน / ประเภทบัตร (ZONE & CATEGORY)',
-      bgColor: 'transparent',
-      borderColor: 'transparent',
-      borderWidth: 0,
       text: 'VIP FRONT ROW - ZONE A',
     },
 
@@ -182,7 +225,8 @@ export const DEFAULT_STATE: TicketDesignerState = {
       y: 162,
       visible: true,
       fontSize: 16,
-      fontWeight: '700',
+      secondaryFontSize: 11,
+      showSecondaryText: true,
       color: '#0f172a',
       secondaryColor: '#64748b',
       secondaryText: 'ประตูทางเข้า (GATE)',
@@ -196,7 +240,8 @@ export const DEFAULT_STATE: TicketDesignerState = {
       y: 162,
       visible: true,
       fontSize: 16,
-      fontWeight: '700',
+      secondaryFontSize: 11,
+      showSecondaryText: true,
       color: '#0f172a',
       secondaryColor: '#64748b',
       secondaryText: 'แถว/ที่นั่ง (ROW / SEAT)',
@@ -210,7 +255,8 @@ export const DEFAULT_STATE: TicketDesignerState = {
       y: 162,
       visible: true,
       fontSize: 16,
-      fontWeight: '700',
+      secondaryFontSize: 11,
+      showSecondaryText: true,
       color: '#0f172a',
       secondaryColor: '#64748b',
       secondaryText: 'ราคาบัตร (PRICE)',
@@ -226,6 +272,8 @@ export const DEFAULT_STATE: TicketDesignerState = {
       y: 228,
       visible: true,
       fontSize: 14,
+      secondaryFontSize: 11,
+      showSecondaryText: true,
       color: '#0f172a',
       secondaryColor: '#64748b',
       text: '24 ธันวาคม 2026 | ประตูเปิด 17:00 น. | เริ่มแสดง 19:00 น.',
@@ -239,6 +287,8 @@ export const DEFAULT_STATE: TicketDesignerState = {
       y: 284,
       visible: true,
       fontSize: 14,
+      secondaryFontSize: 11,
+      showSecondaryText: true,
       color: '#0f172a',
       secondaryColor: '#64748b',
       text: 'ศูนย์ประชุมและแสดงสินค้านานาชาติ เชียงใหม่ (Hall 1)',
@@ -254,6 +304,8 @@ export const DEFAULT_STATE: TicketDesignerState = {
       y: 338,
       visible: true,
       fontSize: 13,
+      secondaryFontSize: 11,
+      showSecondaryText: true,
       color: '#0f172a',
       secondaryColor: '#64748b',
       text: 'สมชาย รักดนตรี',
@@ -267,7 +319,8 @@ export const DEFAULT_STATE: TicketDesignerState = {
       y: 338,
       visible: true,
       fontSize: 14,
-      fontWeight: '700',
+      secondaryFontSize: 11,
+      showSecondaryText: true,
       color: '#0f172a',
       secondaryColor: '#64748b',
       text: 'TK-849201-9482-01',
@@ -280,6 +333,9 @@ export const DEFAULT_STATE: TicketDesignerState = {
       x: 430,
       y: 332,
       visible: true,
+      fontSize: 10,
+      secondaryFontSize: 10,
+      showSecondaryText: true,
       text: 'TK-849201-9482-01',
       secondaryText: 'SECURITY VERIFICATION',
       color: '#0f172a',
@@ -295,7 +351,11 @@ export const DEFAULT_STATE: TicketDesignerState = {
       y: 394,
       visible: true,
       fontSize: 11,
+      secondaryFontSize: 10,
+      showSecondaryText: false,
       color: '#64748b',
+      secondaryColor: '#64748b',
+      secondaryText: 'เงื่อนไขและข้อตกลง (POLICY)',
       text: '* บัตรนี้สามารถสแกนเข้างานได้ 1 ครั้งต่อท่าน · ห้ามทำซ้ำหรือดัดแปลง · แสดงพร้อมบัตรประชาชน',
     },
 
@@ -308,7 +368,8 @@ export const DEFAULT_STATE: TicketDesignerState = {
       y: 24,
       visible: true,
       fontSize: 12,
-      fontWeight: '700',
+      secondaryFontSize: 10,
+      showSecondaryText: true,
       color: '#0f172a',
       secondaryColor: '#64748b',
       secondaryText: 'ADMISSION STUB',
@@ -331,7 +392,8 @@ export const DEFAULT_STATE: TicketDesignerState = {
       y: 242,
       visible: true,
       fontSize: 13,
-      fontWeight: '700',
+      secondaryFontSize: 10,
+      showSecondaryText: true,
       color: '#0f172a',
       secondaryColor: '#64748b',
       text: 'TK-849201-9482-01',
@@ -345,7 +407,11 @@ export const DEFAULT_STATE: TicketDesignerState = {
       y: 300,
       visible: true,
       fontSize: 11,
+      secondaryFontSize: 10,
+      showSecondaryText: false,
       color: '#64748b',
+      secondaryColor: '#64748b',
+      secondaryText: 'คำแนะนำ (INSTRUCTION)',
       text: 'แสดง QR Code ต่อเจ้าหน้าที่เพื่อสแกนเข้างาน',
     },
     orderId: {
@@ -356,6 +422,8 @@ export const DEFAULT_STATE: TicketDesignerState = {
       y: 345,
       visible: true,
       fontSize: 11,
+      secondaryFontSize: 10,
+      showSecondaryText: true,
       color: '#64748b',
       secondaryColor: '#64748b',
       text: 'ORD-20261224-8891',
@@ -402,7 +470,7 @@ const SECTIONS_DIRECTORY: { id: ElementSection; name: string; itemIds: string[] 
   },
 ];
 
-const PRESETS: Record<string, { name: string; desc: string; apply: (s: TicketDesignerState) => TicketDesignerState }> = {
+export const PRESETS: Record<string, { name: string; desc: string; apply: (s: TicketDesignerState) => TicketDesignerState }> = {
   'classic-white': {
     name: 'บัตรขาวทางการ (Official White)',
     desc: 'บัตรคอนเสิร์ตกระดาษอาร์ตการ์ดขาวสะอาด ขอบคมชัด ตัวหนังสือสีเข้มอ่านง่าย สไตล์บัตรทางการมาตรฐานสากล',
@@ -412,10 +480,10 @@ const PRESETS: Record<string, { name: string; desc: string; apply: (s: TicketDes
       bgType: 'solid',
       bgColor: '#ffffff',
       borderColor: '#cbd5e1',
-      borderRadius: 4,
-      borderWidth: 1,
+      borderRadius: 0,
+      borderWidth: 0,
       tearLineColor: '#94a3b8',
-      tearLineStyle: 'dashed',
+      tearLineStyle: 'none',
       bgOverlayDarkness: 0,
       bgOverlayBlur: 0,
       qrFgColor: '#000000',
@@ -424,7 +492,7 @@ const PRESETS: Record<string, { name: string; desc: string; apply: (s: TicketDes
         ...s.elements,
         brandLogo: { ...s.elements.brandLogo, color: '#0f172a' },
         eventTitle: { ...s.elements.eventTitle, color: '#0f172a' },
-        zoneBadge: { ...s.elements.zoneBadge, bgColor: 'transparent', color: '#0f172a', borderWidth: 0, borderColor: 'transparent' },
+        zoneBadge: { ...s.elements.zoneBadge, color: '#0f172a' },
         gateInfo: { ...s.elements.gateInfo, color: '#0f172a' },
         seatInfo: { ...s.elements.seatInfo, color: '#0f172a' },
         priceInfo: { ...s.elements.priceInfo, color: '#0f172a' },
@@ -443,17 +511,17 @@ const PRESETS: Record<string, { name: string; desc: string; apply: (s: TicketDes
   },
   'matte-black': {
     name: 'การ์ดดำด้านพรีเมียม (Matte Black)',
-    desc: 'กระดาษการ์ดดำด้านลึก ตัดขอบสีเงิน ตัวหนังสือสีขาวนวล สไตล์คอนเสิร์ตระดับโลก',
+    desc: 'กระดาษการ์ดดำด้านลึก ตัวหนังสือสีขาวนวล สไตล์คอนเสิร์ตระดับโลก',
     apply: (s) => ({
       ...s,
       presetId: 'matte-black',
       bgType: 'solid',
       bgColor: '#111827',
       borderColor: '#374151',
-      borderRadius: 6,
-      borderWidth: 1,
+      borderRadius: 0,
+      borderWidth: 0,
       tearLineColor: '#4b5563',
-      tearLineStyle: 'notched',
+      tearLineStyle: 'none',
       bgOverlayDarkness: 0,
       bgOverlayBlur: 0,
       qrFgColor: '#000000',
@@ -462,7 +530,7 @@ const PRESETS: Record<string, { name: string; desc: string; apply: (s: TicketDes
         ...s.elements,
         brandLogo: { ...s.elements.brandLogo, color: '#f8fafc' },
         eventTitle: { ...s.elements.eventTitle, color: '#ffffff' },
-        zoneBadge: { ...s.elements.zoneBadge, bgColor: 'transparent', color: '#f3f4f6', borderWidth: 0, borderColor: 'transparent' },
+        zoneBadge: { ...s.elements.zoneBadge, color: '#f3f4f6' },
         gateInfo: { ...s.elements.gateInfo, color: '#f3f4f6' },
         seatInfo: { ...s.elements.seatInfo, color: '#f3f4f6' },
         priceInfo: { ...s.elements.priceInfo, color: '#f3f4f6' },
@@ -481,17 +549,17 @@ const PRESETS: Record<string, { name: string; desc: string; apply: (s: TicketDes
   },
   'vip-gold-pass': {
     name: 'วีไอพี การ์ดทอง (VIP Gold Pass)',
-    desc: 'บัตรออบซิเดียนหรูหรา ขอบทอง ตัวหนังสือทองประกายฟอยล์ สมฐานะบัตร VIP',
+    desc: 'บัตรออบซิเดียนหรูหรา ตัวหนังสือทองประกายฟอยล์ สมฐานะบัตร VIP',
     apply: (s) => ({
       ...s,
       presetId: 'vip-gold-pass',
       bgType: 'solid',
       bgColor: '#18181b',
       borderColor: '#d97706',
-      borderRadius: 8,
-      borderWidth: 1,
+      borderRadius: 0,
+      borderWidth: 0,
       tearLineColor: '#b45309',
-      tearLineStyle: 'dashed',
+      tearLineStyle: 'none',
       bgOverlayDarkness: 0,
       bgOverlayBlur: 0,
       qrFgColor: '#000000',
@@ -500,7 +568,7 @@ const PRESETS: Record<string, { name: string; desc: string; apply: (s: TicketDes
         ...s.elements,
         brandLogo: { ...s.elements.brandLogo, color: '#fbbf24' },
         eventTitle: { ...s.elements.eventTitle, color: '#fbbf24' },
-        zoneBadge: { ...s.elements.zoneBadge, bgColor: 'transparent', color: '#fbbf24', borderWidth: 0, borderColor: 'transparent' },
+        zoneBadge: { ...s.elements.zoneBadge, color: '#fbbf24' },
         gateInfo: { ...s.elements.gateInfo, color: '#fef3c7' },
         seatInfo: { ...s.elements.seatInfo, color: '#fef3c7' },
         priceInfo: { ...s.elements.priceInfo, color: '#fef3c7' },
@@ -526,10 +594,10 @@ const PRESETS: Record<string, { name: string; desc: string; apply: (s: TicketDes
       bgType: 'solid',
       bgColor: '#f4ede4',
       borderColor: '#d5bdaf',
-      borderRadius: 4,
-      borderWidth: 1,
+      borderRadius: 0,
+      borderWidth: 0,
       tearLineColor: '#c6ac8f',
-      tearLineStyle: 'dashed',
+      tearLineStyle: 'none',
       bgOverlayDarkness: 0,
       bgOverlayBlur: 0,
       qrFgColor: '#2d1500',
@@ -538,7 +606,7 @@ const PRESETS: Record<string, { name: string; desc: string; apply: (s: TicketDes
         ...s.elements,
         brandLogo: { ...s.elements.brandLogo, color: '#2d1500' },
         eventTitle: { ...s.elements.eventTitle, color: '#2d1500' },
-        zoneBadge: { ...s.elements.zoneBadge, bgColor: 'transparent', color: '#38281f', borderWidth: 0, borderColor: 'transparent' },
+        zoneBadge: { ...s.elements.zoneBadge, color: '#38281f' },
         gateInfo: { ...s.elements.gateInfo, color: '#38281f' },
         seatInfo: { ...s.elements.seatInfo, color: '#38281f' },
         priceInfo: { ...s.elements.priceInfo, color: '#38281f' },
@@ -564,10 +632,10 @@ const PRESETS: Record<string, { name: string; desc: string; apply: (s: TicketDes
       bgType: 'solid',
       bgColor: '#f1f5f9',
       borderColor: '#cbd5e1',
-      borderRadius: 6,
-      borderWidth: 1,
+      borderRadius: 0,
+      borderWidth: 0,
       tearLineColor: '#94a3b8',
-      tearLineStyle: 'solid',
+      tearLineStyle: 'none',
       bgOverlayDarkness: 0,
       bgOverlayBlur: 0,
       qrFgColor: '#0f172a',
@@ -576,7 +644,7 @@ const PRESETS: Record<string, { name: string; desc: string; apply: (s: TicketDes
         ...s.elements,
         brandLogo: { ...s.elements.brandLogo, color: '#0f172a' },
         eventTitle: { ...s.elements.eventTitle, color: '#0f172a' },
-        zoneBadge: { ...s.elements.zoneBadge, bgColor: 'transparent', color: '#1e293b', borderWidth: 0, borderColor: 'transparent' },
+        zoneBadge: { ...s.elements.zoneBadge, color: '#1e293b' },
         gateInfo: { ...s.elements.gateInfo, color: '#1e293b' },
         seatInfo: { ...s.elements.seatInfo, color: '#1e293b' },
         priceInfo: { ...s.elements.priceInfo, color: '#1e293b' },
@@ -595,33 +663,28 @@ const PRESETS: Record<string, { name: string; desc: string; apply: (s: TicketDes
   },
 };
 
-const SAMPLE_BACKGROUNDS = [
-  {
-    name: 'เวทีคอนเสิร์ตร็อก',
-    url: 'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?auto=format&fit=crop&w=1200&q=80',
-  },
-  {
-    name: 'แสงเลเซอร์และควันเวที',
-    url: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?auto=format&fit=crop&w=1200&q=80',
-  },
-  {
-    name: 'ผู้ชมและแสงสีเสียง',
-    url: 'https://images.unsplash.com/photo-1429962714451-bb934ecdc4ec?auto=format&fit=crop&w=1200&q=80',
-  },
-  {
-    name: 'เฟสติวัลยามค่ำคืน',
-    url: 'https://images.unsplash.com/photo-1459749411175-04bf5292ceea?auto=format&fit=crop&w=1200&q=80',
-  },
-];
-
 function SecurityBarcodeSvg({
   code,
   color = '#0f172a',
   secondaryColor = '#64748b',
+  secondaryText = 'SECURITY VERIFICATION',
+  showSecondaryText = true,
+  secondaryFontSize = 10,
+  secondaryFontWeight = '400',
+  fontSize = 10,
+  fontWeight = '400',
+  align = 'left',
 }: {
   code: string;
   color?: string;
   secondaryColor?: string;
+  secondaryText?: string;
+  showSecondaryText?: boolean;
+  secondaryFontSize?: number;
+  secondaryFontWeight?: string;
+  fontSize?: number;
+  fontWeight?: string;
+  align?: 'left' | 'center' | 'right';
 }) {
   const bars = useMemo(() => {
     const list: { id: string; width: number; isBlack: boolean }[] = [
@@ -649,8 +712,25 @@ function SecurityBarcodeSvg({
 
   let currentX = 0;
   return (
-    <div className="security-barcode-container">
-      <div className="security-barcode-label" style={{ color: secondaryColor }}>SECURITY VERIFICATION</div>
+    <div
+      className="security-barcode-container"
+      style={{
+        alignItems: align === 'center' ? 'center' : align === 'right' ? 'flex-end' : 'flex-start',
+        textAlign: align,
+      }}
+    >
+      {showSecondaryText && secondaryText && (
+        <div
+          className="security-barcode-label"
+          style={{
+            color: secondaryColor,
+            fontSize: `${secondaryFontSize}px`,
+            fontWeight: secondaryFontWeight,
+          }}
+        >
+          {secondaryText}
+        </div>
+      )}
       <svg width="180" height="34" viewBox="0 0 180 34" fill="none" xmlns="http://www.w3.org/2000/svg">
         <title>Security Barcode</title>
         {bars.map((bar) => {
@@ -660,9 +740,73 @@ function SecurityBarcodeSvg({
           return <rect key={bar.id} x={x} y={0} width={bar.width * 1.8} height={34} fill={color} />;
         })}
       </svg>
-      <div className="security-barcode-code">*{code}*</div>
+      <div
+        className="security-barcode-code"
+        style={{
+          color,
+          fontSize: `${fontSize}px`,
+          fontWeight,
+        }}
+      >
+        *{code}*
+      </div>
     </div>
   );
+}
+
+const IMAGE_COMPRESSION_LIMIT_BYTES = Math.floor(0.99 * 1024 * 1024);
+
+async function compressImageUnderLimit(
+  file: File,
+  maxBytes = IMAGE_COMPRESSION_LIMIT_BYTES,
+): Promise<{ file: File; wasCompressed: boolean; originalBytes: number }> {
+  if (file.size <= maxBytes) {
+    return { file, wasCompressed: false, originalBytes: file.size };
+  }
+  const objectUrl = URL.createObjectURL(file);
+  try {
+    const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const image = new Image();
+      image.onload = () => resolve(image);
+      image.onerror = () => reject(new Error('ไม่สามารถอ่านข้อมูลภาพได้'));
+      image.src = objectUrl;
+    });
+
+    const baseWidth = Math.min(img.naturalWidth || 1600, 1800);
+    const baseHeight = img.naturalWidth > 0
+      ? Math.round((img.naturalHeight / img.naturalWidth) * baseWidth)
+      : 1000;
+    const scales = [1, 0.85, 0.7, 0.55, 0.4, 0.3];
+    const qualities = [0.88, 0.78, 0.68, 0.58, 0.46, 0.36];
+    const baseName = file.name.replace(/\.[^.]+$/, '') || 'ticket-bg';
+
+    for (const scale of scales) {
+      const targetW = Math.max(200, Math.round(baseWidth * scale));
+      const targetH = Math.max(120, Math.round(baseHeight * scale));
+      const canvas = document.createElement('canvas');
+      canvas.width = targetW;
+      canvas.height = targetH;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) break;
+      ctx.drawImage(img, 0, 0, targetW, targetH);
+
+      for (const quality of qualities) {
+        const blob = await new Promise<Blob | null>((resolve) => {
+          canvas.toBlob((b) => resolve(b), 'image/jpeg', quality);
+        });
+        if (blob && blob.size <= maxBytes) {
+          return {
+            file: new File([blob], `${baseName}.jpg`, { type: 'image/jpeg' }),
+            wasCompressed: true,
+            originalBytes: file.size,
+          };
+        }
+      }
+    }
+    throw new Error('ไม่สามารถลดขนาดรูปภาพให้ไม่เกิน 0.99MB ได้ กรุณาเลือกไฟล์ขนาดเล็กลง');
+  } finally {
+    URL.revokeObjectURL(objectUrl);
+  }
 }
 
 export function AdminTicketDesigner() {
@@ -673,13 +817,52 @@ export function AdminTicketDesigner() {
   const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(true);
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
   const [viewMode, setViewMode] = useState<'studio' | 'mobile' | 'print'>('studio');
+  void setViewMode;
   const [zoomMode, setZoomMode] = useState<'fit' | 'manual'>('fit');
   const [manualScale, setManualScale] = useState<number>(100);
   const [fitScale, setFitScale] = useState<number>(85);
   const [isExporting, setIsExporting] = useState<boolean>(false);
-  const [simulatedScanResult, setSimulatedScanResult] = useState<string | null>(null);
-  const [masterSavedToast, setMasterSavedToast] = useState<string | null>(null);
+  const [isUploadingFont, setIsUploadingFont] = useState<boolean>(false);
   const [isDragOverDropzone, setIsDragOverDropzone] = useState<boolean>(false);
+
+  const fontInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Countdown Toast Notification State
+  const [countdownToast, setCountdownToast] = useState<{
+    id: string;
+    type: 'success' | 'info' | 'error';
+    title: string;
+    message?: string;
+    durationMs: number;
+  } | null>(null);
+
+  const showStudioToast = useCallback(
+    (params: {
+      type: 'success' | 'info' | 'error';
+      title: string;
+      message?: string;
+      durationMs?: number;
+    }) => {
+      const durationMs = params.durationMs || 4000;
+      const id = `toast-${Date.now()}`;
+      setCountdownToast({
+        id,
+        type: params.type,
+        title: params.title,
+        message: params.message,
+        durationMs,
+      });
+    },
+    [],
+  );
+
+  useEffect(() => {
+    if (!countdownToast) return;
+    const t = setTimeout(() => {
+      setCountdownToast(null);
+    }, countdownToast.durationMs);
+    return () => clearTimeout(t);
+  }, [countdownToast]);
 
   // Dragging tracking
   const [draggingId, setDraggingId] = useState<string | null>(null);
@@ -718,6 +901,13 @@ export function AdminTicketDesigner() {
   // Load Saved Master Template on Mount if exists (Local or Server)
   useEffect(() => {
     let active = true;
+    const mergeTemplate = (parsed: Partial<TicketDesignerState>): Partial<TicketDesignerState> => ({
+      ...parsed,
+      borderRadius: 0,
+      borderWidth: 0,
+      tearLineStyle: 'none',
+    });
+
     try {
       const saved = localStorage.getItem(MASTER_TEMPLATE_STORAGE_KEY);
       if (saved) {
@@ -725,7 +915,7 @@ export function AdminTicketDesigner() {
         if (parsed && typeof parsed === 'object' && parsed.elements) {
           setState((prev) => ({
             ...prev,
-            ...parsed,
+            ...mergeTemplate(parsed),
             elements: {
               ...prev.elements,
               ...parsed.elements,
@@ -745,7 +935,7 @@ export function AdminTicketDesigner() {
         if (!active || !data?.template) return;
         setState((prev) => ({
           ...prev,
-          ...data.template,
+          ...mergeTemplate(data.template),
           elements: {
             ...prev.elements,
             ...(data.template.elements || {}),
@@ -766,6 +956,28 @@ export function AdminTicketDesigner() {
     };
   }, []);
 
+  // Load Custom Uploaded Font Face dynamically so live preview & canvas export use it immediately
+  useEffect(() => {
+    if (!state.customFontUrl || !state.customFontName) return;
+    if (typeof window === 'undefined' || typeof FontFace === 'undefined') return;
+    let active = true;
+    const safeFamily = state.customFontName;
+    const url = state.customFontUrl;
+    const face = new FontFace(safeFamily, `url("${url}")`);
+    face
+      .load()
+      .then((loaded) => {
+        if (!active) return;
+        document.fonts.add(loaded);
+      })
+      .catch(() => {
+        // Ignore font load failures on detached test DOM
+      });
+    return () => {
+      active = false;
+    };
+  }, [state.customFontName, state.customFontUrl]);
+
   const effectiveScale = zoomMode === 'fit' ? fitScale : manualScale;
 
   // Form IDs helper
@@ -777,6 +989,66 @@ export function AdminTicketDesigner() {
     if (!selectedId) return null;
     return state.elements[selectedId] || null;
   }, [selectedId, state.elements]);
+
+  // Normalized bottom-to-top layer order (index 0 = bottom, last index = front-most)
+  const orderedLayerIds = useMemo(() => {
+    const existingKeys = Object.keys(state.elements);
+    const seen = new Set<string>();
+    const result: string[] = [];
+    const savedOrder = Array.isArray(state.layerOrder) && state.layerOrder.length > 0
+      ? state.layerOrder
+      : DEFAULT_LAYER_ORDER;
+
+    for (const id of savedOrder) {
+      if (id in state.elements && !seen.has(id)) {
+        seen.add(id);
+        result.push(id);
+      }
+    }
+    for (const id of existingKeys) {
+      if (!seen.has(id)) {
+        seen.add(id);
+        result.push(id);
+      }
+    }
+    return result;
+  }, [state.elements, state.layerOrder]);
+
+  const handleMoveLayer = useCallback(
+    (id: string, direction: 'up' | 'down') => {
+      setState((prev) => {
+        const keys = Object.keys(prev.elements);
+        const seen = new Set<string>();
+        const list: string[] = [];
+        const currentOrder = Array.isArray(prev.layerOrder) && prev.layerOrder.length > 0
+          ? prev.layerOrder
+          : DEFAULT_LAYER_ORDER;
+        for (const k of currentOrder) {
+          if (k in prev.elements && !seen.has(k)) {
+            seen.add(k);
+            list.push(k);
+          }
+        }
+        for (const k of keys) {
+          if (!seen.has(k)) {
+            seen.add(k);
+            list.push(k);
+          }
+        }
+        const idx = list.indexOf(id);
+        if (idx === -1) return prev;
+        // 'up' means higher zIndex (towards end of bottom-to-top array)
+        const targetIdx = direction === 'up' ? idx + 1 : idx - 1;
+        if (targetIdx < 0 || targetIdx >= list.length) return prev;
+        const next = [...list];
+        const tmp = next[idx];
+        next[idx] = next[targetIdx];
+        next[targetIdx] = tmp;
+        return { ...prev, layerOrder: next };
+      });
+    },
+    [],
+  );
 
   // Live QR SVG
   const qrSvgDataUrl = useMemo(() => {
@@ -795,57 +1067,40 @@ export function AdminTicketDesigner() {
     }
   }, [state.qrPayload, state.qrFgColor, state.qrBgColor]);
 
-  // Dynamic Workspace Stage Background Style
+  // Dynamic Workspace Stage Background Style (Fixed: Grid, Clean White, Deep Black)
   const stageBackgroundStyle = useMemo(() => {
-    const bg = workspaceStage.customColor || '#f8fafc';
     switch (workspaceStage.style) {
-      case 'dots':
-        return {
-          backgroundColor: bg,
-          backgroundImage: 'radial-gradient(#cbd5e1 1.2px, transparent 1.2px)',
-          backgroundSize: '20px 20px',
-        };
       case 'white':
         return {
           backgroundColor: '#ffffff',
           backgroundImage: 'none',
         };
-      case 'light-slate':
-        return {
-          backgroundColor: '#f1f5f9',
-          backgroundImage: 'none',
-        };
-      case 'grid':
-        return {
-          backgroundColor: bg,
-          backgroundImage:
-            'linear-gradient(to right, #e2e8f0 1px, transparent 1px), linear-gradient(to bottom, #e2e8f0 1px, transparent 1px)',
-          backgroundSize: '20px 20px',
-        };
       case 'dark-neutral':
         return {
-          backgroundColor: '#334155',
-          backgroundImage: 'radial-gradient(#475569 1.2px, transparent 1.2px)',
+          backgroundColor: '#18181b',
+          backgroundImage: 'radial-gradient(#3f3f46 1.2px, transparent 1.2px)',
           backgroundSize: '20px 20px',
+          backgroundAttachment: 'local',
         };
       default:
         return {
-          backgroundColor: bg,
-          backgroundImage: 'radial-gradient(#cbd5e1 1.2px, transparent 1.2px)',
+          backgroundColor: '#f8fafc',
+          backgroundImage:
+            'linear-gradient(to right, #e2e8f0 1px, transparent 1px), linear-gradient(to bottom, #e2e8f0 1px, transparent 1px)',
           backgroundSize: '20px 20px',
+          backgroundAttachment: 'local',
         };
     }
-  }, [workspaceStage]);
+  }, [workspaceStage.style]);
 
   // Dynamic Notch Color matching stage background
   const notchColor = useMemo(() => {
     if (workspaceStage.style === 'white') return '#ffffff';
-    if (workspaceStage.style === 'light-slate') return '#f1f5f9';
-    if (workspaceStage.style === 'dark-neutral') return '#334155';
-    return workspaceStage.customColor || '#f8fafc';
-  }, [workspaceStage]);
+    if (workspaceStage.style === 'dark-neutral') return '#18181b';
+    return '#f8fafc';
+  }, [workspaceStage.style]);
 
-  // Background CSS for Ticket Card
+  // Background CSS for Ticket Card (Solid, Gradient, or Uploaded Image only)
   const backgroundStyle = useMemo(() => {
     switch (state.bgType) {
       case 'solid':
@@ -860,37 +1115,14 @@ export function AdminTicketDesigner() {
           backgroundImage: `radial-gradient(circle at center, ${state.gradientStart}, ${state.gradientEnd})`,
         };
       case 'image':
-        return {
-          backgroundImage: `url(${state.bgImageUrl || SAMPLE_BACKGROUNDS[0].url})`,
-          backgroundSize: 'cover',
-          backgroundPosition: 'center',
-          backgroundRepeat: 'no-repeat',
-        };
-      case 'pattern': {
-        if (state.patternType === 'dots') {
-          return {
-            backgroundColor: state.bgColor,
-            backgroundImage: 'radial-gradient(#94a3b8 1.5px, transparent 1.5px)',
-            backgroundSize: '16px 16px',
-          };
-        }
-        if (state.patternType === 'grid') {
-          return {
-            backgroundColor: state.bgColor,
-            backgroundImage:
-              'linear-gradient(to right, #cbd5e1 1px, transparent 1px), linear-gradient(to bottom, #cbd5e1 1px, transparent 1px)',
-            backgroundSize: '24px 24px',
-          };
-        }
-        if (state.patternType === 'stripes') {
-          return {
-            backgroundColor: state.bgColor,
-            backgroundImage:
-              'repeating-linear-gradient(45deg, transparent, transparent 10px, rgba(148, 163, 184, 0.2) 10px, rgba(148, 163, 184, 0.2) 20px)',
-          };
-        }
-        return { backgroundColor: state.bgColor };
-      }
+        return state.bgImageUrl
+          ? {
+              backgroundImage: `url(${state.bgImageUrl})`,
+              backgroundSize: 'cover',
+              backgroundPosition: 'center',
+              backgroundRepeat: 'no-repeat',
+            }
+          : { backgroundColor: state.bgColor };
       default:
         return { backgroundColor: state.bgColor };
     }
@@ -902,7 +1134,6 @@ export function AdminTicketDesigner() {
     state.gradientStart,
     state.gradientEnd,
     state.bgImageUrl,
-    state.patternType,
   ]);
 
   // Pointer Down on Element
@@ -1002,7 +1233,12 @@ export function AdminTicketDesigner() {
   // Save Master Template
   const handleSaveMasterTemplate = async () => {
     try {
-      let templateToSave = state;
+      let templateToSave: TicketDesignerState = {
+        ...state,
+        borderRadius: 0,
+        borderWidth: 0,
+        tearLineStyle: 'none',
+      };
 
       // Auto-migrate legacy Base64 data URLs to uploaded media URLs so DB persistence succeeds
       if (
@@ -1010,7 +1246,8 @@ export function AdminTicketDesigner() {
         typeof templateToSave.bgImageUrl === 'string' &&
         templateToSave.bgImageUrl.startsWith('data:image/')
       ) {
-        const file = dataUrlToImageFile(templateToSave.bgImageUrl);
+        const rawFile = dataUrlToImageFile(templateToSave.bgImageUrl);
+        const { file } = await compressImageUnderLimit(rawFile);
         const uploadedUrl = await uploadTicketBackgroundFile(file);
         templateToSave = {
           ...templateToSave,
@@ -1031,10 +1268,12 @@ export function AdminTicketDesigner() {
           typeof resData?.message === 'string' && resData.message
             ? resData.message
             : `รหัสข้อผิดพลาด ${res.status}`;
-        setMasterSavedToast(`บันทึกแบบบัตรหลักลงฐานข้อมูลไม่สำเร็จ: ${errMsg}`);
-        setTimeout(() => {
-          setMasterSavedToast(null);
-        }, 5000);
+        showStudioToast({
+          type: 'error',
+          title: 'บันทึกแบบบัตรหลักลงฐานข้อมูลไม่สำเร็จ',
+          message: errMsg,
+          durationMs: 5000,
+        });
         return;
       }
 
@@ -1056,20 +1295,20 @@ export function AdminTicketDesigner() {
         }
       }
 
-      setMasterSavedToast(
-        'บันทึกแบบบัตรหลักของระบบสำเร็จ แบบบัตรนี้ถูกนำไปใช้เป็นมาตรฐานกับบัตรทุกคอนเสิร์ตทั่วทั้งระบบแล้ว'
-      );
-      setTimeout(() => {
-        setMasterSavedToast(null);
-      }, 4500);
+      showStudioToast({
+        type: 'success',
+        title: 'บันทึกแบบบัตรหลักสำเร็จ',
+        message: 'แบบบัตรนี้ถูกนำไปใช้เป็นมาตรฐานกับบัตรทุกคอนเสิร์ตทั่วทั้งระบบแล้ว',
+      });
     } catch (error) {
       const errMsg = error instanceof Error && error.message
         ? error.message
         : 'ไม่สามารถเชื่อมต่อเซิร์ฟเวอร์ได้';
-      setMasterSavedToast(`บันทึกแบบบัตรหลักไม่สำเร็จ: ${errMsg}`);
-      setTimeout(() => {
-        setMasterSavedToast(null);
-      }, 5000);
+      showStudioToast({
+        type: 'error',
+        title: 'บันทึกแบบบัตรหลักไม่สำเร็จ',
+        message: errMsg,
+      });
     }
   };
 
@@ -1098,17 +1337,26 @@ export function AdminTicketDesigner() {
           setState({
             ...DEFAULT_STATE,
             ...parsed,
+            borderRadius: 0,
+            borderWidth: 0,
+            tearLineStyle: 'none',
             elements: {
               ...DEFAULT_STATE.elements,
               ...(parsed.elements || {}),
             },
           });
-          setMasterSavedToast('โหลดแบบบัตรหลักของระบบเรียบร้อย');
-          setTimeout(() => setMasterSavedToast(null), 3000);
+          showStudioToast({
+            type: 'info',
+            title: 'โหลดแบบบัตรหลักสำเร็จ',
+            message: 'นำรูปแบบบัตรหลักที่บันทึกไว้มาใช้งานบนโต๊ะเขียนแบบเรียบร้อยแล้ว',
+          });
         }
       } else {
-        setMasterSavedToast('ยังไม่มีการบันทึกแบบบัตรหลัก ระบบจะใช้ค่าเริ่มต้นมาตรฐาน');
-        setTimeout(() => setMasterSavedToast(null), 3000);
+        showStudioToast({
+          type: 'info',
+          title: 'ใช้ค่าเริ่มต้นมาตรฐาน',
+          message: 'ยังไม่มีการบันทึกแบบบัตรหลัก ระบบจะใช้ค่าเริ่มต้นมาตรฐาน',
+        });
       }
     } catch {
       // ignore
@@ -1119,33 +1367,77 @@ export function AdminTicketDesigner() {
   const handleResetPositions = () => {
     setState(DEFAULT_STATE);
     setSelectedId('eventTitle');
+    showStudioToast({
+      type: 'info',
+      title: 'รีเซ็ตเริ่มต้นสำเร็จ',
+      message: 'คืนค่าพิกัดและการจัดวางทุกชิ้นส่วนเป็นค่าเริ่มต้นมาตรฐาน',
+    });
   };
 
-  // Apply Preset
-  const handleApplyPreset = (presetKey: string) => {
-    const preset = PRESETS[presetKey];
-    if (!preset) return;
-    setState((prev) => preset.apply(prev));
+  // Center element horizontally on card
+  const handleCenterOnCard = (item: MovableItem) => {
+    const hasTear = state.tearLineStyle && state.tearLineStyle !== 'none';
+    const isStub = hasTear && (item.section === 'stub' || item.x >= state.tearLineX);
+    let newX = 36;
+    if (isStub) {
+      const stubWidth = 1000 - state.tearLineX;
+      const approxWidth = item.id === 'qrCode' ? (item.size || state.qrSize || 155) : Math.min(220, (item.text?.length || 10) * ((item.fontSize || 14) * 0.55));
+      newX = Math.round(state.tearLineX + (stubWidth - approxWidth) / 2);
+    } else if (hasTear) {
+      const mainWidth = state.tearLineX;
+      const approxWidth = Math.min(mainWidth - 60, (item.text?.length || 15) * ((item.fontSize || 16) * 0.55));
+      newX = Math.max(20, Math.round((mainWidth - approxWidth) / 2));
+    } else {
+      const approxWidth = item.id === 'qrCode' ? (item.size || state.qrSize || 155) : Math.min(600, (item.text?.length || 15) * ((item.fontSize || 16) * 0.55));
+      newX = Math.max(20, Math.round((1000 - approxWidth) / 2));
+    }
+    setState((prev) => ({
+      ...prev,
+      elements: {
+        ...prev.elements,
+        [item.id]: {
+          ...prev.elements[item.id],
+          x: newX,
+          align: 'center',
+        },
+      },
+    }));
   };
 
-  // File Upload for Ticket Background (uploads to /api/upload for a compact persistent URL)
-  const applyUploadedBackgroundFile = async (file: File) => {
-    setMasterSavedToast('กำลังอัปโหลดรูปภาพพื้นหลังบัตร...');
+  // File Upload for Ticket Background (Auto-compress <= 0.99MB before uploading to /api/upload)
+  const applyUploadedBackgroundFile = async (rawFile: File) => {
+    showStudioToast({
+      type: 'info',
+      title: 'กำลังเตรียมรูปภาพ',
+      message: 'กำลังตรวจสอบและอัปโหลดรูปภาพพื้นหลังบัตร...',
+      durationMs: 3000,
+    });
     try {
+      const { file, wasCompressed, originalBytes } = await compressImageUnderLimit(rawFile);
       const uploadedUrl = await uploadTicketBackgroundFile(file);
       setState((prev) => ({
         ...prev,
         bgType: 'image',
         bgImageUrl: uploadedUrl,
       }));
-      setMasterSavedToast('อัปโหลดรูปภาพพื้นหลังสำเร็จ กรุณากด "บันทึกแบบบัตรหลัก" เพื่อใช้งานจริง');
-      setTimeout(() => setMasterSavedToast(null), 4000);
+      const finalKb = Math.max(1, Math.round(file.size / 1024));
+      const origMb = (originalBytes / (1024 * 1024)).toFixed(2);
+      showStudioToast({
+        type: 'success',
+        title: 'อัปโหลดรูปภาพพื้นหลังสำเร็จ',
+        message: wasCompressed
+          ? `ลดขนาดไฟล์อัตโนมัติจาก ${origMb}MB เหลือ ${finalKb}KB (ไม่เกิน 0.99MB) กด "บันทึกแบบบัตรหลัก" เพื่อใช้งานจริง`
+          : `ขนาดไฟล์ ${finalKb}KB กด "บันทึกแบบบัตรหลัก" เพื่อใช้งานจริง`,
+      });
     } catch (error) {
       const errMsg = error instanceof Error && error.message
         ? error.message
         : 'อัปโหลดรูปภาพพื้นหลังไม่สำเร็จ';
-      setMasterSavedToast(`อัปโหลดรูปภาพไม่สำเร็จ: ${errMsg}`);
-      setTimeout(() => setMasterSavedToast(null), 5000);
+      showStudioToast({
+        type: 'error',
+        title: 'อัปโหลดไม่สำเร็จ',
+        message: errMsg,
+      });
     }
   };
 
@@ -1184,6 +1476,80 @@ export function AdminTicketDesigner() {
     }));
   };
 
+  // Custom Font Upload Handler (.ttf, .otf, .woff, .woff2)
+  const handleCustomFontUpload = async (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+
+    setIsUploadingFont(true);
+    showStudioToast({
+      type: 'info',
+      title: 'กำลังอัปโหลดฟอนต์',
+      message: 'กำลังตรวจสอบและติดตั้งฟอนต์ใหม่...',
+      durationMs: 3000,
+    });
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      const res = await fetch('/api/owner/ticket-font-upload', {
+        method: 'POST',
+        body: formData,
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || typeof data?.url !== 'string' || typeof data?.fontName !== 'string') {
+        throw new Error(
+          typeof data?.message === 'string' && data.message
+            ? data.message
+            : 'อัปโหลดฟอนต์ไม่สำเร็จ'
+        );
+      }
+
+      if (typeof FontFace !== 'undefined') {
+        const face = new FontFace(data.fontName, `url("${data.url}")`);
+        const loaded = await face.load();
+        document.fonts.add(loaded);
+      }
+
+      setState((prev) => ({
+        ...prev,
+        customFontUrl: data.url,
+        customFontName: data.fontName,
+        fontFamily: data.fontName,
+      }));
+      showStudioToast({
+        type: 'success',
+        title: 'ติดตั้งฟอนต์ใหม่สำเร็จ',
+        message: `เลือกใช้ฟอนต์ "${data.fontName}" กับบัตรคอนเสิร์ตเรียบร้อย`,
+      });
+    } catch (error) {
+      const errMsg = error instanceof Error && error.message
+        ? error.message
+        : 'อัปโหลดฟอนต์ไม่สำเร็จ';
+      showStudioToast({
+        type: 'error',
+        title: 'อัปโหลดฟอนต์ไม่สำเร็จ',
+        message: errMsg,
+      });
+    } finally {
+      setIsUploadingFont(false);
+    }
+  };
+
+  const handleClearCustomFont = () => {
+    setState((prev) => ({
+      ...prev,
+      customFontUrl: '',
+      customFontName: '',
+      fontFamily: 'Kanit',
+    }));
+    showStudioToast({
+      type: 'info',
+      title: 'คืนค่าฟอนต์มาตรฐาน',
+      message: 'เปลี่ยนกลับไปใช้ฟอนต์ Kanit เรียบร้อยแล้ว',
+    });
+  };
+
   // Toggle Fullscreen Mode
   const handleToggleFullscreen = () => {
     if (!document.fullscreenElement) {
@@ -1195,42 +1561,13 @@ export function AdminTicketDesigner() {
     }
   };
 
-  // High-Res PNG Export (1200 x 500 px canvas)
+  // High-Res PNG Export (1200 x 500 px canvas, Square Edges Only, Ordered Layers, Zero Boxes)
   const handleExportPng = useCallback(async () => {
     setIsExporting(true);
     try {
       const width = 1200;
       const height = 500;
-      const scaleFactor = 1200 / 1000; // ratio from preview 1000 to export 1200
-
-      const drawRoundedRect = (
-        c: CanvasRenderingContext2D,
-        x: number,
-        y: number,
-        w: number,
-        h: number,
-        r: number
-      ) => {
-        if (r <= 0) {
-          if (typeof c.rect === 'function') c.rect(x, y, w, h);
-          return;
-        }
-        if (typeof c.roundRect === 'function') {
-          c.roundRect(x, y, w, h, r);
-        } else if (typeof c.arcTo === 'function') {
-          c.moveTo(x + r, y);
-          c.lineTo(x + w - r, y);
-          c.arcTo(x + w, y, x + w, y + r, r);
-          c.lineTo(x + w, y + h - r);
-          c.arcTo(x + w, y + h, x + w - r, y + h, r);
-          c.lineTo(x + r, y + h);
-          c.arcTo(x, y + h, x, y + h - r, r);
-          c.lineTo(x, y + r);
-          c.arcTo(x, y, x + r, y, r);
-        } else if (typeof c.rect === 'function') {
-          c.rect(x, y, w, h);
-        }
-      };
+      const scaleFactor = 1200 / 1000;
 
       const canvas = document.createElement('canvas');
       canvas.width = width;
@@ -1238,17 +1575,7 @@ export function AdminTicketDesigner() {
       const ctx = canvas.getContext('2d');
       if (!ctx) throw new Error('Canvas context not available');
 
-      const cardRadius = Math.max((typeof state.borderRadius === 'number' ? state.borderRadius : 4) * scaleFactor, 0);
-
-      // Clip canvas for rounded card corners
-      if (cardRadius > 0 && typeof ctx.clip === 'function') {
-        ctx.save();
-        ctx.beginPath();
-        drawRoundedRect(ctx, 0, 0, width, height, cardRadius);
-        ctx.clip();
-      }
-
-      // 1. Background
+      // 1. Card Background (Square corners only)
       if (state.bgType === 'solid') {
         ctx.fillStyle = state.bgColor;
         ctx.fillRect(0, 0, width, height);
@@ -1272,7 +1599,7 @@ export function AdminTicketDesigner() {
         if (img.width > 0) {
           ctx.drawImage(img, 0, 0, width, height);
         } else {
-          ctx.fillStyle = '#0f172a';
+          ctx.fillStyle = state.bgColor || '#0f172a';
           ctx.fillRect(0, 0, width, height);
         }
       } else {
@@ -1286,241 +1613,106 @@ export function AdminTicketDesigner() {
         ctx.fillRect(0, 0, width, height);
       }
 
-      // 3. Border
-      if (state.borderWidth > 0) {
-        ctx.strokeStyle = state.borderColor;
-        ctx.lineWidth = state.borderWidth * scaleFactor;
-        if (cardRadius > 0 && typeof ctx.beginPath === 'function') {
-          ctx.beginPath();
-          drawRoundedRect(ctx, (state.borderWidth * scaleFactor) / 2, (state.borderWidth * scaleFactor) / 2, width - state.borderWidth * scaleFactor, height - state.borderWidth * scaleFactor, cardRadius);
-          ctx.stroke();
-        } else {
-          ctx.strokeRect(0, 0, width, height);
-        }
-      }
-
-      // 4. Tear Line
-      const tearX = Math.round(state.tearLineX * scaleFactor);
-      if (state.tearLineStyle !== 'none') {
-        ctx.save();
-        ctx.strokeStyle = state.tearLineColor;
-        ctx.lineWidth = 2;
-        if (state.tearLineStyle === 'dashed') ctx.setLineDash([8, 8]);
-        if (state.tearLineStyle === 'dotted') ctx.setLineDash([3, 5]);
-        ctx.beginPath();
-        ctx.moveTo(tearX, 0);
-        ctx.lineTo(tearX, height);
-        ctx.stroke();
-        ctx.restore();
-      }
-
-      // 5. Draw Movable Elements at exact coordinates
+      // 3. Draw Movable Elements in exact Layer Order (bottom-to-top, Zero Boxes/Borders)
       ctx.textAlign = 'left';
       ctx.textBaseline = 'top';
+      const fontStack = state.fontFamily && state.fontFamily !== 'Kanit'
+        ? `"${state.fontFamily}", Kanit, sans-serif`
+        : 'Kanit, sans-serif';
+      const defaultTitleWeight = String(state.titleFontWeight ?? 400);
+      const defaultBodyWeight = String(state.bodyFontWeight ?? 400);
 
-      // Brand Logo
-      const logo = state.elements.brandLogo;
-      if (logo?.visible) {
-        ctx.fillStyle = logo.color || '#0f172a';
-        ctx.font = `bold 16px ${state.fontFamily}, Kanit, sans-serif`;
-        ctx.fillText('TICKET', logo.x * scaleFactor + 24, logo.y * scaleFactor);
-        if (logo.secondaryText) {
-          ctx.fillStyle = logo.secondaryColor || '#64748b';
-          ctx.font = `10px ${state.fontFamily}, Kanit, sans-serif`;
-          ctx.fillText(logo.secondaryText, logo.x * scaleFactor + 92, logo.y * scaleFactor + 4);
-        }
-      }
-
-      // Event Title
-      const title = state.elements.eventTitle;
-      if (title?.visible && title.text) {
-        ctx.fillStyle = title.color || '#0f172a';
-        ctx.font = `${title.fontWeight || '700'} ${Math.round((title.fontSize || 26) * scaleFactor)}px ${state.fontFamily}, Kanit, sans-serif`;
-        ctx.fillText(title.text, title.x * scaleFactor, title.y * scaleFactor);
-      }
-
-      // Zone Badge
-      const badge = state.elements.zoneBadge;
-      if (badge?.visible && badge.text) {
-        const badgeX = badge.x * scaleFactor;
-        const badgeY = badge.y * scaleFactor;
-        ctx.font = `bold ${Math.round((badge.fontSize || 14) * scaleFactor)}px ${state.fontFamily}, Kanit, sans-serif`;
-        const textWidth = ctx.measureText(badge.text).width;
-        const hasBg = badge.bgColor && badge.bgColor !== 'transparent';
-        const bWidth = badge.borderWidth ?? (badge.borderColor && badge.borderColor !== 'transparent' ? 1 : 0);
-        const hasBorder = bWidth > 0 && badge.borderColor && badge.borderColor !== 'transparent';
-
-        if (hasBg || hasBorder) {
-          const padX = 8 * scaleFactor;
-          const boxW = textWidth + padX * 2;
-          const boxH = 30 * scaleFactor;
-          if (hasBg) {
-            ctx.fillStyle = badge.bgColor as string;
-            ctx.fillRect(badgeX, badgeY, boxW, boxH);
-          }
-          if (hasBorder) {
-            ctx.strokeStyle = badge.borderColor as string;
-            ctx.lineWidth = bWidth * scaleFactor;
-            ctx.strokeRect(badgeX, badgeY, boxW, boxH);
-          }
-          ctx.fillStyle = badge.color || '#0f172a';
-          ctx.fillText(badge.text, badgeX + padX, badgeY + 6 * scaleFactor);
-        } else {
-          ctx.fillStyle = badge.color || '#0f172a';
-          ctx.fillText(badge.text, badgeX, badgeY);
-        }
-      }
-
-      // Other Text Elements
-      const textKeys = [
-        'gateInfo',
-        'seatInfo',
-        'priceInfo',
-        'dateTime',
-        'venue',
-        'buyerName',
-        'ticketCode',
-        'orderId',
-        'footerNote',
-        'stubEventSummary',
-        'qrCodeLabel',
-        'scanHint',
-      ];
-      for (const k of textKeys) {
-        const el = state.elements[k];
+      for (const id of orderedLayerIds) {
+        const el = state.elements[id];
         if (!el?.visible) continue;
 
+        const titleWeight = el.secondaryFontWeight || defaultTitleWeight;
+        const bodyWeight = el.fontWeight || defaultBodyWeight;
+        const secSizePx = el.secondaryFontSize || (
+          id === 'brandLogo' || id === 'barcode' || id === 'footerNote' || id === 'scanHint' || id === 'stubEventSummary' || id === 'qrCodeLabel' || id === 'orderId'
+            ? 10
+            : 11
+        );
+        const bodySizePx = el.fontSize || (id === 'eventTitle' ? 26 : id === 'brandLogo' || id === 'gateInfo' || id === 'seatInfo' || id === 'priceInfo' || id === 'zoneBadge' ? 16 : 14);
+        const showSec = el.showSecondaryText !== false && Boolean(el.secondaryText);
         const posX = el.x * scaleFactor;
         const posY = el.y * scaleFactor;
 
-        // Optional Box Background / Border for any element
-        const hasBg = el.bgColor && el.bgColor !== 'transparent';
-        const bWidth = el.borderWidth ?? (el.borderColor && el.borderColor !== 'transparent' ? 1 : 0);
-        const hasBorder = bWidth > 0 && el.borderColor && el.borderColor !== 'transparent';
-
-        if (hasBg || hasBorder) {
-          ctx.font = `${el.fontWeight || 'normal'} ${Math.round((el.fontSize || 14) * scaleFactor)}px ${state.fontFamily}, Kanit, sans-serif`;
-          const textW = Math.max(
-            el.text ? ctx.measureText(el.text).width : 0,
-            el.secondaryText ? ctx.measureText(el.secondaryText).width : 0,
-          );
-          const padW = 8 * scaleFactor;
-          const padH = 4 * scaleFactor;
-          const boxW = textW + padW * 2;
-          const boxH = (el.secondaryText ? 36 : 24) * scaleFactor;
-
-          if (hasBg) {
-            ctx.fillStyle = el.bgColor as string;
-            ctx.fillRect(posX - padW, posY - padH, boxW, boxH);
-          }
-          if (hasBorder) {
-            ctx.strokeStyle = el.borderColor as string;
-            ctx.lineWidth = bWidth * scaleFactor;
-            ctx.strokeRect(posX - padW, posY - padH, boxW, boxH);
-          }
-        }
-
-        const isCenter = el.align === 'center' || el.id === 'qrCodeLabel' || el.id === 'orderId' || el.id === 'scanHint';
-        ctx.save();
-        if (isCenter) {
-          ctx.font = `12px ${state.fontFamily}, Kanit, sans-serif`;
-          const sW = el.secondaryText ? ctx.measureText(el.secondaryText).width : 0;
-          ctx.font = `${el.fontWeight || 'normal'} ${Math.round((el.fontSize || 14) * scaleFactor)}px ${state.fontFamily}, Kanit, sans-serif`;
-          const tW = el.text ? ctx.measureText(el.text).width : 0;
-          const blockCenter = posX + Math.max(sW, tW) / 2;
-          ctx.textAlign = 'center';
-
-          if (el.secondaryText) {
+        if (id === 'brandLogo') {
+          ctx.fillStyle = el.color || '#0f172a';
+          ctx.font = `${bodyWeight} ${Math.round(bodySizePx * scaleFactor)}px ${fontStack}`;
+          ctx.fillText(el.text || 'TICKET', posX + 24, posY);
+          if (showSec && el.secondaryText) {
             ctx.fillStyle = el.secondaryColor || '#64748b';
-            ctx.font = `12px ${state.fontFamily}, Kanit, sans-serif`;
-            ctx.fillText(el.secondaryText, blockCenter, posY);
+            ctx.font = `${titleWeight} ${Math.round(secSizePx * scaleFactor)}px ${fontStack}`;
+            ctx.fillText(el.secondaryText, posX + 92, posY + 4);
           }
-          if (el.text) {
-            ctx.fillStyle = el.color || '#0f172a';
-            ctx.font = `${el.fontWeight || 'normal'} ${Math.round((el.fontSize || 14) * scaleFactor)}px ${state.fontFamily}, Kanit, sans-serif`;
-            ctx.fillText(el.text, blockCenter, el.secondaryText ? posY + 18 : posY);
-          }
-        } else {
-          if (el.secondaryText) {
+          continue;
+        }
+
+        if (id === 'barcode') {
+          if (!el.text) continue;
+          let yCursor = posY;
+          if (showSec && el.secondaryText) {
             ctx.fillStyle = el.secondaryColor || '#64748b';
-            ctx.font = `12px ${state.fontFamily}, Kanit, sans-serif`;
-            ctx.fillText(el.secondaryText, posX, posY);
+            ctx.font = `${titleWeight} ${Math.round(secSizePx * scaleFactor)}px ${fontStack}`;
+            ctx.fillText(el.secondaryText, posX, yCursor);
+            yCursor += Math.round((secSizePx + 4) * scaleFactor);
           }
-          if (el.text) {
-            ctx.fillStyle = el.color || '#0f172a';
-            ctx.font = `${el.fontWeight || 'normal'} ${Math.round((el.fontSize || 14) * scaleFactor)}px ${state.fontFamily}, Kanit, sans-serif`;
-            ctx.fillText(el.text, posX, el.secondaryText ? posY + 18 : posY);
+          ctx.fillStyle = el.color || '#0f172a';
+          let barOffset = 0;
+          for (let i = 0; i < 35; i++) {
+            const w = (i % 3 === 0 ? 3 : 1.5) * scaleFactor;
+            ctx.fillRect(posX + barOffset, yCursor, w, 24 * scaleFactor);
+            barOffset += w + 2 * scaleFactor;
           }
+          const totalBarsWidth = Math.max(barOffset - 2 * scaleFactor, 100);
+          const codeString = `*${el.text}*`;
+          ctx.font = `${bodyWeight} ${Math.round(bodySizePx * scaleFactor)}px ${fontStack}`;
+          const codeW = ctx.measureText(codeString).width;
+          ctx.fillText(codeString, posX + Math.max(0, (totalBarsWidth - codeW) / 2), yCursor + 26 * scaleFactor);
+          continue;
         }
-        ctx.restore();
-      }
 
-      // Barcode element
-      const bcode = state.elements.barcode;
-      if (bcode?.visible && bcode.text) {
-        const bX = bcode.x * scaleFactor;
-        const bY = bcode.y * scaleFactor;
-        ctx.fillStyle = bcode.secondaryColor || '#64748b';
-        ctx.font = `11px ${state.fontFamily}, Kanit, sans-serif`;
-        ctx.fillText('SECURITY VERIFICATION', bX, bY);
-        // Draw bars
-        ctx.fillStyle = bcode.color || '#0f172a';
-        let barOffset = 0;
-        for (let i = 0; i < 35; i++) {
-          const w = (i % 3 === 0 ? 3 : 1.5) * scaleFactor;
-          ctx.fillRect(bX + barOffset, bY + 16, w, 24 * scaleFactor);
-          barOffset += w + 2 * scaleFactor;
+        if (id === 'qrCode') {
+          const qrImg = new Image();
+          await new Promise<void>((resolve) => {
+            qrImg.onload = () => resolve();
+            qrImg.onerror = () => resolve();
+            qrImg.src = qrSvgDataUrl;
+          });
+          const qrW = (el.size || state.qrSize || 155) * scaleFactor;
+          ctx.drawImage(qrImg, posX, posY, qrW, qrW);
+          continue;
         }
-        const totalBarsWidth = Math.max(barOffset - 2 * scaleFactor, 100);
-        const codeString = `*${bcode.text}*`;
-        const codeW = ctx.measureText(codeString).width;
-        ctx.fillText(codeString, bX + Math.max(0, (totalBarsWidth - codeW) / 2), bY + 16 + 26 * scaleFactor);
-      }
 
-      // 6. Draw QR Code
-      const qr = state.elements.qrCode;
-      if (qr?.visible) {
-        const qrImg = new Image();
-        await new Promise<void>((resolve) => {
-          qrImg.onload = () => resolve();
-          qrImg.onerror = () => resolve();
-          qrImg.src = qrSvgDataUrl;
-        });
-        const qrW = (qr.size || 155) * scaleFactor;
-        const qrX = qr.x * scaleFactor;
-        const qrY = qr.y * scaleFactor;
-        const qrPad = 8 * scaleFactor;
-        const qrRadius = 8 * scaleFactor;
-        const boxX = qrX - qrPad;
-        const boxY = qrY - qrPad;
-        const boxW = qrW + qrPad * 2;
-        const boxH = qrW + qrPad * 2;
+        // Standard Text Elements (aligned left/center/right, zero border/bg)
+        const secFont = `${titleWeight} ${Math.round(secSizePx * scaleFactor)}px ${fontStack}`;
+        const bodyFont = `${bodyWeight} ${Math.round(bodySizePx * scaleFactor)}px ${fontStack}`;
+        ctx.font = secFont;
+        const sW = showSec && el.secondaryText ? ctx.measureText(el.secondaryText).width : 0;
+        ctx.font = bodyFont;
+        const tW = el.text ? ctx.measureText(el.text).width : 0;
+        const blockWidth = Math.max(sW, tW);
+
+        const align = el.align || 'left';
+        const isCenter = align === 'center';
+        const anchorX = isCenter ? posX + blockWidth / 2 : align === 'right' ? posX + blockWidth : posX;
 
         ctx.save();
-        ctx.fillStyle = state.qrBgColor && state.qrBgColor !== 'transparent' ? state.qrBgColor : '#ffffff';
-        if (typeof ctx.beginPath === 'function') {
-          ctx.beginPath();
-          drawRoundedRect(ctx, boxX, boxY, boxW, boxH, qrRadius);
-          if (typeof ctx.fill === 'function') {
-            ctx.fill();
-          } else {
-            ctx.fillRect(boxX, boxY, boxW, boxH);
-          }
-          ctx.strokeStyle = '#e2e8f0';
-          ctx.lineWidth = 1 * scaleFactor;
-          if (typeof ctx.stroke === 'function') ctx.stroke();
-        } else {
-          ctx.fillRect(boxX, boxY, boxW, boxH);
+        ctx.textAlign = align;
+        let currentY = posY;
+        if (showSec && el.secondaryText) {
+          ctx.fillStyle = el.secondaryColor || '#64748b';
+          ctx.font = secFont;
+          ctx.fillText(el.secondaryText, anchorX, currentY);
+          currentY += Math.round((secSizePx + 4) * scaleFactor);
         }
-        ctx.restore();
-
-        ctx.save();
-        if (typeof ctx.beginPath === 'function' && typeof ctx.clip === 'function') {
-          ctx.beginPath();
-          drawRoundedRect(ctx, qrX, qrY, qrW, qrW, 4 * scaleFactor);
-          ctx.clip();
+        if (el.text) {
+          ctx.fillStyle = el.color || '#0f172a';
+          ctx.font = bodyFont;
+          ctx.fillText(el.text, anchorX, currentY);
         }
-        ctx.drawImage(qrImg, qrX, qrY, qrW, qrW);
         ctx.restore();
       }
 
@@ -1530,31 +1722,229 @@ export function AdminTicketDesigner() {
       a.href = dataUrl;
       a.download = `ticket-design-${state.presetId}-${Date.now()}.png`;
       a.click();
+      showStudioToast({
+        type: 'success',
+        title: 'ส่งออกไฟล์ PNG สำเร็จ',
+        message: 'ดาวน์โหลดภาพบัตรคอนเสิร์ตความละเอียดสูงเรียบร้อยแล้ว',
+      });
     } finally {
       setIsExporting(false);
     }
-  }, [state, qrSvgDataUrl]);
+  }, [state, orderedLayerIds, qrSvgDataUrl, showStudioToast]);
 
-  // Helper to resolve box background & border styles for any element
+  // Alignment-only helper (Zero boxes, zero borders per D-289)
   const getElementBoxStyle = (el: MovableItem | undefined): CSSProperties => {
-    if (!el) return {};
-    const hasBg = el.bgColor && el.bgColor !== 'transparent';
-    const bWidth = el.borderWidth ?? (el.borderColor && el.borderColor !== 'transparent' ? 1 : 0);
-    const hasBorder = bWidth > 0 && el.borderColor && el.borderColor !== 'transparent';
-    if (!hasBg && !hasBorder) return {};
+    const align = el?.align || 'left';
     return {
-      backgroundColor: hasBg ? el.bgColor : 'transparent',
-      borderColor: hasBorder ? el.borderColor : 'transparent',
-      borderWidth: `${bWidth}px`,
-      borderStyle: hasBorder ? 'solid' : 'none',
-      padding: '4px 8px',
-      borderRadius: '4px',
+      textAlign: align,
+      display: 'inline-flex',
+      flexDirection: 'column',
+      alignItems: align === 'center' ? 'center' : align === 'right' ? 'flex-end' : 'flex-start',
     };
   };
 
-  // Render Canonical Ticket Surface
-  const renderTicketCard = (isInteractive: boolean) => {
+  // Render a Single Movable Element by layer order (zero boxes/borders per D-289)
+  const renderMovableElement = (id: string, layerIndex: number, isInteractive: boolean) => {
+    const el = state.elements[id];
+    if (!el?.visible) return null;
+
+    const titleWeight = el.secondaryFontWeight || String(state.titleFontWeight ?? 400);
+    const bodyWeight = el.fontWeight || String(state.bodyFontWeight ?? 400);
+    const secSize =
+      el.secondaryFontSize ||
+      (id === 'brandLogo' || id === 'barcode' || id === 'footerNote' || id === 'scanHint' || id === 'stubEventSummary' || id === 'qrCodeLabel' || id === 'orderId'
+        ? 10
+        : 11);
+    const showSec = el.showSecondaryText !== false && Boolean(el.secondaryText);
+    const align = el.align || 'left';
+    const isSelected = isInteractive && selectedId === id;
+
+    if (id === 'qrCode') {
+      return (
+        <div
+          key={id}
+          className={`movable-item qr-movable-box ${isSelected ? 'is-selected' : ''}`}
+          style={{
+            transform: `translate(${el.x}px, ${el.y}px)`,
+            zIndex: 10 + layerIndex,
+          }}
+          onPointerDown={(e) => handlePointerDown('qrCode', e)}
+        >
+          <button
+            type="button"
+            className="surface-qr-btn"
+            style={{
+              backgroundColor: 'transparent',
+              width: `${state.qrSize}px`,
+              height: `${state.qrSize}px`,
+              borderRadius: 0,
+              padding: 0,
+              border: 'none',
+              overflow: 'hidden',
+            }}
+            onClick={(e) => {
+              e.stopPropagation();
+              showStudioToast({
+                type: 'success',
+                title: 'ผลการทดสอบสแกน QR Code',
+                message: `รหัสผ่านประตู: ${state.qrPayload}`,
+              });
+            }}
+            title="คลิกเพื่อทดสอบผลการสแกน QR"
+          >
+            {/* biome-ignore lint/performance/noImgElement: direct rendered SVG QR */}
+            <img
+              src={qrSvgDataUrl}
+              alt="Ticket QR Code"
+              style={{ width: '100%', height: '100%', display: 'block', borderRadius: 0 }}
+            />
+          </button>
+          {isSelected && (
+            <span className="coord-chip">X: {el.x} Y: {el.y}</span>
+          )}
+        </div>
+      );
+    }
+
+    if (id === 'barcode') {
+      return (
+        <div
+          key={id}
+          className={`movable-item ${isSelected ? 'is-selected' : ''}`}
+          style={{
+            transform: `translate(${el.x}px, ${el.y}px)`,
+            zIndex: 10 + layerIndex,
+          }}
+          onPointerDown={(e) => handlePointerDown('barcode', e)}
+        >
+          <SecurityBarcodeSvg
+            code={el.text || 'TK-849201-9482-01'}
+            color={el.color}
+            secondaryColor={el.secondaryColor}
+            secondaryText={el.secondaryText}
+            showSecondaryText={showSec}
+            secondaryFontSize={secSize}
+            secondaryFontWeight={titleWeight}
+            fontSize={el.fontSize || 10}
+            fontWeight={bodyWeight}
+            align={align}
+          />
+          {isSelected && (
+            <span className="coord-chip">X: {el.x} Y: {el.y}</span>
+          )}
+        </div>
+      );
+    }
+
+    if (id === 'brandLogo') {
+      return (
+        <div
+          key={id}
+          className={`movable-item ${isSelected ? 'is-selected' : ''}`}
+          style={{
+            transform: `translate(${el.x}px, ${el.y}px)`,
+            zIndex: 10 + layerIndex,
+          }}
+          onPointerDown={(e) => handlePointerDown('brandLogo', e)}
+        >
+          <div className="brand-logo-content" style={{ color: el.color, ...getElementBoxStyle(el) }}>
+            <TicketIcon style={{ width: 18, height: 18 }} />
+            <strong style={{ fontSize: `${el.fontSize || 16}px`, fontWeight: bodyWeight }}>
+              {el.text || 'TICKET'}
+            </strong>
+            {showSec && (
+              <span
+                className="brand-official-tag"
+                style={{
+                  color: el.secondaryColor || '#64748b',
+                  fontSize: `${secSize}px`,
+                  fontWeight: titleWeight,
+                }}
+              >
+                {el.secondaryText}
+              </span>
+            )}
+          </div>
+          {isSelected && (
+            <span className="coord-chip">X: {el.x} Y: {el.y}</span>
+          )}
+        </div>
+      );
+    }
+
+    const defaultBodySize =
+      id === 'eventTitle'
+        ? 26
+        : id === 'zoneBadge' || id === 'gateInfo' || id === 'seatInfo' || id === 'priceInfo'
+          ? 16
+          : id === 'dateTime' || id === 'venue' || id === 'ticketCode'
+            ? 14
+            : id === 'buyerName' || id === 'qrCodeLabel'
+              ? 13
+              : id === 'stubEventSummary'
+                ? 12
+                : 11;
+    const isMono = id === 'ticketCode' || id === 'qrCodeLabel' || id === 'orderId';
+    const wrapperClass =
+      id === 'stubEventSummary'
+        ? 'stub-event-summary-block'
+        : id === 'qrCodeLabel' || id === 'orderId'
+          ? 'stub-code-block'
+          : 'meta-block';
+
     return (
+      <div
+        key={id}
+        className={`movable-item ${isSelected ? 'is-selected' : ''}`}
+        style={{
+          transform: `translate(${el.x}px, ${el.y}px)`,
+          zIndex: 10 + layerIndex,
+        }}
+        onPointerDown={(e) => handlePointerDown(id, e)}
+      >
+        <div className={wrapperClass} style={{ ...getElementBoxStyle(el) }}>
+          {showSec && (
+            <span
+              className="meta-label"
+              style={{
+                color: el.secondaryColor || '#64748b',
+                fontSize: `${secSize}px`,
+                fontWeight: titleWeight,
+              }}
+            >
+              {el.secondaryText}
+            </span>
+          )}
+          <span
+            className={`${id === 'eventTitle' ? 'element-title-text' : id === 'footerNote' ? 'footer-disclaimer' : 'meta-val'}${isMono ? ' font-mono' : ''}`}
+            style={{
+              margin: 0,
+              color: el.color || '#0f172a',
+              fontSize: `${el.fontSize || defaultBodySize}px`,
+              fontWeight: bodyWeight,
+              lineHeight: id === 'eventTitle' ? 1.15 : 1.3,
+              textAlign: align,
+            }}
+          >
+            {el.text}
+          </span>
+        </div>
+        {isSelected && (
+          <span className="coord-chip">X: {el.x} Y: {el.y}</span>
+        )}
+      </div>
+    );
+  };
+
+  // Render Canonical Ticket Surface (Square edges only, ordered layers per D-289)
+  const renderTicketCard = (isInteractive: boolean) => {
+    const resolvedFontFamily = state.fontFamily && state.fontFamily !== 'Kanit'
+      ? `"${state.fontFamily}", Kanit, sans-serif`
+      : 'Kanit, sans-serif';
+
+    return (
+      // biome-ignore lint/a11y/useKeyWithClickEvents: stage background deselect helper
+      // biome-ignore lint/a11y/noStaticElementInteractions: stage background deselect helper
       <div
         className="ticket-surface-box"
         style={{
@@ -1562,12 +1952,15 @@ export function AdminTicketDesigner() {
           height: '420px',
           transform: isInteractive ? `scale(${effectiveScale / 100})` : 'none',
           transformOrigin: 'top left',
-          borderRadius: `${state.borderRadius}px`,
-          borderWidth: `${state.borderWidth}px`,
-          borderStyle: state.borderWidth > 0 ? 'solid' : 'none',
-          borderColor: state.borderColor,
-          fontFamily: `${state.fontFamily}, Kanit, sans-serif`,
+          borderRadius: '0px',
+          border: 'none',
+          fontFamily: resolvedFontFamily,
           ...backgroundStyle,
+        }}
+        onClick={(e) => {
+          if (isInteractive && e.target === e.currentTarget) {
+            setSelectedId(null);
+          }
         }}
       >
         {/* Darkness Overlay */}
@@ -1599,402 +1992,8 @@ export function AdminTicketDesigner() {
           </div>
         )}
 
-        {/* 1. Brand Logo */}
-        {state.elements.brandLogo?.visible && (
-          <div
-            className={`movable-item ${isInteractive && selectedId === 'brandLogo' ? 'is-selected' : ''}`}
-            style={{
-              transform: `translate(${state.elements.brandLogo.x}px, ${state.elements.brandLogo.y}px)`,
-            }}
-            onPointerDown={(e) => handlePointerDown('brandLogo', e)}
-          >
-            <div className="brand-logo-content" style={{ color: state.elements.brandLogo.color }}>
-              <TicketIcon style={{ width: 18, height: 18 }} />
-              <strong>{state.elements.brandLogo.text || 'TICKET'}</strong>
-              <span className="brand-official-tag" style={{ color: state.elements.brandLogo.secondaryColor || '#64748b' }}>
-                {state.elements.brandLogo.secondaryText || 'OFFICIAL CONCERT PASS'}
-              </span>
-            </div>
-            {isInteractive && selectedId === 'brandLogo' && (
-              <span className="coord-chip">X: {state.elements.brandLogo.x} Y: {state.elements.brandLogo.y}</span>
-            )}
-          </div>
-        )}
-
-        {/* 2. Event Title */}
-        {state.elements.eventTitle?.visible && (
-          <div
-            className={`movable-item ${isInteractive && selectedId === 'eventTitle' ? 'is-selected' : ''}`}
-            style={{
-              transform: `translate(${state.elements.eventTitle.x}px, ${state.elements.eventTitle.y}px)`,
-            }}
-            onPointerDown={(e) => handlePointerDown('eventTitle', e)}
-          >
-            <h2
-              className="element-title-text"
-              style={{
-                fontSize: `${state.elements.eventTitle.fontSize || 26}px`,
-                fontWeight: state.elements.eventTitle.fontWeight || '700',
-                color: state.elements.eventTitle.color,
-                ...getElementBoxStyle(state.elements.eventTitle),
-              }}
-            >
-              {state.elements.eventTitle.text}
-            </h2>
-            {isInteractive && selectedId === 'eventTitle' && (
-              <span className="coord-chip">X: {state.elements.eventTitle.x} Y: {state.elements.eventTitle.y}</span>
-            )}
-          </div>
-        )}
-
-        {/* 3. Zone Badge */}
-        {state.elements.zoneBadge?.visible && (
-          <div
-            className={`movable-item ${isInteractive && selectedId === 'zoneBadge' ? 'is-selected' : ''}`}
-            style={{
-              transform: `translate(${state.elements.zoneBadge.x}px, ${state.elements.zoneBadge.y}px)`,
-            }}
-            onPointerDown={(e) => handlePointerDown('zoneBadge', e)}
-          >
-            <div className="meta-block" style={{ ...getElementBoxStyle(state.elements.zoneBadge) }}>
-              <span className="meta-label" style={{ color: state.elements.zoneBadge.secondaryColor || '#64748b' }}>
-                {state.elements.zoneBadge.secondaryText || 'โซน / ประเภทบัตร (ZONE & CATEGORY)'}
-              </span>
-              <strong className="meta-val" style={{ color: state.elements.zoneBadge.color || '#0f172a', fontSize: `${state.elements.zoneBadge.fontSize || 16}px` }}>
-                {state.elements.zoneBadge.text}
-              </strong>
-            </div>
-            {isInteractive && selectedId === 'zoneBadge' && (
-              <span className="coord-chip">X: {state.elements.zoneBadge.x} Y: {state.elements.zoneBadge.y}</span>
-            )}
-          </div>
-        )}
-
-        {/* 4. Gate Info */}
-        {state.elements.gateInfo?.visible && (
-          <div
-            className={`movable-item ${isInteractive && selectedId === 'gateInfo' ? 'is-selected' : ''}`}
-            style={{
-              transform: `translate(${state.elements.gateInfo.x}px, ${state.elements.gateInfo.y}px)`,
-            }}
-            onPointerDown={(e) => handlePointerDown('gateInfo', e)}
-          >
-            <div className="meta-block" style={{ ...getElementBoxStyle(state.elements.gateInfo) }}>
-              <span className="meta-label" style={{ color: state.elements.gateInfo.secondaryColor || '#64748b' }}>
-                {state.elements.gateInfo.secondaryText || 'ประตูทางเข้า (GATE)'}
-              </span>
-              <strong className="meta-val" style={{ color: state.elements.gateInfo.color, fontSize: `${state.elements.gateInfo.fontSize || 16}px` }}>
-                {state.elements.gateInfo.text}
-              </strong>
-            </div>
-            {isInteractive && selectedId === 'gateInfo' && (
-              <span className="coord-chip">X: {state.elements.gateInfo.x} Y: {state.elements.gateInfo.y}</span>
-            )}
-          </div>
-        )}
-
-        {/* 5. Seat Info */}
-        {state.elements.seatInfo?.visible && (
-          <div
-            className={`movable-item ${isInteractive && selectedId === 'seatInfo' ? 'is-selected' : ''}`}
-            style={{
-              transform: `translate(${state.elements.seatInfo.x}px, ${state.elements.seatInfo.y}px)`,
-            }}
-            onPointerDown={(e) => handlePointerDown('seatInfo', e)}
-          >
-            <div className="meta-block" style={{ ...getElementBoxStyle(state.elements.seatInfo) }}>
-              <span className="meta-label" style={{ color: state.elements.seatInfo.secondaryColor || '#64748b' }}>
-                {state.elements.seatInfo.secondaryText || 'แถว/ที่นั่ง (ROW / SEAT)'}
-              </span>
-              <strong className="meta-val" style={{ color: state.elements.seatInfo.color, fontSize: `${state.elements.seatInfo.fontSize || 16}px` }}>
-                {state.elements.seatInfo.text}
-              </strong>
-            </div>
-            {isInteractive && selectedId === 'seatInfo' && (
-              <span className="coord-chip">X: {state.elements.seatInfo.x} Y: {state.elements.seatInfo.y}</span>
-            )}
-          </div>
-        )}
-
-        {/* 6. Price Info */}
-        {state.elements.priceInfo?.visible && (
-          <div
-            className={`movable-item ${isInteractive && selectedId === 'priceInfo' ? 'is-selected' : ''}`}
-            style={{
-              transform: `translate(${state.elements.priceInfo.x}px, ${state.elements.priceInfo.y}px)`,
-            }}
-            onPointerDown={(e) => handlePointerDown('priceInfo', e)}
-          >
-            <div className="meta-block" style={{ ...getElementBoxStyle(state.elements.priceInfo) }}>
-              <span className="meta-label" style={{ color: state.elements.priceInfo.secondaryColor || '#64748b' }}>
-                {state.elements.priceInfo.secondaryText || 'ราคาบัตร (PRICE)'}
-              </span>
-              <strong className="meta-val" style={{ color: state.elements.priceInfo.color, fontSize: `${state.elements.priceInfo.fontSize || 16}px` }}>
-                {state.elements.priceInfo.text}
-              </strong>
-            </div>
-            {isInteractive && selectedId === 'priceInfo' && (
-              <span className="coord-chip">X: {state.elements.priceInfo.x} Y: {state.elements.priceInfo.y}</span>
-            )}
-          </div>
-        )}
-
-        {/* 7. Date & Time */}
-        {state.elements.dateTime?.visible && (
-          <div
-            className={`movable-item ${isInteractive && selectedId === 'dateTime' ? 'is-selected' : ''}`}
-            style={{
-              transform: `translate(${state.elements.dateTime.x}px, ${state.elements.dateTime.y}px)`,
-            }}
-            onPointerDown={(e) => handlePointerDown('dateTime', e)}
-          >
-            <div className="meta-block" style={{ ...getElementBoxStyle(state.elements.dateTime) }}>
-              <span className="meta-label" style={{ color: state.elements.dateTime.secondaryColor || '#64748b' }}>
-                {state.elements.dateTime.secondaryText || 'วันและเวลาแสดง (DATE & TIME)'}
-              </span>
-              <strong className="meta-val" style={{ color: state.elements.dateTime.color, fontSize: `${state.elements.dateTime.fontSize || 14}px` }}>
-                {state.elements.dateTime.text}
-              </strong>
-            </div>
-            {isInteractive && selectedId === 'dateTime' && (
-              <span className="coord-chip">X: {state.elements.dateTime.x} Y: {state.elements.dateTime.y}</span>
-            )}
-          </div>
-        )}
-
-        {/* 8. Venue */}
-        {state.elements.venue?.visible && (
-          <div
-            className={`movable-item ${isInteractive && selectedId === 'venue' ? 'is-selected' : ''}`}
-            style={{
-              transform: `translate(${state.elements.venue.x}px, ${state.elements.venue.y}px)`,
-            }}
-            onPointerDown={(e) => handlePointerDown('venue', e)}
-          >
-            <div className="meta-block" style={{ ...getElementBoxStyle(state.elements.venue) }}>
-              <span className="meta-label" style={{ color: state.elements.venue.secondaryColor || '#64748b' }}>
-                {state.elements.venue.secondaryText || 'สถานที่จัดงาน (VENUE & HALL)'}
-              </span>
-              <strong className="meta-val" style={{ color: state.elements.venue.color, fontSize: `${state.elements.venue.fontSize || 14}px` }}>
-                {state.elements.venue.text}
-              </strong>
-            </div>
-            {isInteractive && selectedId === 'venue' && (
-              <span className="coord-chip">X: {state.elements.venue.x} Y: {state.elements.venue.y}</span>
-            )}
-          </div>
-        )}
-
-        {/* 9. Buyer Name */}
-        {state.elements.buyerName?.visible && (
-          <div
-            className={`movable-item ${isInteractive && selectedId === 'buyerName' ? 'is-selected' : ''}`}
-            style={{
-              transform: `translate(${state.elements.buyerName.x}px, ${state.elements.buyerName.y}px)`,
-            }}
-            onPointerDown={(e) => handlePointerDown('buyerName', e)}
-          >
-            <div className="meta-block" style={{ ...getElementBoxStyle(state.elements.buyerName) }}>
-              <span className="meta-label" style={{ color: state.elements.buyerName.secondaryColor || '#64748b' }}>
-                {state.elements.buyerName.secondaryText || 'ผู้ถือบัตร (ATTENDEE)'}
-              </span>
-              <strong className="meta-val" style={{ color: state.elements.buyerName.color, fontSize: `${state.elements.buyerName.fontSize || 13}px` }}>
-                {state.elements.buyerName.text}
-              </strong>
-            </div>
-            {isInteractive && selectedId === 'buyerName' && (
-              <span className="coord-chip">X: {state.elements.buyerName.x} Y: {state.elements.buyerName.y}</span>
-            )}
-          </div>
-        )}
-
-        {/* 10. Ticket Code */}
-        {state.elements.ticketCode?.visible && (
-          <div
-            className={`movable-item ${isInteractive && selectedId === 'ticketCode' ? 'is-selected' : ''}`}
-            style={{
-              transform: `translate(${state.elements.ticketCode.x}px, ${state.elements.ticketCode.y}px)`,
-            }}
-            onPointerDown={(e) => handlePointerDown('ticketCode', e)}
-          >
-            <div className="meta-block" style={{ ...getElementBoxStyle(state.elements.ticketCode) }}>
-              <span className="meta-label" style={{ color: state.elements.ticketCode.secondaryColor || '#64748b' }}>
-                {state.elements.ticketCode.secondaryText || 'รหัสบัตร (TICKET CODE)'}
-              </span>
-              <strong className="meta-val font-mono" style={{ color: state.elements.ticketCode.color, fontSize: `${state.elements.ticketCode.fontSize || 14}px` }}>
-                {state.elements.ticketCode.text}
-              </strong>
-            </div>
-            {isInteractive && selectedId === 'ticketCode' && (
-              <span className="coord-chip">X: {state.elements.ticketCode.x} Y: {state.elements.ticketCode.y}</span>
-            )}
-          </div>
-        )}
-
-        {/* 11. Security Barcode */}
-        {state.elements.barcode?.visible && (
-          <div
-            className={`movable-item ${isInteractive && selectedId === 'barcode' ? 'is-selected' : ''}`}
-            style={{
-              transform: `translate(${state.elements.barcode.x}px, ${state.elements.barcode.y}px)`,
-            }}
-            onPointerDown={(e) => handlePointerDown('barcode', e)}
-          >
-            <SecurityBarcodeSvg
-              code={state.elements.barcode.text || 'TK-849201-9482-01'}
-              color={state.elements.barcode.color}
-              secondaryColor={state.elements.barcode.secondaryColor}
-            />
-            {isInteractive && selectedId === 'barcode' && (
-              <span className="coord-chip">X: {state.elements.barcode.x} Y: {state.elements.barcode.y}</span>
-            )}
-          </div>
-        )}
-
-        {/* 12. Footer Note */}
-        {state.elements.footerNote?.visible && (
-          <div
-            className={`movable-item ${isInteractive && selectedId === 'footerNote' ? 'is-selected' : ''}`}
-            style={{
-              transform: `translate(${state.elements.footerNote.x}px, ${state.elements.footerNote.y}px)`,
-            }}
-            onPointerDown={(e) => handlePointerDown('footerNote', e)}
-          >
-            <p className="footer-disclaimer" style={{ color: state.elements.footerNote.color, fontSize: `${state.elements.footerNote.fontSize || 11}px` }}>
-              {state.elements.footerNote.text}
-            </p>
-            {isInteractive && selectedId === 'footerNote' && (
-              <span className="coord-chip">X: {state.elements.footerNote.x} Y: {state.elements.footerNote.y}</span>
-            )}
-          </div>
-        )}
-
-        {/* 13. Stub Event Summary */}
-        {state.elements.stubEventSummary?.visible && (
-          <div
-            className={`movable-item ${isInteractive && selectedId === 'stubEventSummary' ? 'is-selected' : ''}`}
-            style={{
-              transform: `translate(${state.elements.stubEventSummary.x}px, ${state.elements.stubEventSummary.y}px)`,
-            }}
-            onPointerDown={(e) => handlePointerDown('stubEventSummary', e)}
-          >
-            <div className="stub-event-summary-block" style={{ ...getElementBoxStyle(state.elements.stubEventSummary) }}>
-              <span className="stub-event-badge" style={{ color: state.elements.stubEventSummary.secondaryColor || '#64748b' }}>
-                {state.elements.stubEventSummary.secondaryText || 'ADMISSION STUB'}
-              </span>
-              <strong className="stub-event-title" style={{ color: state.elements.stubEventSummary.color, fontSize: `${state.elements.stubEventSummary.fontSize || 12}px` }}>
-                {state.elements.stubEventSummary.text}
-              </strong>
-            </div>
-            {isInteractive && selectedId === 'stubEventSummary' && (
-              <span className="coord-chip">X: {state.elements.stubEventSummary.x} Y: {state.elements.stubEventSummary.y}</span>
-            )}
-          </div>
-        )}
-
-        {/* 14. QR Code */}
-        {state.elements.qrCode?.visible && (
-          <div
-            className={`movable-item qr-movable-box ${isInteractive && selectedId === 'qrCode' ? 'is-selected' : ''}`}
-            style={{
-              transform: `translate(${state.elements.qrCode.x}px, ${state.elements.qrCode.y}px)`,
-            }}
-            onPointerDown={(e) => handlePointerDown('qrCode', e)}
-          >
-            <button
-              type="button"
-              className="surface-qr-btn"
-              style={{
-                backgroundColor: state.qrBgColor,
-                width: `${state.qrSize}px`,
-                height: `${state.qrSize}px`,
-                borderRadius: '12px',
-                padding: '8px',
-                border: '1px solid #e2e8f0',
-                overflow: 'hidden',
-              }}
-              onClick={(e) => {
-                e.stopPropagation();
-                setSimulatedScanResult(state.qrPayload);
-              }}
-              title="คลิกเพื่อทดสอบผลการสแกน QR"
-            >
-              {/* biome-ignore lint/performance/noImgElement: direct rendered SVG QR */}
-              <img
-                src={qrSvgDataUrl}
-                alt="Ticket QR Code"
-                style={{ width: '100%', height: '100%', display: 'block', borderRadius: '8px' }}
-              />
-            </button>
-            {isInteractive && selectedId === 'qrCode' && (
-              <span className="coord-chip">X: {state.elements.qrCode.x} Y: {state.elements.qrCode.y}</span>
-            )}
-          </div>
-        )}
-
-        {/* 15. Code Under QR */}
-        {state.elements.qrCodeLabel?.visible && (
-          <div
-            className={`movable-item ${isInteractive && selectedId === 'qrCodeLabel' ? 'is-selected' : ''}`}
-            style={{
-              transform: `translate(${state.elements.qrCodeLabel.x}px, ${state.elements.qrCodeLabel.y}px)`,
-            }}
-            onPointerDown={(e) => handlePointerDown('qrCodeLabel', e)}
-          >
-            <div className="stub-code-block" style={{ ...getElementBoxStyle(state.elements.qrCodeLabel) }}>
-              <span className="stub-code-tag" style={{ color: state.elements.qrCodeLabel.secondaryColor || '#64748b' }}>
-                {state.elements.qrCodeLabel.secondaryText || 'รหัสอ้างอิงบัตร'}
-              </span>
-              <strong className="stub-code-strong font-mono" style={{ color: state.elements.qrCodeLabel.color }}>
-                {state.elements.qrCodeLabel.text}
-              </strong>
-            </div>
-            {isInteractive && selectedId === 'qrCodeLabel' && (
-              <span className="coord-chip">X: {state.elements.qrCodeLabel.x} Y: {state.elements.qrCodeLabel.y}</span>
-            )}
-          </div>
-        )}
-
-        {/* 16. Scan Hint */}
-        {state.elements.scanHint?.visible && (
-          <div
-            className={`movable-item ${isInteractive && selectedId === 'scanHint' ? 'is-selected' : ''}`}
-            style={{
-              transform: `translate(${state.elements.scanHint.x}px, ${state.elements.scanHint.y}px)`,
-            }}
-            onPointerDown={(e) => handlePointerDown('scanHint', e)}
-          >
-            <span className="stub-scan-caption" style={{ color: state.elements.scanHint.color, fontSize: `${state.elements.scanHint.fontSize || 11}px` }}>
-              {state.elements.scanHint.text}
-            </span>
-            {isInteractive && selectedId === 'scanHint' && (
-              <span className="coord-chip">X: {state.elements.scanHint.x} Y: {state.elements.scanHint.y}</span>
-            )}
-          </div>
-        )}
-
-        {/* 17. Order ID */}
-        {state.elements.orderId?.visible && (
-          <div
-            className={`movable-item ${isInteractive && selectedId === 'orderId' ? 'is-selected' : ''}`}
-            style={{
-              transform: `translate(${state.elements.orderId.x}px, ${state.elements.orderId.y}px)`,
-            }}
-            onPointerDown={(e) => handlePointerDown('orderId', e)}
-          >
-            <div className="stub-code-block" style={{ ...getElementBoxStyle(state.elements.orderId) }}>
-              <span className="stub-code-tag" style={{ color: state.elements.orderId.secondaryColor || '#64748b' }}>
-                {state.elements.orderId.secondaryText || 'ORDER ID'}
-              </span>
-              <span className="font-mono" style={{ color: state.elements.orderId.color, fontSize: `${state.elements.orderId.fontSize || 11}px` }}>
-                {state.elements.orderId.text}
-              </span>
-            </div>
-            {isInteractive && selectedId === 'orderId' && (
-              <span className="coord-chip">X: {state.elements.orderId.x} Y: {state.elements.orderId.y}</span>
-            )}
-          </div>
-        )}
+        {/* Ordered Movable Elements */}
+        {orderedLayerIds.map((id, idx) => renderMovableElement(id, idx, isInteractive))}
       </div>
     );
   };
@@ -2008,60 +2007,11 @@ export function AdminTicketDesigner() {
       {/* 1. Slim Studio Topbar */}
       <header className="studio-topbar">
         <div className="studio-brand-group">
-          <div className="studio-badge">
-            <SlidersIcon style={{ width: 14, height: 14 }} />
-            <span>Studio</span>
-          </div>
           <h1 className="studio-title">ออกแบบบัตรคอนเสิร์ต (Ticket Designer)</h1>
-          <span className="studio-format-tag">ขนาดมาตรฐาน 1200 x 500 px (แนวนอน)</span>
         </div>
-
-        {/* View Mode Switcher */}
-        <nav className="studio-view-modes" aria-label="สลับมุมมอง">
-          <button
-            type="button"
-            className={`studio-view-mode-btn ${viewMode === 'studio' ? 'active' : ''}`}
-            onClick={() => setViewMode('studio')}
-            title="โหมดสตูดิโอออกแบบ ลากวางชิ้นส่วนอย่างอิสระ"
-          >
-            <span>สตูดิโอออกแบบ</span>
-          </button>
-          <button
-            type="button"
-            className={`studio-view-mode-btn ${viewMode === 'mobile' ? 'active' : ''}`}
-            onClick={() => setViewMode('mobile')}
-            title="มุมมองในมือถือลูกค้า แสดงหน้าค้นหาบัตรของฉัน"
-          >
-            <span>มุมมองมือถือลูกค้า</span>
-          </button>
-          <button
-            type="button"
-            className={`studio-view-mode-btn ${viewMode === 'print' ? 'active' : ''}`}
-            onClick={() => setViewMode('print')}
-            title="มุมมองสำหรับพิมพ์บัตรบนกระดาษ A4"
-          >
-            <span>มุมมองพิมพ์บัตร</span>
-          </button>
-        </nav>
-
-        {/* Preset Switcher Pills */}
-        <nav className="studio-preset-pills" aria-label="พรีเซ็ตสำเร็จรูป">
-          {Object.entries(PRESETS).map(([key, p]) => (
-            <button
-              key={key}
-              type="button"
-              className={`studio-preset-pill ${state.presetId === key ? 'active' : ''}`}
-              onClick={() => handleApplyPreset(key)}
-            >
-              {state.presetId === key && <CheckIcon style={{ width: 12, height: 12 }} />}
-              <span>{p.name.split(' (')[0]}</span>
-            </button>
-          ))}
-        </nav>
 
         {/* Top Actions */}
         <div className="studio-top-actions">
-          {/* Master Template Save Button */}
           <button
             type="button"
             className="studio-btn save-master"
@@ -2094,16 +2044,6 @@ export function AdminTicketDesigner() {
           <button
             type="button"
             className="studio-btn secondary"
-            onClick={() => setIsSidebarOpen((v) => !v)}
-            title={isSidebarOpen ? 'ซ่อนแผงควบคุม' : 'เปิดแผงควบคุม'}
-          >
-            {isSidebarOpen ? <ChevronRightIcon style={{ width: 16, height: 16 }} /> : <ChevronLeftIcon style={{ width: 16, height: 16 }} />}
-            <span>{isSidebarOpen ? 'ซ่อนเมนู' : 'เปิดเมนู'}</span>
-          </button>
-
-          <button
-            type="button"
-            className="studio-btn secondary"
             onClick={handleToggleFullscreen}
             title="สลับโหมดเต็มหน้าจอ"
           >
@@ -2120,41 +2060,69 @@ export function AdminTicketDesigner() {
             <DownloadIcon style={{ width: 15, height: 15 }} />
             <span>{isExporting ? 'กำลังสร้างไฟล์...' : 'ดาวน์โหลด PNG'}</span>
           </button>
+
+          {/* Single Toggle Button for Right Floating Drawer */}
+          <button
+            type="button"
+            className="studio-btn secondary toggle-sidebar-btn"
+            onClick={() => setIsSidebarOpen((v) => !v)}
+            title={isSidebarOpen ? 'ปิดเมนูปรับแต่ง' : 'เปิดเมนูปรับแต่ง'}
+            aria-label={isSidebarOpen ? 'ปิดเมนูปรับแต่ง' : 'เปิดเมนูปรับแต่ง'}
+          >
+            {isSidebarOpen ? <ChevronRightIcon style={{ width: 16, height: 16 }} /> : <ChevronLeftIcon style={{ width: 16, height: 16 }} />}
+            <span>{isSidebarOpen ? 'ปิดเมนู' : 'เปิดเมนู'}</span>
+          </button>
         </div>
       </header>
 
-      {/* Master Template Saved Toast */}
-      {masterSavedToast && (
-        <div className="studio-master-toast" role="status" aria-live="polite">
-          <CheckIcon style={{ width: 18, height: 18, color: '#16a34a' }} />
-          <span>{masterSavedToast}</span>
-          <button type="button" className="toast-close-btn" onClick={() => setMasterSavedToast(null)}>
-            ปิด
-          </button>
+      {/* Countdown Toast Notification (Single unified toast system) */}
+      {countdownToast && (
+        <div className="studio-countdown-toast" role="status" aria-live="polite">
+          <div className="studio-countdown-toast-content">
+            <div className="studio-countdown-toast-icon">
+              {countdownToast.type === 'success' && <CheckIcon style={{ width: 18, height: 18, color: '#16a34a' }} />}
+              {countdownToast.type === 'info' && <SparklesIcon style={{ width: 18, height: 18, color: '#0284c7' }} />}
+              {countdownToast.type === 'error' && <XIcon style={{ width: 18, height: 18, color: '#dc2626' }} />}
+            </div>
+            <div className="studio-countdown-toast-text">
+              <h5 className="studio-countdown-toast-title">{countdownToast.title}</h5>
+              {countdownToast.message && <p className="studio-countdown-toast-desc">{countdownToast.message}</p>}
+            </div>
+            <button
+              type="button"
+              className="studio-countdown-toast-close"
+              onClick={() => setCountdownToast(null)}
+              title="ปิดการแจ้งเตือน"
+              aria-label="ปิดการแจ้งเตือน"
+            >
+              <XIcon style={{ width: 15, height: 15 }} />
+            </button>
+          </div>
+          <div
+            key={countdownToast.id}
+            className="studio-countdown-toast-bar"
+            style={{ animationDuration: `${countdownToast.durationMs}ms` }}
+          />
         </div>
       )}
 
       {/* 2. Main Studio Viewport */}
       <div className="studio-main-viewport">
         {/* Central Drafting Canvas Stage with Dynamic Stage Style */}
+        {/* biome-ignore lint/a11y/useKeyWithClickEvents: stage background deselect helper */}
         <main
           ref={stageRef}
           className="studio-canvas-stage"
           style={stageBackgroundStyle}
           onPointerMove={handlePointerMove}
           onPointerUp={handlePointerUp}
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setSelectedId(null);
+          }}
         >
           {viewMode === 'studio' && (
             <>
-              {/* Backdrop click to deselect element */}
-              <button
-                type="button"
-                className="stage-backdrop-clickarea"
-                aria-label="ยกเลิกการเลือกชิ้นส่วน"
-                onClick={() => setSelectedId(null)}
-              />
-
-              {/* Zoom / Scale Toolbar */}
+              {/* Zoom / Scale + Floating Stage Background Toolbar */}
               <div className="canvas-scale-dock">
                 <div className="dock-mode-group">
                   <button
@@ -2215,6 +2183,37 @@ export function AdminTicketDesigner() {
                 <span className="scale-current-tag">
                   {zoomMode === 'fit' ? `พอดีจอ (${fitScale}%)` : `ซูม ${manualScale}%`}
                 </span>
+
+                <div className="dock-divider" />
+
+                {/* Floating Stage Background Switcher */}
+                <div className="dock-stage-group">
+                  <span className="dock-group-label">ฉากหลัง:</span>
+                  <button
+                    type="button"
+                    className={`scale-pill-btn stage-dock-btn ${workspaceStage.style === 'grid' ? 'active' : ''}`}
+                    onClick={() => setWorkspaceStage((prev) => ({ ...prev, style: 'grid' }))}
+                    title="ฉากหลังโต๊ะทำงานแบบตาราง"
+                  >
+                    แบบตาราง
+                  </button>
+                  <button
+                    type="button"
+                    className={`scale-pill-btn stage-dock-btn ${workspaceStage.style === 'white' ? 'active' : ''}`}
+                    onClick={() => setWorkspaceStage((prev) => ({ ...prev, style: 'white' }))}
+                    title="ฉากหลังโต๊ะทำงานสีขาว"
+                  >
+                    สีขาว
+                  </button>
+                  <button
+                    type="button"
+                    className={`scale-pill-btn stage-dock-btn ${workspaceStage.style === 'dark-neutral' ? 'active' : ''}`}
+                    onClick={() => setWorkspaceStage((prev) => ({ ...prev, style: 'dark-neutral' }))}
+                    title="ฉากหลังโต๊ะทำงานสีดำ"
+                  >
+                    สีดำ
+                  </button>
+                </div>
               </div>
 
               {/* Scaled Layout Wrapper Box */}
@@ -2252,76 +2251,69 @@ export function AdminTicketDesigner() {
               </div>
             </div>
           )}
-
-          {/* Test Scan Popup Result */}
-          {simulatedScanResult && (
-            <div className="studio-scan-toast" role="status" aria-live="polite">
-              <CheckIcon style={{ width: 16, height: 16, color: '#16a34a' }} />
-              <span>ผลการทดสอบสแกน QR: <strong>{simulatedScanResult}</strong></span>
-              <button
-                type="button"
-                className="toast-close-btn"
-                onClick={() => setSimulatedScanResult(null)}
-              >
-                ปิด
-              </button>
-            </div>
-          )}
         </main>
 
-        {/* 3. Collapsible Redesigned Menu Tabs Inspector Panel */}
+        {/* 3. Floating Right Overlay Drawer (Overlays canvas without shifting card) */}
         {isSidebarOpen && (
-          <aside className="studio-side-panel">
-            {/* Redesigned Clean Segmented Nav Tabs (5-Grid, Zero Overflow) */}
+          <aside className="studio-side-panel floating-right-drawer">
+            {/* Drawer Header with X Close Button */}
+            <div className="side-panel-header">
+              <div className="side-panel-header-title">
+                <SlidersIcon style={{ width: 16, height: 16 }} />
+                <span>เมนูปรับแต่งบัตร</span>
+              </div>
+              <button
+                type="button"
+                className="side-panel-collapse-btn"
+                onClick={() => setIsSidebarOpen(false)}
+                title="ปิดเมนูปรับแต่ง"
+                aria-label="ปิดเมนูปรับแต่ง"
+              >
+                <XIcon style={{ width: 16, height: 16 }} />
+              </button>
+            </div>
+
+            {/* 4 Focused Navigation Tabs */}
             <nav className="side-nav-tabs" aria-label="แท็บเมนูเครื่องมือ">
               <button
                 type="button"
                 className={`side-tab-btn ${activeSideTab === 'elements' ? 'active' : ''}`}
                 onClick={() => setActiveSideTab('elements')}
-                title="ปรับแต่งรายละเอียดชิ้นส่วนที่เลือก"
+                title="ปรับแต่งชิ้นส่วน ข้อความ หัวข้อ ขนาด สี และพิกัด"
               >
-                <SlidersIcon style={{ width: 15, height: 15 }} />
+                <SlidersIcon style={{ width: 14, height: 14 }} />
                 <span>ชิ้นส่วน</span>
               </button>
               <button
                 type="button"
-                className={`side-tab-btn ${activeSideTab === 'cardBg' ? 'active' : ''}`}
-                onClick={() => setActiveSideTab('cardBg')}
-                title="พื้นหลังบัตร อัปโหลดรูปภาพทดสอบ และสีเนื้อกระดาษ"
+                className={`side-tab-btn ${activeSideTab === 'layers' || activeSideTab === 'allElements' ? 'active' : ''}`}
+                onClick={() => setActiveSideTab('layers')}
+                title="จัดลำดับชั้นเลเยอร์ขึ้น-ลง และเปิด/ปิดการแสดงผล"
               >
-                <SparklesIcon style={{ width: 15, height: 15 }} />
-                <span>พื้นหลังบัตร</span>
-              </button>
-              <button
-                type="button"
-                className={`side-tab-btn ${activeSideTab === 'stageBg' ? 'active' : ''}`}
-                onClick={() => setActiveSideTab('stageBg')}
-                title="ปรับแต่งสภาพแวดล้อมโต๊ะทำงาน / ฉากรอบบัตร เพื่อทดสอบความคมชัด"
-              >
-                <RefreshIcon style={{ width: 15, height: 15 }} />
-                <span>ฉากหลัง</span>
-              </button>
-              <button
-                type="button"
-                className={`side-tab-btn ${activeSideTab === 'tearLine' ? 'active' : ''}`}
-                onClick={() => setActiveSideTab('tearLine')}
-                title="ตั้งค่าเส้นรอยปรุฉีกบัตรและฟอนต์ตัวอักษรหลัก"
-              >
-                <TicketIcon style={{ width: 15, height: 15 }} />
-                <span>รอยปรุ</span>
-              </button>
-              <button
-                type="button"
-                className={`side-tab-btn ${activeSideTab === 'allElements' ? 'active' : ''}`}
-                onClick={() => setActiveSideTab('allElements')}
-                title="จัดการและเปิด/ปิดการแสดงผลเลเยอร์ทั้งหมด"
-              >
-                <EyeIcon style={{ width: 15, height: 15 }} />
+                <EyeIcon style={{ width: 14, height: 14 }} />
                 <span>เลเยอร์</span>
+              </button>
+              <button
+                type="button"
+                className={`side-tab-btn ${activeSideTab === 'card' || activeSideTab === 'cardBg' ? 'active' : ''}`}
+                onClick={() => setActiveSideTab('card')}
+                title="เฉดสีพื้นหลังบัตรและอัปโหลดรูปภาพ (ไม่เกิน 0.99MB)"
+              >
+                <SparklesIcon style={{ width: 14, height: 14 }} />
+                <span>พื้นหลัง</span>
+              </button>
+              <button
+                type="button"
+                className={`side-tab-btn ${activeSideTab === 'font' ? 'active' : ''}`}
+                onClick={() => setActiveSideTab('font')}
+                title="เลือกฟอนต์เฉพาะบัตร ปรับหนา-บาง 100-900 และอัปโหลดฟอนต์ใหม่"
+              >
+                <RefreshIcon style={{ width: 14, height: 14 }} />
+                <span>ฟอนต์</span>
               </button>
             </nav>
 
-            {/* TAB 1: ELEMENTS & CONTEXTUAL INSPECTOR */}
+            {/* TAB 1: ELEMENTS & CONTEXTUAL INSPECTOR (No frames/boxes, no suggested color swatches) */}
             {activeSideTab === 'elements' && (
               <div className="side-tab-content">
                 {selectedItem ? (
@@ -2329,368 +2321,238 @@ export function AdminTicketDesigner() {
                     <div className="inspector-card-header">
                       <div className="inspector-card-header-top">
                         <span className="inspector-item-badge">กำลังแก้ไข</span>
-                        <button
-                          type="button"
-                          className="hide-element-action-btn"
-                          onClick={() => {
-                            setState((prev) => ({
-                              ...prev,
-                              elements: {
-                                ...prev.elements,
-                                [selectedItem.id]: {
-                                  ...prev.elements[selectedItem.id],
-                                  visible: false,
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                          <button
+                            type="button"
+                            className="studio-btn secondary view-layers-shortcut-btn"
+                            style={{ height: '26px', padding: '0 0.5rem', fontSize: '0.72rem' }}
+                            onClick={() => setActiveSideTab('layers')}
+                            title="ไปที่แท็บจัดการเลเยอร์"
+                          >
+                            จัดเลเยอร์
+                          </button>
+                          <button
+                            type="button"
+                            className="hide-element-action-btn"
+                            onClick={() => {
+                              setState((prev) => ({
+                                ...prev,
+                                elements: {
+                                  ...prev.elements,
+                                  [selectedItem.id]: {
+                                    ...prev.elements[selectedItem.id],
+                                    visible: false,
+                                  },
                                 },
-                              },
-                            }));
-                            setSelectedId(null);
-                          }}
-                          title="ซ่อนชิ้นส่วนนี้ ไม่ให้แสดงบนบัตร"
-                        >
-                          <EyeOffIcon style={{ width: 13, height: 13 }} />
-                          <span>ซ่อนชิ้นส่วนนี้ (ไม่ใช้งาน)</span>
-                        </button>
+                              }));
+                              setSelectedId(null);
+                            }}
+                            title="ซ่อนชิ้นส่วนนี้ ไม่ให้แสดงบนบัตร"
+                          >
+                            <EyeOffIcon style={{ width: 13, height: 13 }} />
+                            <span>ซ่อน</span>
+                          </button>
+                        </div>
                       </div>
                       <h3 className="inspector-item-title">{selectedItem.label}</h3>
                     </div>
 
-                    {/* Text Content Editor */}
-                    {selectedItem.text !== undefined && (
-                      <div className="studio-field">
-                        <label htmlFor={getFieldId('itemText')} className="studio-label">
-                          ข้อความในชิ้นส่วน
-                        </label>
-                        <input
-                          id={getFieldId('itemText')}
-                          type="text"
-                          className="studio-input"
-                          value={selectedItem.text}
-                          onChange={(e) => {
-                            const val = e.target.value;
-                            setState((prev) => ({
-                              ...prev,
-                              elements: {
-                                ...prev.elements,
-                                [selectedItem.id]: {
-                                  ...prev.elements[selectedItem.id],
-                                  text: val,
-                                },
-                              },
-                            }));
-                          }}
-                        />
-                      </div>
-                    )}
-
-                    {/* Secondary Text / Subtitle */}
-                    {selectedItem.secondaryText !== undefined && (
-                      <div className="studio-field">
-                        <label htmlFor={getFieldId('itemSecondaryText')} className="studio-label">
-                          ข้อความกำกับส่วนหัว (Subtitle / Tag)
-                        </label>
-                        <input
-                          id={getFieldId('itemSecondaryText')}
-                          type="text"
-                          className="studio-input"
-                          value={selectedItem.secondaryText}
-                          onChange={(e) => {
-                            const val = e.target.value;
-                            setState((prev) => ({
-                              ...prev,
-                              elements: {
-                                ...prev.elements,
-                                [selectedItem.id]: {
-                                  ...prev.elements[selectedItem.id],
-                                  secondaryText: val,
-                                },
-                              },
-                            }));
-                          }}
-                        />
-                      </div>
-                    )}
-
-                    {/* Secondary Text Color / Subtitle Color */}
-                    {selectedItem.secondaryText !== undefined && (
-                      <div className="studio-field">
-                        <label htmlFor={getFieldId('itemSecondaryColor')} className="studio-label">
-                          สีข้อความกำกับส่วนหัว (Subtitle / Tag Color)
-                        </label>
-                        <div className="studio-color-row">
-                          <input
-                            id={getFieldId('itemSecondaryColor')}
-                            type="color"
-                            value={selectedItem.secondaryColor || '#64748b'}
-                            onChange={(e) => {
-                              const val = e.target.value;
-                              setState((prev) => ({
-                                ...prev,
-                                elements: {
-                                  ...prev.elements,
-                                  [selectedItem.id]: {
-                                    ...prev.elements[selectedItem.id],
-                                    secondaryColor: val,
-                                  },
-                                },
-                              }));
-                            }}
-                          />
-                          <input
-                            type="text"
-                            className="studio-input"
-                            value={selectedItem.secondaryColor || '#64748b'}
-                            onChange={(e) => {
-                              const val = e.target.value;
-                              setState((prev) => ({
-                                ...prev,
-                                elements: {
-                                  ...prev.elements,
-                                  [selectedItem.id]: {
-                                    ...prev.elements[selectedItem.id],
-                                    secondaryColor: val,
-                                  },
-                                },
-                              }));
-                            }}
-                            aria-label="รหัสสีข้อความกำกับส่วนหัว"
-                          />
-                        </div>
-                        <div className="color-swatches" style={{ marginTop: '0.35rem' }}>
-                          {['#64748b', '#94a3b8', '#0f172a', '#334155', '#475569', '#78350f', '#0284c7', '#16a34a', '#dc2626'].map((hex) => (
-                            <button
-                              key={hex}
-                              type="button"
-                              className="color-swatch-chip"
-                              style={{ backgroundColor: hex }}
-                              onClick={() => {
-                                setState((prev) => ({
-                                  ...prev,
-                                  elements: {
-                                    ...prev.elements,
-                                    [selectedItem.id]: {
-                                      ...prev.elements[selectedItem.id],
-                                      secondaryColor: hex,
-                                    },
-                                  },
-                                }));
-                              }}
-                              title={`เลือกสี ${hex}`}
-                              aria-label={`สี ${hex}`}
-                            />
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Font Size */}
-                    {selectedItem.fontSize !== undefined && (
-                      <div className="studio-field">
-                        <label htmlFor={getFieldId('itemFontSize')} className="studio-label">
-                          ขนาดตัวอักษร ({selectedItem.fontSize}px)
-                        </label>
-                        <input
-                          id={getFieldId('itemFontSize')}
-                          type="range"
-                          min={11}
-                          max={44}
-                          value={selectedItem.fontSize}
-                          onChange={(e) => {
-                            const val = Number(e.target.value);
-                            setState((prev) => ({
-                              ...prev,
-                              elements: {
-                                ...prev.elements,
-                                [selectedItem.id]: {
-                                  ...prev.elements[selectedItem.id],
-                                  fontSize: val,
-                                },
-                              },
-                            }));
-                          }}
-                        />
-                      </div>
-                    )}
-
-                    {/* Text Color */}
-                    {selectedItem.color !== undefined && (
-                      <div className="studio-field">
-                        <label htmlFor={getFieldId('itemColor')} className="studio-label">สีตัวอักษร</label>
-                        <div className="studio-color-row">
-                          <input
-                            id={getFieldId('itemColor')}
-                            type="color"
-                            value={selectedItem.color}
-                            onChange={(e) => {
-                              const val = e.target.value;
-                              setState((prev) => ({
-                                ...prev,
-                                elements: {
-                                  ...prev.elements,
-                                  [selectedItem.id]: {
-                                    ...prev.elements[selectedItem.id],
-                                    color: val,
-                                  },
-                                },
-                              }));
-                            }}
-                          />
-                          <input
-                            type="text"
-                            className="studio-input"
-                            value={selectedItem.color}
-                            onChange={(e) => {
-                              const val = e.target.value;
-                              setState((prev) => ({
-                                ...prev,
-                                elements: {
-                                  ...prev.elements,
-                                  [selectedItem.id]: {
-                                    ...prev.elements[selectedItem.id],
-                                    color: val,
-                                  },
-                                },
-                              }));
-                            }}
-                            aria-label="รหัสสีตัวอักษร"
-                          />
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Background & Border for Zone Badge and All Elements */}
+                    {/* NON-QR TEXT & BARCODE SUITE */}
                     {selectedItem.id !== 'qrCode' && (
-                      <div className="studio-field" style={{ borderTop: '1px solid #f1f5f9', paddingTop: '0.75rem', marginTop: '0.5rem' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.25rem' }}>
-                          <label htmlFor={getFieldId('itemBgColor')} className="studio-label" style={{ margin: 0 }}>
-                            {selectedItem.id === 'zoneBadge' ? 'สีพื้นหลังป้ายโซน (Zone Background)' : 'สีพื้นหลังกล่องชิ้นส่วน (Box Background)'}
-                          </label>
-                          <button
-                            type="button"
-                            className={`studio-btn secondary ${(!selectedItem.bgColor || selectedItem.bgColor === 'transparent') ? 'active' : ''}`}
-                            style={{ height: '26px', padding: '0 0.5rem', fontSize: '0.72rem' }}
-                            onClick={() => {
-                              const isCurrentlyTransparent = !selectedItem.bgColor || selectedItem.bgColor === 'transparent';
-                              const nextBg = isCurrentlyTransparent ? '#0f172a' : 'transparent';
-                              setState((prev) => ({
-                                ...prev,
-                                elements: {
-                                  ...prev.elements,
-                                  [selectedItem.id]: {
-                                    ...prev.elements[selectedItem.id],
-                                    bgColor: nextBg,
-                                    color: (nextBg === 'transparent' && selectedItem.id === 'zoneBadge' && selectedItem.color === '#ffffff') ? '#0f172a' : selectedItem.color,
-                                  },
-                                },
-                              }));
-                            }}
-                          >
-                            {(!selectedItem.bgColor || selectedItem.bgColor === 'transparent') ? 'พื้นหลัง: โปร่งใส' : 'ปรับเป็นโปร่งใส'}
-                          </button>
-                        </div>
-
-                        <div className="studio-color-row">
-                          <input
-                            id={getFieldId('itemBgColor')}
-                            type="color"
-                            value={selectedItem.bgColor && selectedItem.bgColor !== 'transparent' ? selectedItem.bgColor : '#0f172a'}
-                            onChange={(e) => {
-                              const val = e.target.value;
-                              setState((prev) => ({
-                                ...prev,
-                                elements: {
-                                  ...prev.elements,
-                                  [selectedItem.id]: {
-                                    ...prev.elements[selectedItem.id],
-                                    bgColor: val,
-                                  },
-                                },
-                              }));
-                            }}
-                          />
-                          <input
-                            type="text"
-                            className="studio-input"
-                            value={selectedItem.bgColor || 'transparent'}
-                            onChange={(e) => {
-                              const val = e.target.value;
-                              setState((prev) => ({
-                                ...prev,
-                                elements: {
-                                  ...prev.elements,
-                                  [selectedItem.id]: {
-                                    ...prev.elements[selectedItem.id],
-                                    bgColor: val,
-                                  },
-                                },
-                              }));
-                            }}
-                            placeholder="transparent หรือ #0f172a"
-                            aria-label="รหัสสีพื้นหลัง"
-                          />
-                        </div>
-
-                        <div className="color-swatches" style={{ marginTop: '0.35rem' }}>
-                          <button
-                            type="button"
-                            className={`color-swatch-chip transparent-swatch ${(!selectedItem.bgColor || selectedItem.bgColor === 'transparent') ? 'active' : ''}`}
-                            onClick={() => {
-                              setState((prev) => ({
-                                ...prev,
-                                elements: {
-                                  ...prev.elements,
-                                  [selectedItem.id]: {
-                                    ...prev.elements[selectedItem.id],
-                                    bgColor: 'transparent',
-                                    color: (selectedItem.id === 'zoneBadge' && selectedItem.color === '#ffffff') ? '#0f172a' : selectedItem.color,
-                                  },
-                                },
-                              }));
-                            }}
-                            title="โปร่งใส (ไม่มีพื้นหลัง)"
-                            aria-label="โปร่งใส (ไม่มีพื้นหลัง)"
-                          >
-                            <span style={{ fontSize: '9px', fontWeight: 700, color: '#64748b' }}>None</span>
-                          </button>
-                          {['#0f172a', '#ffffff', '#f1f5f9', '#e2e8f0', '#0284c7', '#9a3412', '#16a34a', '#d97706', '#991b1b'].map((hex) => (
-                            <button
-                              key={hex}
-                              type="button"
-                              className="color-swatch-chip"
-                              style={{ backgroundColor: hex }}
-                              onClick={() => {
+                      <>
+                        {/* Show / Hide Section Title Toggle (Every Part) */}
+                        <div className="studio-field">
+                          <div className="studio-toggle-row">
+                            <label htmlFor={getFieldId('toggleSecondaryText')} className="studio-label" style={{ margin: 0 }}>
+                              แสดงชื่อหัวข้อ (Show Title)
+                            </label>
+                            <input
+                              id={getFieldId('toggleSecondaryText')}
+                              type="checkbox"
+                              checked={selectedItem.showSecondaryText !== false}
+                              onChange={(e) => {
+                                const checked = e.target.checked;
                                 setState((prev) => ({
                                   ...prev,
                                   elements: {
                                     ...prev.elements,
                                     [selectedItem.id]: {
                                       ...prev.elements[selectedItem.id],
-                                      bgColor: hex,
+                                      showSecondaryText: checked,
+                                      secondaryText: prev.elements[selectedItem.id].secondaryText || 'หัวข้อ (TITLE)',
                                     },
                                   },
                                 }));
                               }}
-                              title={`เลือกสี ${hex}`}
-                              aria-label={`สี ${hex}`}
                             />
-                          ))}
+                          </div>
                         </div>
 
-                        {/* Border / Outline for Zone Badge & All Parts */}
-                        <div style={{ marginTop: '0.65rem' }}>
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.25rem' }}>
-                            <label htmlFor={getFieldId('itemBorderColor')} className="studio-label" style={{ margin: 0 }}>
-                              สีกรอบ / เส้นขอบ (Border / Outline)
-                            </label>
-                            <span style={{ fontSize: '0.72rem', color: '#64748b' }}>
-                              หนา {selectedItem.borderWidth ?? (selectedItem.borderColor && selectedItem.borderColor !== 'transparent' ? 1 : 0)}px
-                            </span>
-                          </div>
+                        {/* Secondary Title Controls (When shown) */}
+                        {selectedItem.showSecondaryText !== false && (
+                          <div style={{ padding: '0.6rem', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0', display: 'flex', flexDirection: 'column', gap: '0.55rem' }}>
+                            <div className="studio-field">
+                              <label htmlFor={getFieldId('itemSecondaryText')} className="studio-label">
+                                ข้อความหัวข้อ (Title Text)
+                              </label>
+                              <input
+                                id={getFieldId('itemSecondaryText')}
+                                type="text"
+                                className="studio-input"
+                                value={selectedItem.secondaryText ?? ''}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  setState((prev) => ({
+                                    ...prev,
+                                    elements: {
+                                      ...prev.elements,
+                                      [selectedItem.id]: {
+                                        ...prev.elements[selectedItem.id],
+                                        secondaryText: val,
+                                      },
+                                    },
+                                  }));
+                                }}
+                              />
+                            </div>
 
+                            <div className="studio-field">
+                              <label htmlFor={getFieldId('itemSecondaryColor')} className="studio-label">
+                                สีข้อความหัวข้อ (Title Color)
+                              </label>
+                              <div className="studio-color-row">
+                                <input
+                                  id={getFieldId('itemSecondaryColor')}
+                                  type="color"
+                                  value={selectedItem.secondaryColor || '#64748b'}
+                                  onChange={(e) => {
+                                    const val = e.target.value;
+                                    setState((prev) => ({
+                                      ...prev,
+                                      elements: {
+                                        ...prev.elements,
+                                        [selectedItem.id]: {
+                                          ...prev.elements[selectedItem.id],
+                                          secondaryColor: val,
+                                        },
+                                      },
+                                    }));
+                                  }}
+                                />
+                                <input
+                                  type="text"
+                                  className="studio-input"
+                                  value={selectedItem.secondaryColor || '#64748b'}
+                                  onChange={(e) => {
+                                    const val = e.target.value;
+                                    setState((prev) => ({
+                                      ...prev,
+                                      elements: {
+                                        ...prev.elements,
+                                        [selectedItem.id]: {
+                                          ...prev.elements[selectedItem.id],
+                                          secondaryColor: val,
+                                        },
+                                      },
+                                    }));
+                                  }}
+                                  aria-label="รหัสสีข้อความหัวข้อ"
+                                />
+                              </div>
+                            </div>
+
+                            <div className="studio-field">
+                              <label htmlFor={getFieldId('itemSecondaryFontSize')} className="studio-label">
+                                ขนาดข้อความหัวข้อ ({selectedItem.secondaryFontSize ?? 11}px)
+                              </label>
+                              <input
+                                id={getFieldId('itemSecondaryFontSize')}
+                                type="range"
+                                min={9}
+                                max={28}
+                                value={selectedItem.secondaryFontSize ?? 11}
+                                onChange={(e) => {
+                                  const val = Number(e.target.value);
+                                  setState((prev) => ({
+                                    ...prev,
+                                    elements: {
+                                      ...prev.elements,
+                                      [selectedItem.id]: {
+                                        ...prev.elements[selectedItem.id],
+                                        secondaryFontSize: val,
+                                      },
+                                    },
+                                  }));
+                                }}
+                              />
+                            </div>
+
+                            <div className="studio-field">
+                              <label htmlFor={getFieldId('itemSecondaryWeight')} className="studio-label">
+                                น้ำหนักหัวข้อเฉพาะส่วน
+                              </label>
+                              <select
+                                id={getFieldId('itemSecondaryWeight')}
+                                className="studio-select"
+                                value={selectedItem.secondaryFontWeight || ''}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  setState((prev) => ({
+                                    ...prev,
+                                    elements: {
+                                      ...prev.elements,
+                                      [selectedItem.id]: {
+                                        ...prev.elements[selectedItem.id],
+                                        secondaryFontWeight: val || undefined,
+                                      },
+                                    },
+                                  }));
+                                }}
+                              >
+                                <option value="">ค่าตามเมนูฟอนต์ ({state.titleFontWeight ?? 400})</option>
+                                {[100, 200, 300, 400, 500, 600, 700, 800, 900].map((w) => (
+                                  <option key={w} value={String(w)}>{w}</option>
+                                ))}
+                              </select>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Detail Text Controls */}
+                        <div className="studio-field" style={{ marginTop: '0.25rem' }}>
+                          <label htmlFor={getFieldId('itemText')} className="studio-label">
+                            ข้อความรายละเอียด (Detail Text)
+                          </label>
+                          <input
+                            id={getFieldId('itemText')}
+                            type="text"
+                            className="studio-input"
+                            value={selectedItem.text ?? ''}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setState((prev) => ({
+                                ...prev,
+                                elements: {
+                                  ...prev.elements,
+                                  [selectedItem.id]: {
+                                    ...prev.elements[selectedItem.id],
+                                    text: val,
+                                  },
+                                },
+                              }));
+                            }}
+                          />
+                        </div>
+
+                        <div className="studio-field">
+                          <label htmlFor={getFieldId('itemColor')} className="studio-label">
+                            สีข้อความรายละเอียด (Detail Color)
+                          </label>
                           <div className="studio-color-row">
                             <input
-                              id={getFieldId('itemBorderColor')}
+                              id={getFieldId('itemColor')}
                               type="color"
-                              value={selectedItem.borderColor && selectedItem.borderColor !== 'transparent' ? selectedItem.borderColor : '#0f172a'}
+                              value={selectedItem.color || '#0f172a'}
                               onChange={(e) => {
                                 const val = e.target.value;
                                 setState((prev) => ({
@@ -2699,8 +2561,7 @@ export function AdminTicketDesigner() {
                                     ...prev.elements,
                                     [selectedItem.id]: {
                                       ...prev.elements[selectedItem.id],
-                                      borderColor: val,
-                                      borderWidth: prev.elements[selectedItem.id].borderWidth || 1,
+                                      color: val,
                                     },
                                   },
                                 }));
@@ -2709,7 +2570,7 @@ export function AdminTicketDesigner() {
                             <input
                               type="text"
                               className="studio-input"
-                              value={selectedItem.borderColor || 'transparent'}
+                              value={selectedItem.color || '#0f172a'}
                               onChange={(e) => {
                                 const val = e.target.value;
                                 setState((prev) => ({
@@ -2718,56 +2579,116 @@ export function AdminTicketDesigner() {
                                     ...prev.elements,
                                     [selectedItem.id]: {
                                       ...prev.elements[selectedItem.id],
-                                      borderColor: val,
-                                      borderWidth: val !== 'transparent' ? (prev.elements[selectedItem.id].borderWidth || 1) : 0,
+                                      color: val,
                                     },
                                   },
                                 }));
                               }}
-                              placeholder="transparent หรือ #0f172a"
-                              aria-label="รหัสสีกรอบ"
+                              aria-label="รหัสสีข้อความรายละเอียด"
                             />
                           </div>
-
-                          <div style={{ display: 'flex', gap: '0.35rem', marginTop: '0.35rem' }}>
-                            {[
-                              { label: 'ไม่มีกรอบ', width: 0, color: 'transparent' },
-                              { label: 'กรอบบาง (1px)', width: 1, color: selectedItem.borderColor && selectedItem.borderColor !== 'transparent' ? selectedItem.borderColor : '#0f172a' },
-                              { label: 'กรอบหนา (2px)', width: 2, color: selectedItem.borderColor && selectedItem.borderColor !== 'transparent' ? selectedItem.borderColor : '#0f172a' },
-                            ].map((b) => {
-                              const isCurrent = (selectedItem.borderWidth ?? 0) === b.width;
-                              return (
-                                <button
-                                  key={b.width}
-                                  type="button"
-                                  className={`studio-btn secondary ${isCurrent ? 'active' : ''}`}
-                                  style={{ height: '26px', padding: '0 0.5rem', fontSize: '0.72rem', flex: 1 }}
-                                  onClick={() => {
-                                    setState((prev) => ({
-                                      ...prev,
-                                      elements: {
-                                        ...prev.elements,
-                                        [selectedItem.id]: {
-                                          ...prev.elements[selectedItem.id],
-                                          borderWidth: b.width,
-                                          borderColor: b.color,
-                                        },
-                                      },
-                                    }));
-                                  }}
-                                >
-                                  {b.label}
-                                </button>
-                              );
-                            })}
-                          </div>
                         </div>
-                      </div>
+
+                        <div className="studio-field">
+                          <label htmlFor={getFieldId('itemFontSize')} className="studio-label">
+                            ขนาดข้อความรายละเอียด ({selectedItem.fontSize ?? 14}px)
+                          </label>
+                          <input
+                            id={getFieldId('itemFontSize')}
+                            type="range"
+                            min={10}
+                            max={48}
+                            value={selectedItem.fontSize ?? 14}
+                            onChange={(e) => {
+                              const val = Number(e.target.value);
+                              setState((prev) => ({
+                                ...prev,
+                                elements: {
+                                  ...prev.elements,
+                                  [selectedItem.id]: {
+                                    ...prev.elements[selectedItem.id],
+                                    fontSize: val,
+                                  },
+                                },
+                              }));
+                            }}
+                          />
+                        </div>
+
+                        <div className="studio-field">
+                          <label htmlFor={getFieldId('itemBodyWeight')} className="studio-label">
+                            น้ำหนักรายละเอียดเฉพาะส่วน
+                          </label>
+                          <select
+                            id={getFieldId('itemBodyWeight')}
+                            className="studio-select"
+                            value={selectedItem.fontWeight || ''}
+                            onChange={(e) => {
+                              const val = e.target.value;
+                              setState((prev) => ({
+                                ...prev,
+                                elements: {
+                                  ...prev.elements,
+                                  [selectedItem.id]: {
+                                    ...prev.elements[selectedItem.id],
+                                    fontWeight: val || undefined,
+                                  },
+                                },
+                              }));
+                            }}
+                          >
+                            <option value="">ค่าตามเมนูฟอนต์ ({state.bodyFontWeight ?? 400})</option>
+                            {[100, 200, 300, 400, 500, 600, 700, 800, 900].map((w) => (
+                              <option key={w} value={String(w)}>{w}</option>
+                            ))}
+                          </select>
+                        </div>
+
+                        {/* Text Alignment Controls & Center on Card */}
+                        <div className="studio-field">
+                          <span className="studio-label">การจัดตำแหน่งข้อความ (Text Alignment)</span>
+                          <div className="align-btn-group">
+                            {(['left', 'center', 'right'] as const).map((al) => (
+                              <button
+                                key={al}
+                                type="button"
+                                className={`align-option-btn ${(!selectedItem.align && al === 'left') || selectedItem.align === al ? 'active' : ''}`}
+                                onClick={() => {
+                                  setState((prev) => ({
+                                    ...prev,
+                                    elements: {
+                                      ...prev.elements,
+                                      [selectedItem.id]: {
+                                        ...prev.elements[selectedItem.id],
+                                        align: al,
+                                      },
+                                    },
+                                  }));
+                                }}
+                              >
+                                {al === 'left' ? 'ชิดซ้าย' : al === 'center' ? 'กึ่งกลาง' : 'ชิดขวา'}
+                              </button>
+                            ))}
+                          </div>
+                          <button
+                            type="button"
+                            className="studio-btn secondary center-on-card-btn"
+                            onClick={() => handleCenterOnCard(selectedItem)}
+                            title="คำนวณตำแหน่ง X เพื่อจัดกึ่งกลางพื้นที่บัตรอัตโนมัติ"
+                          >
+                            จัดกึ่งกลางพื้นที่บัตรอัตโนมัติ (Center on Card)
+                          </button>
+                        </div>
+                      </>
                     )}
 
-                    {/* QR Code Size & Colors if QR is selected */}
+                    {/* QR CODE INSPECTOR (Zero boxes, zero borders, zero radius, pure fg/bg colors) */}
                     {selectedItem.id === 'qrCode' && (
-                      <>
+                      <div className="qr-inspector-section" style={{ borderTop: '1px solid #f1f5f9', paddingTop: '0.75rem', marginTop: '0.25rem' }}>
+                        <h4 style={{ margin: '0 0 0.5rem 0', fontSize: '0.85rem', fontWeight: 400, color: '#0f172a' }}>
+                          ปรับแต่งคิวอาร์โค้ด (QR Code)
+                        </h4>
+
                         <div className="studio-field">
                           <label htmlFor={getFieldId('qrSizeVal')} className="studio-label">
                             ขนาดคิวอาร์โค้ด ({state.qrSize}px)
@@ -2775,11 +2696,50 @@ export function AdminTicketDesigner() {
                           <input
                             id={getFieldId('qrSizeVal')}
                             type="range"
-                            min={110}
-                            max={230}
+                            min={100}
+                            max={240}
                             value={state.qrSize}
                             onChange={(e) => setState((prev) => ({ ...prev, qrSize: Number(e.target.value) }))}
                           />
+                        </div>
+
+                        <div className="studio-grid-2">
+                          <div className="studio-field">
+                            <label htmlFor={getFieldId('qrFgColor')} className="studio-label">สีจุด QR</label>
+                            <div className="studio-color-row">
+                              <input
+                                id={getFieldId('qrFgColor')}
+                                type="color"
+                                value={state.qrFgColor}
+                                onChange={(e) => setState((prev) => ({ ...prev, qrFgColor: e.target.value }))}
+                              />
+                              <input
+                                type="text"
+                                className="studio-input"
+                                value={state.qrFgColor}
+                                onChange={(e) => setState((prev) => ({ ...prev, qrFgColor: e.target.value }))}
+                                aria-label="รหัสสีจุด QR"
+                              />
+                            </div>
+                          </div>
+                          <div className="studio-field">
+                            <label htmlFor={getFieldId('qrBgColor')} className="studio-label">สีพื้นหลัง QR</label>
+                            <div className="studio-color-row">
+                              <input
+                                id={getFieldId('qrBgColor')}
+                                type="color"
+                                value={state.qrBgColor}
+                                onChange={(e) => setState((prev) => ({ ...prev, qrBgColor: e.target.value }))}
+                              />
+                              <input
+                                type="text"
+                                className="studio-input"
+                                value={state.qrBgColor}
+                                onChange={(e) => setState((prev) => ({ ...prev, qrBgColor: e.target.value }))}
+                                aria-label="รหัสสีพื้นหลัง QR"
+                              />
+                            </div>
+                          </div>
                         </div>
 
                         <div className="studio-field">
@@ -2795,7 +2755,7 @@ export function AdminTicketDesigner() {
                             onChange={(e) => setState((prev) => ({ ...prev, qrPayload: e.target.value }))}
                           />
                         </div>
-                      </>
+                      </div>
                     )}
 
                     {/* Precision Coordinates X & Y */}
@@ -2849,12 +2809,49 @@ export function AdminTicketDesigner() {
                         />
                       </div>
                     </div>
+
+                    {selectedItem.id === 'qrCode' && (
+                      <div style={{ marginTop: '0.4rem', marginBottom: '0.65rem' }}>
+                        <button
+                          type="button"
+                          className="studio-btn secondary center-on-card-btn"
+                          style={{ width: '100%', height: '32px', fontSize: '0.78rem' }}
+                          onClick={() => handleCenterOnCard(selectedItem)}
+                          title="คำนวณตำแหน่ง X เพื่อจัดกึ่งกลางพื้นที่บัตรอัตโนมัติ"
+                        >
+                          จัดกึ่งกลางพื้นที่บัตรอัตโนมัติ (Center on Card)
+                        </button>
+                      </div>
+                    )}
+
+                    {/* Quick Elements Switcher */}
+                    <div style={{ marginTop: '0.85rem', paddingTop: '0.85rem', borderTop: '1px solid #e2e8f0' }}>
+                      <span style={{ display: 'block', fontSize: '0.8rem', color: '#64748b', marginBottom: '0.45rem' }}>
+                        เลือกชิ้นส่วนอื่นเพื่อแก้ไข:
+                      </span>
+                      <div className="section-card-items">
+                        {orderedLayerIds.map((itemId) => {
+                          const item = state.elements[itemId];
+                          if (!item) return null;
+                          return (
+                            <button
+                              key={itemId}
+                              type="button"
+                              className={`section-quick-item-btn ${selectedId === itemId ? 'active' : ''} ${!item.visible ? 'is-hidden' : ''}`}
+                              onClick={() => setSelectedId(itemId)}
+                            >
+                              {item.label.split(' (')[0]}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
                   </div>
                 ) : (
                   <div className="inspector-empty-state">
                     <SlidersIcon style={{ width: 28, height: 28, color: '#64748b' }} />
                     <h4>โครงสร้างองค์ประกอบบัตรคอนเสิร์ต</h4>
-                    <p>คลิกเลือกชิ้นส่วนบนบัตรเพื่อลากย้าย หรือเลือกจากหมวดหมู่โครงสร้างด้านล่าง:</p>
+                    <p>คลิกเลือกชิ้นส่วนบนบัตรเพื่อลากย้าย หรือเลือกจากหมวดหมู่ด้านล่าง:</p>
                     <div className="inspector-sections-list">
                       {SECTIONS_DIRECTORY.map((sec) => (
                         <div key={sec.id} className="inspector-section-card">
@@ -2912,414 +2909,12 @@ export function AdminTicketDesigner() {
               </div>
             )}
 
-            {/* TAB 2: TICKET CARD BACKGROUND & TEST IMAGE FILE UPLOAD */}
-            {activeSideTab === 'cardBg' && (
-              <div className="side-tab-content">
-                <div className="studio-field">
-                  <label htmlFor={getFieldId('bgTypeSelect')} className="studio-label">
-                    โหมดพื้นหลังบัตร (Cardstock Mode)
-                  </label>
-                  <select
-                    id={getFieldId('bgTypeSelect')}
-                    className="studio-select"
-                    value={state.bgType}
-                    onChange={(e) => setState((prev) => ({ ...prev, bgType: e.target.value as BackgroundType }))}
-                  >
-                    <option value="solid">สีพื้นหลังการ์ดเรียบ (Solid Cardstock)</option>
-                    <option value="image">อัปโหลดรูปภาพทดสอบพื้นหลังบัตร (Image File Upload)</option>
-                    <option value="gradient">ไล่เฉดสี (Gradient)</option>
-                    <option value="pattern">ลวดลายเท็กซ์เจอร์ (Pattern Texture)</option>
-                  </select>
-                </div>
-
-                {/* Solid Color */}
-                {state.bgType === 'solid' && (
-                  <div className="studio-field">
-                    <label htmlFor={getFieldId('solidColorInput')} className="studio-label">สีพื้นหลังบัตร</label>
-                    <div className="studio-color-row">
-                      <input
-                        id={getFieldId('solidColorInput')}
-                        type="color"
-                        value={state.bgColor}
-                        onChange={(e) => setState((prev) => ({ ...prev, bgColor: e.target.value }))}
-                      />
-                      <input
-                        type="text"
-                        className="studio-input"
-                        value={state.bgColor}
-                        onChange={(e) => setState((prev) => ({ ...prev, bgColor: e.target.value }))}
-                        aria-label="รหัสสีพื้นหลัง"
-                      />
-                    </div>
-                    <div className="color-swatches">
-                      {['#ffffff', '#f8fafc', '#f1f5f9', '#f4ede4', '#111827', '#18181b', '#0f172a'].map((hex) => (
-                        <button
-                          key={hex}
-                          type="button"
-                          className="color-swatch-chip"
-                          style={{ backgroundColor: hex }}
-                          onClick={() => setState((prev) => ({ ...prev, bgColor: hex }))}
-                          aria-label={`สี ${hex}`}
-                        />
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Test Image File Upload for Ticket Card */}
-                {state.bgType === 'image' && (
-                  <div className="studio-image-box">
-                    <div className="studio-field">
-                      <span className="studio-label">อัปโหลดไฟล์รูปภาพทดสอบพื้นหลังบัตร</span>
-                      {/* Hidden file input */}
-                      <input
-                        id={getFieldId('uploadBgFile')}
-                        ref={fileInputRef}
-                        type="file"
-                        accept="image/*"
-                        style={{ display: 'none' }}
-                        onChange={handleTicketImageUpload}
-                      />
-
-                      {/* Dropzone */}
-                      <button
-                        type="button"
-                        className={`ticket-upload-dropzone ${isDragOverDropzone ? 'dragover' : ''}`}
-                        onDragOver={handleDropzoneDragOver}
-                        onDragLeave={handleDropzoneDragLeave}
-                        onDrop={handleDropzoneDrop}
-                        onClick={() => fileInputRef.current?.click()}
-                        aria-label="อัปโหลดรูปภาพทดสอบพื้นหลังบัตร"
-                      >
-                        <div className="dropzone-icon-box">
-                          <DownloadIcon style={{ width: 18, height: 18 }} />
-                        </div>
-                        <span className="dropzone-prompt">คลิกเพื่อเลือกไฟล์รูปภาพ หรือลากมาวาง</span>
-                        <span className="dropzone-hint">รองรับ PNG, JPG, WebP ทุกขนาด</span>
-                      </button>
-                    </div>
-
-                    {/* Uploaded Thumbnail & Remove Option */}
-                    {state.bgImageUrl && (
-                      <div className="ticket-upload-preview">
-                        <div className="preview-left-group">
-                          {/* biome-ignore lint/performance/noImgElement: background thumbnail */}
-                          <img src={state.bgImageUrl} alt="Card Background" className="ticket-upload-thumbnail" />
-                          <span className="preview-file-tag">ใช้รูปนี้เป็นพื้นหลังบัตร</span>
-                        </div>
-                        <button
-                          type="button"
-                          className="studio-btn secondary"
-                          style={{ height: '28px', padding: '0 0.5rem', fontSize: '0.72rem' }}
-                          onClick={handleClearCardImage}
-                        >
-                          คืนค่าบัตรขาว
-                        </button>
-                      </div>
-                    )}
-
-                    <div className="studio-field">
-                      <label htmlFor={getFieldId('imageUrlText')} className="studio-label">หรือระบุ URL รูปภาพ</label>
-                      <input
-                        id={getFieldId('imageUrlText')}
-                        type="url"
-                        className="studio-input"
-                        placeholder="https://example.com/poster.jpg"
-                        value={state.bgImageUrl}
-                        onChange={(e) => setState((prev) => ({ ...prev, bgImageUrl: e.target.value }))}
-                      />
-                    </div>
-
-                    <span className="sample-label">คลิกทดสอบภาพเวทีจริง:</span>
-                    <div className="sample-grid-2">
-                      {SAMPLE_BACKGROUNDS.map((bg) => (
-                        <button
-                          key={bg.name}
-                          type="button"
-                          className="sample-stage-card"
-                          onClick={() => setState((prev) => ({ ...prev, bgType: 'image', bgImageUrl: bg.url }))}
-                        >
-                          {/* biome-ignore lint/performance/noImgElement: background thumbnail */}
-                          <img src={bg.url} alt={bg.name} />
-                          <span>{bg.name}</span>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Gradient */}
-                {state.bgType === 'gradient' && (
-                  <>
-                    <div className="studio-grid-2">
-                      <div className="studio-field">
-                        <label htmlFor={getFieldId('gradStart')} className="studio-label">สีเริ่มต้น</label>
-                        <input
-                          id={getFieldId('gradStart')}
-                          type="color"
-                          value={state.gradientStart}
-                          onChange={(e) => setState((prev) => ({ ...prev, gradientStart: e.target.value }))}
-                        />
-                      </div>
-                      <div className="studio-field">
-                        <label htmlFor={getFieldId('gradEnd')} className="studio-label">สีสิ้นสุด</label>
-                        <input
-                          id={getFieldId('gradEnd')}
-                          type="color"
-                          value={state.gradientEnd}
-                          onChange={(e) => setState((prev) => ({ ...prev, gradientEnd: e.target.value }))}
-                        />
-                      </div>
-                    </div>
-
-                    <div className="studio-field">
-                      <label htmlFor={getFieldId('gradAngle')} className="studio-label">
-                        มุมการไล่เฉด ({state.gradientAngle}°)
-                      </label>
-                      <input
-                        id={getFieldId('gradAngle')}
-                        type="range"
-                        min={0}
-                        max={360}
-                        value={state.gradientAngle}
-                        onChange={(e) => setState((prev) => ({ ...prev, gradientAngle: Number(e.target.value) }))}
-                      />
-                    </div>
-                  </>
-                )}
-
-                {/* Pattern */}
-                {state.bgType === 'pattern' && (
-                  <div className="studio-field">
-                    <label htmlFor={getFieldId('patternSelect')} className="studio-label">เลือกลวดลาย</label>
-                    <select
-                      id={getFieldId('patternSelect')}
-                      className="studio-select"
-                      value={state.patternType}
-                      onChange={(e) =>
-                        setState((prev) => ({
-                          ...prev,
-                          patternType: e.target.value as 'none' | 'dots' | 'grid' | 'stripes',
-                        }))
-                      }
-                    >
-                      <option value="dots">จุดกลมสลับ (Subtle Dots)</option>
-                      <option value="grid">ตารางเส้นบาง (Modern Grid)</option>
-                      <option value="stripes">ลายเส้นเฉียง (Diagonal Stripes)</option>
-                      <option value="none">ไม่มีลาย</option>
-                    </select>
-                  </div>
-                )}
-
-                {/* Contrast Overlays */}
-                <div className="studio-field" style={{ marginTop: '0.75rem', paddingTop: '0.75rem', borderTop: '1px solid #f1f5f9' }}>
-                  <label htmlFor={getFieldId('darknessVal')} className="studio-label">
-                    ความมืดเลเยอร์ทับฉากหลัง ({state.bgOverlayDarkness}%)
-                  </label>
-                  <input
-                    id={getFieldId('darknessVal')}
-                    type="range"
-                    min={0}
-                    max={90}
-                    value={state.bgOverlayDarkness}
-                    onChange={(e) => setState((prev) => ({ ...prev, bgOverlayDarkness: Number(e.target.value) }))}
-                  />
-                </div>
-
-                <div className="studio-field">
-                  <label htmlFor={getFieldId('blurVal')} className="studio-label">
-                    ความเบลอฉากหลัง ({state.bgOverlayBlur}px)
-                  </label>
-                  <input
-                    id={getFieldId('blurVal')}
-                    type="range"
-                    min={0}
-                    max={12}
-                    value={state.bgOverlayBlur}
-                    onChange={(e) => setState((prev) => ({ ...prev, bgOverlayBlur: Number(e.target.value) }))}
-                  />
-                </div>
-              </div>
-            )}
-
-            {/* TAB 3: WORKSPACE STAGE BACKGROUND (โต๊ะทำงาน ไม่ใช่บัตร) */}
-            {activeSideTab === 'stageBg' && (
-              <div className="side-tab-content">
-                <div className="studio-field">
-                  <span className="studio-label">เลือกรูปแบบพื้นหลังโต๊ะเขียนแบบ (Workspace Stage)</span>
-                  <p className="dropzone-hint" style={{ margin: '0 0 0.5rem 0' }}>
-                    ปรับสภาพแวดล้อมรอบตัวบัตรเพื่อทดสอบความคมชัดและมิติการมองเห็น (ไม่กระทบต่อตัวบัตรจริง)
-                  </p>
-                  <div className="stage-style-grid">
-                    <button
-                      type="button"
-                      className={`stage-style-card ${workspaceStage.style === 'dots' ? 'active' : ''}`}
-                      onClick={() => setWorkspaceStage((prev) => ({ ...prev, style: 'dots' }))}
-                    >
-                      <span className="stage-style-title">จุดกริดเขียนแบบ</span>
-                      <span className="stage-style-desc">ลายจุดสไตล์โต๊ะดราฟต์</span>
-                    </button>
-                    <button
-                      type="button"
-                      className={`stage-style-card ${workspaceStage.style === 'white' ? 'active' : ''}`}
-                      onClick={() => setWorkspaceStage((prev) => ({ ...prev, style: 'white' }))}
-                    >
-                      <span className="stage-style-title">สีขาวสว่าง</span>
-                      <span className="stage-style-desc">โต๊ะสีขาวบริสุทธิ์</span>
-                    </button>
-                    <button
-                      type="button"
-                      className={`stage-style-card ${workspaceStage.style === 'light-slate' ? 'active' : ''}`}
-                      onClick={() => setWorkspaceStage((prev) => ({ ...prev, style: 'light-slate' }))}
-                    >
-                      <span className="stage-style-title">สเลทนวลตา</span>
-                      <span className="stage-style-desc">สีเทาอ่อน #f1f5f9</span>
-                    </button>
-                    <button
-                      type="button"
-                      className={`stage-style-card ${workspaceStage.style === 'grid' ? 'active' : ''}`}
-                      onClick={() => setWorkspaceStage((prev) => ({ ...prev, style: 'grid' }))}
-                    >
-                      <span className="stage-style-title">ตารางสเกล</span>
-                      <span className="stage-style-desc">เส้นตารางมิลลิเมตร</span>
-                    </button>
-                    <button
-                      type="button"
-                      className={`stage-style-card ${workspaceStage.style === 'dark-neutral' ? 'active' : ''}`}
-                      onClick={() => setWorkspaceStage((prev) => ({ ...prev, style: 'dark-neutral' }))}
-                    >
-                      <span className="stage-style-title">คอนทราสต์เข้ม</span>
-                      <span className="stage-style-desc">สีสเลทเข้มตัดขอบ</span>
-                    </button>
-                  </div>
-                </div>
-
-                <div className="studio-field" style={{ marginTop: '0.75rem', paddingTop: '0.75rem', borderTop: '1px solid #f1f5f9' }}>
-                  <label htmlFor={getFieldId('customStageColor')} className="studio-label">
-                    สีพื้นหลังโต๊ะเขียนแบบแบบกำหนดเอง
-                  </label>
-                  <div className="studio-color-row">
-                    <input
-                      id={getFieldId('customStageColor')}
-                      type="color"
-                      value={workspaceStage.customColor}
-                      onChange={(e) => setWorkspaceStage((prev) => ({ ...prev, customColor: e.target.value }))}
-                    />
-                    <input
-                      type="text"
-                      className="studio-input"
-                      value={workspaceStage.customColor}
-                      onChange={(e) => setWorkspaceStage((prev) => ({ ...prev, customColor: e.target.value }))}
-                      aria-label="รหัสสีพื้นหลังโต๊ะทำงาน"
-                    />
-                  </div>
-                  <div className="color-swatches">
-                    {['#f8fafc', '#ffffff', '#f1f5f9', '#e2e8f0', '#cbd5e1', '#334155', '#0f172a'].map((hex) => (
-                      <button
-                        key={hex}
-                        type="button"
-                        className="color-swatch-chip"
-                        style={{ backgroundColor: hex }}
-                        onClick={() => setWorkspaceStage((prev) => ({ ...prev, customColor: hex }))}
-                        aria-label={`สี ${hex}`}
-                      />
-                    ))}
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* TAB 4: TEAR LINE, BORDER & FONT */}
-            {activeSideTab === 'tearLine' && (
-              <div className="side-tab-content">
-                <div className="studio-field">
-                  <label htmlFor={getFieldId('tearStyle')} className="studio-label">รูปแบบรอยปรุ / เส้นตัด</label>
-                  <select
-                    id={getFieldId('tearStyle')}
-                    className="studio-select"
-                    value={state.tearLineStyle}
-                    onChange={(e) => setState((prev) => ({ ...prev, tearLineStyle: e.target.value as TearLineStyle }))}
-                  >
-                    <option value="dashed">เส้นประมาตรฐาน (Dashed)</option>
-                    <option value="notched">รอยบากเจาะรูครึ่งวงกลม (Ticket Notches)</option>
-                    <option value="dotted">เส้นจุดไข่ปลา (Dotted)</option>
-                    <option value="solid">เส้นทึบแบ่งส่วน (Solid)</option>
-                    <option value="none">ไม่มีเส้นแบ่ง (None)</option>
-                  </select>
-                </div>
-
-                <div className="studio-field">
-                  <label htmlFor={getFieldId('tearXVal')} className="studio-label">
-                    ตำแหน่งเส้นรอยปรุแนวนอน ({state.tearLineX}px)
-                  </label>
-                  <input
-                    id={getFieldId('tearXVal')}
-                    type="range"
-                    min={550}
-                    max={850}
-                    value={state.tearLineX}
-                    onChange={(e) => setState((prev) => ({ ...prev, tearLineX: Number(e.target.value) }))}
-                  />
-                </div>
-
-                <div className="studio-field">
-                  <label htmlFor={getFieldId('tearColor')} className="studio-label">สีเส้นรอยปรุ</label>
-                  <input
-                    id={getFieldId('tearColor')}
-                    type="color"
-                    value={state.tearLineColor}
-                    onChange={(e) => setState((prev) => ({ ...prev, tearLineColor: e.target.value }))}
-                  />
-                </div>
-
-                <div className="studio-field">
-                  <label htmlFor={getFieldId('radiusVal')} className="studio-label">
-                    ความโค้งมนขอบบัตร ({state.borderRadius}px)
-                  </label>
-                  <input
-                    id={getFieldId('radiusVal')}
-                    type="range"
-                    min={0}
-                    max={24}
-                    value={state.borderRadius}
-                    onChange={(e) => setState((prev) => ({ ...prev, borderRadius: Number(e.target.value) }))}
-                  />
-                </div>
-
-                <div className="studio-field">
-                  <label htmlFor={getFieldId('borderColor')} className="studio-label">สีขอบบัตร</label>
-                  <input
-                    id={getFieldId('borderColor')}
-                    type="color"
-                    value={state.borderColor}
-                    onChange={(e) => setState((prev) => ({ ...prev, borderColor: e.target.value }))}
-                  />
-                </div>
-
-                {/* Global Font Family */}
-                <div className="studio-field" style={{ marginTop: '0.75rem', paddingTop: '0.75rem', borderTop: '1px solid #f1f5f9' }}>
-                  <label htmlFor={getFieldId('fontFamilySelect')} className="studio-label">ฟอนต์ตัวอักษรหลัก (Font Family)</label>
-                  <select
-                    id={getFieldId('fontFamilySelect')}
-                    className="studio-select"
-                    value={state.fontFamily}
-                    onChange={(e) => setState((prev) => ({ ...prev, fontFamily: e.target.value as FontFamilyChoice }))}
-                  >
-                    <option value="Kanit">Kanit (มาตรฐานทันสมัย)</option>
-                    <option value="Sarabun">Sarabun (ทางการ ชัดเจน)</option>
-                    <option value="Prompt">Prompt (โมเดิร์น คมชัด)</option>
-                    <option value="Chakra Petch">Chakra Petch (สปอร์ต ดิจิทัล)</option>
-                  </select>
-                </div>
-              </div>
-            )}
-
-            {/* TAB 5: ALL ELEMENTS VISIBILITY CHECKLIST */}
-            {activeSideTab === 'allElements' && (
+            {/* TAB 2: DEDICATED LAYERS TAB (Reorderable Up/Down + Visibility) */}
+            {(activeSideTab === 'layers' || activeSideTab === 'allElements') && (
               <div className="side-tab-content">
                 <div className="layers-tab-header">
                   <span className="elements-list-hint">
-                    เปิด/ปิด หรือเลือกชิ้นส่วนบนบัตร ({Object.values(state.elements).filter((e) => e.visible).length}/{Object.values(state.elements).length} ชิ้นส่วนกำลังแสดง):
+                    เลเยอร์บนสุดแสดงอยู่ด้านหน้าสุด ({Object.values(state.elements).filter((e) => e.visible).length}/{Object.values(state.elements).length} กำลังแสดง):
                   </span>
                   <div className="layers-batch-actions">
                     <button
@@ -3359,42 +2954,357 @@ export function AdminTicketDesigner() {
                   </div>
                 </div>
                 <div className="elements-toggle-stack">
-                  {Object.values(state.elements).map((el) => (
-                    <div
-                      key={el.id}
-                      className={`element-row-item ${selectedId === el.id ? 'active' : ''} ${!el.visible ? 'is-dimmed' : ''}`}
-                    >
+                  {[...orderedLayerIds].reverse().map((id, displayIdx, arr) => {
+                    const el = state.elements[id];
+                    if (!el) return null;
+                    const isTop = displayIdx === 0;
+                    const isBottom = displayIdx === arr.length - 1;
+                    return (
+                      <div
+                        key={el.id}
+                        className={`element-row-item ${selectedId === el.id ? 'active' : ''} ${!el.visible ? 'is-dimmed' : ''}`}
+                      >
+                        <button
+                          type="button"
+                          className="element-row-name-btn"
+                          onClick={() => {
+                            setSelectedId(el.id);
+                            setActiveSideTab('elements');
+                          }}
+                        >
+                          {el.label.split(' (')[0]}
+                        </button>
+                        <div className="layer-row-controls">
+                          <button
+                            type="button"
+                            className="layer-move-btn"
+                            disabled={isTop}
+                            onClick={() => handleMoveLayer(el.id, 'up')}
+                            title="เลื่อนเลเยอร์ขึ้น (นำมาด้านหน้า)"
+                            aria-label={`เลื่อน ${el.label} ขึ้น`}
+                          >
+                            <ChevronUpIcon style={{ width: 13, height: 13 }} />
+                          </button>
+                          <button
+                            type="button"
+                            className="layer-move-btn"
+                            disabled={isBottom}
+                            onClick={() => handleMoveLayer(el.id, 'down')}
+                            title="เลื่อนเลเยอร์ลง (ส่งไปด้านหลัง)"
+                            aria-label={`เลื่อน ${el.label} ลง`}
+                          >
+                            <ChevronDownIcon style={{ width: 13, height: 13 }} />
+                          </button>
+                          <button
+                            type="button"
+                            className="element-eye-btn"
+                            onClick={() => {
+                              setState((prev) => ({
+                                ...prev,
+                                elements: {
+                                  ...prev.elements,
+                                  [el.id]: {
+                                    ...prev.elements[el.id],
+                                    visible: !prev.elements[el.id].visible,
+                                  },
+                                },
+                              }));
+                            }}
+                            title={el.visible ? 'ซ่อนชิ้นส่วน' : 'แสดงชิ้นส่วน'}
+                          >
+                            {el.visible ? <EyeIcon style={{ width: 14, height: 14 }} /> : <EyeOffIcon style={{ width: 14, height: 14, color: '#94a3b8' }} />}
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* TAB 3: CARD BACKGROUND ONLY (Solid / Gradient / Image <= 0.99MB, Square Edges Only) */}
+            {(activeSideTab === 'card' || activeSideTab === 'cardBg' || activeSideTab === 'tearLine') && (
+              <div className="side-tab-content">
+                <div className="studio-field">
+                  <label htmlFor={getFieldId('bgTypeSelect')} className="studio-label">
+                    โหมดพื้นหลังบัตร (Card Background)
+                  </label>
+                  <select
+                    id={getFieldId('bgTypeSelect')}
+                    className="studio-select"
+                    value={state.bgType === 'gradient' ? 'gradient' : state.bgType === 'image' ? 'image' : 'solid'}
+                    onChange={(e) => setState((prev) => ({ ...prev, bgType: e.target.value as BackgroundType }))}
+                  >
+                    <option value="solid">สีพื้นหลังเรียบ (Solid Color)</option>
+                    <option value="gradient">ไล่เฉดสี (Gradient)</option>
+                    <option value="image">อัปโหลดรูปภาพพื้นหลัง (Image Upload)</option>
+                  </select>
+                </div>
+
+                {/* Solid Color (No Swatches) */}
+                {state.bgType === 'solid' && (
+                  <div className="studio-field">
+                    <label htmlFor={getFieldId('solidColorInput')} className="studio-label">สีพื้นหลังบัตร</label>
+                    <div className="studio-color-row">
+                      <input
+                        id={getFieldId('solidColorInput')}
+                        type="color"
+                        value={state.bgColor}
+                        onChange={(e) => setState((prev) => ({ ...prev, bgColor: e.target.value }))}
+                      />
+                      <input
+                        type="text"
+                        className="studio-input"
+                        value={state.bgColor}
+                        onChange={(e) => setState((prev) => ({ ...prev, bgColor: e.target.value }))}
+                        aria-label="รหัสสีพื้นหลัง"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* Gradient */}
+                {state.bgType === 'gradient' && (
+                  <>
+                    <div className="studio-grid-2">
+                      <div className="studio-field">
+                        <label htmlFor={getFieldId('gradStart')} className="studio-label">สีเริ่มต้น</label>
+                        <div className="studio-color-row">
+                          <input
+                            id={getFieldId('gradStart')}
+                            type="color"
+                            value={state.gradientStart}
+                            onChange={(e) => setState((prev) => ({ ...prev, gradientStart: e.target.value }))}
+                          />
+                          <input
+                            type="text"
+                            className="studio-input"
+                            value={state.gradientStart}
+                            onChange={(e) => setState((prev) => ({ ...prev, gradientStart: e.target.value }))}
+                            aria-label="รหัสสีเริ่มต้น"
+                          />
+                        </div>
+                      </div>
+                      <div className="studio-field">
+                        <label htmlFor={getFieldId('gradEnd')} className="studio-label">สีสิ้นสุด</label>
+                        <div className="studio-color-row">
+                          <input
+                            id={getFieldId('gradEnd')}
+                            type="color"
+                            value={state.gradientEnd}
+                            onChange={(e) => setState((prev) => ({ ...prev, gradientEnd: e.target.value }))}
+                          />
+                          <input
+                            type="text"
+                            className="studio-input"
+                            value={state.gradientEnd}
+                            onChange={(e) => setState((prev) => ({ ...prev, gradientEnd: e.target.value }))}
+                            aria-label="รหัสสีสิ้นสุด"
+                          />
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="studio-field">
+                      <label htmlFor={getFieldId('gradAngle')} className="studio-label">
+                        มุมการไล่เฉด ({state.gradientAngle} องศา)
+                      </label>
+                      <input
+                        id={getFieldId('gradAngle')}
+                        type="range"
+                        min={0}
+                        max={360}
+                        value={state.gradientAngle}
+                        onChange={(e) => setState((prev) => ({ ...prev, gradientAngle: Number(e.target.value) }))}
+                      />
+                    </div>
+                  </>
+                )}
+
+                {/* Image Upload Only (Auto-compressed <= 0.99MB, No URL, No Sample Backgrounds) */}
+                {state.bgType === 'image' && (
+                  <div className="studio-image-box">
+                    <div className="studio-field">
+                      <span className="studio-label">อัปโหลดไฟล์รูปภาพพื้นหลังบัตร</span>
+                      <input
+                        id={getFieldId('uploadBgFile')}
+                        ref={fileInputRef}
+                        type="file"
+                        accept="image/*"
+                        style={{ display: 'none' }}
+                        onChange={handleTicketImageUpload}
+                      />
+
                       <button
                         type="button"
-                        className="element-row-name-btn"
-                        onClick={() => {
-                          setSelectedId(el.id);
-                          setActiveSideTab('elements');
-                        }}
+                        className={`ticket-upload-dropzone ${isDragOverDropzone ? 'dragover' : ''}`}
+                        onDragOver={handleDropzoneDragOver}
+                        onDragLeave={handleDropzoneDragLeave}
+                        onDrop={handleDropzoneDrop}
+                        onClick={() => fileInputRef.current?.click()}
+                        aria-label="อัปโหลดไฟล์รูปภาพพื้นหลังบัตร"
                       >
-                        {el.label}
-                      </button>
-                      <button
-                        type="button"
-                        className="element-eye-btn"
-                        onClick={() => {
-                          setState((prev) => ({
-                            ...prev,
-                            elements: {
-                              ...prev.elements,
-                              [el.id]: {
-                                ...prev.elements[el.id],
-                                visible: !prev.elements[el.id].visible,
-                              },
-                            },
-                          }));
-                        }}
-                        title={el.visible ? 'ซ่อนชิ้นส่วน' : 'แสดงชิ้นส่วน'}
-                      >
-                        {el.visible ? <EyeIcon style={{ width: 14, height: 14 }} /> : <EyeOffIcon style={{ width: 14, height: 14, color: '#94a3b8' }} />}
+                        <div className="dropzone-icon-box">
+                          <DownloadIcon style={{ width: 18, height: 18 }} />
+                        </div>
+                        <span className="dropzone-prompt">คลิกเพื่อเลือกไฟล์รูปภาพ หรือลากมาวาง</span>
+                        <span className="dropzone-hint">รองรับ PNG, JPG, WebP (ขนาดไม่เกิน 0.99MB - ลดขนาดอัตโนมัติหากเกิน)</span>
                       </button>
                     </div>
-                  ))}
+
+                    {state.bgImageUrl && (
+                      <div className="ticket-upload-preview">
+                        <div className="preview-left-group">
+                          {/* biome-ignore lint/performance/noImgElement: background thumbnail */}
+                          <img src={state.bgImageUrl} alt="Card Background" className="ticket-upload-thumbnail" />
+                          <span className="preview-file-tag">ใช้รูปนี้เป็นพื้นหลังบัตร</span>
+                        </div>
+                        <button
+                          type="button"
+                          className="studio-btn secondary"
+                          style={{ height: '28px', padding: '0 0.5rem', fontSize: '0.72rem' }}
+                          onClick={handleClearCardImage}
+                        >
+                          ลบรูปภาพ
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Contrast Overlays */}
+                <div className="studio-field" style={{ marginTop: '0.75rem', paddingTop: '0.75rem', borderTop: '1px solid #f1f5f9' }}>
+                  <label htmlFor={getFieldId('darknessVal')} className="studio-label">
+                    ความมืดเลเยอร์ทับฉากหลัง ({state.bgOverlayDarkness}%)
+                  </label>
+                  <input
+                    id={getFieldId('darknessVal')}
+                    type="range"
+                    min={0}
+                    max={90}
+                    value={state.bgOverlayDarkness}
+                    onChange={(e) => setState((prev) => ({ ...prev, bgOverlayDarkness: Number(e.target.value) }))}
+                  />
+                </div>
+
+                <div className="studio-field">
+                  <label htmlFor={getFieldId('blurVal')} className="studio-label">
+                    ความเบลอฉากหลัง ({state.bgOverlayBlur}px)
+                  </label>
+                  <input
+                    id={getFieldId('blurVal')}
+                    type="range"
+                    min={0}
+                    max={12}
+                    value={state.bgOverlayBlur}
+                    onChange={(e) => setState((prev) => ({ ...prev, bgOverlayBlur: Number(e.target.value) }))}
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* TAB 4: DEDICATED FONT TAB (Font Selection, Fine Weights 100-900, Font Upload) */}
+            {activeSideTab === 'font' && (
+              <div className="side-tab-content">
+                <div className="studio-field">
+                  <label htmlFor={getFieldId('fontFamilySelect')} className="studio-label">
+                    ฟอนต์ตัวอักษรหลักของบัตร (Card Font Family)
+                  </label>
+                  <select
+                    id={getFieldId('fontFamilySelect')}
+                    className="studio-select"
+                    value={state.fontFamily}
+                    onChange={(e) => setState((prev) => ({ ...prev, fontFamily: e.target.value }))}
+                  >
+                    <option value="Kanit">Kanit (มาตรฐานทันสมัย)</option>
+                    <option value="Sarabun">Sarabun (ทางการ ชัดเจน)</option>
+                    <option value="Prompt">Prompt (โมเดิร์น คมชัด)</option>
+                    <option value="Chakra Petch">Chakra Petch (สปอร์ต ดิจิทัล)</option>
+                    {state.customFontName && (
+                      <option value={state.customFontName}>{state.customFontName} (ฟอนต์ที่อัปโหลด)</option>
+                    )}
+                  </select>
+                </div>
+
+                {/* Upload Custom Font (.ttf, .otf, .woff, .woff2) */}
+                <div className="studio-image-box" style={{ marginTop: '0.25rem' }}>
+                  <div className="studio-field">
+                    <span className="studio-label">อัปโหลดฟอนต์ใหม่เฉพาะบัตร (Upload Custom Font)</span>
+                    <input
+                      id={getFieldId('uploadFontFile')}
+                      ref={fontInputRef}
+                      type="file"
+                      accept=".ttf,.otf,.woff,.woff2"
+                      style={{ display: 'none' }}
+                      onChange={handleCustomFontUpload}
+                    />
+                    <button
+                      type="button"
+                      className="ticket-upload-dropzone"
+                      disabled={isUploadingFont}
+                      onClick={() => fontInputRef.current?.click()}
+                      aria-label="อัปโหลดไฟล์ฟอนต์ใหม่"
+                    >
+                      <div className="dropzone-icon-box">
+                        <DownloadIcon style={{ width: 18, height: 18 }} />
+                      </div>
+                      <span className="dropzone-prompt">
+                        {isUploadingFont ? 'กำลังอัปโหลดและติดตั้งฟอนต์...' : 'คลิกเพื่อเลือกไฟล์ฟอนต์'}
+                      </span>
+                      <span className="dropzone-hint">รองรับ .ttf, .otf, .woff, .woff2 (สูงสุด 2MB)</span>
+                    </button>
+                  </div>
+
+                  {state.customFontName && (
+                    <div className="ticket-upload-preview">
+                      <div className="preview-left-group">
+                        <span className="preview-file-tag">ฟอนต์ที่ติดตั้ง: {state.customFontName}</span>
+                      </div>
+                      <button
+                        type="button"
+                        className="studio-btn secondary"
+                        style={{ height: '28px', padding: '0 0.5rem', fontSize: '0.72rem' }}
+                        onClick={handleClearCustomFont}
+                      >
+                        ลบฟอนต์
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                {/* Fine-Grained Font Weight Sliders (100 - 900) */}
+                <div style={{ marginTop: '0.75rem', paddingTop: '0.75rem', borderTop: '1px solid #f1f5f9', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                  <div className="studio-field">
+                    <label htmlFor={getFieldId('titleWeightRange')} className="studio-label">
+                      น้ำหนักตัวอักษรหัวข้อทั้งใบ ({state.titleFontWeight ?? 400})
+                    </label>
+                    <input
+                      id={getFieldId('titleWeightRange')}
+                      type="range"
+                      min={100}
+                      max={900}
+                      step={100}
+                      value={state.titleFontWeight ?? 400}
+                      onChange={(e) => setState((prev) => ({ ...prev, titleFontWeight: Number(e.target.value) }))}
+                    />
+                    <span className="dropzone-hint">100 (บางที่สุด) ถึง 900 (หนาที่สุด)</span>
+                  </div>
+
+                  <div className="studio-field">
+                    <label htmlFor={getFieldId('bodyWeightRange')} className="studio-label">
+                      น้ำหนักตัวอักษรรายละเอียดทั้งใบ ({state.bodyFontWeight ?? 400})
+                    </label>
+                    <input
+                      id={getFieldId('bodyWeightRange')}
+                      type="range"
+                      min={100}
+                      max={900}
+                      step={100}
+                      value={state.bodyFontWeight ?? 400}
+                      onChange={(e) => setState((prev) => ({ ...prev, bodyFontWeight: Number(e.target.value) }))}
+                    />
+                    <span className="dropzone-hint">สามารถปรับเพิ่ม/ลดเฉพาะรายชิ้นส่วนได้ในแท็บ ชิ้นส่วน</span>
+                  </div>
                 </div>
               </div>
             )}

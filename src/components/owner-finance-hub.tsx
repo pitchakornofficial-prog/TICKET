@@ -12,7 +12,7 @@ import {
   DownloadIcon,
   ReceiptIcon,
 } from './icons';
-import { triggerToast } from './toast-notification';
+import { triggerToast, triggerRefreshToast } from './toast-notification';
 import { OwnerFeeSettingsManager } from './owner-fee-settings-manager';
 import { OwnerReserveReleaseManager } from './owner-reserve-release-manager';
 import { OwnerDebtRepaymentManager } from './owner-debt-repayment-manager';
@@ -453,7 +453,10 @@ export function OwnerFinanceHub() {
             <button
               type="button"
               className="hub-refresh-btn"
-              onClick={fetchData}
+              onClick={async () => {
+                await fetchData();
+                triggerRefreshToast('การเงิน');
+              }}
               disabled={isLoadingData}
               title="รีเฟรชข้อมูลการเงิน"
               aria-label="รีเฟรชข้อมูลการเงิน"
@@ -532,9 +535,9 @@ export function OwnerFinanceHub() {
                       fontSize: '0.825rem',
                     }}
                   >
-                    <span style={{ color: '#64748b', fontWeight: 600 }}>บัญชีรับเงินปลายทาง:</span>
+                    <span style={{ color: '#64748b', fontWeight: 400 }}>บัญชีรับเงินปลายทาง:</span>
                     <strong style={{ color: '#0f172a' }}>{concert.payoutBankName}</strong>
-                    <span style={{ color: '#334155', fontFamily: 'monospace', fontWeight: 700 }}>
+                    <span style={{ color: '#334155', fontFamily: 'monospace', fontWeight: 400 }}>
                       {concert.payoutAccountNumber}
                     </span>
                     <span style={{ color: '#475569' }}>({concert.payoutAccountName})</span>
@@ -544,7 +547,7 @@ export function OwnerFinanceHub() {
                         alignItems: 'center',
                         gap: '0.25rem',
                         fontSize: '0.725rem',
-                        fontWeight: 700,
+                        fontWeight: 400,
                         padding: '0.15rem 0.5rem',
                         borderRadius: '9999px',
                         backgroundColor: '#f0fdf4',
@@ -598,7 +601,7 @@ export function OwnerFinanceHub() {
                         borderRadius: '8px',
                       }}
                     >
-                      <span style={{ color: concert.payableAmount > 0 ? '#166534' : '#64748b', fontSize: '0.75rem', fontWeight: 700 }}>
+                      <span style={{ color: concert.payableAmount > 0 ? '#166534' : '#64748b', fontSize: '0.75rem', fontWeight: 400 }}>
                         ยอดพร้อมโอนสุทธิ (A_pay):
                       </span>
                       {/* Test id compat: owner-payable-amount */}

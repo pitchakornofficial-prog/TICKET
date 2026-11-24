@@ -78,7 +78,7 @@ export function OwnerPaymentRecoveryManager() {
             background: 'var(--white)',
             border: '1px solid var(--line)',
             borderRadius: '4px',
-            fontWeight: 500,
+            fontWeight: 400,
             fontSize: '0.85rem',
             cursor: isLoading ? 'not-allowed' : 'pointer',
           }}
@@ -154,7 +154,7 @@ export function OwnerPaymentRecoveryManager() {
                         padding: '0.2rem 0.6rem',
                         borderRadius: '4px',
                         fontSize: '0.75rem',
-                        fontWeight: 600,
+                        fontWeight: 400,
                       }}
                     >
                       {c.reason === 'paid_after_deadline'

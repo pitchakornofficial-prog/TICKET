@@ -518,7 +518,7 @@ export function EventCheckoutFlow({
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.8rem', marginBottom: '1.25rem' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
               <span className="step-badge-number">1</span>
-              <h2 id="ticket-selection-title" style={{ margin: 0, fontSize: '1.3rem', fontWeight: 600 }}>
+              <h2 id="ticket-selection-title" style={{ margin: 0, fontSize: '1.3rem', fontWeight: 400 }}>
                 เลือกรอบการแสดงและจำนวนบัตร
               </h2>
             </div>
@@ -541,7 +541,7 @@ export function EventCheckoutFlow({
           {sessions.length > 0 && (
             <div style={{ marginBottom: '1.75rem' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '0.75rem' }}>
-                <label htmlFor="session-select" style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', fontWeight: 600, fontSize: '0.98rem' }}>
+                <label htmlFor="session-select" style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', fontWeight: 400, fontSize: '0.98rem' }}>
                   <CalendarIcon style={{ width: '18px', height: '18px', color: 'var(--blue)' }} />
                   <span>{sessions.length > 1 ? 'เลือกรอบการแสดงที่ต้องการชม' : 'รอบการแสดง'}</span>
                 </label>
@@ -638,7 +638,7 @@ export function EventCheckoutFlow({
                   }}
                 >
                   <div style={{ flex: '1 1 220px' }}>
-                    <div style={{ fontWeight: 600, fontSize: '1.05rem', color: 'var(--black)' }}>
+                    <div style={{ fontWeight: 400, fontSize: '1.05rem', color: 'var(--black)' }}>
                       {tt.name}
                     </div>
                     {tt.description && (
@@ -658,7 +658,7 @@ export function EventCheckoutFlow({
                           <div style={{ fontSize: '0.8rem', textDecoration: 'line-through', color: 'var(--muted)' }}>
                             {formatBaht(tt.price)}
                           </div>
-                          <div style={{ fontWeight: 700, fontSize: '1.15rem', color: 'var(--blue)' }}>
+                          <div style={{ fontWeight: 400, fontSize: '1.15rem', color: 'var(--blue)' }}>
                             {formatBaht(
                               tt.studentPrice != null
                                 ? Number(tt.studentPrice)
@@ -680,7 +680,7 @@ export function EventCheckoutFlow({
                           <div style={{ fontSize: '0.8rem', textDecoration: 'line-through', color: 'var(--muted)' }}>
                             {formatBaht(tt.price)}
                           </div>
-                          <div style={{ fontWeight: 700, fontSize: '1.15rem', color: 'var(--blue)' }}>
+                          <div style={{ fontWeight: 400, fontSize: '1.15rem', color: 'var(--blue)' }}>
                             {formatBaht(Math.round(Number(tt.price) * (1 - UBU_DISCOUNT_PERCENT / 100)))}
                           </div>
                           <span className="ubu-ticket-pill">
@@ -688,7 +688,7 @@ export function EventCheckoutFlow({
                           </span>
                         </>
                       ) : (
-                        <div style={{ fontWeight: 700, fontSize: '1.15rem', color: 'var(--blue)' }}>
+                        <div style={{ fontWeight: 400, fontSize: '1.15rem', color: 'var(--blue)' }}>
                           {formatBaht(tt.price)}
                         </div>
                       )}
@@ -706,7 +706,7 @@ export function EventCheckoutFlow({
                           borderRadius: '10px',
                           border: '1px solid var(--line)',
                           background: 'var(--white)',
-                          fontWeight: 600,
+                          fontWeight: 400,
                           fontSize: '1.1rem',
                           cursor: isSoldOut || qty <= 0 || isLocked ? 'not-allowed' : 'pointer',
                           opacity: isSoldOut || qty <= 0 || isLocked ? 0.4 : 1,
@@ -716,7 +716,7 @@ export function EventCheckoutFlow({
                       </button>
                       <span
                         id={`qty-${tt.id}`}
-                        style={{ minWidth: '30px', textAlign: 'center', fontWeight: 700, fontSize: '1.05rem' }}
+                        style={{ minWidth: '30px', textAlign: 'center', fontWeight: 400, fontSize: '1.05rem' }}
                       >
                         {qty}
                       </span>
@@ -732,7 +732,7 @@ export function EventCheckoutFlow({
                           border: '1px solid var(--blue)',
                           background: 'var(--blue)',
                           color: 'var(--white)',
-                          fontWeight: 600,
+                          fontWeight: 400,
                           fontSize: '1.1rem',
                           cursor: isSoldOut || qty >= tt.quota || totalTickets >= effectiveLimit || isLocked ? 'not-allowed' : 'pointer',
                           opacity: isSoldOut || qty >= tt.quota || totalTickets >= effectiveLimit || isLocked ? 0.4 : 1,
@@ -874,7 +874,7 @@ export function EventCheckoutFlow({
             <div className="breakdown-panel-inner">
               <div className="breakdown-panel-header">
                 <div>
-                  <h4 style={{ margin: '0 0 0.2rem', fontSize: '1.1rem', fontWeight: 700 }}>
+                  <h4 style={{ margin: '0 0 0.2rem', fontSize: '1.1rem', fontWeight: 400 }}>
                     สรุปรายการจองบัตร
                   </h4>
                   <p style={{ margin: 0, fontSize: '0.85rem', color: 'var(--muted)' }}>
@@ -904,7 +904,7 @@ export function EventCheckoutFlow({
                         <span>
                           {tt.name} <strong>x{q}</strong>
                         </span>
-                        <span style={{ fontWeight: 600 }}>{formatBaht(q * Number(tt.price))}</span>
+                        <span style={{ fontWeight: 400 }}>{formatBaht(q * Number(tt.price))}</span>
                       </div>
                     );
                   })}
@@ -935,7 +935,7 @@ export function EventCheckoutFlow({
               </div>
 
               <div className="breakdown-total-row">
-                <span style={{ fontWeight: 600 }}>ยอดชำระสุทธิ</span>
+                <span style={{ fontWeight: 400 }}>ยอดชำระสุทธิ</span>
                 <strong className="breakdown-total-price">
                   {formatBaht(grandTotal)}
                 </strong>

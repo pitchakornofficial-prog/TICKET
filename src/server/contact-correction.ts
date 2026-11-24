@@ -128,6 +128,7 @@ export async function listPaidOrdersForOwner(
       LIMIT 1
     ) pc ON true
     WHERE o.status = 'paid'
+      AND COALESCE(o."orderSource", 'web') <> 'direct_issue'
   `;
 
   const params: unknown[] = [];

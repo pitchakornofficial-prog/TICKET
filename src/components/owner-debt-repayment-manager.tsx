@@ -198,7 +198,7 @@ export function OwnerDebtRepaymentManager() {
     >
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '12px' }}>
         <div>
-          <h2 style={{ fontSize: '18px', fontWeight: 'bold', color: '#0f172a', margin: 0 }}>
+          <h2 style={{ fontSize: '18px', fontWeight: 400, color: '#0f172a', margin: 0 }}>
             จัดการยอดค้างชำระและการรับเงินคืนจากผู้จัดงาน (Debt Repayment)
           </h2>
           <p style={{ fontSize: '13px', color: '#64748b', margin: '4px 0 0' }}>
@@ -208,7 +208,7 @@ export function OwnerDebtRepaymentManager() {
 
         {/* Event selector */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <label htmlFor="owner-debt-repayment-event-select" style={{ fontSize: '13px', fontWeight: 500, color: '#334155' }}>
+          <label htmlFor="owner-debt-repayment-event-select" style={{ fontSize: '13px', fontWeight: 400, color: '#334155' }}>
             เลือกคอนเสิร์ต:
           </label>
           <select
@@ -271,7 +271,7 @@ export function OwnerDebtRepaymentManager() {
                 <span
                   data-testid="event-debt-status-badge"
                   style={{
-                    fontWeight: 'bold',
+                    fontWeight: 400,
                     fontSize: '14px',
                     color: report.isDebt ? '#991b1b' : '#166534',
                   }}
@@ -312,7 +312,7 @@ export function OwnerDebtRepaymentManager() {
             {/* Net Entitlement */}
             <div style={{ padding: '12px', backgroundColor: '#f8fafc', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
               <div style={{ fontSize: '12px', color: '#64748b' }}>สิทธิ์สุทธิ (E)</div>
-              <div data-testid="owner-net-entitlement" style={{ fontSize: '18px', fontWeight: 'bold', color: '#0f172a' }}>
+              <div data-testid="owner-net-entitlement" style={{ fontSize: '18px', fontWeight: 400, color: '#0f172a' }}>
                 ฿{report.netEntitlement.toLocaleString('th-TH', { minimumFractionDigits: 2 })}
               </div>
             </div>
@@ -320,7 +320,7 @@ export function OwnerDebtRepaymentManager() {
             {/* Total Paid Out */}
             <div style={{ padding: '12px', backgroundColor: '#f8fafc', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
               <div style={{ fontSize: '12px', color: '#64748b' }}>โอนจ่ายแล้ว (P)</div>
-              <div data-testid="owner-total-paid" style={{ fontSize: '18px', fontWeight: 'bold', color: '#0284c7' }}>
+              <div data-testid="owner-total-paid" style={{ fontSize: '18px', fontWeight: 400, color: '#0284c7' }}>
                 ฿{report.totalPaidOut.toLocaleString('th-TH', { minimumFractionDigits: 2 })}
               </div>
             </div>
@@ -328,7 +328,7 @@ export function OwnerDebtRepaymentManager() {
             {/* Total Debt Repaid */}
             <div style={{ padding: '12px', backgroundColor: '#f8fafc', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
               <div style={{ fontSize: '12px', color: '#64748b' }}>รับคืนแล้วสะสม (X)</div>
-              <div data-testid="owner-total-debt-repaid" style={{ fontSize: '18px', fontWeight: 'bold', color: '#16a34a' }}>
+              <div data-testid="owner-total-debt-repaid" style={{ fontSize: '18px', fontWeight: 400, color: '#16a34a' }}>
                 ฿{report.totalDebtRepaid.toLocaleString('th-TH', { minimumFractionDigits: 2 })}
               </div>
             </div>
@@ -340,7 +340,7 @@ export function OwnerDebtRepaymentManager() {
                 data-testid="owner-net-liability"
                 style={{
                   fontSize: '18px',
-                  fontWeight: 'bold',
+                  fontWeight: 400,
                   color: report.netLiability < 0 ? '#dc2626' : '#0f172a',
                 }}
               >
@@ -357,14 +357,14 @@ export function OwnerDebtRepaymentManager() {
                 border: `1px solid ${report.isDebt ? '#fca5a5' : '#86efac'}`,
               }}
             >
-              <div style={{ fontSize: '12px', color: report.isDebt ? '#991b1b' : '#166534', fontWeight: 600 }}>
+              <div style={{ fontSize: '12px', color: report.isDebt ? '#991b1b' : '#166534', fontWeight: 400 }}>
                 หนี้ค้างชำระ (Debt)
               </div>
               <div
                 data-testid="owner-debt-amount"
                 style={{
                   fontSize: '18px',
-                  fontWeight: 'bold',
+                  fontWeight: 400,
                   color: report.isDebt ? '#dc2626' : '#16a34a',
                 }}
               >
@@ -406,13 +406,13 @@ export function OwnerDebtRepaymentManager() {
               marginBottom: '24px',
             }}
           >
-            <h3 style={{ fontSize: '14px', fontWeight: 'bold', color: '#1e293b', margin: '0 0 12px' }}>
+            <h3 style={{ fontSize: '14px', fontWeight: 400, color: '#1e293b', margin: '0 0 12px' }}>
               บันทึกการรับชำระเงินคืนจากผู้จัดงาน (Record Debt Repayment)
             </h3>
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '12px', alignItems: 'flex-end' }}>
               <div>
-                <label htmlFor="debt-repayment-amount-input" style={{ display: 'block', fontSize: '12px', fontWeight: 500, color: '#475569', marginBottom: '4px' }}>
+                <label htmlFor="debt-repayment-amount-input" style={{ display: 'block', fontSize: '12px', fontWeight: 400, color: '#475569', marginBottom: '4px' }}>
                   จำนวนเงินที่รับคืน (บาท) *
                 </label>
                 <input
@@ -438,7 +438,7 @@ export function OwnerDebtRepaymentManager() {
               </div>
 
               <div>
-                <label htmlFor="debt-repayment-notes-input" style={{ display: 'block', fontSize: '12px', fontWeight: 500, color: '#475569', marginBottom: '4px' }}>
+                <label htmlFor="debt-repayment-notes-input" style={{ display: 'block', fontSize: '12px', fontWeight: 400, color: '#475569', marginBottom: '4px' }}>
                   หมายเหตุ / เลขที่อ้างอิงการโอนคืน (ถ้ามี)
                 </label>
                 <input
@@ -474,7 +474,7 @@ export function OwnerDebtRepaymentManager() {
                     color: '#ffffff',
                     border: 'none',
                     borderRadius: '4px',
-                    fontWeight: 600,
+                    fontWeight: 400,
                     fontSize: '13px',
                     cursor: !report.isDebt || report.debtAmount <= 0 || submitting ? 'not-allowed' : 'pointer',
                     transition: 'background-color 0.15s ease',
@@ -494,7 +494,7 @@ export function OwnerDebtRepaymentManager() {
 
           {/* Repayments History Table */}
           <div>
-            <h3 style={{ fontSize: '14px', fontWeight: 'bold', color: '#1e293b', margin: '0 0 10px' }}>
+            <h3 style={{ fontSize: '14px', fontWeight: 400, color: '#1e293b', margin: '0 0 10px' }}>
               ประวัติการรับชำระเงินคืนจากผู้จัดงาน (Debt Repayment History)
             </h3>
 
@@ -532,11 +532,11 @@ export function OwnerDebtRepaymentManager() {
                         data-testid={`repayment-row-${rp.id}`}
                         style={{ borderBottom: idx < report.repayments.length - 1 ? '1px solid #f1f5f9' : 'none' }}
                       >
-                        <td style={{ padding: '8px 12px', fontFamily: 'monospace', fontWeight: 600 }}>{rp.id}</td>
+                        <td style={{ padding: '8px 12px', fontFamily: 'monospace', fontWeight: 400 }}>{rp.id}</td>
                         <td style={{ padding: '8px 12px', whiteSpace: 'nowrap' }}>
                           {formatDate(new Date(rp.repaidAt))} {formatTime(new Date(rp.repaidAt))}
                         </td>
-                        <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 'bold', color: '#16a34a' }}>
+                        <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 400, color: '#16a34a' }}>
                           ฿{rp.amount.toLocaleString('th-TH', { minimumFractionDigits: 2 })}
                         </td>
                         <td style={{ padding: '8px 12px', color: '#475569' }}>{rp.notes || '-'}</td>

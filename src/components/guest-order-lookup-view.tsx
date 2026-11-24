@@ -658,7 +658,7 @@ export function GuestOrderLookupView({ initialOrderId }: GuestOrderLookupViewPro
           </div>
 
           <div style={{ textAlign: 'center', marginBottom: '1.5rem' }}>
-            <h2 style={{ fontSize: '1.35rem', fontWeight: 800, color: '#0f172a', margin: '0 0 0.4rem 0' }}>
+            <h2 style={{ fontSize: '1.35rem', fontWeight: 400, color: '#0f172a', margin: '0 0 0.4rem 0' }}>
               ยืนยันรหัส OTP
             </h2>
             <p style={{ fontSize: '0.9rem', color: '#475569', margin: '0 0 0.35rem 0' }}>
@@ -787,7 +787,7 @@ export function GuestOrderLookupView({ initialOrderId }: GuestOrderLookupViewPro
                 border: 'none',
                 color: cooldownSeconds > 0 ? '#94a3b8' : '#1848ed',
                 fontSize: '0.85rem',
-                fontWeight: 600,
+                fontWeight: 400,
                 cursor: cooldownSeconds > 0 || isLoading ? 'not-allowed' : 'pointer',
                 display: 'inline-flex',
                 alignItems: 'center',
@@ -900,7 +900,7 @@ export function GuestOrderLookupView({ initialOrderId }: GuestOrderLookupViewPro
               <div className="lookup-card-top-icon" style={{ background: '#f1f5f9', color: '#64748b' }}>
                 <TicketIcon style={{ width: '28px', height: '28px' }} />
               </div>
-              <h3 style={{ fontSize: '1.25rem', fontWeight: 800, color: '#0f172a', margin: '0 0 0.5rem 0' }}>
+              <h3 style={{ fontSize: '1.25rem', fontWeight: 400, color: '#0f172a', margin: '0 0 0.5rem 0' }}>
                 ไม่พบบัตรคอนเสิร์ตที่ชำระเงินสำเร็จ
               </h3>
               <p style={{ color: '#64748b', fontSize: '0.9rem', margin: 0, lineHeight: 1.6 }}>
@@ -912,7 +912,7 @@ export function GuestOrderLookupView({ initialOrderId }: GuestOrderLookupViewPro
               <div className="lookup-card-top-icon" style={{ background: '#f1f5f9', color: '#64748b' }}>
                 <SearchIcon style={{ width: '28px', height: '28px' }} />
               </div>
-              <h3 style={{ fontSize: '1.15rem', fontWeight: 800, color: '#0f172a', margin: '0 0 0.5rem 0' }}>
+              <h3 style={{ fontSize: '1.15rem', fontWeight: 400, color: '#0f172a', margin: '0 0 0.5rem 0' }}>
                 ไม่พบบัตรคอนเสิร์ตที่ตรงกับคำค้นหา
               </h3>
               <p style={{ color: '#64748b', fontSize: '0.9rem', margin: '0 0 1.25rem 0' }}>
@@ -938,7 +938,7 @@ export function GuestOrderLookupView({ initialOrderId }: GuestOrderLookupViewPro
                     border: 'none',
                     borderRadius: '8px',
                     padding: '0.6rem 1.25rem',
-                    fontWeight: 600,
+                    fontWeight: 400,
                     fontSize: '0.9rem',
                     cursor: 'pointer',
                   }}
@@ -984,7 +984,7 @@ export function GuestOrderLookupView({ initialOrderId }: GuestOrderLookupViewPro
                           className="concert-toggle-btn"
                         >
                           <span>{isConcertExpanded ? 'ย่อเก็บ' : `ดูตั๋วเข้างาน (${group.allPaidTickets.length} ใบ)`}</span>
-                          <span style={{ fontSize: '1.1rem', fontWeight: 800, marginLeft: '6px', lineHeight: 1 }}>{isConcertExpanded ? '−' : '+'}</span>
+                          <span style={{ fontSize: '1.1rem', fontWeight: 400, marginLeft: '6px', lineHeight: 1 }}>{isConcertExpanded ? '−' : '+'}</span>
                         </button>
                       </div>
                     </div>
@@ -1023,7 +1023,7 @@ export function GuestOrderLookupView({ initialOrderId }: GuestOrderLookupViewPro
                                   <div style={{ fontSize: '0.78rem', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
                                     รหัสคำสั่งซื้อ
                                   </div>
-                                  <div style={{ fontSize: '1.15rem', fontWeight: 800, color: '#0f172a', fontFamily: 'monospace' }}>
+                                  <div style={{ fontSize: '1.15rem', fontWeight: 400, color: '#0f172a', fontFamily: 'monospace' }}>
                                     {order.id}
                                   </div>
                                   <div style={{ fontSize: '0.85rem', color: '#475569', marginTop: '0.2rem' }}>
@@ -1038,7 +1038,7 @@ export function GuestOrderLookupView({ initialOrderId }: GuestOrderLookupViewPro
                                         backgroundColor: '#dcfce7',
                                         color: '#15803d',
                                         fontSize: '0.85rem',
-                                        fontWeight: 700,
+                                        fontWeight: 400,
                                         padding: '0.35rem 0.75rem',
                                         borderRadius: '6px',
                                         display: 'inline-flex',
@@ -1056,7 +1056,7 @@ export function GuestOrderLookupView({ initialOrderId }: GuestOrderLookupViewPro
                                         backgroundColor: '#fef9c3',
                                         color: '#854d0e',
                                         fontSize: '0.85rem',
-                                        fontWeight: 700,
+                                        fontWeight: 400,
                                         padding: '0.35rem 0.75rem',
                                         borderRadius: '6px',
                                         display: 'inline-flex',
@@ -1074,7 +1074,7 @@ export function GuestOrderLookupView({ initialOrderId }: GuestOrderLookupViewPro
                                         backgroundColor: '#f1f5f9',
                                         color: '#64748b',
                                         fontSize: '0.85rem',
-                                        fontWeight: 700,
+                                        fontWeight: 400,
                                         padding: '0.35rem 0.75rem',
                                         borderRadius: '6px',
                                         display: 'inline-flex',
@@ -1094,7 +1094,7 @@ export function GuestOrderLookupView({ initialOrderId }: GuestOrderLookupViewPro
                                         backgroundColor: '#fee2e2',
                                         color: '#b91c1c',
                                         fontSize: '0.85rem',
-                                        fontWeight: 700,
+                                        fontWeight: 400,
                                         padding: '0.35rem 0.75rem',
                                         borderRadius: '6px',
                                         display: 'inline-flex',
@@ -1114,7 +1114,7 @@ export function GuestOrderLookupView({ initialOrderId }: GuestOrderLookupViewPro
                                         backgroundColor: '#fef3c7',
                                         color: '#b45309',
                                         fontSize: '0.85rem',
-                                        fontWeight: 700,
+                                        fontWeight: 400,
                                         padding: '0.35rem 0.75rem',
                                         borderRadius: '6px',
                                         display: 'inline-flex',
@@ -1148,7 +1148,7 @@ export function GuestOrderLookupView({ initialOrderId }: GuestOrderLookupViewPro
                                 <div style={{ marginBottom: '1.75rem' }}>
                                   <div className="lookup-tickets-header-row">
                                     <div>
-                                      <h4 style={{ fontSize: '1.05rem', fontWeight: 800, color: '#0f172a', margin: '0 0 0.25rem 0' }}>
+                                      <h4 style={{ fontSize: '1.05rem', fontWeight: 400, color: '#0f172a', margin: '0 0 0.25rem 0' }}>
                                         รายการบัตรเข้างาน ({order.tickets.length} ใบ)
                                       </h4>
                                       <p style={{ fontSize: '0.85rem', color: '#64748b', margin: 0 }}>
@@ -1256,16 +1256,22 @@ export function GuestOrderLookupView({ initialOrderId }: GuestOrderLookupViewPro
 
                                               {/* Right: Scan Stub Area */}
                                               <div className="stub-scan-side">
-                                                <div className="stub-qr-frame">
-                                                  {/* biome-ignore lint/performance/noImgElement: Data URL SVG QR representation */}
+                                                <div className="stub-qr-frame" style={{ backgroundColor: '#ffffff', colorScheme: 'light' }}>
+                                                  {/* biome-ignore lint/performance/noImgElement: Opaque PNG ticket QR representation */}
                                                   <img
                                                     id={`ticket-qr-${tkt.id}`}
-                                                    src={tkt.qrCodeUrl}
+                                                    src={`/api/public/tickets/${tkt.id}/qr`}
                                                     alt={`QR Code บัตร ${tkt.ticketCode}`}
                                                     data-qr-payload={tkt.qrPayload}
                                                     width={160}
                                                     height={160}
-                                                    style={{ display: 'block', margin: '0 auto', borderRadius: '12px', border: '1px solid #e2e8f0', padding: '8px', background: '#ffffff' }}
+                                                    style={{ display: 'block', margin: '0 auto', borderRadius: '10px', backgroundColor: '#ffffff', padding: 0, border: 'none' }}
+                                                    onError={(e) => {
+                                                      const img = e.currentTarget;
+                                                      if (img.dataset.fallbackApplied || !tkt.qrCodeUrl) return;
+                                                      img.dataset.fallbackApplied = '1';
+                                                      img.src = tkt.qrCodeUrl;
+                                                    }}
                                                   />
                                                 </div>
 
@@ -1305,40 +1311,40 @@ export function GuestOrderLookupView({ initialOrderId }: GuestOrderLookupViewPro
                               {/* Order Details & Financial Summary (D-162) */}
                               <div className="lookup-order-accordions" style={{ marginTop: '1.75rem' }}>
                                 <div style={{ marginBottom: '0.85rem' }}>
-                                  <span style={{ fontSize: '0.95rem', fontWeight: 700, color: '#334155' }}>
+                                  <span style={{ fontSize: '0.95rem', fontWeight: 400, color: '#334155' }}>
                                     รายละเอียดคำสั่งซื้อและการเงิน
                                   </span>
                                 </div>
 
                                 <div style={{ backgroundColor: '#f8fafc', borderRadius: '10px', padding: '1.15rem 1.25rem', fontSize: '0.88rem', border: '1px solid #e2e8f0' }}>
-                                  <h4 style={{ fontSize: '0.92rem', fontWeight: 700, color: '#0f172a', margin: '0 0 0.65rem 0' }}>
+                                  <h4 style={{ fontSize: '0.92rem', fontWeight: 400, color: '#0f172a', margin: '0 0 0.65rem 0' }}>
                                     สรุปยอดเงิน
                                   </h4>
                                   {order.items && order.items.length > 0 ? (
                                     order.items.map(item => (
                                       <div key={item.id || item.ticketTypeId} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.4rem' }}>
                                         <span style={{ color: '#64748b' }}>{item.ticketTypeName} x {item.quantity} ใบ</span>
-                                        <span style={{ fontWeight: 600 }}>{formatBaht(item.subtotal)}</span>
+                                        <span style={{ fontWeight: 400 }}>{formatBaht(item.subtotal)}</span>
                                       </div>
                                     ))
                                   ) : (
                                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.4rem' }}>
                                       <span style={{ color: '#64748b' }}>{order.tickets[0]?.ticketTypeName || 'บัตรเข้าชม'} x {order.tickets.length} ใบ</span>
-                                      <span style={{ fontWeight: 600 }}>{formatBaht(order.subtotal)}</span>
+                                      <span style={{ fontWeight: 400 }}>{formatBaht(order.subtotal)}</span>
                                     </div>
                                   )}
 
                                   {order.discountAmount > 0 && (
                                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.4rem', color: '#16a34a' }}>
                                       <span>ส่วนลด</span>
-                                      <span style={{ fontWeight: 600 }}>-{formatBaht(order.discountAmount)}</span>
+                                      <span style={{ fontWeight: 400 }}>-{formatBaht(order.discountAmount)}</span>
                                     </div>
                                   )}
                                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.4rem' }}>
                                     <span style={{ color: '#64748b' }}>ค่าบริการลูกค้า</span>
                                     <span>{formatBaht(order.customerFee)}</span>
                                   </div>
-                                  <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid #e2e8f0', paddingTop: '0.55rem', marginTop: '0.55rem', fontSize: '1.02rem', fontWeight: 800, color: '#0f172a' }}>
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid #e2e8f0', paddingTop: '0.55rem', marginTop: '0.55rem', fontSize: '1.02rem', fontWeight: 400, color: '#0f172a' }}>
                                     <span>ยอดชำระทั้งหมด</span>
                                     <span style={{ color: '#1848ed' }}>{formatBaht(order.total)}</span>
                                   </div>
@@ -1378,11 +1384,11 @@ export function GuestOrderLookupView({ initialOrderId }: GuestOrderLookupViewPro
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
                 <InfoIcon style={{ width: '18px', height: '18px', color: '#0f172a', flexShrink: 0 }} />
-                <span style={{ fontWeight: 700, fontSize: '0.95rem', color: '#0f172a' }}>
+                <span style={{ fontWeight: 400, fontSize: '0.95rem', color: '#0f172a' }}>
                   นโยบายและเงื่อนไขการขอคืนเงิน
                 </span>
               </div>
-              <span style={{ fontSize: '1.25rem', fontWeight: 800, color: '#0f172a', lineHeight: 1 }}>
+              <span style={{ fontSize: '1.25rem', fontWeight: 400, color: '#0f172a', lineHeight: 1 }}>
                 {isPolicyExpanded ? '−' : '+'}
               </span>
             </button>
@@ -1398,7 +1404,7 @@ export function GuestOrderLookupView({ initialOrderId }: GuestOrderLookupViewPro
                   <a
                     href="/refund-policy"
                     className="lookup-policy-link"
-                    style={{ fontSize: '0.85rem', color: '#0f172a', fontWeight: 600, textDecoration: 'underline' }}
+                    style={{ fontSize: '0.85rem', color: '#0f172a', fontWeight: 400, textDecoration: 'underline' }}
                   >
                     อ่านนโยบายและเงื่อนไขการขอคืนเงินฉบับเต็ม
                   </a>

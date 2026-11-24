@@ -29,8 +29,8 @@ import { Button } from '@/components/ui';
 import { HeaderInfoTooltip } from './header-info-tooltip';
 import { OrganizerMoneyReportView } from './organizer-money-report-view';
 import { DateTimePicker24h } from './datetime-picker-24h';
-import { triggerToast } from './toast-notification';
-import { loadPayoutAccounts, getPrimaryPayoutAccount, type PayoutBankAccount } from '@/lib/organizer-payout-sync';
+import { triggerToast, triggerRefreshToast } from './toast-notification';
+import { loadPayoutAccounts, getPrimaryPayoutAccount, loadSharedPayoutAccounts, type PayoutBankAccount } from '@/lib/organizer-payout-sync';
 import { formatBaht, formatDate, formatTime, toLocalDatetimeInputString } from '@/lib/locale';
 import { startAdaptivePoller } from '@/lib/adaptive-polling';
 
@@ -197,10 +197,27 @@ export function OrganizerEventsManager({
   const [ubuPrivilegeMode, setUbuPrivilegeMode] = useState<boolean>(false);
 
   useEffect(() => {
+    let isCancelled = false;
     const accs = loadPayoutAccounts();
     setPayoutAccounts(accs);
     const primary = getPrimaryPayoutAccount(accs);
     if (primary) setSelectedPayoutAccountId(primary.id);
+
+    loadSharedPayoutAccounts()
+      .then((fresh) => {
+        if (!isCancelled && fresh.length > 0) {
+          setPayoutAccounts(fresh);
+          const freshPrimary = getPrimaryPayoutAccount(fresh);
+          if (freshPrimary) {
+            setSelectedPayoutAccountId((prev) => (prev ? prev : freshPrimary.id));
+          }
+        }
+      })
+      .catch(() => {});
+
+    return () => {
+      isCancelled = true;
+    };
   }, []);
 
   // Clean initial session state (D-133: No mock data)
@@ -423,6 +440,7 @@ export function OrganizerEventsManager({
     setRefreshing(true);
     await loadEvents();
     setRefreshing(false);
+    triggerRefreshToast('คอนเสิร์ต');
   };
 
   const loadEvents = useCallback(async (signal?: AbortSignal): Promise<boolean> => {
@@ -1365,7 +1383,7 @@ export function OrganizerEventsManager({
               {wizardStep === 1 && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                   <div className="form-group">
-                    <label htmlFor="event-title" style={{ fontWeight: 700, fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '0.35rem', marginBottom: '0.35rem' }}>
+                    <label htmlFor="event-title" style={{ fontWeight: 400, fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '0.35rem', marginBottom: '0.35rem' }}>
                       <span>ชื่องานคอนเสิร์ต *</span>
                       <HeaderInfoTooltip text="ระบุชื่อคอนเสิร์ตหรือชื่องานแสดงอย่างเป็นทางการสำหรับผู้ซื้อ" />
                     </label>
@@ -1384,7 +1402,7 @@ export function OrganizerEventsManager({
                   </div>
 
                   <div className="form-group">
-                    <label htmlFor="event-artists" style={{ fontWeight: 700, fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '0.35rem', marginBottom: '0.35rem' }}>
+                    <label htmlFor="event-artists" style={{ fontWeight: 400, fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '0.35rem', marginBottom: '0.35rem' }}>
                       <span>ศิลปินผู้ร่วมสร้างสรรค์ / ไลน์อัปการแสดง</span>
                       <HeaderInfoTooltip text="ระบุรายชื่อศิลปินหรือวงดนตรี คั่นด้วยเครื่องหมายจุลภาค เพื่อสร้างแท็กไลน์อัป" />
                     </label>
@@ -1405,7 +1423,7 @@ export function OrganizerEventsManager({
                   </div>
 
                   <div className="form-group">
-                    <label htmlFor="event-description" style={{ fontWeight: 700, fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '0.35rem', marginBottom: '0.35rem' }}>
+                    <label htmlFor="event-description" style={{ fontWeight: 400, fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '0.35rem', marginBottom: '0.35rem' }}>
                       <span>เกี่ยวกับคอนเสิร์ตนี้ / รายละเอียดและจุดเด่น</span>
                       <HeaderInfoTooltip text="ระบุคำอธิบาย ไฮไลต์การแสดง กฎเกณฑ์สำคัญ หรือสิ่งที่ผู้ชมจะได้รับ" />
                     </label>
@@ -1428,7 +1446,7 @@ export function OrganizerEventsManager({
               {wizardStep === 2 && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                   <div className="form-group">
-                    <label htmlFor="event-location" style={{ fontWeight: 700, fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '0.35rem', marginBottom: '0.35rem' }}>
+                    <label htmlFor="event-location" style={{ fontWeight: 400, fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '0.35rem', marginBottom: '0.35rem' }}>
                       <span>สถานที่จัดงาน *</span>
                       <HeaderInfoTooltip text="ระบุชื่อฮอลล์ อารีน่า หรือสถานที่จัดงานจริงอย่างชัดเจน" />
                     </label>
@@ -1447,7 +1465,7 @@ export function OrganizerEventsManager({
                   </div>
 
                   <div className="form-group">
-                    <label htmlFor="event-map-link" style={{ fontWeight: 700, fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '0.35rem', marginBottom: '0.35rem' }}>
+                    <label htmlFor="event-map-link" style={{ fontWeight: 400, fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '0.35rem', marginBottom: '0.35rem' }}>
                       <span>ลิงก์แผนที่ Google Maps (ทางเลือก)</span>
                       <HeaderInfoTooltip text="วางลิงก์ Google Maps เพื่อให้ผู้ซื้อเปิดดูเส้นทาง หรือปล่อยว่างเพื่อให้ระบบค้นหาตามชื่อสถานที่" />
                     </label>
@@ -1518,7 +1536,7 @@ export function OrganizerEventsManager({
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
                   <div className="form-row-two-col">
                     <div className="form-group">
-                      <label htmlFor="event-sales-start" style={{ fontWeight: 700, fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '0.35rem', marginBottom: '0.35rem' }}>
+                      <label htmlFor="event-sales-start" style={{ fontWeight: 400, fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '0.35rem', marginBottom: '0.35rem' }}>
                         <span>วันและเวลาเริ่มต้นเปิดขายบัตร</span>
                         <HeaderInfoTooltip text="กำหนดเวลาเริ่มจำหน่าย หากปล่อยว่างจะเปิดขายทันทีหลังได้รับการอนุมัติ" />
                       </label>
@@ -1536,7 +1554,7 @@ export function OrganizerEventsManager({
                     </div>
 
                     <div className="form-group">
-                      <label htmlFor="event-sales-end" style={{ fontWeight: 700, fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '0.35rem', marginBottom: '0.35rem' }}>
+                      <label htmlFor="event-sales-end" style={{ fontWeight: 400, fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '0.35rem', marginBottom: '0.35rem' }}>
                         <span>วันและเวลาสิ้นสุดการขายบัตร (24 ชม.)</span>
                         <HeaderInfoTooltip text="กำหนดเวลาปิดจำหน่าย หากปล่อยว่างจะปิดการขายตามเวลาเริ่มการแสดงแต่ละรอบ" />
                       </label>
@@ -1558,7 +1576,7 @@ export function OrganizerEventsManager({
                   <div className="form-group">
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.35rem' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-                        <span style={{ fontWeight: 700, fontSize: '0.9rem', margin: 0, color: '#0f172a' }}>
+                        <span style={{ fontWeight: 400, fontSize: '0.9rem', margin: 0, color: '#0f172a' }}>
                           จำกัดการซื้อสูงสุดต่อคำสั่งซื้อ *
                         </span>
                         <HeaderInfoTooltip text="เลือกจำนวนบัตรสูงสุดที่ผู้ซื้อสามารถทำรายการได้ใน 1 คำสั่งซื้อ เพื่อป้องกันการกักตุนบัตร หรือเลือกไม่จำกัดจำนวน" />
@@ -1690,7 +1708,7 @@ export function OrganizerEventsManager({
                   {/* Age Restriction & Refund Policy (D-218) */}
                   <div className="form-row-two-col">
                     <div className="form-group">
-                      <label htmlFor="event-age-restriction" style={{ fontWeight: 700, fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '0.35rem', marginBottom: '0.35rem' }}>
+                      <label htmlFor="event-age-restriction" style={{ fontWeight: 400, fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '0.35rem', marginBottom: '0.35rem' }}>
                         <span>การจำกัดอายุผู้ชม (Age Restriction)</span>
                         <HeaderInfoTooltip text="กำหนดเกณฑ์อายุขั้นต่ำของผู้เข้าชมคอนเสิร์ต" />
                       </label>
@@ -1715,7 +1733,7 @@ export function OrganizerEventsManager({
                     </div>
 
                     <div className="form-group">
-                      <label htmlFor="event-refund-policy" style={{ fontWeight: 700, fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '0.35rem', marginBottom: '0.35rem' }}>
+                      <label htmlFor="event-refund-policy" style={{ fontWeight: 400, fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '0.35rem', marginBottom: '0.35rem' }}>
                         <span>นโยบายการคืนเงิน (Refund Policy)</span>
                         <HeaderInfoTooltip text="ข้อกำหนดการขอคืนเงินของคอนเสิร์ตนี้" />
                       </label>
@@ -1742,7 +1760,7 @@ export function OrganizerEventsManager({
 
                   {refundPolicy === 'custom' && (
                     <div className="form-group">
-                      <label htmlFor="event-refund-custom" style={{ fontWeight: 700, fontSize: '0.88rem', display: 'flex', alignItems: 'center', gap: '0.35rem', marginBottom: '0.35rem' }}>
+                      <label htmlFor="event-refund-custom" style={{ fontWeight: 400, fontSize: '0.88rem', display: 'flex', alignItems: 'center', gap: '0.35rem', marginBottom: '0.35rem' }}>
                         <span>ระบุรายละเอียดนโยบายการคืนเงินเฉพาะ</span>
                       </label>
                       <textarea
@@ -1762,7 +1780,7 @@ export function OrganizerEventsManager({
 
                   {/* Entry Guidelines (D-218) */}
                   <div className="form-group">
-                    <label htmlFor="event-entry-guidelines" style={{ fontWeight: 700, fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '0.35rem', marginBottom: '0.35rem' }}>
+                    <label htmlFor="event-entry-guidelines" style={{ fontWeight: 400, fontSize: '0.9rem', display: 'flex', alignItems: 'center', gap: '0.35rem', marginBottom: '0.35rem' }}>
                       <span>กติกาการเข้างานและมาตรการรักษาความปลอดภัย (Entry Guidelines)</span>
                       <HeaderInfoTooltip text="คำแนะนำสำหรับผู้เข้าชม เช่น เอกสารที่ต้องเตรียม สิ่งของต้องห้าม การตรวจค้นสัมภาระ" />
                     </label>
@@ -1785,7 +1803,7 @@ export function OrganizerEventsManager({
                   <div className="form-group" data-testid="payout-account-selection-group">
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.35rem' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-                        <span style={{ fontWeight: 700, fontSize: '0.9rem', margin: 0, color: '#0f172a' }}>
+                        <span style={{ fontWeight: 400, fontSize: '0.9rem', margin: 0, color: '#0f172a' }}>
                           บัญชีธนาคารสำหรับรับเงินโอน (Payout Bank Account) *
                         </span>
                         <HeaderInfoTooltip text="เลือกบัญชีธนาคารของคุณที่ต้องการให้ระบบโอนรายได้สุทธิหลังหักค่าบริการให้ตามรอบจ่ายเงิน" />
@@ -1821,7 +1839,7 @@ export function OrganizerEventsManager({
                                 </span>
                               )}
                             </div>
-                            <span style={{ fontSize: '0.85rem', color: '#1e293b', fontFamily: 'monospace', fontWeight: 600 }}>
+                            <span style={{ fontSize: '0.85rem', color: '#1e293b', fontFamily: 'monospace', fontWeight: 400 }}>
                               {acc.accountNumber}
                             </span>
                             <span style={{ fontSize: '0.78rem', color: '#64748b' }}>
@@ -1986,7 +2004,7 @@ export function OrganizerEventsManager({
                             <div className="session-accordion-body">
                               <div className="form-row-two-col" style={{ marginBottom: '0.75rem' }}>
                                 <div>
-                                  <label htmlFor={`sess-start-${sess.id}`} style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.78rem', fontWeight: 600, color: '#334155', marginBottom: '4px' }}>
+                                  <label htmlFor={`sess-start-${sess.id}`} style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.78rem', fontWeight: 400, color: '#334155', marginBottom: '4px' }}>
                                     <span>วันเวลาเริ่มการแสดง (Show Start) *</span>
                                     <HeaderInfoTooltip text="วันและเวลาที่การแสดงเริ่มต้นขึ้นจริง" />
                                   </label>
@@ -2000,7 +2018,7 @@ export function OrganizerEventsManager({
                                   />
                                 </div>
                                 <div>
-                                  <label htmlFor={`sess-end-${sess.id}`} style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.78rem', fontWeight: 600, color: '#334155', marginBottom: '4px' }}>
+                                  <label htmlFor={`sess-end-${sess.id}`} style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.78rem', fontWeight: 400, color: '#334155', marginBottom: '4px' }}>
                                     <span>วันเวลาสิ้นสุดการแสดง (Show End) *</span>
                                     <HeaderInfoTooltip text="วันและเวลาที่การแสดงเสร็จสิ้นโดยประมาณ" />
                                   </label>
@@ -2017,7 +2035,7 @@ export function OrganizerEventsManager({
 
                               <div className="form-row-two-col" style={{ marginBottom: '1rem' }}>
                                 <div>
-                                  <label htmlFor={`sess-adm-start-${sess.id}`} style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.78rem', fontWeight: 600, color: '#334155', marginBottom: '4px' }}>
+                                  <label htmlFor={`sess-adm-start-${sess.id}`} style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.78rem', fontWeight: 400, color: '#334155', marginBottom: '4px' }}>
                                     <span>เวลาประตูเปิด / รับเข้างาน (Doors Open)</span>
                                     <HeaderInfoTooltip text="เวลาเปิดประตูให้ผู้ชมเริ่มเข้าสู่บริเวณฮอลล์การแสดง" />
                                   </label>
@@ -2031,7 +2049,7 @@ export function OrganizerEventsManager({
                                   />
                                 </div>
                                 <div>
-                                  <label htmlFor={`sess-adm-end-${sess.id}`} style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.78rem', fontWeight: 600, color: '#334155', marginBottom: '4px' }}>
+                                  <label htmlFor={`sess-adm-end-${sess.id}`} style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.78rem', fontWeight: 400, color: '#334155', marginBottom: '4px' }}>
                                     <span>สิ้นสุดช่วงเวลารับเข้างาน</span>
                                     <HeaderInfoTooltip text="เวลาปิดรับผู้ชมเข้างานเพื่อความเรียบร้อยของการแสดง" />
                                   </label>
@@ -2049,7 +2067,7 @@ export function OrganizerEventsManager({
                               {/* Ticket types per session */}
                               <div style={{ marginTop: '0.75rem' }}>
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-                                  <span style={{ fontSize: '0.82rem', fontWeight: 700, color: '#0f172a' }}>
+                                  <span style={{ fontSize: '0.82rem', fontWeight: 400, color: '#0f172a' }}>
                                     โซนและประเภทบัตรของรอบนี้ ({sess.ticketTypes.length} ประเภท)
                                   </span>
                                   <button
@@ -2073,7 +2091,7 @@ export function OrganizerEventsManager({
                                     gap: '0.5rem',
                                     padding: '0.15rem 0.65rem 0.4rem 0.65rem',
                                     fontSize: '0.75rem',
-                                    fontWeight: 700,
+                                    fontWeight: 400,
                                     color: '#475569',
                                     borderBottom: '1px solid #e2e8f0',
                                     marginBottom: '0.35rem',
@@ -2189,7 +2207,7 @@ export function OrganizerEventsManager({
                                       </div>
                                       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', padding: '0.15rem 0.2rem 0', borderTop: '1px dashed #e2e8f0' }}>
                                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                                          <label style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.76rem', color: tt.isStudentPrivilege ? '#1848ed' : '#64748b', cursor: 'pointer', fontWeight: tt.isStudentPrivilege ? 600 : 400 }}>
+                                          <label style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.76rem', color: tt.isStudentPrivilege ? '#1848ed' : '#64748b', cursor: 'pointer', fontWeight: tt.isStudentPrivilege ? 400 : 200 }}>
                                             <input
                                               type="checkbox"
                                               checked={Boolean(tt.isStudentPrivilege)}
@@ -2208,7 +2226,7 @@ export function OrganizerEventsManager({
                                             <span>กำหนดเป็นบัตรสิทธิ์พิเศษนักศึกษา ม.อุบล (@ubu.ac.th)</span>
                                           </label>
                                           {tt.isStudentPrivilege && (
-                                            <span style={{ fontSize: '0.72rem', background: '#eff6ff', color: '#1848ed', padding: '2px 6px', borderRadius: '4px', fontWeight: 600 }}>
+                                            <span style={{ fontSize: '0.72rem', background: '#eff6ff', color: '#1848ed', padding: '2px 6px', borderRadius: '4px', fontWeight: 400 }}>
                                               สิทธิ์ ม.อุบล
                                             </span>
                                           )}
@@ -2216,7 +2234,7 @@ export function OrganizerEventsManager({
                                         {tt.isStudentPrivilege && (
                                           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', marginTop: '0.2rem', paddingLeft: '1.25rem' }}>
                                             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
-                                              <label htmlFor={`tt-student-price-${tt.id}`} style={{ fontSize: '0.78rem', color: '#1848ed', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                                              <label htmlFor={`tt-student-price-${tt.id}`} style={{ fontSize: '0.78rem', color: '#1848ed', fontWeight: 400, whiteSpace: 'nowrap' }}>
                                                 ราคานักศึกษา (บาท):
                                               </label>
                                               <input
@@ -2284,7 +2302,7 @@ export function OrganizerEventsManager({
                           data-testid="ubu-privilege-toggle"
                           style={{ width: '18px', height: '18px', cursor: 'pointer' }}
                         />
-                        <span style={{ fontSize: '0.85rem', fontWeight: 700, color: ubuPrivilegeMode ? '#1848ed' : '#64748b' }}>
+                        <span style={{ fontSize: '0.85rem', fontWeight: 400, color: ubuPrivilegeMode ? '#1848ed' : '#64748b' }}>
                           {ubuPrivilegeMode ? 'เปิดใช้งานสิทธิ์ ม.อุบล' : 'ปิดใช้งาน'}
                         </span>
                       </label>
@@ -2292,7 +2310,7 @@ export function OrganizerEventsManager({
 
                     {ubuPrivilegeMode && (
                       <div style={{ marginTop: '0.85rem', paddingTop: '0.75rem', borderTop: '1px dashed #cbd5e1', fontSize: '0.82rem', color: '#1e293b' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', marginBottom: '0.25rem', color: '#1848ed', fontWeight: 600 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', marginBottom: '0.25rem', color: '#1848ed', fontWeight: 400 }}>
                           <CheckCircleIcon width={14} height={14} />
                           <span>เปิดรับสิทธิ์ ม.อุบล แล้ว</span>
                         </div>
@@ -3083,12 +3101,12 @@ export function OrganizerEventsManager({
               <form onSubmit={handleSubmitAmendment}>
                 {/* SECTION 1: Concert Details Amendment (D-279) */}
                 <div className="modal-form-section-card" style={{ marginBottom: '1.25rem' }}>
-                  <h4 className="modal-section-title" style={{ color: '#0f172a', fontWeight: 700, fontSize: '0.95rem', marginBottom: '0.75rem' }}>
+                  <h4 className="modal-section-title" style={{ color: '#0f172a', fontWeight: 400, fontSize: '0.95rem', marginBottom: '0.75rem' }}>
                     1. ข้อมูลคอนเสิร์ต (Concert Details):
                   </h4>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '0.75rem', marginBottom: '0.75rem' }}>
                     <div>
-                      <label htmlFor="amd-concert-title" style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: '#475569', marginBottom: '0.25rem' }}>
+                      <label htmlFor="amd-concert-title" style={{ display: 'block', fontSize: '0.8rem', fontWeight: 400, color: '#475569', marginBottom: '0.25rem' }}>
                         ชื่อคอนเสิร์ต *
                       </label>
                       <input
@@ -3102,7 +3120,7 @@ export function OrganizerEventsManager({
                       />
                     </div>
                     <div>
-                      <label htmlFor="amd-concert-artists" style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: '#475569', marginBottom: '0.25rem' }}>
+                      <label htmlFor="amd-concert-artists" style={{ display: 'block', fontSize: '0.8rem', fontWeight: 400, color: '#475569', marginBottom: '0.25rem' }}>
                         ศิลปิน / ศิลปินรับเชิญ (Artists Lineup)
                       </label>
                       <input
@@ -3119,7 +3137,7 @@ export function OrganizerEventsManager({
 
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '0.75rem', marginBottom: '0.75rem' }}>
                     <div>
-                      <label htmlFor="amd-concert-location" style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: '#475569', marginBottom: '0.25rem' }}>
+                      <label htmlFor="amd-concert-location" style={{ display: 'block', fontSize: '0.8rem', fontWeight: 400, color: '#475569', marginBottom: '0.25rem' }}>
                         สถานที่จัดงาน (Location / Venue) *
                       </label>
                       <input
@@ -3133,7 +3151,7 @@ export function OrganizerEventsManager({
                       />
                     </div>
                     <div>
-                      <label htmlFor="amd-concert-maps" style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: '#475569', marginBottom: '0.25rem' }}>
+                      <label htmlFor="amd-concert-maps" style={{ display: 'block', fontSize: '0.8rem', fontWeight: 400, color: '#475569', marginBottom: '0.25rem' }}>
                         Google Maps URL
                       </label>
                       <input
@@ -3150,7 +3168,7 @@ export function OrganizerEventsManager({
 
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '0.75rem', marginBottom: '0.75rem' }}>
                     <div>
-                      <label htmlFor="amd-concert-poster" style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: '#475569', marginBottom: '0.25rem' }}>
+                      <label htmlFor="amd-concert-poster" style={{ display: 'block', fontSize: '0.8rem', fontWeight: 400, color: '#475569', marginBottom: '0.25rem' }}>
                         URL รูปโปสเตอร์ (Poster Image)
                       </label>
                       <input
@@ -3163,7 +3181,7 @@ export function OrganizerEventsManager({
                       />
                     </div>
                     <div>
-                      <label htmlFor="amd-concert-cover" style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: '#475569', marginBottom: '0.25rem' }}>
+                      <label htmlFor="amd-concert-cover" style={{ display: 'block', fontSize: '0.8rem', fontWeight: 400, color: '#475569', marginBottom: '0.25rem' }}>
                         URL รูปแบนเนอร์ปก (Cover Banner Image)
                       </label>
                       <input
@@ -3178,7 +3196,7 @@ export function OrganizerEventsManager({
                   </div>
 
                   <div style={{ marginBottom: '0.75rem' }}>
-                    <label htmlFor="amd-concert-desc" style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: '#475569', marginBottom: '0.25rem' }}>
+                    <label htmlFor="amd-concert-desc" style={{ display: 'block', fontSize: '0.8rem', fontWeight: 400, color: '#475569', marginBottom: '0.25rem' }}>
                       รายละเอียดคอนเสิร์ต
                     </label>
                     <textarea
@@ -3193,7 +3211,7 @@ export function OrganizerEventsManager({
 
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.75rem' }}>
                     <div>
-                      <label htmlFor="amd-concert-age" style={{ display: 'block', fontSize: '0.78rem', fontWeight: 600, color: '#475569', marginBottom: '0.2rem' }}>
+                      <label htmlFor="amd-concert-age" style={{ display: 'block', fontSize: '0.78rem', fontWeight: 400, color: '#475569', marginBottom: '0.2rem' }}>
                         การจำกัดอายุ
                       </label>
                       <input
@@ -3207,7 +3225,7 @@ export function OrganizerEventsManager({
                       />
                     </div>
                     <div>
-                      <label htmlFor="amd-concert-guide" style={{ display: 'block', fontSize: '0.78rem', fontWeight: 600, color: '#475569', marginBottom: '0.2rem' }}>
+                      <label htmlFor="amd-concert-guide" style={{ display: 'block', fontSize: '0.78rem', fontWeight: 400, color: '#475569', marginBottom: '0.2rem' }}>
                         กติกาการเข้างาน
                       </label>
                       <input
@@ -3221,7 +3239,7 @@ export function OrganizerEventsManager({
                       />
                     </div>
                     <div>
-                      <label htmlFor="amd-concert-refund" style={{ display: 'block', fontSize: '0.78rem', fontWeight: 600, color: '#475569', marginBottom: '0.2rem' }}>
+                      <label htmlFor="amd-concert-refund" style={{ display: 'block', fontSize: '0.78rem', fontWeight: 400, color: '#475569', marginBottom: '0.2rem' }}>
                         นโยบายการคืนเงิน
                       </label>
                       <input
@@ -3240,12 +3258,12 @@ export function OrganizerEventsManager({
                 {/* SECTION 2: Session Times & Door Opening (AC-38, AC-108, D-279) */}
                 <div className="modal-form-section-card" style={{ marginBottom: '1.25rem' }}>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
-                    <h4 className="modal-section-title" style={{ color: '#0f172a', fontWeight: 700, fontSize: '0.95rem', margin: 0 }}>
+                    <h4 className="modal-section-title" style={{ color: '#0f172a', fontWeight: 400, fontSize: '0.95rem', margin: 0 }}>
                       2. กำหนดการแสดงและเวลาเปิดประตู (Session Times & Admission):
                     </h4>
                     {activeEventDetails.sessions.length > 1 && (
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                        <label htmlFor="amendment-session-select" style={{ fontSize: '0.8rem', fontWeight: 600, color: '#0f172a' }}>
+                        <label htmlFor="amendment-session-select" style={{ fontSize: '0.8rem', fontWeight: 400, color: '#0f172a' }}>
                           เลือกรอบ:
                         </label>
                         <select
@@ -3269,7 +3287,7 @@ export function OrganizerEventsManager({
                   </p>
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '0.75rem', marginBottom: '0.75rem' }}>
                     <div>
-                      <label htmlFor="amendment-start-time" style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: '#475569', marginBottom: '0.3rem' }}>
+                      <label htmlFor="amendment-start-time" style={{ display: 'block', fontSize: '0.8rem', fontWeight: 400, color: '#475569', marginBottom: '0.3rem' }}>
                         วันเวลาเริ่มการแสดงใหม่
                       </label>
                       <DateTimePicker24h
@@ -3280,7 +3298,7 @@ export function OrganizerEventsManager({
                       />
                     </div>
                     <div>
-                      <label htmlFor="amendment-end-time" style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: '#475569', marginBottom: '0.3rem' }}>
+                      <label htmlFor="amendment-end-time" style={{ display: 'block', fontSize: '0.8rem', fontWeight: 400, color: '#475569', marginBottom: '0.3rem' }}>
                         วันเวลาสิ้นสุดการแสดงใหม่ (24 ชม.)
                       </label>
                       <DateTimePicker24h
@@ -3294,7 +3312,7 @@ export function OrganizerEventsManager({
 
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '0.75rem' }}>
                     <div>
-                      <label htmlFor="amendment-door-open" style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: '#475569', marginBottom: '0.3rem' }}>
+                      <label htmlFor="amendment-door-open" style={{ display: 'block', fontSize: '0.8rem', fontWeight: 400, color: '#475569', marginBottom: '0.3rem' }}>
                         เวลาเปิดประตูเข้างาน (Door Open)
                       </label>
                       <DateTimePicker24h
@@ -3305,7 +3323,7 @@ export function OrganizerEventsManager({
                       />
                     </div>
                     <div>
-                      <label htmlFor="amendment-door-close" style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, color: '#475569', marginBottom: '0.3rem' }}>
+                      <label htmlFor="amendment-door-close" style={{ display: 'block', fontSize: '0.8rem', fontWeight: 400, color: '#475569', marginBottom: '0.3rem' }}>
                         เวลาปิดประตูเข้างาน (Door Close)
                       </label>
                       <DateTimePicker24h
@@ -3322,7 +3340,7 @@ export function OrganizerEventsManager({
                 <div className="modal-form-section-card" style={{ marginBottom: '1.25rem' }}>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
                     <div>
-                      <h4 className="modal-section-title" style={{ color: '#0f172a', fontWeight: 700, fontSize: '0.95rem', margin: 0 }}>
+                      <h4 className="modal-section-title" style={{ color: '#0f172a', fontWeight: 400, fontSize: '0.95rem', margin: 0 }}>
                         3. ประเภทบัตร โควตา และสิทธิ์พิเศษ (Ticket Tiers & Quota Governance):
                       </h4>
                       <p style={{ fontSize: '0.78rem', color: '#64748b', margin: '0.2rem 0 0' }}>
@@ -3369,7 +3387,7 @@ export function OrganizerEventsManager({
                                   );
                                 }}
                                 className="modal-textarea"
-                                style={{ padding: '0.4rem 0.6rem', fontSize: '0.88rem', fontWeight: 600, flex: 1 }}
+                                style={{ padding: '0.4rem 0.6rem', fontSize: '0.88rem', fontWeight: 400, flex: 1 }}
                                 placeholder="ชื่อประเภทบัตร"
                                 required
                               />
@@ -3587,7 +3605,7 @@ export function OrganizerEventsManager({
               <form onSubmit={handleSubmitCancellation}>
                 {cancelEventDetails.sessions.length > 1 && (
                   <div style={{ marginBottom: '1.25rem' }}>
-                    <label htmlFor="cancel-session-select" style={{ display: 'block', fontSize: '0.88rem', fontWeight: 600, color: '#0f172a', marginBottom: '0.4rem' }}>
+                    <label htmlFor="cancel-session-select" style={{ display: 'block', fontSize: '0.88rem', fontWeight: 400, color: '#0f172a', marginBottom: '0.4rem' }}>
                       เลือกรอบการแสดงที่ต้องการยกเลิก
                     </label>
                     <select
@@ -3608,7 +3626,7 @@ export function OrganizerEventsManager({
                 )}
 
                 <div style={{ marginBottom: '1.25rem' }}>
-                  <label htmlFor="cancellation-reason" style={{ display: 'block', fontSize: '0.88rem', fontWeight: 600, color: '#0f172a', marginBottom: '0.4rem' }}>
+                  <label htmlFor="cancellation-reason" style={{ display: 'block', fontSize: '0.88rem', fontWeight: 400, color: '#0f172a', marginBottom: '0.4rem' }}>
                     เหตุผลในการขอยกเลิกรอบการแสดง *
                   </label>
                   <textarea

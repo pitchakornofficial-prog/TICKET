@@ -389,10 +389,12 @@ export async function submitRefundRequest(
       sessionStartTime: Date;
       specialRefundWindowStart?: Date | null;
       specialRefundWindowEnd?: Date | null;
+      orderSource?: string | null;
     }>(
       `SELECT o.id, o.status, o."buyerEmail", o."buyerPhone", o."buyerName",
               o."sessionId", es."startTime" AS "sessionStartTime",
-              es."specialRefundWindowStart", es."specialRefundWindowEnd"
+              es."specialRefundWindowStart", es."specialRefundWindowEnd",
+              o."orderSource"
        FROM orders o
        JOIN event_sessions es ON es.id = o."sessionId"
        WHERE o.id = $1
@@ -406,6 +408,11 @@ export async function submitRefundRequest(
     }
 
     const order = orderRes.rows[0];
+
+    if (order.orderSource === 'direct_issue') {
+      await client.query('ROLLBACK');
+      return { success: false, error: 'บัตรที่ออกตรงนอกระบบไม่สามารถยื่นขอคืนเงินผ่านระบบได้', code: 'INVALID_STATUS' };
+    }
 
     // AC-22: Cross-buyer tampering check
     const sessionEmail = session.email.trim().toLowerCase();
@@ -1027,10 +1034,12 @@ export async function processSessionCancellationRefunds(
     buyerPhone: string;
     buyerName: string;
     orderStatus: string;
+    orderSource: string;
   }>(
     `SELECT t.id, t."orderId", t."ticketCode", t.status, t."admissionStatus",
             COALESCE(t.price, oi."unitPrice") AS "ticketPrice",
-            o."buyerEmail", o."buyerPhone", o."buyerName", o.status AS "orderStatus"
+            o."buyerEmail", o."buyerPhone", o."buyerName", o.status AS "orderStatus",
+            COALESCE(o."orderSource", 'web') AS "orderSource"
      FROM tickets t
      JOIN ticket_types tt ON tt.id = t."ticketTypeId"
      JOIN order_items oi ON oi.id = t."orderItemId"
@@ -1090,6 +1099,17 @@ export async function processSessionCancellationRefunds(
     const isAdmitted = admittedSet.has(ticket.id) || ticket.admissionStatus === 'inside';
     if (isAdmitted) {
       // Admitted ticket: cannot be refunded (G-22)
+      continue;
+    }
+
+    if (ticket.orderSource === 'direct_issue') {
+      if (ticket.status === 'valid') {
+        await client.query(
+          `UPDATE tickets SET status = 'cancelled', "updatedAt" = $2 WHERE id = $1`,
+          [ticket.id, currentTime],
+        );
+        revokedTicketCount++;
+      }
       continue;
     }
 

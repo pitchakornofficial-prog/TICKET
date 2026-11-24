@@ -5,6 +5,7 @@ import type { EventMoneyReportDetail } from '@/server/reports';
 import { formatDate, formatTime } from '@/lib/locale';
 import { RefreshIcon } from './icons';
 import { AlertIcon } from './alert-icon';
+import { triggerRefreshToast } from './toast-notification';
 
 export interface EventOption {
   id: string;
@@ -196,7 +197,7 @@ export function OwnerWeeklyPayoutManager() {
     >
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '12px' }}>
         <div>
-          <h2 style={{ fontSize: '20px', fontWeight: 'bold', color: '#0f172a', margin: '0 0 4px 0' }}>
+          <h2 style={{ fontSize: '20px', fontWeight: 400, color: '#0f172a', margin: '0 0 4px 0' }}>
             รอบจ่ายเงินรายสัปดาห์ให้ผู้จัดงาน (Weekly Manual Payout)
           </h2>
           <p style={{ fontSize: '13px', color: '#64748b', margin: 0 }}>
@@ -205,7 +206,7 @@ export function OwnerWeeklyPayoutManager() {
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <label htmlFor="payout-event-select" style={{ fontSize: '13px', fontWeight: 600, color: '#334155' }}>
+          <label htmlFor="payout-event-select" style={{ fontSize: '13px', fontWeight: 400, color: '#334155' }}>
             เลือกคอนเสิร์ต:
           </label>
           <select
@@ -234,7 +235,10 @@ export function OwnerWeeklyPayoutManager() {
 
           <button
             type="button"
-            onClick={() => fetchReport(false)}
+            onClick={async () => {
+              await fetchReport(false);
+              triggerRefreshToast('รายงานรอบจ่ายเงิน');
+            }}
             disabled={loading}
             style={{
               display: 'inline-flex',
@@ -242,7 +246,7 @@ export function OwnerWeeklyPayoutManager() {
               gap: '6px',
               padding: '6px 12px',
               fontSize: '13px',
-              fontWeight: 600,
+              fontWeight: 400,
               borderRadius: '6px',
               border: '1px solid #cbd5e1',
               backgroundColor: '#f8fafc',
@@ -296,14 +300,14 @@ export function OwnerWeeklyPayoutManager() {
           >
             <div style={{ padding: '14px', backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '6px' }}>
               <div style={{ fontSize: '11px', color: '#64748b', marginBottom: '2px' }}>สิทธิ์สุทธิผู้จัดงาน (E)</div>
-              <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#0f172a' }}>
+              <div style={{ fontSize: '18px', fontWeight: 400, color: '#0f172a' }}>
                 ฿{report.netEntitlement.toLocaleString('th-TH', { minimumFractionDigits: 2 })}
               </div>
             </div>
 
             <div style={{ padding: '14px', backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '6px' }}>
               <div style={{ fontSize: '11px', color: '#64748b', marginBottom: '2px' }}>เงินสำรองที่กันไว้จริง (Held H)</div>
-              <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#475569' }}>
+              <div style={{ fontSize: '18px', fontWeight: 400, color: '#475569' }}>
                 ฿{report.actualHeldReserve.toLocaleString('th-TH', { minimumFractionDigits: 2 })}
               </div>
               <div style={{ fontSize: '10px', color: '#64748b' }}>เป้าหมายสำรอง: ฿{report.reserveTarget.toLocaleString('th-TH', { minimumFractionDigits: 2 })}</div>
@@ -311,7 +315,7 @@ export function OwnerWeeklyPayoutManager() {
 
             <div style={{ padding: '14px', backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '6px' }}>
               <div style={{ fontSize: '11px', color: '#64748b', marginBottom: '2px' }}>ยอดที่โอนจ่ายแล้ว (Paid P)</div>
-              <div data-testid="owner-total-paid-out" style={{ fontSize: '18px', fontWeight: 'bold', color: '#0284c7' }}>
+              <div data-testid="owner-total-paid-out" style={{ fontSize: '18px', fontWeight: 400, color: '#0284c7' }}>
                 ฿{report.totalPaidOut.toLocaleString('th-TH', { minimumFractionDigits: 2 })}
               </div>
             </div>
@@ -324,12 +328,12 @@ export function OwnerWeeklyPayoutManager() {
                 borderRadius: '6px',
               }}
             >
-              <div style={{ fontSize: '11px', color: report.isDebt ? '#991b1b' : '#166534', fontWeight: 600, marginBottom: '2px' }}>
+              <div style={{ fontSize: '11px', color: report.isDebt ? '#991b1b' : '#166534', fontWeight: 400, marginBottom: '2px' }}>
                 {report.isDebt ? 'ยอดหนี้ค้างชำระ (Debt)' : 'ยอดพร้อมจ่าย (Payable A_pay)'}
               </div>
               <div
                 data-testid="owner-payable-amount"
-                style={{ fontSize: '20px', fontWeight: 'bold', color: report.isDebt ? '#dc2626' : '#15803d' }}
+                style={{ fontSize: '20px', fontWeight: 400, color: report.isDebt ? '#dc2626' : '#15803d' }}
               >
                 {report.isDebt
                   ? `-฿${report.debtAmount.toLocaleString('th-TH', { minimumFractionDigits: 2 })}`
@@ -349,7 +353,7 @@ export function OwnerWeeklyPayoutManager() {
             }}
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
-              <h3 style={{ fontSize: '15px', fontWeight: 'bold', color: '#0f172a', margin: 0 }}>
+              <h3 style={{ fontSize: '15px', fontWeight: 400, color: '#0f172a', margin: 0 }}>
                 {isFailureMode ? 'บันทึกรายการโอนเงินไม่สำเร็จ (Record Payout Failure)' : 'บันทึกการโอนเงินตามรอบ (Record Weekly Payout)'}
               </h3>
               <button
@@ -362,7 +366,7 @@ export function OwnerWeeklyPayoutManager() {
                   border: 'none',
                   textDecoration: 'underline',
                   cursor: 'pointer',
-                  fontWeight: 500,
+                  fontWeight: 400,
                 }}
               >
                 {isFailureMode ? '← สลับเป็นบันทึกการโอนเงินสำเร็จ' : 'บันทึกกรณีโอนเงินล้มเหลว (Failure / Bounce)'}
@@ -371,7 +375,7 @@ export function OwnerWeeklyPayoutManager() {
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '14px' }}>
               <div>
-                <label htmlFor="payout-amount-input" style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#334155', marginBottom: '4px' }}>
+                <label htmlFor="payout-amount-input" style={{ display: 'block', fontSize: '12px', fontWeight: 400, color: '#334155', marginBottom: '4px' }}>
                   จำนวนเงินที่โอน (บาท) *
                 </label>
                 <input
@@ -390,13 +394,13 @@ export function OwnerWeeklyPayoutManager() {
                     borderRadius: '6px',
                     border: '1px solid #cbd5e1',
                     backgroundColor: '#ffffff',
-                    fontWeight: 'bold',
+                    fontWeight: 400,
                   }}
                 />
               </div>
 
               <div>
-                <label htmlFor="payout-date-input" style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#334155', marginBottom: '4px' }}>
+                <label htmlFor="payout-date-input" style={{ display: 'block', fontSize: '12px', fontWeight: 400, color: '#334155', marginBottom: '4px' }}>
                   วันที่โอนเงิน *
                 </label>
                 <input
@@ -418,7 +422,7 @@ export function OwnerWeeklyPayoutManager() {
               </div>
 
               <div>
-                <label htmlFor="payout-note-input" style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#334155', marginBottom: '4px' }}>
+                <label htmlFor="payout-note-input" style={{ display: 'block', fontSize: '12px', fontWeight: 400, color: '#334155', marginBottom: '4px' }}>
                   หมายเหตุการโอน
                 </label>
                 <input
@@ -442,7 +446,7 @@ export function OwnerWeeklyPayoutManager() {
 
               {!isFailureMode ? (
                 <div>
-                  <label htmlFor="payout-proof-file" style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#334155', marginBottom: '4px' }}>
+                  <label htmlFor="payout-proof-file" style={{ display: 'block', fontSize: '12px', fontWeight: 400, color: '#334155', marginBottom: '4px' }}>
                     ไฟล์สลิปหลักฐานการโอน (เฉพาะผู้ดูแลระบบ)
                   </label>
                   <input
@@ -464,7 +468,7 @@ export function OwnerWeeklyPayoutManager() {
                 </div>
               ) : (
                 <div>
-                  <label htmlFor="payout-failure-reason-input" style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#991b1b', marginBottom: '4px' }}>
+                  <label htmlFor="payout-failure-reason-input" style={{ display: 'block', fontSize: '12px', fontWeight: 400, color: '#991b1b', marginBottom: '4px' }}>
                     เหตุผลการโอนล้มเหลว *
                   </label>
                   <input
@@ -499,7 +503,7 @@ export function OwnerWeeklyPayoutManager() {
                   style={{
                     padding: '8px 20px',
                     fontSize: '14px',
-                    fontWeight: 600,
+                    fontWeight: 400,
                     borderRadius: '6px',
                     backgroundColor: report.payableAmount > 0 ? '#15803d' : '#94a3b8',
                     color: '#ffffff',
@@ -519,7 +523,7 @@ export function OwnerWeeklyPayoutManager() {
                   style={{
                     padding: '8px 20px',
                     fontSize: '14px',
-                    fontWeight: 600,
+                    fontWeight: 400,
                     borderRadius: '6px',
                     backgroundColor: '#0f172a',
                     color: '#ffffff',
@@ -535,7 +539,7 @@ export function OwnerWeeklyPayoutManager() {
 
           {/* Payout History Table */}
           <div>
-            <h3 style={{ fontSize: '15px', fontWeight: 'bold', color: '#0f172a', marginBottom: '12px' }}>
+            <h3 style={{ fontSize: '15px', fontWeight: 400, color: '#0f172a', marginBottom: '12px' }}>
               ประวัติการโอนเงินสำหรับคอนเสิร์ตนี้ (Payout History)
             </h3>
 
@@ -573,11 +577,11 @@ export function OwnerWeeklyPayoutManager() {
                         data-testid={`owner-payout-row-${p.id}`}
                         style={{ borderBottom: idx < report.payouts.length - 1 ? '1px solid #f1f5f9' : 'none' }}
                       >
-                        <td style={{ padding: '10px 12px', fontFamily: 'monospace', fontWeight: 600 }}>{p.id}</td>
+                        <td style={{ padding: '10px 12px', fontFamily: 'monospace', fontWeight: 400 }}>{p.id}</td>
                         <td style={{ padding: '10px 12px', whiteSpace: 'nowrap' }}>
                           {formatDate(new Date(p.paidAt))} {formatTime(new Date(p.paidAt))}
                         </td>
-                        <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 'bold', color: p.status === 'completed' ? '#0284c7' : '#991b1b' }}>
+                        <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 400, color: p.status === 'completed' ? '#0284c7' : '#991b1b' }}>
                           ฿{p.amount.toLocaleString('th-TH', { minimumFractionDigits: 2 })}
                         </td>
                         <td style={{ padding: '10px 12px', textAlign: 'center' }}>
@@ -586,7 +590,7 @@ export function OwnerWeeklyPayoutManager() {
                               padding: '2px 8px',
                               borderRadius: '4px',
                               fontSize: '11px',
-                              fontWeight: 600,
+                              fontWeight: 400,
                               backgroundColor: p.status === 'completed' ? '#e0f2fe' : '#fee2e2',
                               color: p.status === 'completed' ? '#0369a1' : '#991b1b',
                             }}
@@ -610,7 +614,7 @@ export function OwnerWeeklyPayoutManager() {
                               style={{
                                 color: '#2563eb',
                                 textDecoration: 'underline',
-                                fontWeight: 500,
+                                fontWeight: 400,
                               }}
                             >
                               ดูหลักฐาน

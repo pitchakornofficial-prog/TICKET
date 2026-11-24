@@ -16,7 +16,7 @@ import {
   SearchIcon,
   XIcon,
 } from './icons';
-import { triggerToast } from './toast-notification';
+import { triggerToast, triggerRefreshToast } from './toast-notification';
 
 type MailboxStatusTab = 'all' | InboundEmailStatus;
 
@@ -342,7 +342,10 @@ export function OwnerInboundMailbox() {
           <button
             type="button"
             className="hub-refresh-btn"
-            onClick={() => void fetchEmails()}
+            onClick={async () => {
+              await fetchEmails();
+              triggerRefreshToast('กล่องจดหมาย');
+            }}
             disabled={isLoading}
             aria-label="รีเฟรชกล่องจดหมาย"
             title="รีเฟรชกล่องจดหมาย"
@@ -577,7 +580,7 @@ export function OwnerInboundMailbox() {
               {/* Attachments metadata */}
               {selectedEmail.attachmentsMeta.length > 0 && (
                 <div style={{ marginBottom: '1rem' }}>
-                  <h4 style={{ fontSize: '0.9rem', fontWeight: 600, marginBottom: '0.5rem' }}>
+                  <h4 style={{ fontSize: '0.9rem', fontWeight: 400, marginBottom: '0.5rem' }}>
                     ไฟล์แนบ ({selectedEmail.attachmentsMeta.length} รายการ)
                   </h4>
                   <ul style={{ margin: 0, paddingLeft: '1.25rem', fontSize: '0.85rem', color: '#475569' }}>
@@ -596,7 +599,7 @@ export function OwnerInboundMailbox() {
               ) : (
                 replies.length > 0 && (
                   <div style={{ marginBottom: '1.25rem' }}>
-                    <h4 style={{ fontSize: '0.95rem', fontWeight: 600, marginBottom: '0.5rem' }}>
+                    <h4 style={{ fontSize: '0.95rem', fontWeight: 400, marginBottom: '0.5rem' }}>
                       ประวัติการตอบกลับ ({replies.length})
                     </h4>
                     <div className="contact-audit-log-container">
@@ -608,7 +611,7 @@ export function OwnerInboundMailbox() {
                             </span>
                             <span>{displayDateTime(rep.sentAt)}</span>
                           </div>
-                          <div style={{ fontWeight: 600, fontSize: '0.875rem', marginBottom: '0.25rem' }}>
+                          <div style={{ fontWeight: 400, fontSize: '0.875rem', marginBottom: '0.25rem' }}>
                             {rep.subject}
                           </div>
                           <p style={{ margin: 0, whiteSpace: 'pre-wrap', fontSize: '0.875rem', color: '#1e293b' }}>
@@ -623,7 +626,7 @@ export function OwnerInboundMailbox() {
 
               {/* Reply Form */}
               <form onSubmit={(e) => void handleSendReply(e)} data-testid="inbound-email-reply-form">
-                <h4 style={{ fontSize: '0.95rem', fontWeight: 600, marginBottom: '0.65rem' }}>
+                <h4 style={{ fontSize: '0.95rem', fontWeight: 400, marginBottom: '0.65rem' }}>
                   ตอบกลับอีเมลผ่าน Amazon SES
                 </h4>
                 <div className="form-group" style={{ marginBottom: '0.75rem' }}>

@@ -84,7 +84,7 @@ export function QuotaLimitAlertModal({
               id="quota-modal-title"
               style={{
                 fontSize: '1.25rem',
-                fontWeight: 700,
+                fontWeight: 400,
                 color: '#0f172a',
                 margin: '0 0 0.25rem',
                 lineHeight: 1.3,
@@ -192,7 +192,7 @@ export function QuotaLimitAlertModal({
               color: '#ffffff',
               border: 'none',
               borderRadius: '10px',
-              fontWeight: 600,
+              fontWeight: 400,
               fontSize: '0.95rem',
               cursor: 'pointer',
               transition: 'background 0.15s ease',
@@ -211,7 +211,7 @@ export function QuotaLimitAlertModal({
               color: '#64748b',
               border: '1px solid #cbd5e1',
               borderRadius: '10px',
-              fontWeight: 500,
+              fontWeight: 400,
               fontSize: '0.9rem',
               cursor: 'pointer',
             }}

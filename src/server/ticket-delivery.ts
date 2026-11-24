@@ -1,5 +1,12 @@
 import { randomUUID } from 'node:crypto';
 import type { Pool } from 'pg';
+import {
+  DEFAULT_EMAIL_MASTER_TEMPLATE,
+  type EmailTemplateState,
+  interpolateEmailVariables,
+  normalizeEmailSectionOrder,
+  readEmailMasterTemplate,
+} from './email-master-template.ts';
 import { emailTransport, type EmailTransport } from './email.ts';
 import { createOrderTicketAccessToken } from './order-access-token.ts';
 import { ensureTicketSchema, getOrderTickets, type TicketDetail } from './tickets.ts';
@@ -80,7 +87,7 @@ const thLocaleDateTimeFormatter = new Intl.DateTimeFormat('th-TH', {
   second: '2-digit',
 });
 
-function escapeHtml(value: string): string {
+export function escapeHtml(value: string): string {
   return value
     .replaceAll('&', '&amp;')
     .replaceAll('<', '&lt;')
@@ -89,7 +96,7 @@ function escapeHtml(value: string): string {
     .replaceAll("'", '&#39;');
 }
 
-function sanitizeEmailUrl(raw: string | null | undefined, options?: { allowDataImage?: boolean }): string {
+export function sanitizeEmailUrl(raw: string | null | undefined, options?: { allowDataImage?: boolean }): string {
   const trimmed = (raw ?? '').trim();
   if (!trimmed) return '';
 
@@ -127,9 +134,41 @@ export function buildTicketEmailContent(
   sessionStartTime: string,
   tickets: TicketDetail[],
   orderUrl: string,
+  template?: EmailTemplateState,
 ): { subject: string; html: string; text: string } {
-  const subject = `[TICKET] บัตรคอนเสิร์ตและ QR Code สำหรับเข้างาน - คำสั่งซื้อ ${orderId}`;
+  const activeTemplate = template || DEFAULT_EMAIL_MASTER_TEMPLATE;
   const formattedSessionStart = thLocaleDateTimeFormatter.format(new Date(sessionStartTime));
+
+  let baseUrl = '';
+  try {
+    const safeOrderOrigin = sanitizeEmailUrl(orderUrl);
+    if (safeOrderOrigin && (safeOrderOrigin.startsWith('https://') || safeOrderOrigin.startsWith('http://'))) {
+      baseUrl = new URL(safeOrderOrigin).origin;
+    }
+  } catch {
+    baseUrl = '';
+  }
+
+  const firstTicket = tickets[0];
+  const vars = {
+    concert_name: eventTitle,
+    buyer_name: buyerName,
+    buyer_email: firstTicket?.buyerEmail || '',
+    order_id: orderId,
+    total_tickets: tickets.length,
+    session_date: formattedSessionStart.split(' ')[0] || '',
+    session_time: formattedSessionStart.split(' ')[1] || '',
+    location,
+    ticket_code: tickets.map(t => t.ticketCode).join(', '),
+    ticket_type: tickets.map(t => t.ticketTypeName).join(', '),
+    ticket_price: tickets.map(t => formatBaht(t.ticketPrice)).join(', '),
+  };
+
+  const rawSubject = activeTemplate.subject
+    ? interpolateEmailVariables(activeTemplate.subject, vars)
+    : `[TICKET] บัตรคอนเสิร์ตและ QR Code สำหรับเข้างาน - คำสั่งซื้อ ${orderId}`;
+  const subject = rawSubject.includes(orderId) ? rawSubject : `[TICKET] ${rawSubject} - คำสั่งซื้อ ${orderId}`;
+
   const safeOrderId = escapeHtml(orderId);
   const safeBuyerName = escapeHtml(buyerName);
   const safeEventTitle = escapeHtml(eventTitle);
@@ -138,80 +177,222 @@ export function buildTicketEmailContent(
   const safeSubject = escapeHtml(subject);
   const safeOrderUrl = escapeHtml(sanitizeEmailUrl(orderUrl) || '#');
 
-  const ticketsHtml = tickets
-    .map((t, idx) => {
-      const safeTicketTypeName = escapeHtml(t.ticketTypeName);
-      const safeTicketCode = escapeHtml(t.ticketCode);
-      const safeQrUrl = escapeHtml(sanitizeEmailUrl(t.qrCodeUrl, { allowDataImage: true }));
-      const qrBlock = safeQrUrl
-        ? `<div style="text-align: center; margin: 12px 0;">
-          <img src="${safeQrUrl}" alt="Ticket QR ${safeTicketCode}" width="160" height="160" style="display: inline-block; border-radius: 4px; border: 1px solid #cbd5e1;" />
-        </div>`
-        : '';
+  const greetingHtml = activeTemplate.greetingText
+    ? escapeHtml(interpolateEmailVariables(activeTemplate.greetingText, vars))
+    : `เรียนคุณ <strong>${safeBuyerName}</strong>,`;
 
-      return `
-      <div style="border: 1px solid #e2e8f0; border-radius: 6px; padding: 16px; margin-bottom: 16px; background-color: #ffffff;">
-        <div style="font-size: 13px; color: #64748b; margin-bottom: 4px;">ใบที่ ${idx + 1} จาก ${tickets.length}</div>
-        <div style="font-size: 16px; font-weight: bold; color: #1848ed; margin-bottom: 4px;">${safeTicketTypeName}</div>
-        <div style="font-size: 14px; margin-bottom: 12px;">ราคา: ${escapeHtml(formatBaht(t.ticketPrice))}</div>
-        ${qrBlock}
-        <div style="font-family: monospace; font-size: 14px; font-weight: bold; text-align: center; color: #0f172a;">
-          รหัสบัตร: ${safeTicketCode}
+  const bodyHtml = activeTemplate.bodyText
+    ? escapeHtml(interpolateEmailVariables(activeTemplate.bodyText, vars)).replace(/\n/g, '<br/>')
+    : `การชำระเงินสำหรับคำสั่งซื้อ <strong>${safeOrderId}</strong> เสร็จสมบูรณ์แล้ว ระบบได้ออกบัตรคอนเสิร์ตจำนวน <strong>${tickets.length} ใบ</strong> ให้ท่านเรียบร้อยแล้ว`;
+
+  const footerNotesHtml = activeTemplate.footerNotes
+    ? escapeHtml(interpolateEmailVariables(activeTemplate.footerNotes, vars)).replace(/\n/g, '<br/>')
+    : '* บัตรทุกใบในคำสั่งซื้อนี้ใช้ข้อมูลผู้ซื้อเดียวกัน กรุณาแสดง QR Code ต่อทีมสแกน ณ ประตูทางเข้าในวันจัดงาน<br/>อีเมลนี้ส่งจากระบบอัตโนมัติ กรุณาอย่าตอบกลับ';
+
+  const qrSize = activeTemplate.qrSize || 160;
+  const isLargeBatch = tickets.length > 20;
+
+  const ticketsHtml = isLargeBatch
+    ? ''
+    : tickets
+        .map((t, idx) => {
+          const safeTicketTypeName = escapeHtml(t.ticketTypeName);
+          const safeTicketCode = escapeHtml(t.ticketCode);
+          const qrImgUrl = baseUrl
+            ? `${escapeHtml(baseUrl)}/api/public/tickets/${encodeURIComponent(t.id)}/qr`
+            : escapeHtml(sanitizeEmailUrl(t.qrCodeUrl, { allowDataImage: true }));
+          const cardImgUrl = baseUrl ? `${escapeHtml(baseUrl)}/api/public/tickets/${encodeURIComponent(t.id)}/image` : '';
+
+          const qrBlock = activeTemplate.showQrCode && qrImgUrl
+            ? `<div style="text-align: center; margin: 16px 0 10px;">
+                <img src="${qrImgUrl}" alt="Ticket QR ${safeTicketCode}" width="${qrSize}" height="${qrSize}" style="display: inline-block; border-radius: 8px; background-color: #ffffff; padding: 0; border: none;" />
+                <div style="font-size: 11px; color: #64748b; margin-top: 6px;">${escapeHtml(activeTemplate.qrHelperText || '* แสดง QR Code ต่อเจ้าหน้าที่เพื่อสแกนเข้างาน')}</div>
+              </div>`
+            : '';
+
+          const downloadCardLink = cardImgUrl
+            ? `<div style="text-align: center; margin-top: 10px;">
+                <a href="${cardImgUrl}" target="_blank" rel="noreferrer" style="font-size: 12px; color: #0f172a; text-decoration: underline;">
+                  ดาวน์โหลดรูปบัตรคอนเสิร์ต (PNG)
+                </a>
+              </div>`
+            : '';
+
+          const isDarkTheme = activeTemplate.ticketCardTheme === 'dark';
+          const isBrandTheme = activeTemplate.ticketCardTheme === 'brand';
+          const cardBg = isDarkTheme ? '#0f172a' : isBrandTheme ? '#1e3a8a' : '#ffffff';
+          const cardBorder = isDarkTheme ? '#1e293b' : isBrandTheme ? '#1d4ed8' : '#e2e8f0';
+          const textPrimary = isDarkTheme || isBrandTheme ? '#ffffff' : '#0f172a';
+          const textSecondary = isDarkTheme || isBrandTheme ? '#94a3b8' : '#64748b';
+          const dividerColor = isDarkTheme || isBrandTheme ? '#334155' : '#e2e8f0';
+
+          return `
+          <div style="border: 1px solid ${cardBorder}; border-radius: 8px; margin-bottom: 16px; background-color: ${cardBg}; color: ${textPrimary}; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+            <!-- Card Top Header -->
+            <div style="padding: 12px 18px; border-bottom: 1px solid ${dividerColor}; display: flex; justify-content: space-between; align-items: center; background: rgba(0,0,0,0.06);">
+              <div style="font-size: 12px; font-weight: 500; color: ${textSecondary}; text-transform: uppercase; letter-spacing: 0.5px;">
+                บัตรใบที่ ${idx + 1} จาก ${tickets.length}
+              </div>
+              <div style="font-size: 13px; font-weight: 600; color: #0f172a;">
+                ${safeTicketTypeName}
+              </div>
+            </div>
+
+            <!-- Card Body -->
+            <div style="padding: 18px;">
+              <div style="font-size: 16px; font-weight: 600; color: ${textPrimary}; margin-bottom: 8px;">
+                ${safeEventTitle}
+              </div>
+
+              <div style="font-size: 13px; color: ${textSecondary}; line-height: 1.6; margin-bottom: 14px;">
+                <div>รอบการแสดง: <strong style="color: ${textPrimary};">${safeFormattedSessionStart}</strong></div>
+                <div>สถานที่: <strong style="color: ${textPrimary};">${safeLocation}</strong></div>
+                <div>ราคา: <strong style="color: ${textPrimary};">${escapeHtml(formatBaht(t.ticketPrice))}</strong></div>
+              </div>
+
+              <!-- Perforated Tear-off divider -->
+              <div style="border-top: 1px dashed ${dividerColor}; margin: 14px 0;"></div>
+
+              <!-- QR & Code Section -->
+              ${qrBlock}
+
+              <div style="font-family: monospace; font-size: 15px; font-weight: 600; text-align: center; color: ${textPrimary}; letter-spacing: 1px; margin-top: 6px;">
+                รหัสบัตร: ${safeTicketCode}
+              </div>
+
+              ${downloadCardLink}
+            </div>
+          </div>
+        `;
+        })
+        .join('');
+
+  const quotaAlertHtml = isLargeBatch
+    ? `
+      <div style="background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px; margin: 0 0 16px 0; font-size: 13px; color: #475569; line-height: 1.6;">
+        <div style="font-weight: 600; color: #0f172a; margin-bottom: 4px;">
+          คำสั่งซื้อนี้มีบัตรทั้งหมด ${tickets.length} ใบ (เกินโควตาการแสดงผลรูปบัตรในอีเมล 20 ใบ)
+        </div>
+        <div>
+          เพื่อความรวดเร็วและป้องกันอีเมลเกินขนาด ระบบได้สรุปรหัสบัตรทุกใบในตารางด้านล่างนี้ โดยท่านสามารถเปิดดูและดาวน์โหลดรูปบัตรความละเอียดสูงทั้งหมดได้ผ่านเว็บไซต์
         </div>
       </div>
-    `;
-    })
-    .join('');
+      <table style="width: 100%; border-collapse: collapse; font-size: 13px; margin: 0 0 20px 0; background-color: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; overflow: hidden;">
+        <thead>
+          <tr style="background-color: #f8fafc; border-bottom: 1px solid #e2e8f0; text-align: left; color: #475569;">
+            <th style="padding: 8px 12px; font-weight: 500;">ลำดับ</th>
+            <th style="padding: 8px 12px; font-weight: 500;">ประเภทบัตร</th>
+            <th style="padding: 8px 12px; font-weight: 500;">รหัสบัตร</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${tickets.map((t, idx) => `
+            <tr style="border-bottom: 1px solid #f1f5f9;">
+              <td style="padding: 8px 12px; color: #64748b;">${idx + 1}</td>
+              <td style="padding: 8px 12px; font-weight: 500; color: #0f172a;">${escapeHtml(t.ticketTypeName)}</td>
+              <td style="padding: 8px 12px; font-family: monospace; color: #0f172a;">${escapeHtml(t.ticketCode)}</td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    `
+    : '';
+
+  const posterUrl = activeTemplate.posterUrl?.trim() || '';
+  const showPoster = activeTemplate.showConcertPoster !== false && Boolean(posterUrl);
+  const posterBlockHtml = showPoster
+    ? `<div style="margin: 0 0 20px 0; overflow: hidden;">
+        <img src="${escapeHtml(posterUrl)}" alt="${safeEventTitle}" style="width: 100%; height: 220px; object-fit: cover; object-position: center; display: block;" />
+      </div>`
+    : '';
+
+  const bodyBlockHtml = `
+    <div style="padding: 20px 24px 0;">
+      <p style="font-size: 15px; margin-top: 0; font-weight: 600;">${greetingHtml}</p>
+      <div style="font-size: 14px; color: #334155; line-height: 1.6; margin-bottom: 20px;">
+        ${bodyHtml}
+      </div>
+      <div style="background-color: #f8fafc; border-radius: 6px; border: 1px solid #e2e8f0; padding: 16px; margin: 20px 0;">
+        <div style="font-size: 15px; font-weight: 600; margin-bottom: 6px; color: #0f172a;">${safeEventTitle}</div>
+        <div style="font-size: 13px; color: #475569; margin-bottom: 4px;">สถานที่: <strong>${safeLocation}</strong></div>
+        <div style="font-size: 13px; color: #475569;">รอบการแสดง: <strong>${safeFormattedSessionStart}</strong></div>
+      </div>
+    </div>
+  `;
+
+  const passesBlockHtml = activeTemplate.showTicketCard
+    ? `
+      <div style="padding: 20px 24px 0;">
+        ${ticketsHtml}
+        ${quotaAlertHtml}
+      </div>
+    `
+    : '';
+
+  const sectionOrder = normalizeEmailSectionOrder(activeTemplate.sectionOrder);
+  const sectionHtmlMap: Record<'poster' | 'body' | 'pass', string> = {
+    poster: posterBlockHtml,
+    body: bodyBlockHtml,
+    pass: passesBlockHtml,
+  };
+  const orderedSectionsHtml = sectionOrder.map((key) => sectionHtmlMap[key]).join('');
+
+  const btnAlign = activeTemplate.primaryButtonAlign || 'center';
+  const btnTextAlign = btnAlign === 'left' ? 'left' : btnAlign === 'right' ? 'right' : 'center';
+  const btnColor = activeTemplate.primaryButtonColor || '#0f172a';
+  const btnTextColor = activeTemplate.primaryButtonTextColor || '#ffffff';
+  const secBgColor = activeTemplate.secondaryButtonBgColor || '#ffffff';
+  const secTextColor = activeTemplate.secondaryButtonTextColor || '#0f172a';
+  const secBorderColor = activeTemplate.secondaryButtonBorderColor || '#cbd5e1';
+
+  const secondaryBtnHtml = activeTemplate.showSecondaryButton
+    ? `<a href="${activeTemplate.secondaryButtonAction === 'download_all' ? safeOrderUrl : (activeTemplate.secondaryButtonCustomUrl || `${baseUrl}/my-tickets`)}" style="background-color: ${secBgColor}; border: 1px solid ${secBorderColor}; color: ${secTextColor}; padding: 10px 20px; text-decoration: none; border-radius: 6px; font-size: 14px; display: inline-block; margin-left: 8px;">
+        ${escapeHtml(activeTemplate.secondaryButtonText || 'ดูรายการบัตรของฉัน')}
+      </a>`
+    : '';
+
+  const primaryBtnLabel = isLargeBatch
+    ? `${activeTemplate.primaryButtonText || 'เปิดดูและดาวน์โหลดบัตรทั้งหมด'} (${tickets.length} ใบ)`
+    : (activeTemplate.primaryButtonText || 'เปิดดูบัตรผ่านเว็บไซต์');
 
   const html = `
     <!DOCTYPE html>
     <html lang="th">
     <head>
       <meta charset="utf-8">
+      <meta name="color-scheme" content="light" />
+      <meta name="supported-color-schemes" content="light" />
       <title>${safeSubject}</title>
     </head>
     <body style="font-family: sans-serif; background-color: #f8fafc; color: #0f172a; margin: 0; padding: 24px;">
-      <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 8px; border: 1px solid #e2e8f0; overflow: hidden;">
-        <div style="background-color: #1848ed; color: #ffffff; padding: 20px 24px;">
-          <h1 style="margin: 0; font-size: 20px; font-weight: bold;">TICKET - บัตรคอนเสิร์ตของคุณ</h1>
+      <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 8px; border: 1px solid #e2e8f0; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.04);">
+        <div style="background-color: #ffffff; color: #0f172a; padding: 20px 24px; border-bottom: 1px solid #e2e8f0;">
+          <h1 style="margin: 0; font-size: 18px; font-weight: 600;">${escapeHtml(activeTemplate.headerTitle || 'TICKET - บัตรคอนเสิร์ตของคุณ')}</h1>
         </div>
-        <div style="padding: 24px;">
-          <p style="font-size: 15px; margin-top: 0;">เรียนคุณ <strong>${safeBuyerName}</strong>,</p>
-          <p style="font-size: 14px; color: #334155; line-height: 1.5;">
-            การชำระเงินสำหรับคำสั่งซื้อ <strong>${safeOrderId}</strong> เสร็จสมบูรณ์แล้ว ระบบได้ออกบัตรคอนเสิร์ตจำนวน <strong>${tickets.length} ใบ</strong> ให้ท่านเรียบร้อยแล้ว
-          </p>
+        <div style="padding: 0 0 24px 0;">
+          ${orderedSectionsHtml}
 
-          <div style="background-color: #f1f5f9; border-radius: 6px; padding: 16px; margin: 20px 0;">
-            <div style="font-size: 15px; font-weight: bold; margin-bottom: 6px;">${safeEventTitle}</div>
-            <div style="font-size: 13px; color: #475569; margin-bottom: 4px;">สถานที่: ${safeLocation}</div>
-            <div style="font-size: 13px; color: #475569;">รอบการแสดง: ${safeFormattedSessionStart}</div>
+          <div style="padding: 0 24px;">
+            <div style="text-align: ${btnTextAlign}; margin: 28px 0 16px;">
+              <a href="${safeOrderUrl}" style="background-color: ${btnColor}; color: ${btnTextColor}; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: 500; font-size: 14px; display: inline-block;">
+                ${escapeHtml(primaryBtnLabel)}
+              </a>
+              ${secondaryBtnHtml}
+            </div>
+
+            <p style="font-size: 12px; color: #64748b; line-height: 1.6; margin-top: 24px; border-top: 1px solid #e2e8f0; padding-top: 16px;">
+              ${footerNotesHtml}
+            </p>
           </div>
-
-          <h3 style="font-size: 16px; margin: 24px 0 12px; color: #0f172a;">รายการบัตรสำหรับเข้างาน (QR Code แยกเฉพาะใบ)</h3>
-          ${ticketsHtml}
-
-          <div style="text-align: center; margin: 28px 0 16px;">
-            <a href="${safeOrderUrl}" style="background-color: #1848ed; color: #ffffff; padding: 12px 24px; text-decoration: none; border-radius: 4px; font-weight: bold; font-size: 14px; display: inline-block;">
-              เปิดดูบัตรผ่านเว็บไซต์
-            </a>
-          </div>
-
-          <p style="font-size: 12px; color: #64748b; line-height: 1.5; margin-top: 24px; border-top: 1px solid #e2e8f0; padding-top: 16px;">
-            * บัตรทุกใบในคำสั่งซื้อนี้ใช้ข้อมูลผู้ซื้อเดียวกัน กรุณาแสดง QR Code ต่อทีมสแกน ณ ประตูทางเข้าในวันจัดงาน<br>
-            อีเมลนี้ส่งจากระบบอัตโนมัติ กรุณาอย่าตอบกลับ
-          </p>
         </div>
       </div>
     </body>
     </html>
   `;
 
-  const ticketsText = tickets
-    .map(
-      (t, idx) =>
-        `ใบที่ ${idx + 1}: ${t.ticketTypeName} (รหัสบัตร: ${t.ticketCode}) - ราคา ${formatBaht(t.ticketPrice)}`,
-    )
-    .join('\n');
+  const ticketsText = isLargeBatch
+    ? `${tickets.slice(0, 20).map((t, idx) => `ใบที่ ${idx + 1}: ${t.ticketTypeName} (รหัสบัตร: ${t.ticketCode})`).join('\n')}\n... และบัตรอีก ${tickets.length - 20} ใบ (ดูและดาวน์โหลดบัตรทั้งหมดได้ที่ลิงก์ด้านล่าง)`
+    : tickets.map((t, idx) => `ใบที่ ${idx + 1}: ${t.ticketTypeName} (รหัสบัตร: ${t.ticketCode}) - ราคา ${formatBaht(t.ticketPrice)}`).join('\n');
 
   const text = `
 TICKET - บัตรคอนเสิร์ตของคุณ
@@ -311,6 +492,7 @@ export async function sendOrderTicketsEmail(
     options?.baseUrl,
   );
 
+  const emailTemplate = await readEmailMasterTemplate(pool);
   const { subject, html, text } = buildTicketEmailContent(
     orderId,
     order.buyerName,
@@ -319,6 +501,7 @@ export async function sendOrderTicketsEmail(
     order.sessionStartTime,
     tickets,
     orderUrl,
+    emailTemplate,
   );
 
   try {
@@ -417,6 +600,7 @@ export async function retryTicketEmailDelivery(
     { id: delivery.orderId, buyerEmail: delivery.recipientEmail, buyerPhone: delivery.buyerPhone },
     options?.baseUrl,
   );
+  const emailTemplate = await readEmailMasterTemplate(pool);
   const { subject, html, text } = buildTicketEmailContent(
     delivery.orderId,
     delivery.buyerName,
@@ -425,6 +609,7 @@ export async function retryTicketEmailDelivery(
     delivery.sessionStartTime,
     tickets,
     orderUrl,
+    emailTemplate,
   );
 
   const nextRetryCount = (delivery.retryCount || 0) + 1;
@@ -541,4 +726,203 @@ export async function getOrderEmailDelivery(
     createdAt: new Date(r.createdAt).toISOString(),
     updatedAt: new Date(r.updatedAt).toISOString(),
   };
+}
+
+export async function sendDirectIssuedTicketsEmail(
+  pool: Pool,
+  orderId: string,
+  options?: {
+    now?: Date;
+    transport?: EmailTransport;
+  },
+): Promise<{ success: boolean; messageId?: string; error?: string }> {
+  await ensureTicketDeliverySchema(pool);
+  const now = options?.now || new Date();
+  const transport = options?.transport || emailTransport;
+
+  const orderRes = await pool.query<{
+    id: string;
+    buyerName: string;
+    buyerEmail: string;
+    buyerPhone: string;
+    orderSource: string;
+    referenceNote: string | null;
+    priceDisplayMode: string | null;
+    eventTitle: string;
+    location: string;
+    sessionStartTime: Date;
+    sessionEndTime: Date;
+  }>(
+    `SELECT o.id, o."buyerName", o."buyerEmail", o."buyerPhone", o."orderSource",
+            o."referenceNote", o."priceDisplayMode",
+            e.title as "eventTitle", e.location,
+            es."startTime" as "sessionStartTime", es."endTime" as "sessionEndTime"
+     FROM orders o
+     JOIN events e ON o."eventId" = e.id
+     JOIN event_sessions es ON o."sessionId" = es.id
+     WHERE o.id = $1`,
+    [orderId],
+  );
+
+  if (orderRes.rowCount === 0) {
+    throw new Error('ไม่พบรายการออกบัตรที่ระบุ');
+  }
+  const order = orderRes.rows[0];
+  const tickets = await getOrderTickets(pool, orderId);
+  if (tickets.length === 0) {
+    throw new Error('ไม่พบบัตรในรายการนี้');
+  }
+
+  const deliveryId = `EML-${randomUUID().slice(0, 8).toUpperCase()}`;
+  const subject = `[TICKET] บัตรคอนเสิร์ต ${order.eventTitle} (รายการออกบัตรตรง #${order.id})`;
+
+  const rawBaseUrl =
+    process.env.BETTER_AUTH_URL ||
+    (process.env.NODE_ENV === 'production' ? '' : 'http://127.0.0.1:3000');
+  let baseUrl = '';
+  try {
+    if (rawBaseUrl) baseUrl = new URL(rawBaseUrl).origin;
+  } catch {
+    baseUrl = '';
+  }
+
+  const formattedDate = thLocaleDateTimeFormatter.format(new Date(order.sessionStartTime));
+  const isLargeBatch = tickets.length > 20;
+
+  let ticketsHtml = '';
+  let ticketsText = '';
+
+  if (!isLargeBatch) {
+    ticketsHtml = `
+      <div style="margin-top: 24px;">
+        <h3 style="font-size: 16px; font-weight: 400; color: #0f172a; margin-bottom: 16px;">
+          รายการบัตรเข้าชม (${tickets.length} ใบ)
+        </h3>
+        ${tickets.map((t, idx) => `
+          <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px; margin-bottom: 16px;">
+            <div style="font-size: 13px; color: #64748b; margin-bottom: 4px;">บัตรใบที่ ${idx + 1} จาก ${tickets.length}</div>
+            <div style="font-size: 16px; font-weight: 400; color: #0f172a; margin-bottom: 4px;">${escapeHtml(t.ticketTypeName)}</div>
+            <div style="font-family: monospace; font-size: 14px; font-weight: 400; color: #2563eb; margin-bottom: 12px;">รหัสบัตร: ${escapeHtml(t.ticketCode)}</div>
+            <div style="text-align: center; margin: 8px 0;">
+              <img src="${baseUrl ? `${escapeHtml(baseUrl)}/api/public/tickets/${encodeURIComponent(t.id)}/qr` : t.qrCodeUrl}" alt="Ticket QR" width="160" height="160" style="display: inline-block; border-radius: 8px; background-color: #ffffff; padding: 0; border: none;" />
+              <div style="font-family: monospace; font-size: 10px; color: #64748b; margin-top: 6px;">${escapeHtml(t.ticketCode)}</div>
+            </div>
+          </div>
+        `).join('')}
+      </div>
+    `;
+    ticketsText = tickets.map((t, idx) => `[ใบที่ ${idx + 1}] ประเภท: ${t.ticketTypeName} | รหัสบัตร: ${t.ticketCode}`).join('\n');
+  } else {
+    ticketsHtml = `
+      <div style="margin-top: 24px; background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 16px;">
+        <h3 style="font-size: 16px; font-weight: 400; color: #0f172a; margin-bottom: 8px;">
+          สรุปรายการบัตรที่ออกตรง (${tickets.length} ใบ)
+        </h3>
+        <p style="font-size: 14px; color: #475569; line-height: 1.5; margin-bottom: 16px;">
+          เนื่องจากรายการนี้มีจำนวนบัตรมากกว่า 20 ใบ เพื่อป้องกันอีเมลเกินขนาด ระบบได้จัดเตรียมไฟล์รหัสบัตรและรูปภาพการ์ดบัตรแบบครบชุด ท่านสามารถเข้าสู่ระบบหลังบ้านเพื่อดาวน์โหลดไฟล์ .zip ได้ทันที
+        </p>
+        <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+          <thead>
+            <tr style="border-bottom: 2px solid #cbd5e1; text-align: left;">
+              <th style="padding: 6px 8px;">ลำดับ</th>
+              <th style="padding: 6px 8px;">ประเภทบัตร</th>
+              <th style="padding: 6px 8px;">รหัสบัตร</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${tickets.map((t, idx) => `
+              <tr style="border-bottom: 1px solid #e2e8f0;">
+                <td style="padding: 6px 8px; color: #64748b;">${idx + 1}</td>
+                <td style="padding: 6px 8px; font-weight: 400; color: #0f172a;">${escapeHtml(t.ticketTypeName)}</td>
+                <td style="padding: 6px 8px; font-family: monospace; color: #2563eb;">${escapeHtml(t.ticketCode)}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+    `;
+    ticketsText = tickets.map((t, idx) => `${idx + 1}. ${t.ticketTypeName} - รหัส: ${t.ticketCode}`).join('\n');
+  }
+
+  const html = `
+    <!DOCTYPE html>
+    <html lang="th">
+    <head>
+      <meta charset="UTF-8">
+      <meta name="color-scheme" content="light" />
+      <meta name="supported-color-schemes" content="light" />
+      <title>${escapeHtml(subject)}</title>
+    </head>
+    <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f1f5f9; margin: 0; padding: 24px; color: #1e293b;">
+      <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 12px; border: 1px solid #e2e8f0; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);">
+        <div style="background-color: #0f172a; padding: 20px 24px; color: #ffffff;">
+          <h1 style="font-size: 20px; font-weight: 400; margin: 0;">TICKET</h1>
+          <div style="font-size: 13px; color: #94a3b8; margin-top: 4px;">ระบบจำหน่ายบัตรคอนเสิร์ต</div>
+        </div>
+        <div style="padding: 24px;">
+          <div style="display: inline-block; background-color: #e0f2fe; color: #0369a1; font-size: 12px; font-weight: 400; padding: 4px 10px; border-radius: 9999px; margin-bottom: 12px;">
+            รายการออกบัตรตรง (Direct Issuance)
+          </div>
+          <h2 style="font-size: 18px; font-weight: 400; color: #0f172a; margin: 0 0 16px 0;">
+            ${escapeHtml(order.eventTitle)}
+          </h2>
+          <div style="background-color: #f8fafc; border-left: 4px solid #2563eb; padding: 12px 16px; margin-bottom: 20px; font-size: 14px; line-height: 1.6;">
+            <div><strong>หมายเลขรายการ:</strong> ${escapeHtml(order.id)}</div>
+            <div><strong>ผู้รับมอบบัตร:</strong> ${escapeHtml(order.buyerName)}</div>
+            <div><strong>รอบการแสดง:</strong> ${escapeHtml(formattedDate)}</div>
+            <div><strong>สถานที่จัดงาน:</strong> ${escapeHtml(order.location)}</div>
+            ${order.referenceNote ? `<div><strong>หมายเหตุอ้างอิง:</strong> ${escapeHtml(order.referenceNote)}</div>` : ''}
+          </div>
+          ${ticketsHtml}
+        </div>
+        <div style="background-color: #f8fafc; border-top: 1px solid #e2e8f0; padding: 16px 24px; text-align: center; font-size: 12px; color: #64748b;">
+          อีเมลนี้ถูกส่งโดยระบบอัตโนมัติของ TICKET เพื่อยืนยันการจัดสรรบัตรตรง
+        </div>
+      </div>
+    </body>
+    </html>
+  `;
+
+  const text = `
+TICKET - รายการออกบัตรตรง
+คอนเสิร์ต: ${order.eventTitle}
+หมายเลขรายการ: ${order.id}
+ผู้รับมอบ: ${order.buyerName}
+รอบการแสดง: ${formattedDate}
+สถานที่: ${order.location}
+${order.referenceNote ? `หมายเหตุ: ${order.referenceNote}\n` : ''}
+จำนวนบัตร: ${tickets.length} ใบ
+
+${ticketsText}
+  `.trim();
+
+  try {
+    const sendResult = await transport.send({
+      from: 'TICKET <tickets@ticket.invalid>',
+      to: order.buyerEmail,
+      subject,
+      html,
+      text,
+    });
+
+    await pool.query(
+      `INSERT INTO ticket_email_deliveries (
+         id, "orderId", "recipientEmail", status, "messageId", "sentAt", "createdAt", "updatedAt"
+       )
+       VALUES ($1, $2, $3, 'sent', $4, $5, $5, $5)`,
+      [deliveryId, orderId, order.buyerEmail, sendResult.id, now],
+    );
+
+    return { success: true, messageId: sendResult.id };
+  } catch (err: unknown) {
+    const errorMsg = err instanceof Error ? err.message : 'เกิดข้อผิดพลาดในการจัดส่งอีเมล';
+    await pool.query(
+      `INSERT INTO ticket_email_deliveries (
+         id, "orderId", "recipientEmail", status, error, "createdAt", "updatedAt"
+       )
+       VALUES ($1, $2, $3, 'failed', $4, $5, $5)`,
+      [deliveryId, orderId, order.buyerEmail, errorMsg, now],
+    );
+    return { success: false, error: errorMsg };
+  }
 }

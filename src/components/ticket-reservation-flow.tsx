@@ -126,6 +126,16 @@ export function TicketReservationFlow({
   const isPaid = reservation?.status === 'paid';
   const isPaymentException = reservation?.status === 'payment_exception';
 
+  const paymentToken =
+    buyer?.token ||
+    (typeof window !== 'undefined' ? sessionStorage.getItem('ticket_guest_otp_token') || '' : '');
+  const rawQrUrl = charge?.qrCodeUrl || '';
+  const isRemoteQrUrl = rawQrUrl.startsWith('http://') || rawQrUrl.startsWith('https://');
+  const displayQrSrc =
+    charge && reservation && isRemoteQrUrl && paymentToken
+      ? `/api/public/checkout/orders/${reservation.id}/payment-qr/download?token=${encodeURIComponent(paymentToken)}&inline=1`
+      : rawQrUrl;
+
   async function handleGeneratePaymentQr() {
     if (!reservation) return;
     const token = buyer?.token || (typeof window !== 'undefined' ? sessionStorage.getItem('ticket_guest_otp_token') : '');
@@ -350,7 +360,7 @@ export function TicketReservationFlow({
           {/* Session Selector if multiple */}
           {sessions.length > 1 && (
             <div style={{ marginBottom: '1.5rem' }}>
-              <label htmlFor="session-select" style={{ display: 'block', fontWeight: 600, fontSize: '0.95rem', marginBottom: '0.4rem' }}>
+              <label htmlFor="session-select" style={{ display: 'block', fontWeight: 400, fontSize: '0.95rem', marginBottom: '0.4rem' }}>
                 เลือกรอบการแสดง
               </label>
               <select
@@ -401,14 +411,14 @@ export function TicketReservationFlow({
                         <strong style={{ display: 'block', fontSize: '1rem' }}>{tt.name}</strong>
                         {tt.description && <span style={{ color: 'var(--muted)', fontSize: '0.85rem' }}>{tt.description}</span>}
                       </td>
-                      <td style={{ padding: '1rem', textAlign: 'right', fontWeight: 600 }}>
+                      <td style={{ padding: '1rem', textAlign: 'right', fontWeight: 400 }}>
                         {formatBaht(tt.price)}
                       </td>
                       <td style={{ padding: '1rem', textAlign: 'center' }}>
                         {isAvailable ? (
-                          <span style={{ color: '#166534', fontWeight: 500 }}>{tt.quota} ใบ</span>
+                          <span style={{ color: '#166534', fontWeight: 400 }}>{tt.quota} ใบ</span>
                         ) : (
-                          <span style={{ color: '#991b1b', fontWeight: 500 }}>บัตรหมด</span>
+                          <span style={{ color: '#991b1b', fontWeight: 400 }}>บัตรหมด</span>
                         )}
                       </td>
                       <td style={{ padding: '1rem', textAlign: 'center' }}>
@@ -425,7 +435,7 @@ export function TicketReservationFlow({
                               border: '1px solid var(--line)',
                               background: 'var(--white)',
                               cursor: qty <= 0 ? 'not-allowed' : 'pointer',
-                              fontWeight: 'bold',
+                              fontWeight: 400,
                               fontSize: '1.1rem',
                             }}
                           >
@@ -433,7 +443,7 @@ export function TicketReservationFlow({
                           </button>
                           <span
                             id={`qty-${tt.id}`}
-                            style={{ minWidth: '28px', textAlign: 'center', fontWeight: 600 }}
+                            style={{ minWidth: '28px', textAlign: 'center', fontWeight: 400 }}
                           >
                             {qty}
                           </span>
@@ -449,7 +459,7 @@ export function TicketReservationFlow({
                               border: '1px solid var(--line)',
                               background: 'var(--white)',
                               cursor: !isAvailable || totalTickets >= limitPerOrder || qty >= tt.quota ? 'not-allowed' : 'pointer',
-                              fontWeight: 'bold',
+                              fontWeight: 400,
                               fontSize: '1.1rem',
                             }}
                           >
@@ -480,7 +490,7 @@ export function TicketReservationFlow({
                 color: 'var(--white)',
                 border: 'none',
                 borderRadius: '4px',
-                fontWeight: 600,
+                fontWeight: 400,
                 fontSize: '1rem',
                 cursor: isPending || totalTickets <= 0 || !buyer ? 'not-allowed' : 'pointer',
                 opacity: totalTickets <= 0 || !buyer ? 0.6 : 1,
@@ -512,28 +522,28 @@ export function TicketReservationFlow({
                 {isPaid ? (
                   <>
                     <CheckCircleIcon style={{ width: '22px', height: '22px', color: '#16a34a' }} />
-                    <span style={{ color: '#16a34a', fontWeight: 600, fontSize: '0.9rem', textTransform: 'uppercase' }}>
+                    <span style={{ color: '#16a34a', fontWeight: 400, fontSize: '0.9rem', textTransform: 'uppercase' }}>
                       ชำระเงินสำเร็จ (Paid)
                     </span>
                   </>
                 ) : isPaymentException ? (
                   <>
                     <AlertIcon />
-                    <span style={{ color: '#ea580c', fontWeight: 600, fontSize: '0.9rem', textTransform: 'uppercase' }}>
+                    <span style={{ color: '#ea580c', fontWeight: 400, fontSize: '0.9rem', textTransform: 'uppercase' }}>
                       รอตรวจสอบเพื่อคืนเงิน (Under Review)
                     </span>
                   </>
                 ) : isExpired ? (
                   <>
                     <AlertIcon />
-                    <span style={{ color: '#dc2626', fontWeight: 600, fontSize: '0.9rem', textTransform: 'uppercase' }}>
+                    <span style={{ color: '#dc2626', fontWeight: 400, fontSize: '0.9rem', textTransform: 'uppercase' }}>
                       หมดเวลาการกันบัตร (Expired)
                     </span>
                   </>
                 ) : (
                   <>
                     <ClockIcon style={{ width: '22px', height: '22px', color: '#2563eb' }} />
-                    <span style={{ color: '#2563eb', fontWeight: 600, fontSize: '0.9rem', textTransform: 'uppercase' }}>
+                    <span style={{ color: '#2563eb', fontWeight: 400, fontSize: '0.9rem', textTransform: 'uppercase' }}>
                       กันบัตรสำเร็จ (Reserved)
                     </span>
                   </>
@@ -560,7 +570,7 @@ export function TicketReservationFlow({
               >
                 <ClockIcon style={{ width: '20px', height: '20px' }} />
                 <div>
-                  <span style={{ fontSize: '0.8rem', display: 'block', fontWeight: 500 }}>
+                  <span style={{ fontSize: '0.8rem', display: 'block', fontWeight: 400 }}>
                     {isExpired ? 'สถานะเวลาการชำระเงิน' : 'เวลาคงเหลือสำหรับการชำระเงิน'}
                   </span>
                   <strong id="reservation-countdown" style={{ fontSize: '1.15rem', letterSpacing: '0.05em' }}>
@@ -586,7 +596,7 @@ export function TicketReservationFlow({
               >
                 <AlertIcon />
                 <div>
-                  <span style={{ fontSize: '0.8rem', display: 'block', fontWeight: 500 }}>
+                  <span style={{ fontSize: '0.8rem', display: 'block', fontWeight: 400 }}>
                     สถานะการประมวลผล
                   </span>
                   <strong style={{ fontSize: '1rem' }}>เปิดเคสตรวจสอบคืนเงินเต็มจำนวนแล้ว</strong>
@@ -608,7 +618,7 @@ export function TicketReservationFlow({
               >
                 <CheckCircleIcon style={{ width: '20px', height: '20px' }} />
                 <div>
-                  <span style={{ fontSize: '0.8rem', display: 'block', fontWeight: 500 }}>
+                  <span style={{ fontSize: '0.8rem', display: 'block', fontWeight: 400 }}>
                     สถานะคำสั่งซื้อ
                   </span>
                   <strong style={{ fontSize: '1.05rem' }}>ออกบัตรสำเร็จแล้ว ({tickets.length} ใบ)</strong>
@@ -648,7 +658,7 @@ export function TicketReservationFlow({
                   color: 'var(--white)',
                   border: 'none',
                   borderRadius: '4px',
-                  fontWeight: 600,
+                  fontWeight: 400,
                   fontSize: '0.95rem',
                   cursor: 'pointer',
                 }}
@@ -688,7 +698,7 @@ export function TicketReservationFlow({
                   color: 'var(--white)',
                   border: 'none',
                   borderRadius: '4px',
-                  fontWeight: 600,
+                  fontWeight: 400,
                   fontSize: '0.95rem',
                   cursor: 'pointer',
                 }}
@@ -728,7 +738,7 @@ export function TicketReservationFlow({
                   color: 'var(--white)',
                   border: 'none',
                   borderRadius: '4px',
-                  fontWeight: 600,
+                  fontWeight: 400,
                   fontSize: '0.95rem',
                   cursor: 'pointer',
                 }}
@@ -741,7 +751,7 @@ export function TicketReservationFlow({
           {/* Reserved Items (Show only when not paid) */}
           {!isPaid && (
             <div style={{ marginBottom: '1.5rem', opacity: isExpired ? 0.7 : 1 }}>
-              <h3 style={{ fontSize: '1.05rem', margin: '0 0 0.8rem', fontWeight: 600 }}>รายการบัตร{isExpired ? 'ที่เคยกันไว้' : 'ที่กันไว้'}</h3>
+              <h3 style={{ fontSize: '1.05rem', margin: '0 0 0.8rem', fontWeight: 400 }}>รายการบัตร{isExpired ? 'ที่เคยกันไว้' : 'ที่กันไว้'}</h3>
               <div style={{ background: '#fafafb', border: '1px solid var(--line)', borderRadius: '6px', overflow: 'hidden' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', fontSize: '0.95rem' }}>
                   <tbody>
@@ -750,7 +760,7 @@ export function TicketReservationFlow({
                         <td style={{ padding: '0.8rem 1.2rem' }}>
                           <strong>{item.ticketTypeName}</strong> x {item.quantity}
                         </td>
-                        <td style={{ padding: '0.8rem 1.2rem', textAlign: 'right', fontWeight: 500 }}>
+                        <td style={{ padding: '0.8rem 1.2rem', textAlign: 'right', fontWeight: 400 }}>
                           {formatBaht(item.subtotal)}
                         </td>
                       </tr>
@@ -772,7 +782,7 @@ export function TicketReservationFlow({
               <strong id="quote-customer-fee">{formatBaht(reservation.customerFee)}</strong>
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', padding: '0.8rem 0 0', borderTop: '2px solid var(--line)', fontSize: '1.15rem' }}>
-              <span style={{ fontWeight: 600 }}>ยอดรวมสุทธิ (Total):</span>
+              <span style={{ fontWeight: 400 }}>ยอดรวมสุทธิ (Total):</span>
               <strong id="quote-total" style={{ color: isPaid ? '#16a34a' : isExpired ? 'var(--muted)' : 'var(--blue)' }}>{formatBaht(reservation.total)}</strong>
             </div>
           </div>
@@ -789,10 +799,10 @@ export function TicketReservationFlow({
           {isPaid && (
             <div id="issued-tickets-section" style={{ marginTop: '2rem' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '1.2rem' }}>
-                <h3 style={{ fontSize: '1.2rem', margin: 0, fontWeight: 600 }}>
+                <h3 style={{ fontSize: '1.2rem', margin: 0, fontWeight: 400 }}>
                   บัตรคอนเสิร์ตที่ออกแล้ว (<span id="issued-tickets-count">{tickets.length}</span> ใบ)
                 </h3>
-                <span style={{ fontSize: '0.85rem', color: '#166534', fontWeight: 500 }}>
+                <span style={{ fontSize: '0.85rem', color: '#166534', fontWeight: 400 }}>
                   QR Code แยกสำหรับเข้างานเฉพาะแต่ละใบ
                 </span>
               </div>
@@ -836,7 +846,7 @@ export function TicketReservationFlow({
                           border: '1px solid #bbf7d0',
                           color: '#166534',
                           fontSize: '0.75rem',
-                          fontWeight: 600,
+                          fontWeight: 400,
                           padding: '0.2rem 0.5rem',
                           borderRadius: '4px',
                         }}
@@ -849,28 +859,37 @@ export function TicketReservationFlow({
                       <h4 style={{ margin: '0 0 0.5rem', fontSize: '1.1rem', color: 'var(--blue)' }}>
                         {tkt.ticketTypeName}
                       </h4>
-                      <div style={{ fontSize: '0.95rem', fontWeight: 600, marginBottom: '1rem' }}>
+                      <div style={{ fontSize: '0.95rem', fontWeight: 400, marginBottom: '1rem' }}>
                         {formatBaht(tkt.ticketPrice)}
                       </div>
 
-                      {/* Ticket QR SVG */}
+                      {/* Ticket QR PNG (opaque white background for dark-mode safety) */}
                       <div
                         style={{
-                          background: '#fafafb',
-                          padding: '0.8rem',
-                          borderRadius: '6px',
-                          border: '1px solid var(--line)',
+                          background: '#ffffff',
+                          colorScheme: 'light',
+                          padding: 0,
+                          borderRadius: '8px',
+                          border: 'none',
                           marginBottom: '1rem',
+                          display: 'inline-block',
                         }}
                       >
-                        {/* biome-ignore lint/performance/noImgElement: Data URL SVG QR representation */}
+                        {/* biome-ignore lint/performance/noImgElement: Opaque PNG ticket QR representation */}
                         <img
                           id={`ticket-qr-${idx}`}
-                          src={tkt.qrCodeUrl}
+                          src={`/api/public/tickets/${tkt.id}/qr`}
                           alt={`QR Code ${tkt.ticketCode}`}
+                          data-qr-payload={tkt.qrPayload}
                           width={180}
                           height={180}
-                          style={{ display: 'block', margin: '0 auto' }}
+                          style={{ display: 'block', margin: '0 auto', borderRadius: '8px', backgroundColor: '#ffffff' }}
+                          onError={(e) => {
+                            const img = e.currentTarget;
+                            if (img.dataset.fallbackApplied || !tkt.qrCodeUrl) return;
+                            img.dataset.fallbackApplied = '1';
+                            img.src = tkt.qrCodeUrl;
+                          }}
                         />
                       </div>
 
@@ -898,7 +917,7 @@ export function TicketReservationFlow({
                     display: 'inline-block',
                     color: '#1848ed',
                     fontSize: '0.9rem',
-                    fontWeight: 'bold',
+                    fontWeight: 400,
                     textDecoration: 'none',
                   }}
                 >
@@ -920,7 +939,7 @@ export function TicketReservationFlow({
                 textAlign: 'center',
               }}
             >
-              <h3 style={{ fontSize: '1.15rem', margin: '0 0 0.5rem', fontWeight: 600 }}>
+              <h3 style={{ fontSize: '1.15rem', margin: '0 0 0.5rem', fontWeight: 400 }}>
                 ชำระเงินผ่าน PromptPay QR
               </h3>
               <p style={{ margin: '0 0 1.2rem', fontSize: '0.9rem', color: 'var(--muted)' }}>
@@ -957,7 +976,7 @@ export function TicketReservationFlow({
                     color: 'var(--white)',
                     border: 'none',
                     borderRadius: '4px',
-                    fontWeight: 600,
+                    fontWeight: 400,
                     fontSize: '1rem',
                     cursor: isGeneratingQr ? 'not-allowed' : 'pointer',
                   }}
@@ -966,15 +985,21 @@ export function TicketReservationFlow({
                 </button>
               ) : (
                 <div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center' }}>
-                  <div style={{ background: 'var(--white)', padding: '1rem', borderRadius: '8px', border: '1px solid var(--line)', marginBottom: '1rem' }}>
-                    {/* biome-ignore lint/performance/noImgElement: Data URL SVG QR representation */}
+                  <div style={{ background: '#ffffff', colorScheme: 'light', padding: '1rem', borderRadius: '8px', border: '1px solid var(--line)', marginBottom: '1rem' }}>
+                    {/* biome-ignore lint/performance/noImgElement: Data URL SVG or flattened PNG QR representation */}
                     <img
                       id="promptpay-qr-image"
-                      src={charge.qrCodeUrl}
+                      src={displayQrSrc}
                       alt="PromptPay QR Code"
                       width={220}
                       height={220}
-                      style={{ display: 'block', margin: '0 auto' }}
+                      style={{ display: 'block', margin: '0 auto', backgroundColor: '#ffffff', borderRadius: '8px' }}
+                      onError={(e) => {
+                        const img = e.currentTarget;
+                        if (img.dataset.fallbackApplied || !charge?.qrCodeUrl || img.src === charge.qrCodeUrl) return;
+                        img.dataset.fallbackApplied = '1';
+                        img.src = charge.qrCodeUrl;
+                      }}
                     />
                   </div>
                   <div style={{ fontSize: '1rem', marginBottom: '0.4rem' }}>
@@ -982,7 +1007,7 @@ export function TicketReservationFlow({
                     <strong id="payment-total-thb" style={{ fontSize: '1.25rem', color: 'var(--blue)' }}>
                       {formatBaht(reservation.total)}
                     </strong>{' '}
-                    <span id="payment-currency" style={{ fontWeight: 600, color: 'var(--muted)' }}>
+                    <span id="payment-currency" style={{ fontWeight: 400, color: 'var(--muted)' }}>
                       THB
                     </span>
                   </div>
@@ -1009,7 +1034,7 @@ export function TicketReservationFlow({
                           color: 'var(--white)',
                           border: 'none',
                           borderRadius: '4px',
-                          fontWeight: 600,
+                          fontWeight: 400,
                           fontSize: '0.95rem',
                           cursor: isVerifyingPayment ? 'not-allowed' : 'pointer',
                         }}
@@ -1020,7 +1045,7 @@ export function TicketReservationFlow({
                       </button>
                     )}
 
-                  <p style={{ margin: '0.8rem 0 0', fontSize: '0.85rem', color: '#166534', fontWeight: 500 }}>
+                  <p style={{ margin: '0.8rem 0 0', fontSize: '0.85rem', color: '#166534', fontWeight: 400 }}>
                     * กรุณาชำระเงินให้เสร็จสิ้นก่อนเวลานับถอยหลังสิ้นสุด
                   </p>
                 </div>

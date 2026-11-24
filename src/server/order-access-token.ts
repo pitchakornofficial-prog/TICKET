@@ -84,10 +84,37 @@ export async function resolveAuthorizedOrderReservation<
 > {
   const { orderId, token, unauthorizedMessage, forbiddenMessage } = options;
 
-  if (!token || isOrderTicketAccessToken(token)) {
+  if (!token) {
     return {
       ok: false,
       response: Response.json({ message: unauthorizedMessage }, { status: 401 }),
+    };
+  }
+
+  // Direct access via cryptographically signed token sent to buyer's verified email
+  if (isOrderTicketAccessToken(token)) {
+    const reservation = await options.getOrderReservation(orderId);
+    if (!reservation) {
+      return {
+        ok: false,
+        response: Response.json({ message: 'ไม่พบรายการคำสั่งซื้อ' }, { status: 404 }),
+      };
+    }
+    const isValid = verifyOrderTicketAccessToken(
+      token,
+      orderId,
+      reservation.buyerEmail,
+      reservation.buyerPhone,
+    );
+    if (isValid) {
+      return { ok: true, reservation };
+    }
+    return {
+      ok: false,
+      response: Response.json(
+        { message: 'ลิงก์เข้าดูบัตรไม่ถูกต้องหรือหมดอายุแล้ว กรุณายืนยัน OTP ใหม่' },
+        { status: 401 },
+      ),
     };
   }
 

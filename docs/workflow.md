@@ -11,6 +11,7 @@
 | Product intent, scope, constraints และ UI design | [requirement.md](requirement.md) |
 | คำศัพท์ ความสัมพันธ์ กฎธุรกิจ และ verification policy | [CONTEXT.md](../CONTEXT.md) |
 | เทคโนโลยีและสถาปัตยกรรมที่ยืนยัน | [ADRs](adr/0001-application-and-shared-data.md) |
+| แผนที่ระบบอีเมลและคู่มือไล่หาสาเหตุบั๊ก | [docs/email-system/README.md](email-system/README.md) |
 | พฤติกรรม feature และ acceptance criteria | `docs/specs/SPEC-###-<feature>.md` เมื่อสร้างจริง |
 | งาน implementation และหลักฐานของงาน | `docs/tasks/TASK-###-<slice>.md` เมื่อสร้างจริง |
 | Working rules และคำสั่ง repository | [AGENTS.md](../AGENTS.md) |

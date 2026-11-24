@@ -128,7 +128,7 @@ export function DateTimePicker24h({
             border: 'none',
             background: 'transparent',
             fontSize: '0.9rem',
-            fontWeight: 600,
+            fontWeight: 400,
             color: datePart ? '#0f172a' : '#94a3b8',
             cursor: datePart ? 'pointer' : 'not-allowed',
             padding: '0.25rem 0.15rem',
@@ -141,7 +141,7 @@ export function DateTimePicker24h({
             </option>
           ))}
         </select>
-        <span style={{ color: '#64748b', fontWeight: 700, fontSize: '0.9rem' }}>:</span>
+        <span style={{ color: '#64748b', fontWeight: 400, fontSize: '0.9rem' }}>:</span>
         <select
           value={minutePart}
           onChange={handleMinuteChange}
@@ -151,7 +151,7 @@ export function DateTimePicker24h({
             border: 'none',
             background: 'transparent',
             fontSize: '0.9rem',
-            fontWeight: 600,
+            fontWeight: 400,
             color: datePart ? '#0f172a' : '#94a3b8',
             cursor: datePart ? 'pointer' : 'not-allowed',
             padding: '0.25rem 0.15rem',

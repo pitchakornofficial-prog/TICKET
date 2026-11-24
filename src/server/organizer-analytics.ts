@@ -92,11 +92,12 @@ export async function getOrganizerAnalytics(
       totalRefunded: number;
     }>(
       `SELECT
-         COALESCE(SUM(tt.price) FILTER (WHERE t.status IN ('valid', 'used')), 0)::float8 AS "grossSales",
-         COUNT(*) FILTER (WHERE t.status IN ('valid', 'used'))::int AS "totalTicketsSold",
+         COALESCE(SUM(tt.price) FILTER (WHERE t.status IN ('valid', 'used') AND COALESCE(o."orderSource", 'web') <> 'direct_issue'), 0)::float8 AS "grossSales",
+         COUNT(*) FILTER (WHERE t.status IN ('valid', 'used') AND COALESCE(o."orderSource", 'web') <> 'direct_issue')::int AS "totalTicketsSold",
          COUNT(*) FILTER (WHERE t."admissionStatus" IN ('inside', 'admitted') OR t.status = 'used')::int AS "totalAdmitted",
-         COUNT(*) FILTER (WHERE t.status = 'refunded')::int AS "totalRefunded"
+         COUNT(*) FILTER (WHERE t.status = 'refunded' AND COALESCE(o."orderSource", 'web') <> 'direct_issue')::int AS "totalRefunded"
        FROM tickets t
+       JOIN orders o ON o.id = t."orderId"
        JOIN ticket_types tt ON tt.id = t."ticketTypeId"
        JOIN events e ON e.id = t."eventId"
        WHERE e."organizerId" = $1
@@ -115,11 +116,13 @@ export async function getOrganizerAnalytics(
          COUNT(*)::int AS sold,
          COALESCE(SUM(tt.price), 0)::float8 AS "grossSales"
        FROM tickets t
+       JOIN orders o ON o.id = t."orderId"
        JOIN ticket_types tt ON tt.id = t."ticketTypeId"
        JOIN events e ON e.id = t."eventId"
        WHERE e."organizerId" = $1
          AND ($2::text IS NULL OR e.id = $2)
          AND t.status IN ('valid', 'used')
+         AND COALESCE(o."orderSource", 'web') <> 'direct_issue'
        GROUP BY t."eventId", tt.name`,
       [organizerId, activeEventId],
     ),
@@ -133,11 +136,13 @@ export async function getOrganizerAnalytics(
          COALESCE(SUM(tt.price), 0)::float8 AS sales,
          COUNT(*)::int AS tickets
        FROM tickets t
+       JOIN orders o ON o.id = t."orderId"
        JOIN ticket_types tt ON tt.id = t."ticketTypeId"
        JOIN events e ON e.id = t."eventId"
        WHERE e."organizerId" = $1
          AND ($2::text IS NULL OR e.id = $2)
          AND t.status IN ('valid', 'used')
+         AND COALESCE(o."orderSource", 'web') <> 'direct_issue'
        GROUP BY 1
        ORDER BY 1 DESC
        LIMIT 7`,

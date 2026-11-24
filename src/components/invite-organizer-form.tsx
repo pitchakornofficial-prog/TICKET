@@ -65,7 +65,7 @@ export function InviteOrganizerForm() {
       <h2 style={{ fontSize: '1.25rem', marginBottom: '1rem' }}>เชิญผู้จัดงานใหม่</h2>
       <form onSubmit={handleSubmit} className="auth-form" noValidate>
         <div className="form-group" style={{ marginBottom: '1rem' }}>
-          <label htmlFor="invite-role-select" style={{ display: 'block', fontWeight: 600, marginBottom: '0.4rem' }}>
+          <label htmlFor="invite-role-select" style={{ display: 'block', fontWeight: 400, marginBottom: '0.4rem' }}>
             บทบาทผู้ใช้งานที่ต้องการเชิญ
           </label>
           <select

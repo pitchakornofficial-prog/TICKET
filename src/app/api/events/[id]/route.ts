@@ -91,7 +91,24 @@ export async function PUT(
       Array.isArray(body.sessions) ? (body.sessions as SessionDraftInput[]) : undefined,
       isOwner,
     );
-    if (updated.status === 'approved') safeRevalidateTag('public-events');
+    if (updated?.status === 'approved') safeRevalidateTag('public-events');
+    if (isOwner && typeof body.isSalesPaused === 'boolean') {
+      try {
+        const { recordEventAuditLog } = await import('@/server/event-audit');
+        await recordEventAuditLog(pool, {
+          eventId: id,
+          editorUserId: session.user.id,
+          editorName: 'เจ้าของระบบ (Admin/Owner)',
+          changesSummary: [
+            body.isSalesPaused
+              ? `สวิตช์เปิด/ปิดการจำหน่ายบัตรด่วน: ระงับการจำหน่ายบัตรด่วน (${typeof body.salesPausedReason === 'string' && body.salesPausedReason.trim() ? body.salesPausedReason.trim() : 'ระงับชั่วคราว'})`
+              : 'สวิตช์เปิด/ปิดการจำหน่ายบัตรด่วน: เปิดจำหน่ายบัตรตามปกติ',
+          ],
+        });
+      } catch {
+        // Non-blocking for audit logging
+      }
+    }
     return Response.json({ message: 'อัปเดตงานคอนเสิร์ตสำเร็จ', event: updated }, { status: 200 });
   } catch (error: unknown) {
     return createSafeErrorResponse(error, 'เกิดข้อผิดพลาดในการอัปเดตงานคอนเสิร์ต', { defaultStatus: 400 });

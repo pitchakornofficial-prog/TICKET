@@ -651,12 +651,38 @@ export async function listAllEventsForOwner(pool: Pool) {
 }
 
 export async function getEventDetails(clientOrPool: { query: Pool['query'] }, eventId: string, organizerId?: string) {
-  const evRes = await clientOrPool.query('SELECT * FROM events WHERE id = $1', [eventId]);
-  if (evRes.rowCount === 0) return null;
+  const evRes = await clientOrPool
+    .query(
+      `SELECT e.*,
+              f."organizerFeeMode", f."organizerFeeRate", f."organizerFeePrivilegeRate",
+              f."ubuPrivilegeMode" AS "feeUbuPrivilegeMode", f."customerFeeMode", f."customerFeeRate",
+              f."reservePercentage", f."organizerFeeLocked"
+       FROM (SELECT * FROM events WHERE id = $1) e
+       LEFT JOIN event_fee_settings f ON f."eventId" = e.id`,
+      [eventId],
+    )
+    .catch(() => clientOrPool.query('SELECT * FROM events WHERE id = $1', [eventId]));
+
+  if (!evRes.rowCount || evRes.rowCount === 0) return null;
   const event = evRes.rows[0];
 
   if (organizerId && event.organizerId !== organizerId) {
     throw new Error('ไม่อนุญาต: ไม่มีสิทธิ์เข้าถึงงานคอนเสิร์ตนี้');
+  }
+
+  // Extract fee settings if available
+  let feeSettings: Record<string, unknown> = {};
+  if (event.organizerFeeRate !== null && event.organizerFeeRate !== undefined) {
+    feeSettings = {
+      organizerFeeMode: event.organizerFeeMode || 'percentage',
+      organizerFeeRate: Number(event.organizerFeeRate),
+      organizerFeePrivilegeRate: Number(event.organizerFeePrivilegeRate ?? event.organizerFeeRate),
+      customerFeeMode: event.customerFeeMode || 'percentage',
+      customerFeeRate: Number(event.customerFeeRate ?? 0),
+      reservePercentage: Number(event.reservePercentage ?? 0),
+      organizerFeeLocked: Boolean(event.organizerFeeLocked),
+      ubuPrivilegeMode: event.feeUbuPrivilegeMode !== undefined ? Boolean(event.feeUbuPrivilegeMode) : Boolean(event.ubuPrivilegeMode),
+    };
   }
 
   const sessRes = await clientOrPool.query(
@@ -689,7 +715,12 @@ export async function getEventDetails(clientOrPool: { query: Pool['query'] }, ev
     ticketTypes: ticketTypesBySession.get(sess.id as string) ?? [],
   }));
 
-  return { ...event, sessions };
+  return {
+    ...event,
+    ...feeSettings,
+    feeSettings: Object.keys(feeSettings).length > 0 ? feeSettings : undefined,
+    sessions,
+  };
 }
 
 // Public catalog access: only approved events with approved sessions are public
@@ -972,7 +1003,7 @@ export async function getPublicEventWithApprovedSessions(pool: Pool, eventId: st
            SELECT t."ticketTypeId", COUNT(*)::int AS refunded_qty
            FROM tickets t
            JOIN target_tt ttt ON ttt.id = t."ticketTypeId"
-           WHERE t.status = 'refunded'
+           WHERE t.status IN ('refunded', 'cancelled')
            GROUP BY t."ticketTypeId"
          )`
              : ''
@@ -1611,7 +1642,7 @@ export async function submitSessionAmendment(
           ) - COALESCE(
             (SELECT COUNT(*)::int
              FROM tickets t
-             WHERE t."ticketTypeId" = $1 AND t.status = 'refunded'
+             WHERE t."ticketTypeId" = $1 AND t.status IN ('refunded', 'cancelled')
             ), 0
           )) AS "heldQuota"`,
           [curTt.id],
@@ -1655,7 +1686,7 @@ export async function submitSessionAmendment(
           ) - COALESCE(
             (SELECT COUNT(*)::int
              FROM tickets t
-             WHERE t."ticketTypeId" = $1 AND t.status = 'refunded'
+             WHERE t."ticketTypeId" = $1 AND t.status IN ('refunded', 'cancelled')
             ), 0
           )) AS "heldQuota"`,
           [item.id],
@@ -1781,7 +1812,7 @@ export async function listPendingSessionAmendments(pool: Pool): Promise<SessionA
         ) - COALESCE(
           (SELECT COUNT(*)::int
            FROM tickets t
-           WHERE t."ticketTypeId" = $1 AND t.status = 'refunded'
+           WHERE t."ticketTypeId" = $1 AND t.status IN ('refunded', 'cancelled')
           ), 0
         )) AS "heldQuota"`,
         [tt.id],
@@ -2002,7 +2033,7 @@ export async function approveSessionAmendment(
           ) - COALESCE(
             (SELECT COUNT(*)::int
              FROM tickets t
-             WHERE t."ticketTypeId" = $1 AND t.status = 'refunded'
+             WHERE t."ticketTypeId" = $1 AND t.status IN ('refunded', 'cancelled')
             ), 0
           )) AS "heldQuota"`,
           [item.id],
@@ -2983,10 +3014,14 @@ export interface AdminOverrideConcertInput {
   ubuPrivilegeMode?: boolean;
   isSalesPaused?: boolean;
   salesPausedReason?: string | null;
+  organizerFeeMode?: 'percentage' | 'per_ticket' | 'flat_fee';
   organizerFeeRate?: number;
+  customerFeeMode?: 'per_ticket' | 'per_order' | 'percentage';
   customerFeeRate?: number;
   reservePercentage?: number;
   sessions?: AdminOverrideSessionInput[];
+  changesSummary?: string[];
+  snapshotCsv?: string | null;
 }
 
 /**
@@ -3149,7 +3184,9 @@ export async function adminOverrideConcertFull(
 
     // 4. Update fee settings if provided
     if (
+      input.organizerFeeMode !== undefined ||
       input.organizerFeeRate !== undefined ||
+      input.customerFeeMode !== undefined ||
       input.customerFeeRate !== undefined ||
       input.reservePercentage !== undefined ||
       input.ubuPrivilegeMode !== undefined
@@ -3160,18 +3197,21 @@ export async function adminOverrideConcertFull(
            "ubuPrivilegeMode", "customerFeeMode", "customerFeeRate", "reservePercentage",
            "organizerFeeLocked", "createdAt", "updatedAt"
          )
-         VALUES ($1, 'percentage', COALESCE($2, 3), 3, COALESCE($3, FALSE), 'percentage', COALESCE($4, 0), COALESCE($5, 0), FALSE, now(), now())
+         VALUES ($1, COALESCE($2, 'percentage'), COALESCE($3, 3), 3, COALESCE($4, FALSE), COALESCE($5, 'percentage'), COALESCE($6, 0), COALESCE($7, 0), FALSE, now(), now())
          ON CONFLICT ("eventId") DO UPDATE SET
-           "organizerFeeRate" = COALESCE($2, event_fee_settings."organizerFeeRate"),
-           "ubuPrivilegeMode" = COALESCE($3, event_fee_settings."ubuPrivilegeMode"),
-           "customerFeeMode" = 'percentage',
-           "customerFeeRate" = COALESCE($4, event_fee_settings."customerFeeRate"),
-           "reservePercentage" = COALESCE($5, event_fee_settings."reservePercentage"),
+           "organizerFeeMode" = COALESCE($2, event_fee_settings."organizerFeeMode"),
+           "organizerFeeRate" = COALESCE($3, event_fee_settings."organizerFeeRate"),
+           "ubuPrivilegeMode" = COALESCE($4, event_fee_settings."ubuPrivilegeMode"),
+           "customerFeeMode" = COALESCE($5, event_fee_settings."customerFeeMode"),
+           "customerFeeRate" = COALESCE($6, event_fee_settings."customerFeeRate"),
+           "reservePercentage" = COALESCE($7, event_fee_settings."reservePercentage"),
            "updatedAt" = now()`,
         [
           eventId,
+          input.organizerFeeMode || null,
           input.organizerFeeRate != null ? Number(input.organizerFeeRate) : null,
           input.ubuPrivilegeMode != null ? Boolean(input.ubuPrivilegeMode) : null,
+          input.customerFeeMode || null,
           input.customerFeeRate != null ? Number(input.customerFeeRate) : null,
           input.reservePercentage != null ? Number(input.reservePercentage) : null,
         ],
@@ -3238,7 +3278,7 @@ export async function adminOverrideConcertFull(
               ) - COALESCE(
                 (SELECT COUNT(*)::int
                  FROM tickets t
-                 WHERE t."ticketTypeId" = $1 AND t.status = 'refunded'
+                 WHERE t."ticketTypeId" = $1 AND t.status IN ('refunded', 'cancelled')
                 ), 0
               )) AS "heldQuota"`,
               [tt.id],
@@ -3331,6 +3371,26 @@ export async function adminOverrideConcertFull(
           await client.query('DELETE FROM event_sessions WHERE id = $1', [extSess.id]);
         }
       }
+    }
+
+    // 6. Record audit log if changesSummary is provided
+    if (input.changesSummary && input.changesSummary.length > 0) {
+      const editorName = userRes.rows[0]?.name || 'เจ้าของระบบ (Admin/Owner)';
+      const { ensureEventAuditSchema } = await import('./event-audit.ts');
+      await ensureEventAuditSchema(pool);
+      await client.query(
+        `INSERT INTO event_audit_logs (
+           id, "eventId", "editorUserId", "editorName", "changesSummary", "snapshotCsv", "createdAt"
+         ) VALUES ($1, $2, $3, $4, $5::jsonb, $6, now())`,
+        [
+          `audit-${Date.now()}-${randomUUID().slice(0, 8)}`,
+          eventId,
+          ownerId,
+          editorName,
+          JSON.stringify(input.changesSummary),
+          input.snapshotCsv || null,
+        ],
+      );
     }
 
     safeRevalidateTag('public-events');

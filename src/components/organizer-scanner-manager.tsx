@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { TicketIcon } from './ticket-icon';
 import { Button, Badge } from '@/components/ui';
 import { HeaderInfoTooltip } from './header-info-tooltip';
+import { triggerRefreshToast } from './toast-notification';
 import {
   CheckCircleIcon,
   RefreshIcon,
@@ -162,6 +163,7 @@ export function OrganizerScannerManager() {
       await loadEventData(selectedEventId);
     }
     setRefreshing(false);
+    triggerRefreshToast('ทีมสแกนเนอร์');
   };
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
@@ -1777,7 +1779,7 @@ export function OrganizerScannerManager() {
 
                 <form onSubmit={handleAddScanner}>
                   <div className="form-group" style={{ marginBottom: '1rem' }}>
-                    <label htmlFor="modal-scanner-name" style={{ fontWeight: 600, display: 'block', marginBottom: '0.4rem' }}>
+                    <label htmlFor="modal-scanner-name" style={{ fontWeight: 400, display: 'block', marginBottom: '0.4rem' }}>
                       ชื่อเจ้าหน้าที่ / ประตูหรือจุดตรวจ <span style={{ color: '#dc2626' }}>*</span>
                     </label>
                     <input
@@ -1846,7 +1848,7 @@ export function OrganizerScannerManager() {
                 </div>
 
                 <div style={{ marginBottom: '1.25rem' }}>
-                  <span style={{ fontSize: '1.1rem', fontWeight: 700, color: '#0f172a', display: 'block' }}>
+                  <span style={{ fontSize: '1.1rem', fontWeight: 400, color: '#0f172a', display: 'block' }}>
                     {activeQrScanner.name}
                   </span>
                   <span className={`status-badge ${activeQrScanner.isPrimary ? 'approved' : 'open'}`} style={{ marginTop: '0.4rem', display: 'inline-block' }}>
@@ -1916,7 +1918,7 @@ export function OrganizerScannerManager() {
 
                         {/* Direct Link Input & Copy Button */}
                         <div style={{ marginBottom: '1.25rem', textAlign: 'left' }}>
-                          <label htmlFor="scanner-access-link-input" style={{ fontSize: '0.82rem', fontWeight: 600, color: '#475569', display: 'block', marginBottom: '0.35rem' }}>
+                          <label htmlFor="scanner-access-link-input" style={{ fontSize: '0.82rem', fontWeight: 400, color: '#475569', display: 'block', marginBottom: '0.35rem' }}>
                             หรือคัดลอกลิงก์ส่งให้ทีมงานทาง LINE / แชต:
                           </label>
                           <div style={{ display: 'flex', gap: '0.5rem' }}>
@@ -2024,7 +2026,7 @@ export function OrganizerScannerManager() {
                   >
                     <span
                       style={{
-                        fontWeight: 700,
+                        fontWeight: 400,
                         color: '#0f172a',
                         display: 'flex',
                         alignItems: 'center',
@@ -2106,7 +2108,7 @@ export function OrganizerScannerManager() {
                       gap: '0.5rem',
                       alignItems: 'center',
                       marginBottom: '0.4rem',
-                      fontWeight: 700,
+                      fontWeight: 400,
                       color: '#0f172a',
                     }}
                   >
@@ -2356,7 +2358,7 @@ export function OrganizerScannerManager() {
                 >
                   <h3
                     id="edit-scanner-modal-title"
-                    style={{ margin: 0, fontSize: '1.2rem', fontWeight: 700, color: '#0f172a' }}
+                    style={{ margin: 0, fontSize: '1.2rem', fontWeight: 400, color: '#0f172a' }}
                   >
                     แก้ไขชื่อทีมงาน / จุดตรวจ
                   </h3>
@@ -2390,7 +2392,7 @@ export function OrganizerScannerManager() {
                         display: 'block',
                         marginBottom: '0.45rem',
                         fontSize: '0.88rem',
-                        fontWeight: 600,
+                        fontWeight: 400,
                         color: '#0f172a',
                       }}
                     >

@@ -166,7 +166,7 @@ export function OrganizerMoneyReportView({
         }}
       >
         <div>
-          <h2 style={{ fontSize: '20px', fontWeight: 'bold', color: '#0f172a', margin: '0 0 4px 0' }}>
+          <h2 style={{ fontSize: '20px', fontWeight: 400, color: '#0f172a', margin: '0 0 4px 0' }}>
             รายงานการเงินและยอดพร้อมจ่าย (Organizer Financial Report)
           </h2>
           <p style={{ fontSize: '13px', color: '#64748b', margin: 0 }}>
@@ -185,7 +185,7 @@ export function OrganizerMoneyReportView({
               gap: '6px',
               padding: '8px 14px',
               fontSize: '13px',
-              fontWeight: 600,
+              fontWeight: 400,
               borderRadius: '6px',
               border: '1px solid #cbd5e1',
               backgroundColor: '#f8fafc',
@@ -207,7 +207,7 @@ export function OrganizerMoneyReportView({
               gap: '6px',
               padding: '8px 14px',
               fontSize: '13px',
-              fontWeight: 600,
+              fontWeight: 400,
               borderRadius: '6px',
               border: '1px solid #cbd5e1',
               backgroundColor: '#ffffff',
@@ -226,7 +226,7 @@ export function OrganizerMoneyReportView({
               style={{
                 padding: '8px 14px',
                 fontSize: '13px',
-                fontWeight: 600,
+                fontWeight: 400,
                 borderRadius: '6px',
                 border: '1px solid #cbd5e1',
                 backgroundColor: '#ffffff',
@@ -312,7 +312,7 @@ export function OrganizerMoneyReportView({
                 fontSize: '13px',
               }}
             >
-              <div style={{ fontWeight: 'bold', marginBottom: '4px' }}>
+              <div style={{ fontWeight: 400, marginBottom: '4px' }}>
                 แจ้งเตือนยอดหนี้ค้างชำระ (Debt Outstanding)
               </div>
               <div>
@@ -344,7 +344,7 @@ export function OrganizerMoneyReportView({
               }}
             >
               <div style={{ fontSize: '12px', color: '#64748b', marginBottom: '4px' }}>ยอดขายบัตรทั้งหมด (Gross)</div>
-              <div data-testid="gross-sales-amount" style={{ fontSize: '20px', fontWeight: 'bold', color: '#0f172a' }}>
+              <div data-testid="gross-sales-amount" style={{ fontSize: '20px', fontWeight: 400, color: '#0f172a' }}>
                 ฿{report.grossSales.toLocaleString('th-TH', { minimumFractionDigits: 2 })}
               </div>
               <div style={{ fontSize: '11px', color: '#64748b', marginTop: '4px' }}>
@@ -363,7 +363,7 @@ export function OrganizerMoneyReportView({
               }}
             >
               <div style={{ fontSize: '12px', color: '#64748b', marginBottom: '4px' }}>ยอดคืนเงินที่อนุมัติ (Refunds)</div>
-              <div data-testid="refund-deductions-amount" style={{ fontSize: '20px', fontWeight: 'bold', color: '#dc2626' }}>
+              <div data-testid="refund-deductions-amount" style={{ fontSize: '20px', fontWeight: 400, color: '#dc2626' }}>
                 -฿{report.approvedRefundDeductions.toLocaleString('th-TH', { minimumFractionDigits: 2 })}
               </div>
               <div style={{ fontSize: '11px', color: '#64748b', marginTop: '4px' }}>
@@ -382,7 +382,7 @@ export function OrganizerMoneyReportView({
               }}
             >
               <div style={{ fontSize: '12px', color: '#64748b', marginBottom: '4px' }}>ยอดขายสุทธิ (Net Sales)</div>
-              <div data-testid="net-sales-amount" style={{ fontSize: '20px', fontWeight: 'bold', color: '#0f172a' }}>
+              <div data-testid="net-sales-amount" style={{ fontSize: '20px', fontWeight: 400, color: '#0f172a' }}>
                 ฿{report.netSales.toLocaleString('th-TH', { minimumFractionDigits: 2 })}
               </div>
               <div style={{ fontSize: '11px', color: '#64748b', marginTop: '4px' }}>
@@ -401,7 +401,7 @@ export function OrganizerMoneyReportView({
               }}
             >
               <div style={{ fontSize: '12px', color: '#64748b', marginBottom: '4px' }}>ค่าบริการระบบ (Organizer Fee)</div>
-              <div data-testid="organizer-fee-amount" style={{ fontSize: '20px', fontWeight: 'bold', color: '#b45309' }}>
+              <div data-testid="organizer-fee-amount" style={{ fontSize: '20px', fontWeight: 400, color: '#b45309' }}>
                 -฿{report.organizerFee.toLocaleString('th-TH', { minimumFractionDigits: 2 })}
               </div>
               {report.flatFeeCarry > 0 && (
@@ -422,7 +422,7 @@ export function OrganizerMoneyReportView({
               }}
             >
               <div style={{ fontSize: '12px', color: '#64748b', marginBottom: '4px' }}>สิทธิ์สุทธิผู้จัดงาน (E)</div>
-              <div data-testid="net-entitlement-amount" style={{ fontSize: '20px', fontWeight: 'bold', color: '#0f172a' }}>
+              <div data-testid="net-entitlement-amount" style={{ fontSize: '20px', fontWeight: 400, color: '#0f172a' }}>
                 ฿{report.netEntitlement.toLocaleString('th-TH', { minimumFractionDigits: 2 })}
               </div>
               <div style={{ fontSize: '11px', color: '#64748b', marginTop: '4px' }}>
@@ -441,7 +441,7 @@ export function OrganizerMoneyReportView({
               }}
             >
               <div style={{ fontSize: '12px', color: '#64748b', marginBottom: '4px' }}>เงินสำรองที่กันไว้จริง (Held H)</div>
-              <div data-testid="held-reserve-amount" style={{ fontSize: '20px', fontWeight: 'bold', color: '#475569' }}>
+              <div data-testid="held-reserve-amount" style={{ fontSize: '20px', fontWeight: 400, color: '#475569' }}>
                 ฿{report.actualHeldReserve.toLocaleString('th-TH', { minimumFractionDigits: 2 })}
               </div>
               <div style={{ fontSize: '11px', color: '#64748b', marginTop: '4px' }}>
@@ -460,7 +460,7 @@ export function OrganizerMoneyReportView({
               }}
             >
               <div style={{ fontSize: '12px', color: '#64748b', marginBottom: '4px' }}>ยอดที่โอนจ่ายแล้ว (Paid P)</div>
-              <div data-testid="total-paid-out-amount" style={{ fontSize: '20px', fontWeight: 'bold', color: '#0284c7' }}>
+              <div data-testid="total-paid-out-amount" style={{ fontSize: '20px', fontWeight: 400, color: '#0284c7' }}>
                 ฿{report.totalPaidOut.toLocaleString('th-TH', { minimumFractionDigits: 2 })}
               </div>
               <div style={{ fontSize: '11px', color: '#64748b', marginTop: '4px' }}>
@@ -478,10 +478,10 @@ export function OrganizerMoneyReportView({
                 padding: '16px',
               }}
             >
-              <div style={{ fontSize: '12px', color: report.isDebt ? '#991b1b' : '#166534', fontWeight: 600, marginBottom: '4px' }}>
+              <div style={{ fontSize: '12px', color: report.isDebt ? '#991b1b' : '#166534', fontWeight: 400, marginBottom: '4px' }}>
                 {report.isDebt ? 'ยอดหนี้ค้างชำระ (Debt)' : 'ยอดพร้อมจ่าย (Payable)'}
               </div>
-              <div data-testid={report.isDebt ? "debt-amount" : "payable-amount"} style={{ fontSize: '22px', fontWeight: 'bold', color: report.isDebt ? '#dc2626' : '#15803d' }}>
+              <div data-testid={report.isDebt ? "debt-amount" : "payable-amount"} style={{ fontSize: '22px', fontWeight: 400, color: report.isDebt ? '#dc2626' : '#15803d' }}>
                 {report.isDebt
                   ? `-฿${report.debtAmount.toLocaleString('th-TH', { minimumFractionDigits: 2 })}`
                   : `฿${report.payableAmount.toLocaleString('th-TH', { minimumFractionDigits: 2 })}`}
@@ -496,7 +496,7 @@ export function OrganizerMoneyReportView({
           {report.sessions.length > 0 && (
             <details open className="report-collapsible-section" style={{ marginTop: '24px' }}>
               <summary className="report-collapsible-summary">
-                <span style={{ fontSize: '15px', fontWeight: 'bold', color: '#0f172a' }}>
+                <span style={{ fontSize: '15px', fontWeight: 400, color: '#0f172a' }}>
                   สรุปยอดตามรอบการแสดง ({report.sessions.length} รอบ)
                 </span>
               </summary>
@@ -526,7 +526,7 @@ export function OrganizerMoneyReportView({
                               padding: '2px 8px',
                               borderRadius: '4px',
                               fontSize: '11px',
-                              fontWeight: 600,
+                              fontWeight: 400,
                               backgroundColor: s.sessionStatus === 'approved' ? '#dcfce7' : s.sessionStatus === 'cancelled' ? '#fee2e2' : '#f1f5f9',
                               color: s.sessionStatus === 'approved' ? '#166534' : s.sessionStatus === 'cancelled' ? '#991b1b' : '#475569',
                             }}
@@ -535,7 +535,7 @@ export function OrganizerMoneyReportView({
                           </span>
                         </td>
                         <td style={{ padding: '10px 14px', textAlign: 'right' }}>{s.issuedTicketsCount}</td>
-                        <td style={{ padding: '10px 14px', textAlign: 'right', fontWeight: 600 }}>{s.validTicketsCount}</td>
+                        <td style={{ padding: '10px 14px', textAlign: 'right', fontWeight: 400 }}>{s.validTicketsCount}</td>
                         <td style={{ padding: '10px 14px', textAlign: 'right', color: s.refundedTicketsCount > 0 ? '#dc2626' : '#64748b' }}>
                           {s.refundedTicketsCount}
                         </td>
@@ -545,7 +545,7 @@ export function OrganizerMoneyReportView({
                         <td style={{ padding: '10px 14px', textAlign: 'right', color: s.approvedRefunds > 0 ? '#dc2626' : '#64748b' }}>
                           {s.approvedRefunds > 0 ? `-฿${s.approvedRefunds.toLocaleString('th-TH', { minimumFractionDigits: 2 })}` : '-'}
                         </td>
-                        <td style={{ padding: '10px 14px', textAlign: 'right', fontWeight: 'bold' }}>
+                        <td style={{ padding: '10px 14px', textAlign: 'right', fontWeight: 400 }}>
                           ฿{s.netSales.toLocaleString('th-TH', { minimumFractionDigits: 2 })}
                         </td>
                       </tr>
@@ -560,7 +560,7 @@ export function OrganizerMoneyReportView({
           <details open className="report-collapsible-section" style={{ marginTop: '20px' }}>
             <summary className="report-collapsible-summary">
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', flexWrap: 'wrap', gap: '8px' }}>
-                <span style={{ fontSize: '15px', fontWeight: 'bold', color: '#0f172a' }}>
+                <span style={{ fontSize: '15px', fontWeight: 400, color: '#0f172a' }}>
                   รายการคำสั่งซื้อและค่าบริการรายคำสั่ง ({report.totalOrdersCount} รายการ)
                 </span>
                 <span style={{ fontSize: '12px', color: '#64748b', fontWeight: 'normal' }}>
@@ -594,7 +594,7 @@ export function OrganizerMoneyReportView({
                     <tbody>
                       {report.orders.map((o, idx) => (
                         <tr key={o.orderId} style={{ borderBottom: idx < report.orders.length - 1 ? '1px solid #f1f5f9' : 'none' }}>
-                          <td style={{ padding: '10px 12px', fontFamily: 'monospace', fontWeight: 600 }}>{o.orderId}</td>
+                          <td style={{ padding: '10px 12px', fontFamily: 'monospace', fontWeight: 400 }}>{o.orderId}</td>
                           <td style={{ padding: '10px 12px' }}>{o.buyerName}</td>
                           <td style={{ padding: '10px 12px', color: '#475569' }} data-testid="masked-email">{o.buyerEmail}</td>
                           <td style={{ padding: '10px 12px', color: '#475569' }} data-testid="masked-phone">{o.buyerPhone}</td>
@@ -607,10 +607,10 @@ export function OrganizerMoneyReportView({
                           <td style={{ padding: '10px 12px', textAlign: 'right', color: o.refundDeductions > 0 ? '#dc2626' : '#64748b' }}>
                             {o.refundDeductions > 0 ? `-฿${o.refundDeductions.toLocaleString('th-TH', { minimumFractionDigits: 2 })}` : '-'}
                           </td>
-                          <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 600 }}>
+                          <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 400 }}>
                             ฿{o.netSubtotal.toLocaleString('th-TH', { minimumFractionDigits: 2 })}
                           </td>
-                          <td style={{ padding: '10px 12px', textAlign: 'right', color: '#b45309', fontWeight: 600 }}>
+                          <td style={{ padding: '10px 12px', textAlign: 'right', color: '#b45309', fontWeight: 400 }}>
                             ฿{o.orderFeeAdjusted.toLocaleString('th-TH', { minimumFractionDigits: 2 })}
                           </td>
                           <td style={{ padding: '10px 12px', textAlign: 'right', color: o.feeAdjustment > 0 ? '#16a34a' : '#64748b' }}>
@@ -676,7 +676,7 @@ export function OrganizerMoneyReportView({
           <details open className="report-collapsible-section" style={{ marginTop: '20px' }}>
             <summary className="report-collapsible-summary">
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', flexWrap: 'wrap', gap: '8px' }}>
-                <span style={{ fontSize: '15px', fontWeight: 'bold', color: '#0f172a' }}>
+                <span style={{ fontSize: '15px', fontWeight: 400, color: '#0f172a' }}>
                   ประวัติการโอนเงินให้ผู้จัดงาน ({report.payouts.length} รายการ)
                 </span>
                 <span style={{ fontSize: '12px', color: '#64748b', fontWeight: 'normal' }}>
@@ -722,11 +722,11 @@ export function OrganizerMoneyReportView({
                           data-testid={`payout-row-${p.id}`}
                           style={{ borderBottom: idx < report.payouts.length - 1 ? '1px solid #f1f5f9' : 'none' }}
                         >
-                          <td style={{ padding: '10px 12px', fontFamily: 'monospace', fontWeight: 600 }}>{p.id}</td>
+                          <td style={{ padding: '10px 12px', fontFamily: 'monospace', fontWeight: 400 }}>{p.id}</td>
                           <td style={{ padding: '10px 12px', whiteSpace: 'nowrap' }}>
                             {formatDate(new Date(p.paidAt))} {formatTime(new Date(p.paidAt))}
                           </td>
-                          <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 'bold', color: p.status === 'completed' ? '#0284c7' : '#991b1b' }}>
+                          <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 400, color: p.status === 'completed' ? '#0284c7' : '#991b1b' }}>
                             ฿{p.amount.toLocaleString('th-TH', { minimumFractionDigits: 2 })}
                           </td>
                           <td style={{ padding: '10px 12px', textAlign: 'center' }}>
@@ -735,7 +735,7 @@ export function OrganizerMoneyReportView({
                                 padding: '2px 8px',
                                 borderRadius: '4px',
                                 fontSize: '11px',
-                                fontWeight: 600,
+                                fontWeight: 400,
                                 backgroundColor: p.status === 'completed' ? '#e0f2fe' : '#fee2e2',
                                 color: p.status === 'completed' ? '#0369a1' : '#991b1b',
                               }}
@@ -756,7 +756,7 @@ export function OrganizerMoneyReportView({
                                 style={{
                                   color: '#2563eb',
                                   textDecoration: 'underline',
-                                  fontWeight: 500,
+                                  fontWeight: 400,
                                 }}
                               >
                                 ดูหลักฐาน
@@ -775,7 +775,7 @@ export function OrganizerMoneyReportView({
           {/* Debt Repayment History Section (AC-86, D-197 Collapsible Accordion) */}
           <details open className="report-collapsible-section" style={{ marginTop: '20px' }}>
             <summary className="report-collapsible-summary">
-              <span style={{ fontSize: '15px', fontWeight: 'bold', color: '#0f172a' }}>
+              <span style={{ fontSize: '15px', fontWeight: 400, color: '#0f172a' }}>
                 ประวัติการรับชำระคืนหนี้จากผู้จัดงาน ({report.repayments.length} รายการ)
               </span>
             </summary>
@@ -813,11 +813,11 @@ export function OrganizerMoneyReportView({
                           data-testid={`repayment-row-${rp.id}`}
                           style={{ borderBottom: idx < report.repayments.length - 1 ? '1px solid #f1f5f9' : 'none' }}
                         >
-                          <td style={{ padding: '10px 12px', fontFamily: 'monospace', fontWeight: 600 }}>{rp.id}</td>
+                          <td style={{ padding: '10px 12px', fontFamily: 'monospace', fontWeight: 400 }}>{rp.id}</td>
                           <td style={{ padding: '10px 12px', whiteSpace: 'nowrap' }}>
                             {formatDate(new Date(rp.repaidAt))} {formatTime(new Date(rp.repaidAt))}
                           </td>
-                          <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 'bold', color: '#16a34a' }}>
+                          <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 400, color: '#16a34a' }}>
                             ฿{rp.amount.toLocaleString('th-TH', { minimumFractionDigits: 2 })}
                           </td>
                           <td style={{ padding: '10px 12px', color: '#475569' }}>{rp.notes || '-'}</td>

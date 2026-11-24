@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import type { AdmissionSecurityRejectionItem, AdmissionSyncConflictItem } from '@/server/admission';
 import { formatTime, formatDate } from '@/lib/locale';
 import { RefreshIcon, CheckCircleIcon, ClockIcon } from './icons';
+import { triggerRefreshToast } from './toast-notification';
 
 export function OwnerSyncConflictManager() {
   const [conflicts, setConflicts] = useState<AdmissionSyncConflictItem[]>([]);
@@ -73,7 +74,7 @@ export function OwnerSyncConflictManager() {
     >
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px', marginBottom: '12px' }}>
         <div>
-          <h2 id="sync-conflicts-heading" style={{ fontSize: '18px', fontWeight: 600, color: '#1e293b' }}>
+          <h2 id="sync-conflicts-heading" style={{ fontSize: '18px', fontWeight: 400, color: '#1e293b' }}>
             รายการข้อขัดแย้งการซิงก์ออฟไลน์ (Offline Admission Conflicts)
           </h2>
           <p className="card-caption">
@@ -90,7 +91,10 @@ export function OwnerSyncConflictManager() {
           <button
             type="button"
             className="secondary-button mini-btn"
-            onClick={fetchConflicts}
+            onClick={async () => {
+              await fetchConflicts();
+              triggerRefreshToast('ข้อขัดแย้งการสแกน');
+            }}
             disabled={loading}
             title="รีเฟรชรายการข้อขัดแย้ง"
             style={{ padding: '4px 8px' }}
@@ -140,7 +144,7 @@ export function OwnerSyncConflictManager() {
                     {formatDate(new Date(c.scannedAt))} {formatTime(new Date(c.scannedAt))}
                   </td>
                   <td>
-                    <div style={{ fontWeight: 600, fontSize: '13px' }}>{c.eventTitle}</div>
+                    <div style={{ fontWeight: 400, fontSize: '13px' }}>{c.eventTitle}</div>
                     <div style={{ fontSize: '11px', color: '#64748b' }}>
                       {formatTime(new Date(c.sessionStartTime))} – {formatTime(new Date(c.sessionEndTime))}
                     </div>
@@ -189,7 +193,7 @@ export function OwnerSyncConflictManager() {
       )}
 
       <div style={{ marginTop: '24px' }}>
-        <h3 style={{ fontSize: '16px', fontWeight: 600, color: '#1e293b', marginBottom: '8px' }}>
+        <h3 style={{ fontSize: '16px', fontWeight: 400, color: '#1e293b', marginBottom: '8px' }}>
           รายการสแกนที่ต้องตรวจสอบ
         </h3>
         <p className="card-caption" style={{ marginBottom: '12px' }}>

@@ -889,7 +889,7 @@ export async function requestGuestOtp(
           <h2>${actionTitle}</h2>
           <p>สวัสดีคุณ <strong>${safeHtmlName}</strong>,</p>
           <p>รหัส OTP เพื่อยืนยันอีเมลของคุณคือ:</p>
-          <div style="font-size: 32px; font-weight: bold; letter-spacing: 6px; color: #1848ed; margin: 20px 0;">
+          <div style="font-size: 32px; font-weight: 400; letter-spacing: 6px; color: #1848ed; margin: 20px 0;">
             ${otpCode}
           </div>
           <p style="color: #6b7280; font-size: 14px;">รหัสนี้มีอายุการใช้งาน 5 นาที และใช้ได้เพียงครั้งเดียว</p>

@@ -32,7 +32,11 @@ export async function GET(
   }
 
   const fullKey = decodedSegments.join('/');
-  if (!fullKey.startsWith('posters/') && !fullKey.startsWith('proofs/')) {
+  if (
+    !fullKey.startsWith('posters/') &&
+    !fullKey.startsWith('proofs/') &&
+    !fullKey.startsWith('ticket-fonts/')
+  ) {
     return new Response('Forbidden', { status: 403 });
   }
 
@@ -62,11 +66,12 @@ export async function GET(
 
   const safeFilename = (fullKey.split('/').pop() || 'download').replace(/[^\w.-]/g, '_');
   const SAFE_INLINE_IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
+  const SAFE_INLINE_FONT_TYPES = new Set(['font/woff2', 'font/woff', 'font/ttf', 'font/otf']);
 
   let effectiveContentType = item.contentType;
   let contentDisposition = `attachment; filename="${safeFilename}"`;
 
-  if (SAFE_INLINE_IMAGE_TYPES.has(item.contentType)) {
+  if (SAFE_INLINE_IMAGE_TYPES.has(item.contentType) || SAFE_INLINE_FONT_TYPES.has(item.contentType)) {
     contentDisposition = `inline; filename="${safeFilename}"`;
   } else if (item.contentType === 'application/pdf') {
     contentDisposition = `attachment; filename="${safeFilename}"`;

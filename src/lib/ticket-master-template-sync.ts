@@ -11,6 +11,9 @@ export interface MovableItem {
   visible: boolean;
   fontSize?: number;
   fontWeight?: string;
+  secondaryFontSize?: number;
+  secondaryFontWeight?: string;
+  showSecondaryText?: boolean;
   color?: string;
   secondaryColor?: string;
   bgColor?: string;
@@ -23,7 +26,7 @@ export interface MovableItem {
 }
 
 export interface WorkspaceStageSettings {
-  style: 'dots' | 'grid' | 'stripes' | 'slate' | 'wood' | 'studio' | 'clean';
+  style: 'dots' | 'grid' | 'stripes' | 'slate' | 'wood' | 'studio' | 'clean' | 'white' | 'dark-neutral';
   customColor: string;
 }
 
@@ -36,6 +39,11 @@ export interface TicketDesignerState {
   tearLineStyle: 'dashed' | 'dotted' | 'solid' | 'none';
   tearLineColor: string;
   fontFamily: string;
+  titleFontWeight?: number;
+  bodyFontWeight?: number;
+  customFontName?: string;
+  customFontUrl?: string;
+  layerOrder?: string[];
   bgType: 'solid' | 'gradient' | 'image';
   bgColor: string;
   gradientStart: string;
@@ -58,20 +66,43 @@ export const EVENT_MASTER_TEMPLATE_CHANGED = 'ticket_master_template_updated';
 export const CHANNEL_MASTER_TEMPLATE = 'ticket_master_template_channel';
 
 export const DEFAULT_WORKSPACE_STAGE: WorkspaceStageSettings = {
-  style: 'dots',
+  style: 'grid',
   customColor: '#f8fafc',
 };
 
 export const DEFAULT_STATE: TicketDesignerState = {
   presetId: 'classic-white',
-  borderRadius: 4,
-  borderWidth: 1,
+  borderRadius: 0,
+  borderWidth: 0,
   borderColor: '#cbd5e1',
   tearLineX: 720,
-  tearLineStyle: 'dashed',
+  tearLineStyle: 'none',
   tearLineColor: '#94a3b8',
 
   fontFamily: 'Kanit',
+  titleFontWeight: 400,
+  bodyFontWeight: 400,
+  customFontName: '',
+  customFontUrl: '',
+  layerOrder: [
+    'brandLogo',
+    'eventTitle',
+    'zoneBadge',
+    'gateInfo',
+    'seatInfo',
+    'priceInfo',
+    'dateTime',
+    'venue',
+    'buyerName',
+    'ticketCode',
+    'barcode',
+    'footerNote',
+    'stubEventSummary',
+    'qrCode',
+    'qrCodeLabel',
+    'scanHint',
+    'orderId',
+  ],
 
   bgType: 'solid',
   bgColor: '#ffffff',
@@ -113,7 +144,7 @@ export const DEFAULT_STATE: TicketDesignerState = {
       y: 68,
       visible: true,
       fontSize: 26,
-      fontWeight: '700',
+      fontWeight: '400',
       color: '#0f172a',
       text: 'Isan Indy Rock Fest 2026',
     },
@@ -125,7 +156,7 @@ export const DEFAULT_STATE: TicketDesignerState = {
       y: 112,
       visible: true,
       fontSize: 14,
-      fontWeight: '700',
+      fontWeight: '400',
       color: '#0f172a',
       bgColor: 'transparent',
       borderColor: 'transparent',
@@ -142,7 +173,7 @@ export const DEFAULT_STATE: TicketDesignerState = {
       y: 162,
       visible: true,
       fontSize: 16,
-      fontWeight: '700',
+      fontWeight: '400',
       color: '#0f172a',
       secondaryColor: '#64748b',
       secondaryText: 'ประตูทางเข้า (GATE)',
@@ -156,7 +187,7 @@ export const DEFAULT_STATE: TicketDesignerState = {
       y: 162,
       visible: true,
       fontSize: 16,
-      fontWeight: '700',
+      fontWeight: '400',
       color: '#0f172a',
       secondaryColor: '#64748b',
       secondaryText: 'แถว/ที่นั่ง (ROW / SEAT)',
@@ -170,7 +201,7 @@ export const DEFAULT_STATE: TicketDesignerState = {
       y: 162,
       visible: true,
       fontSize: 16,
-      fontWeight: '700',
+      fontWeight: '400',
       color: '#0f172a',
       secondaryColor: '#64748b',
       secondaryText: 'ราคาบัตร (PRICE)',
@@ -227,7 +258,7 @@ export const DEFAULT_STATE: TicketDesignerState = {
       y: 338,
       visible: true,
       fontSize: 14,
-      fontWeight: '700',
+      fontWeight: '400',
       color: '#0f172a',
       secondaryColor: '#64748b',
       text: 'TK-849201-9482-01',
@@ -268,7 +299,7 @@ export const DEFAULT_STATE: TicketDesignerState = {
       y: 24,
       visible: true,
       fontSize: 12,
-      fontWeight: '700',
+      fontWeight: '400',
       color: '#0f172a',
       secondaryColor: '#64748b',
       secondaryText: 'ADMISSION STUB',
@@ -291,7 +322,7 @@ export const DEFAULT_STATE: TicketDesignerState = {
       y: 242,
       visible: true,
       fontSize: 13,
-      fontWeight: '700',
+      fontWeight: '400',
       color: '#0f172a',
       secondaryColor: '#64748b',
       text: 'TK-849201-9482-01',

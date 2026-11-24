@@ -7,7 +7,7 @@ import type { OrganizerFeeMode, CustomerFeeMode } from '@/server/fees';
 import { formatBaht, formatDateTime, toLocalDatetimeInputString } from '@/lib/locale';
 import { getEventSalesStatus } from '@/lib/sales-window';
 import { sanitizeGoogleMapsUrl } from '@/lib/google-maps-url';
-import { triggerToast } from './toast-notification';
+import { triggerToast, triggerRefreshToast } from './toast-notification';
 import {
   CheckCircleIcon,
   EyeIcon,
@@ -73,7 +73,9 @@ export interface AdminOverrideFormState {
   payoutBankName: string;
   payoutAccountNumber: string;
   payoutAccountName: string;
+  organizerFeeMode?: 'percentage' | 'per_ticket' | 'flat_fee';
   organizerFeeRate: number;
+  customerFeeMode?: 'per_ticket' | 'per_order' | 'percentage';
   customerFeeRate: number;
   reservePercentage: number;
   ubuPrivilegeMode: boolean;
@@ -228,7 +230,7 @@ interface AuditLogEntry {
   timestamp: string;
   editor: string;
   changesSummary: string[];
-  snapshotCsv: string;
+  snapshotCsv: string | null;
 }
 
 function safeFormatDateTime(dateStr?: string | null): string {
@@ -250,8 +252,9 @@ export function OwnerSessionApprovalManager() {
   const [actionMessage, setActionMessage] = useState('');
   const [error, setError] = useState('');
 
-  // Status Tab Filtering: 3 streamlined tabs (D-244, D-245) - default to 'pending'
-  const [statusTab, setStatusTab] = useState<'pending' | 'approved' | 'rejected'>('pending');
+  // Status Tab Filtering: 4 tabs (Pending, Approved, Rejected, Analytics)
+  // useState<'pending' | 'approved' | 'rejected'>('pending')
+  const [statusTab, setStatusTab] = useState<'pending' | 'approved' | 'rejected' | 'analytics'>('pending');
 
   // Sorting and Pagination State (D-244, D-245)
   const [sortBy, setSortBy] = useState<'latest' | 'show_date' | 'alphabetical'>('latest');
@@ -743,10 +746,32 @@ export function OwnerSessionApprovalManager() {
     setActionMessage('');
 
     try {
-      const res = await fetch(`/api/events/${event.id}`);
+      const [res, auditRes] = await Promise.all([
+        fetch(`/api/events/${event.id}`),
+        fetch(`/api/owner/events/${event.id}/audit-logs`),
+      ]);
       if (!res.ok) throw new Error('ไม่สามารถโหลดรายละเอียดคอนเสิร์ตได้');
       const data = await res.json();
       const ev = data.event || {};
+
+      if (auditRes.ok) {
+        const auditData = await auditRes.json();
+        interface RawAuditRecord {
+          id: string;
+          createdAt: string;
+          editorName?: string;
+          changesSummary?: string[];
+          snapshotCsv?: string | null;
+        }
+        const mappedLogs: AuditLogEntry[] = (auditData.logs || []).map((l: RawAuditRecord) => ({
+          id: l.id,
+          timestamp: safeFormatDateTime(l.createdAt),
+          editor: l.editorName || 'เจ้าของระบบ (Admin/Owner)',
+          changesSummary: Array.isArray(l.changesSummary) ? l.changesSummary : [],
+          snapshotCsv: l.snapshotCsv || null,
+        }));
+        setAuditLogs((prev) => ({ ...prev, [event.id]: mappedLogs }));
+      }
 
       interface FetchedSession {
         id?: string;
@@ -828,9 +853,11 @@ export function OwnerSessionApprovalManager() {
         payoutBankName: ev.payoutBankName || event.payoutBankName || '',
         payoutAccountNumber: ev.payoutAccountNumber || event.payoutAccountNumber || '',
         payoutAccountName: ev.payoutAccountName || event.payoutAccountName || '',
-        organizerFeeRate: ev.organizerFeeRate ?? event.organizerFeeRate ?? 3.0,
-        customerFeeRate: ev.customerFeeRate ?? event.customerFeeRate ?? 0.0,
-        reservePercentage: ev.reservePercentage ?? event.reservePercentage ?? 0.0,
+        organizerFeeMode: ev.organizerFeeMode || 'percentage',
+        organizerFeeRate: typeof ev.organizerFeeRate === 'number' ? ev.organizerFeeRate : (event.organizerFeeRate ?? 3.0),
+        customerFeeMode: ev.customerFeeMode || 'percentage',
+        customerFeeRate: typeof ev.customerFeeRate === 'number' ? ev.customerFeeRate : (event.customerFeeRate ?? 0.0),
+        reservePercentage: typeof ev.reservePercentage === 'number' ? ev.reservePercentage : (event.reservePercentage ?? 0.0),
         ubuPrivilegeMode: Boolean(ev.ubuPrivilegeMode ?? event.ubuPrivilegeMode),
         sessions: loadedSessions,
       };
@@ -1148,8 +1175,14 @@ export function OwnerSessionApprovalManager() {
       if (editFormData.entryGuidelines !== orig.entryGuidelines) {
         changesList.push(`กติกาเข้างาน: มีการแก้ไขข้อกำหนด`);
       }
+      if (editFormData.organizerFeeMode !== orig.organizerFeeMode) {
+        changesList.push(`รูปแบบค่าบริการผู้จัดงาน: ${orig.organizerFeeMode || 'percentage'} -> ${editFormData.organizerFeeMode || 'percentage'}`);
+      }
       if (editFormData.organizerFeeRate !== orig.organizerFeeRate) {
         changesList.push(`ค่าบริการผู้จัดงาน: ${orig.organizerFeeRate}% -> ${editFormData.organizerFeeRate}%`);
+      }
+      if (editFormData.customerFeeMode !== orig.customerFeeMode) {
+        changesList.push(`รูปแบบค่าบริการลูกค้า: ${orig.customerFeeMode || 'percentage'} -> ${editFormData.customerFeeMode || 'percentage'}`);
       }
       if (editFormData.customerFeeRate !== orig.customerFeeRate) {
         changesList.push(`ค่าบริการลูกค้า: ${orig.customerFeeRate}% -> ${editFormData.customerFeeRate}%`);
@@ -1158,7 +1191,7 @@ export function OwnerSessionApprovalManager() {
         changesList.push(`สัดส่วนเงินสำรอง: ${orig.reservePercentage}% -> ${editFormData.reservePercentage}%`);
       }
       if (editFormData.ubuPrivilegeMode !== orig.ubuPrivilegeMode) {
-        changesList.push(`สิทธิ์ ม.อุบลฯ: ${editFormData.ubuPrivilegeMode ? 'เปิดใช้งาน' : 'ปิดการใช้งาน'}`);
+        changesList.push(`สิทธิ์ ม.อุบลฯ: ${editFormData.ubuPrivilegeMode ? 'เปิดใช้งาน (@ubu.ac.th)' : 'ปิดการใช้งาน'}`);
       }
       if (
         editFormData.payoutBankName !== orig.payoutBankName ||
@@ -1281,10 +1314,14 @@ export function OwnerSessionApprovalManager() {
         payoutBankName: editFormData.payoutBankName.trim() || null,
         payoutAccountNumber: editFormData.payoutAccountNumber.trim() || null,
         payoutAccountName: editFormData.payoutAccountName.trim() || null,
+        organizerFeeMode: editFormData.organizerFeeMode || 'percentage',
         organizerFeeRate: Number(editFormData.organizerFeeRate),
+        customerFeeMode: editFormData.customerFeeMode || 'percentage',
         customerFeeRate: Number(editFormData.customerFeeRate),
         reservePercentage: Number(editFormData.reservePercentage),
         ubuPrivilegeMode: Boolean(editFormData.ubuPrivilegeMode),
+        changesSummary: pendingChangesList,
+        snapshotCsv,
         sessions: editFormData.sessions.map((s) => ({
           id: s.id,
           startTime: new Date(s.startTime).toISOString(),
@@ -1373,137 +1410,32 @@ export function OwnerSessionApprovalManager() {
         </div>
       )}
 
-      {/* =========================================================
-          VIEW A: DEDICATED CONCERT PERFORMANCE ANALYTICS (D-226)
-          ========================================================= */}
-      {viewingAnalyticsEvent ? (
-        <section className="dedicated-concert-analytics-view" data-testid="dedicated-concert-analytics">
-          <header className="analytics-view-header">
-            <div className="analytics-header-left">
-              <button
-                type="button"
-                className="secondary-button back-to-pipeline-btn"
-                onClick={() => setViewingAnalyticsEvent(null)}
-              >
-                <span>← กลับสู่หน้าจัดการคอนเสิร์ต</span>
-              </button>
-              <h2 className="analytics-event-title">{viewingAnalyticsEvent.title}</h2>
-              <p className="analytics-event-meta">
-                <span>ผู้จัดงาน: {viewingAnalyticsEvent.organizerName || '-'}</span>
-                <span>·</span>
-                <span>สถานที่: {viewingAnalyticsEvent.location}</span>
-                <span>·</span>
-                <span>สถานะ: {concertSalesStatus(viewingAnalyticsEvent).label}</span>
-              </p>
-            </div>
-            <div className="analytics-header-right">
-              <button
-                type="button"
-                className="primary-button export-analytics-btn"
-                onClick={() => handleExportCurrentCsv(viewingAnalyticsEvent)}
-              >
-                <DownloadIcon className="btn-icon" />
-                <span>ดาวน์โหลดข้อมูลคอนเสิร์ต CSV</span>
-              </button>
-            </div>
-          </header>
-
-          {analyticsError && <p role="alert">{analyticsError}</p>}
-          {!analytics && !analyticsError && <p role="status">กำลังโหลดสถิติคอนเสิร์ต...</p>}
-          {analytics && (
-            <>
-              <div className="concert-analytics-kpi-grid">
-                <div className="analytics-kpi-card">
-                  <div className="kpi-card-head">
-                    <span className="kpi-card-label">รายได้รวมจากการขายบัตร</span>
-                    <BanknotesIcon className="borderless-kpi-icon" />
-                  </div>
-                  <div className="kpi-card-value">{formatBaht(analytics.grossSales)}</div>
-                  <p className="kpi-card-sub">ยอดขายบัตรก่อนหักเงินคืนและค่าบริการ</p>
-                </div>
-                <div className="analytics-kpi-card">
-                  <div className="kpi-card-head">
-                    <span className="kpi-card-label">รายได้สุทธิหลังหักค่าบริการ</span>
-                    <CheckCircleIcon className="borderless-kpi-icon" />
-                  </div>
-                  <div className="kpi-card-value">{formatBaht(analytics.netEntitlement)}</div>
-                  <p className="kpi-card-sub">ค่าบริการผู้จัด {formatBaht(analytics.organizerFee)}</p>
-                </div>
-                <div className="analytics-kpi-card">
-                  <div className="kpi-card-head">
-                    <span className="kpi-card-label">ยอดจำหน่ายบัตรจริง</span>
-                    <TicketIcon className="borderless-kpi-icon" />
-                  </div>
-                  <div className="kpi-card-value">{analytics.issuedTickets} ใบ</div>
-                  <p className="kpi-card-sub">จำนวนบัตรที่ออกทั้งหมด รวมบัตรที่คืนเงินแล้ว</p>
-                </div>
-                <div className="analytics-kpi-card">
-                  <div className="kpi-card-head">
-                    <span className="kpi-card-label">สิทธิ์พิเศษ โค้ดส่วนลด และคืนบัตร</span>
-                    <SlidersIcon className="borderless-kpi-icon" />
-                  </div>
-                  <div className="kpi-exceptions-list">
-                    <div className="kpi-exception-item">
-                      <span>คำสั่งซื้อที่ใช้สิทธิ์ ม.อุบลฯ</span><strong>{analytics.ubuOrders} รายการ</strong>
-                    </div>
-                    <div className="kpi-exception-item">
-                      <span>คำสั่งซื้อที่มีส่วนลด</span><strong>{analytics.discountedOrders} รายการ</strong>
-                    </div>
-                    <div className="kpi-exception-item">
-                      <span>คืนเงินแล้ว</span>
-                      <strong>{analytics.refundedTickets} ใบ ({formatBaht(analytics.approvedRefunds)})</strong>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div className="analytics-tier-breakdown-card">
-                <h3 className="card-inner-heading">แจกแจงยอดขายตามประเภทบัตร / โซน</h3>
-                {analytics.tiers.length === 0 ? <p>ยังไม่มีประเภทบัตร</p> : (
-                  <div className="table-responsive">
-                    <table className="enterprise-analytics-table">
-                      <thead>
-                        <tr>
-                          <th>ประเภทบัตร / โซน</th>
-                          <th>รอบการแสดง</th>
-                          <th>ราคาบัตร</th>
-                          <th>บัตรที่ออก</th>
-                          <th>โควตาทั้งหมด</th>
-                          <th>ยอดขายรวม</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {analytics.tiers.map((tier) => (
-                          <tr key={tier.id}>
-                            <td><strong>{tier.name}</strong></td>
-                            <td>{safeFormatDateTime(tier.startTime)}{tier.status === 'cancelled' && ' (ยกเลิก)'}</td>
-                            <td>{formatBaht(tier.price)}</td>
-                            <td>{tier.sold} ใบ</td>
-                            <td>{tier.quota} ใบ</td>
-                            <td>{formatBaht(tier.gross)}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </div>
-            </>
-          )}
-        </section>
-      ) : (
-        /* =========================================================
-           VIEW B: CONCERT MANAGEMENT & APPROVAL PIPELINE (D-225)
-           ========================================================= */
         <div className="concert-management-pipeline">
-          {/* Reorganized Header & Unified Toolbar (D-239, D-241) */}
-          <div className="hub-top-bar">
+          {/* Reorganized Header & Unified Toolbar with Refunds Shortcut (D-239, D-241) */}
+          <div className="hub-top-bar" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem' }}>
             <div className="hub-header-left">
               <h2 className="pipeline-title">ศูนย์จัดการและอนุมัติคอนเสิร์ต (Concert Management Hub)</h2>
               <p className="pipeline-subtitle">
                 ตรวจสอบรายละเอียดคอนเสิร์ต กำหนดอัตราค่าบริการ อนุมัติเผยแพร่สู่ลูกค้า และติดตามสถิติคอนเสิร์ต
               </p>
               {loading && <p className="pipeline-loading-text" style={{ fontSize: '0.85rem', color: '#64748b', marginTop: '0.25rem' }}>กำลังโหลดข้อมูลล่าสุด...</p>}
+            </div>
+            <div className="hub-header-right">
+              <a
+                href="#refunds"
+                className="secondary-button"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '0.5rem',
+                  textDecoration: 'none',
+                  fontSize: '0.875rem',
+                  padding: '0.5rem 0.85rem',
+                }}
+              >
+                <BanknotesIcon className="btn-icon" style={{ width: '16px', height: '16px' }} />
+                <span>จัดการคำขอคืนเงินและการโอนคืน (Refunds & Payouts) &rarr;</span>
+              </a>
             </div>
           </div>
 
@@ -1542,6 +1474,22 @@ export function OwnerSessionApprovalManager() {
               >
                 <span>อื่น ๆ</span>
                 <span className="hub-tab-badge status-counter-pill">{rejectedCount}</span>
+              </button>
+
+              <button
+                type="button"
+                className={`hub-filter-tab pipeline-status-tab ${statusTab === 'analytics' ? 'is-active active' : ''}`}
+                onClick={() => {
+                  setStatusTab('analytics');
+                  if (!viewingAnalyticsEvent && allEvents.length > 0) {
+                    const def = allEvents.find((e) => e.status === 'approved') || allEvents[0];
+                    setViewingAnalyticsEvent(def);
+                  }
+                }}
+                role="tab"
+                aria-selected={statusTab === 'analytics'}
+              >
+                <span>สถิติเชิงลึก (Analytics)</span>
               </button>
             </div>
 
@@ -1587,7 +1535,10 @@ export function OwnerSessionApprovalManager() {
               <button
                 type="button"
                 className="secondary-button hub-refresh-btn"
-                onClick={loadData}
+                onClick={async () => {
+                  await loadData();
+                  triggerRefreshToast('จัดการคอนเสิร์ต');
+                }}
                 title="รีเฟรชข้อมูลล่าสุด"
                 aria-label="รีเฟรชข้อมูลล่าสุด"
               >
@@ -1600,7 +1551,7 @@ export function OwnerSessionApprovalManager() {
           {/* Empty search results state when searching */}
           {totalCount === 0 && searchQuery && (
             <div className="empty-search-state" style={{ padding: '3rem 1.5rem', textAlign: 'center', color: '#64748b' }}>
-              <p style={{ fontSize: '1rem', fontWeight: 500 }}>
+              <p style={{ fontSize: '1rem', fontWeight: 400 }}>
                 ไม่พบคอนเสิร์ตที่ตรงกับคำค้นหา &ldquo;{searchQuery}&rdquo;
               </p>
               <button
@@ -1888,7 +1839,7 @@ export function OwnerSessionApprovalManager() {
 
                           {rejectingAmendmentId === amd.id && (
                             <div className="rejection-box" style={{ marginTop: '0.75rem', padding: '0.75rem', background: '#f8fafc', border: '1px solid #cbd5e1', borderRadius: '6px' }}>
-                              <label htmlFor={`reject-amd-reason-${amd.id}`} className="field-label" style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.25rem' }}>
+                              <label htmlFor={`reject-amd-reason-${amd.id}`} className="field-label" style={{ display: 'block', fontSize: '0.85rem', fontWeight: 400, marginBottom: '0.25rem' }}>
                                 ระบุเหตุผลการปฏิเสธคำขอแก้ไข:
                               </label>
                               <input
@@ -2000,7 +1951,7 @@ export function OwnerSessionApprovalManager() {
 
                           {rejectingCancellationId === can.id && (
                             <div className="rejection-box" style={{ marginTop: '0.75rem', padding: '0.75rem', background: '#f8fafc', border: '1px solid #cbd5e1', borderRadius: '6px' }}>
-                              <label htmlFor={`reject-can-reason-${can.id}`} className="field-label" style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.25rem' }}>
+                              <label htmlFor={`reject-can-reason-${can.id}`} className="field-label" style={{ display: 'block', fontSize: '0.85rem', fontWeight: 400, marginBottom: '0.25rem' }}>
                                 ระบุเหตุผลการปฏิเสธคำขอยกเลิก:
                               </label>
                               <input
@@ -2266,6 +2217,167 @@ export function OwnerSessionApprovalManager() {
             </div>
           )}
 
+          {/* TAB 4: DEDICATED CONCERT PERFORMANCE ANALYTICS (D-226) */}
+          {statusTab === 'analytics' && (
+            <div className="pipeline-tab-content" data-testid="analytics-tab-content">
+              {/* Event Selector Top Bar */}
+              <div className="analytics-concert-selector-bar" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '1rem', marginBottom: '1.25rem', padding: '1rem', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+                  <label htmlFor="analytics-event-select" style={{ fontSize: '0.875rem', fontWeight: 500, color: '#334155' }}>
+                    เลือกคอนเสิร์ตที่ต้องการดูสถิติ:
+                  </label>
+                  <select
+                    id="analytics-event-select"
+                    className="hub-sort-select"
+                    value={viewingAnalyticsEvent?.id || ''}
+                    onChange={(e) => {
+                      const selected = allEvents.find((ev) => ev.id === e.target.value);
+                      if (selected) {
+                        setAnalytics(null);
+                        setAnalyticsError(null);
+                        setViewingAnalyticsEvent(selected);
+                      }
+                    }}
+                    style={{ minWidth: '280px' }}
+                    aria-label="เลือกคอนเสิร์ตเพื่อดูสถิติ"
+                  >
+                    <option value="" disabled>-- เลือกคอนเสิร์ตที่ต้องการดูสถิติ --</option>
+                    {allEvents.map((ev) => (
+                      <option key={ev.id} value={ev.id}>
+                        {ev.title} ({ev.location})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                {viewingAnalyticsEvent && (
+                  <button
+                    type="button"
+                    className="secondary-button export-analytics-btn"
+                    onClick={() => handleExportCurrentCsv(viewingAnalyticsEvent)}
+                  >
+                    <DownloadIcon className="btn-icon" />
+                    <span>ดาวน์โหลดข้อมูลคอนเสิร์ต CSV</span>
+                  </button>
+                )}
+              </div>
+
+              {viewingAnalyticsEvent ? (
+                <section className="dedicated-concert-analytics-view" data-testid="dedicated-concert-analytics" style={{ border: 'none', padding: 0 }}>
+                  <header className="analytics-view-header" style={{ marginBottom: '1.25rem' }}>
+                    <div className="analytics-header-left">
+                      <button
+                        type="button"
+                        className="secondary-button back-to-pipeline-btn"
+                        onClick={() => {
+                          setViewingAnalyticsEvent(null);
+                          setStatusTab('approved');
+                        }}
+                        style={{ marginBottom: '0.5rem', display: 'inline-flex', alignItems: 'center' }}
+                      >
+                        <span>← กลับสู่หน้าจัดการคอนเสิร์ต</span>
+                      </button>
+                      <h2 className="analytics-event-title">{viewingAnalyticsEvent.title}</h2>
+                      <p className="analytics-event-meta">
+                        <span>ผู้จัดงาน: {viewingAnalyticsEvent.organizerName || '-'}</span>
+                        <span>·</span>
+                        <span>สถานที่: {viewingAnalyticsEvent.location}</span>
+                        <span>·</span>
+                        <span>สถานะ: {concertSalesStatus(viewingAnalyticsEvent).label}</span>
+                      </p>
+                    </div>
+                  </header>
+
+                  {analyticsError && <p role="alert">{analyticsError}</p>}
+                  {!analytics && !analyticsError && <p role="status">กำลังโหลดสถิติคอนเสิร์ต...</p>}
+                  {analytics && (
+                    <>
+                      <div className="concert-analytics-kpi-grid">
+                        <div className="analytics-kpi-card">
+                          <div className="kpi-card-head">
+                            <span className="kpi-card-label">รายได้รวมจากการขายบัตร</span>
+                            <BanknotesIcon className="borderless-kpi-icon" />
+                          </div>
+                          <div className="kpi-card-value">{formatBaht(analytics.grossSales)}</div>
+                          <p className="kpi-card-sub">ยอดขายบัตรก่อนหักเงินคืนและค่าบริการ</p>
+                        </div>
+                        <div className="analytics-kpi-card">
+                          <div className="kpi-card-head">
+                            <span className="kpi-card-label">รายได้สุทธิหลังหักค่าบริการ</span>
+                            <CheckCircleIcon className="borderless-kpi-icon" />
+                          </div>
+                          <div className="kpi-card-value">{formatBaht(analytics.netEntitlement)}</div>
+                          <p className="kpi-card-sub">ค่าบริการผู้จัด {formatBaht(analytics.organizerFee)}</p>
+                        </div>
+                        <div className="analytics-kpi-card">
+                          <div className="kpi-card-head">
+                            <span className="kpi-card-label">ยอดจำหน่ายบัตรจริง</span>
+                            <TicketIcon className="borderless-kpi-icon" />
+                          </div>
+                          <div className="kpi-card-value">{analytics.issuedTickets} ใบ</div>
+                          <p className="kpi-card-sub">จำนวนบัตรที่ออกทั้งหมด รวมบัตรที่คืนเงินแล้ว</p>
+                        </div>
+                        <div className="analytics-kpi-card">
+                          <div className="kpi-card-head">
+                            <span className="kpi-card-label">สิทธิ์พิเศษ โค้ดส่วนลด และคืนบัตร</span>
+                            <SlidersIcon className="borderless-kpi-icon" />
+                          </div>
+                          <div className="kpi-exceptions-list">
+                            <div className="kpi-exception-item">
+                              <span>คำสั่งซื้อที่ใช้สิทธิ์ ม.อุบลฯ</span><strong>{analytics.ubuOrders} รายการ</strong>
+                            </div>
+                            <div className="kpi-exception-item">
+                              <span>คำสั่งซื้อที่มีส่วนลด</span><strong>{analytics.discountedOrders} รายการ</strong>
+                            </div>
+                            <div className="kpi-exception-item">
+                              <span>คืนเงินแล้ว</span>
+                              <strong>{analytics.refundedTickets} ใบ ({formatBaht(analytics.approvedRefunds)})</strong>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="analytics-tier-breakdown-card">
+                        <h3 className="card-inner-heading">แจกแจงยอดขายตามประเภทบัตร / โซน</h3>
+                        {analytics.tiers.length === 0 ? <p>ยังไม่มีประเภทบัตร</p> : (
+                          <div className="table-responsive">
+                            <table className="enterprise-analytics-table">
+                              <thead>
+                                <tr>
+                                  <th>ประเภทบัตร / โซน</th>
+                                  <th>รอบการแสดง</th>
+                                  <th>ราคาบัตร</th>
+                                  <th>บัตรที่ออก</th>
+                                  <th>โควตาทั้งหมด</th>
+                                  <th>ยอดขายรวม</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {analytics.tiers.map((tier) => (
+                                  <tr key={tier.id}>
+                                    <td><strong>{tier.name}</strong></td>
+                                    <td>{safeFormatDateTime(tier.startTime)}{tier.status === 'cancelled' && ' (ยกเลิก)'}</td>
+                                    <td>{formatBaht(tier.price)}</td>
+                                    <td>{tier.sold} ใบ</td>
+                                    <td>{tier.quota} ใบ</td>
+                                    <td>{formatBaht(tier.gross)}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
+                      </div>
+                    </>
+                  )}
+                </section>
+              ) : (
+                <div style={{ padding: '3rem 1.5rem', textAlign: 'center', color: '#64748b' }}>
+                  <p>กรุณาเลือกคอนเสิร์ตจากเมนูด้านบนเพื่อดูสถิติเชิงลึก</p>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Pagination Bar (D-244) */}
           {((statusTab === 'pending' && pendingCount > 0) ||
             (statusTab === 'approved' && approvedCount > 0) ||
@@ -2301,7 +2413,6 @@ export function OwnerSessionApprovalManager() {
             </div>
           )}
         </div>
-      )}
 
       {/* =========================================================
           MODAL 1: FULL CONCERT REVIEW & FEE ADJUSTMENT (D-219, D-225)
@@ -2723,15 +2834,20 @@ export function OwnerSessionApprovalManager() {
               {loadingEditData ? (
                 <div style={{ padding: '3rem 1.5rem', textAlign: 'center', color: '#64748b' }}>
                   <RefreshIcon className="spin-icon" style={{ width: '28px', height: '28px', marginBottom: '0.75rem' }} />
-                  <p style={{ margin: 0, fontWeight: 500 }}>กำลังโหลดข้อมูลคอนเสิร์ตและรอบการแสดงทั้งหมด...</p>
+                  <p style={{ margin: 0, fontWeight: 400 }}>กำลังโหลดข้อมูลคอนเสิร์ตและรอบการแสดงทั้งหมด...</p>
                 </div>
               ) : editFormData ? (
                 <div className="edit-form-stack">
                   {/* Section 1: General Info & Artists */}
                   <div className="admin-override-section">
-                    <h4 className="admin-override-section-title">
-                      <span>1. ข้อมูลทั่วไปและไลน์อัปศิลปิน</span>
-                    </h4>
+                    <div style={{ marginBottom: '0.75rem' }}>
+                      <h4 className="admin-override-section-title" style={{ borderBottom: 'none', paddingBottom: 0, margin: 0 }}>
+                        <span>1. ข้อมูลทั่วไปและไลน์อัปศิลปิน</span>
+                      </h4>
+                      <span style={{ fontSize: '0.75rem', color: '#64748b' }}>
+                        แสดงที่: หน้ารายละเอียดคอนเสิร์ตบนเว็บไซต์ (/events/[id]) และแคตตาล็อกหน้าแรก (/)
+                      </span>
+                    </div>
 
                     <div className="form-field">
                       <label htmlFor="edit-concert-title">ชื่อคอนเสิร์ต *</label>
@@ -2824,18 +2940,39 @@ export function OwnerSessionApprovalManager() {
                         />
                       </div>
                     </div>
+
+                    {editFormData.isSalesPaused && (
+                      <div className="emergency-pause-control-card form-field" style={{ marginTop: '0.75rem', padding: '0.75rem', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '6px' }}>
+                        <label htmlFor="edit-paused-reason" style={{ color: '#991b1b', fontWeight: 500 }}>
+                          เหตุผลการระงับการจำหน่ายบัตรชั่วคราว (แสดงให้ลูกค้าทราบบนหน้าเว็บ):
+                        </label>
+                        <input
+                          id="edit-paused-reason"
+                          type="text"
+                          value={editFormData.salesPausedReason}
+                          onChange={(e) => setEditFormData({ ...editFormData, salesPausedReason: e.target.value })}
+                          className="text-input"
+                          placeholder="เช่น ระงับการจำหน่ายบัตรชั่วคราวเพื่อตรวจสอบความเรียบร้อยของระบบ..."
+                        />
+                      </div>
+                    )}
                   </div>
 
-                  {/* Section 2: Visual Assets & Images */}
+                  {/* Section 2: Visual Assets */}
                   <div className="admin-override-section">
-                    <h4 className="admin-override-section-title">
-                      <span>2. รูปภาพและสื่อประชาสัมพันธ์</span>
-                    </h4>
+                    <div style={{ marginBottom: '0.75rem' }}>
+                      <h4 className="admin-override-section-title" style={{ borderBottom: 'none', paddingBottom: 0, margin: 0 }}>
+                        <span>2. รูปภาพและสื่อประชาสัมพันธ์</span>
+                      </h4>
+                      <span style={{ fontSize: '0.75rem', color: '#64748b' }}>
+                        แสดงที่: แบนเนอร์หน้าแรก สื่อประชาสัมพันธ์ และแผนผังที่นั่ง
+                      </span>
+                    </div>
 
                     <div className="image-upload-grid">
                       {/* Poster */}
                       <div className="image-upload-card">
-                        <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: '#334155' }}>
+                        <span style={{ fontSize: '0.8125rem', fontWeight: 400, color: '#334155' }}>
                           รูปโปสเตอร์หลัก (Poster)
                         </span>
                         <div className="image-preview-box">
@@ -2881,7 +3018,7 @@ export function OwnerSessionApprovalManager() {
 
                       {/* Cover Banner */}
                       <div className="image-upload-card">
-                        <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: '#334155' }}>
+                        <span style={{ fontSize: '0.8125rem', fontWeight: 400, color: '#334155' }}>
                           แบนเนอร์หน้าปก (Cover Banner)
                         </span>
                         <div className="image-preview-box">
@@ -2927,7 +3064,7 @@ export function OwnerSessionApprovalManager() {
 
                       {/* Ticket Seating Map Template */}
                       <div className="image-upload-card">
-                        <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: '#334155' }}>
+                        <span style={{ fontSize: '0.8125rem', fontWeight: 400, color: '#334155' }}>
                           แผนผังที่นั่ง / ผังคอนเสิร์ต
                         </span>
                         <div className="image-preview-box">
@@ -2973,12 +3110,17 @@ export function OwnerSessionApprovalManager() {
                     </div>
                   </div>
 
-                  {/* Section 3: Sessions & Zones / Pricing */}
+                  {/* Section 3: Sessions & Zones Builder */}
                   <div className="admin-override-section">
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <h4 className="admin-override-section-title" style={{ borderBottom: 'none', paddingBottom: 0 }}>
-                        <span>3. รอบการแสดง ราคา และโซนที่นั่ง</span>
-                      </h4>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '0.75rem' }}>
+                      <div>
+                        <h4 className="admin-override-section-title" style={{ borderBottom: 'none', paddingBottom: 0, margin: 0 }}>
+                          <span>3. รอบการแสดง ราคา และโซนที่นั่ง</span>
+                        </h4>
+                        <span style={{ fontSize: '0.75rem', color: '#64748b' }}>
+                          แสดงที่: หน้ารอบการแสดงและเลือกโซนที่นั่ง (/events/[id]/sessions) และระบบตรวจบัตร
+                        </span>
+                      </div>
                       <button
                         type="button"
                         className="secondary-button"
@@ -2988,6 +3130,19 @@ export function OwnerSessionApprovalManager() {
                         <PlusIcon className="btn-icon" />
                         <span>เพิ่มรอบการแสดงใหม่</span>
                       </button>
+                    </div>
+
+                    {/* Current UBU Privilege Status Banner */}
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '0.5rem', padding: '0.65rem 0.85rem', backgroundColor: editFormData.ubuPrivilegeMode ? '#f0fdf4' : '#f8fafc', border: `1px solid ${editFormData.ubuPrivilegeMode ? '#bbf7d0' : '#e2e8f0'}`, borderRadius: '6px', marginBottom: '1rem' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <strong style={{ fontSize: '0.85rem', color: '#334155' }}>สถานะสิทธิ์ ม.อุบลฯ ของงานนี้:</strong>
+                        <span className={`status-badge ${editFormData.ubuPrivilegeMode ? 'approved' : 'paused'}`} style={{ fontSize: '0.75rem' }}>
+                          {editFormData.ubuPrivilegeMode ? 'เปิดใช้งานสิทธิ์ (@ubu.ac.th)' : 'ปิดการใช้งานสิทธิ์'}
+                        </span>
+                      </div>
+                      <span style={{ fontSize: '0.75rem', color: '#64748b' }}>
+                        {editFormData.ubuPrivilegeMode ? 'นักศึกษาและบุคลากรซื้อได้ตามราคาสิทธิ์ที่ระบุในแต่ละโซน' : 'ทุกคนซื้อในราคาบุคคลทั่วไป'}
+                      </span>
                     </div>
 
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
@@ -3190,13 +3345,18 @@ export function OwnerSessionApprovalManager() {
                     </div>
                   </div>
 
-                  {/* Section 4: Services, Policies & Financial Settings */}
+                  {/* Section 4: Services & Financials */}
                   <div className="admin-override-section">
-                    <h4 className="admin-override-section-title">
-                      <span>4. การบริการ นโยบายการคืนเงิน และการเงิน</span>
-                    </h4>
+                    <div style={{ marginBottom: '0.75rem' }}>
+                      <h4 className="admin-override-section-title" style={{ borderBottom: 'none', paddingBottom: 0, margin: 0 }}>
+                        <span>4. การบริการ นโยบายการคืนเงิน และการเงิน</span>
+                      </h4>
+                      <span style={{ fontSize: '0.75rem', color: '#64748b' }}>
+                        แสดงที่: หน้าสรุปคำสั่งซื้อและใบเสร็จลูกค้า (/orders), หน้าสรุปการเงินผู้จัดงาน (/organizer/payouts) และระบบจ่ายเงินส่วนแบ่งรายได้ (/back-office/owner#payouts)
+                      </span>
+                    </div>
 
-                    <div className="form-row-two-col">
+                    <div className="form-row-two-col" style={{ marginBottom: '1rem' }}>
                       <div className="form-field">
                         <label htmlFor="edit-age-restriction">การจำกัดอายุ</label>
                         <select
@@ -3225,7 +3385,7 @@ export function OwnerSessionApprovalManager() {
                       </div>
                     </div>
 
-                    <div className="form-field">
+                    <div className="form-field" style={{ marginBottom: '1rem' }}>
                       <label htmlFor="edit-entry-guidelines">กติกาการเข้างาน</label>
                       <input
                         id="edit-entry-guidelines"
@@ -3237,71 +3397,118 @@ export function OwnerSessionApprovalManager() {
                       />
                     </div>
 
-                    <div className="emergency-pause-control-card">
-                      <div className="emergency-pause-header">
-                        <div>
-                          <strong className="emergency-pause-title">สวิตช์เปิด/ปิดการจำหน่ายบัตรด่วน (Emergency Sales)</strong>
-                          <p className="emergency-pause-sub">เมื่อเปิดการระงับ ระบบจะหยุดรับคำสั่งซื้อบัตรทันทีทั้งในหน้าเว็บและระบบจอง</p>
-                        </div>
-                        <label className="switch-toggle-label">
-                          <input
-                            type="checkbox"
-                            checked={editFormData.isSalesPaused}
-                            onChange={(e) => setEditFormData({ ...editFormData, isSalesPaused: e.target.checked })}
-                          />
-                          <span className="switch-toggle-slider" />
-                        </label>
-                      </div>
-                      {editFormData.isSalesPaused && (
-                        <div className="form-field" style={{ marginTop: '0.75rem' }}>
-                          <label htmlFor="edit-paused-reason">เหตุผลการระงับการจำหน่ายบัตร (แสดงให้ลูกค้าทราบบนหน้าเว็บ)</label>
-                          <input
-                            id="edit-paused-reason"
-                            type="text"
-                            value={editFormData.salesPausedReason}
-                            onChange={(e) => setEditFormData({ ...editFormData, salesPausedReason: e.target.value })}
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
+                      {/* Organizer Fee */}
+                      <div style={{ padding: '0.85rem', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '6px' }}>
+                        <strong style={{ display: 'block', fontSize: '0.85rem', color: '#1e293b', marginBottom: '0.5rem' }}>
+                          ค่าบริการผู้จัดงาน (Organizer Fee)
+                        </strong>
+                        <div className="form-field" style={{ marginBottom: '0.5rem' }}>
+                          <label htmlFor="edit-org-fee-mode">รูปแบบการคิดค่าบริการ</label>
+                          <select
+                            id="edit-org-fee-mode"
+                            value={editFormData.organizerFeeMode || 'percentage'}
+                            onChange={(e) => setEditFormData({ ...editFormData, organizerFeeMode: e.target.value as 'percentage' | 'per_ticket' | 'flat_fee' })}
                             className="text-input"
-                            placeholder="เช่น ระงับการจำหน่ายบัตรชั่วคราวเพื่อตรวจสอบโควตา..."
+                          >
+                            <option value="percentage">คิดเป็นร้อยละจากยอดขาย (%)</option>
+                            <option value="per_ticket">คิดเป็นบาทต่อใบ (บาท/ใบ)</option>
+                            <option value="flat_fee">เหมาจ่ายต่องาน (บาท)</option>
+                          </select>
+                        </div>
+                        <div className="form-field">
+                          <label htmlFor="edit-org-fee">
+                            อัตราค่าบริการ {editFormData.organizerFeeMode === 'percentage' ? '(%)' : '(บาท)'}
+                          </label>
+                          <input
+                            id="edit-org-fee"
+                            type="number"
+                            step="0.1"
+                            min="0"
+                            value={editFormData.organizerFeeRate}
+                            onChange={(e) => setEditFormData({ ...editFormData, organizerFeeRate: Number(e.target.value) })}
+                            className="text-input"
                           />
                         </div>
-                      )}
+                      </div>
+
+                      {/* Customer Fee */}
+                      <div style={{ padding: '0.85rem', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '6px' }}>
+                        <strong style={{ display: 'block', fontSize: '0.85rem', color: '#1e293b', marginBottom: '0.5rem' }}>
+                          ค่าบริการลูกค้า (Customer Fee)
+                        </strong>
+                        <div className="form-field" style={{ marginBottom: '0.5rem' }}>
+                          <label htmlFor="edit-cust-fee-mode">รูปแบบการคิดค่าบริการ</label>
+                          <select
+                            id="edit-cust-fee-mode"
+                            value={editFormData.customerFeeMode || 'percentage'}
+                            onChange={(e) => setEditFormData({ ...editFormData, customerFeeMode: e.target.value as 'percentage' | 'per_ticket' | 'per_order' })}
+                            className="text-input"
+                          >
+                            <option value="percentage">คิดเป็นร้อยละจากยอดขาย (%)</option>
+                            <option value="per_ticket">คิดเป็นบาทต่อใบ (บาท/ใบ)</option>
+                            <option value="per_order">คิดเป็นบาทต่อคำสั่งซื้อ (บาท/ออเดอร์)</option>
+                          </select>
+                        </div>
+                        <div className="form-field">
+                          <label htmlFor="edit-cust-fee">
+                            อัตราค่าบริการ {editFormData.customerFeeMode === 'percentage' ? '(%)' : '(บาท)'}
+                          </label>
+                          <input
+                            id="edit-cust-fee"
+                            type="number"
+                            step="0.1"
+                            min="0"
+                            value={editFormData.customerFeeRate}
+                            onChange={(e) => setEditFormData({ ...editFormData, customerFeeRate: Number(e.target.value) })}
+                            className="text-input"
+                          />
+                        </div>
+                      </div>
                     </div>
 
-                    <div className="form-row-three-col">
+                    <div className="form-row-two-col" style={{ marginBottom: '1rem' }}>
                       <div className="form-field">
-                        <label htmlFor="edit-org-fee">ค่าบริการผู้จัดงาน (%)</label>
+                        <label htmlFor="edit-reserve-pct">สัดส่วนเงินสำรองความปลอดภัย (Reserve %)</label>
                         <input
-                          id="edit-org-fee"
+                          id="edit-reserve-pct"
                           type="number"
                           step="0.1"
-                          value={editFormData.organizerFeeRate}
-                          onChange={(e) => setEditFormData({ ...editFormData, organizerFeeRate: Number(e.target.value) })}
+                          min="0"
+                          max="100"
+                          value={editFormData.reservePercentage}
+                          onChange={(e) => setEditFormData({ ...editFormData, reservePercentage: Number(e.target.value) })}
                           className="text-input"
                         />
+                        <span style={{ fontSize: '0.72rem', color: '#64748b', marginTop: '0.2rem' }}>
+                          กันเงินสำรองไว้ชะลอการจ่ายให้ผู้จัดงานเพื่อรองรับการคืนเงินหรือข้อพิพาท
+                        </span>
                       </div>
+
                       <div className="form-field">
-                        <label htmlFor="edit-cust-fee">ค่าบริการลูกค้า (%)</label>
-                        <input
-                          id="edit-cust-fee"
-                          type="number"
-                          step="0.1"
-                          value={editFormData.customerFeeRate}
-                          onChange={(e) => setEditFormData({ ...editFormData, customerFeeRate: Number(e.target.value) })}
-                          className="text-input"
-                        />
-                      </div>
-                      <div className="form-field">
-                        <label htmlFor="edit-ubu-mode">สิทธิ์ ม.อุบลฯ</label>
+                        <label htmlFor="edit-ubu-mode">สิทธิ์ ม.อุบลฯ (UBU Privilege Mode)</label>
                         <select
                           id="edit-ubu-mode"
                           value={editFormData.ubuPrivilegeMode ? 'yes' : 'no'}
                           onChange={(e) => setEditFormData({ ...editFormData, ubuPrivilegeMode: e.target.value === 'yes' })}
                           className="text-input"
                         >
-                          <option value="yes">เปิดใช้งานสิทธิ์ ม.อุบล</option>
-                          <option value="no">ปิดการใช้งานสิทธิ์</option>
+                          <option value="yes">เปิดใช้งานสิทธิ์ ม.อุบลฯ (อนุญาตให้ซื้อราคานักศึกษา/บุคลากร)</option>
+                          <option value="no">ปิดการใช้งานสิทธิ์ (ทุกคนซื้อในราคาบุคคลทั่วไป)</option>
                         </select>
+                        <span style={{ fontSize: '0.72rem', color: '#64748b', marginTop: '0.2rem' }}>
+                          เมื่อเปิด ผู้ซื้อที่มีอีเมล @ubu.ac.th จะได้รับราคาสิทธิ์ตามที่ระบุในแต่ละโซน
+                        </span>
                       </div>
+                    </div>
+
+                    <div style={{ backgroundColor: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '8px', padding: '0.85rem', marginBottom: '1rem' }}>
+                      <strong style={{ fontSize: '0.85rem', color: '#1e40af', display: 'block', marginBottom: '0.25rem' }}>
+                        คำชี้แจงสำคัญเกี่ยวกับบัญชีรับเงิน (Payout Bank Account):
+                      </strong>
+                      <p style={{ margin: 0, fontSize: '0.825rem', color: '#1e3a8a', lineHeight: 1.5 }}>
+                        ข้อมูลบัญชีนี้จำเป็นอย่างยิ่งสำหรับผู้ดูแลระบบ (Admin) ในการโอนเงินส่วนแบ่งรายได้ค่าตั๋วสุทธิ (หลังหักค่าบริการแพลตฟอร์ม) ให้แก่ผู้จัดงาน (Organizer Payout) หลังจากคอนเสิร์ตแสดงเสร็จสิ้น <em>โดยไม่เกี่ยวข้องกับการชำระเงินของลูกค้า</em> เนื่องจากเวลาลูกค้าชำระเงิน ระบบจะแสดง PromptPay QR Code เข้าสู่บัญชีกลางของแพลตฟอร์มโดยตรง
+                      </p>
                     </div>
 
                     <div className="form-row-three-col">
@@ -3344,7 +3551,14 @@ export function OwnerSessionApprovalManager() {
                   {/* Section 5: Audit Trail & Backup Download */}
                   <div className="audit-trail-history-box">
                     <div className="audit-header">
-                      <h4>5. ประวัติการแก้ไขและไฟล์สำรอง CSV (Audit Trail)</h4>
+                      <div>
+                        <h4 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 600, color: '#0f172a' }}>
+                          5. ประวัติการแก้ไขและไฟล์สำรอง CSV (Audit Trail)
+                        </h4>
+                        <p style={{ margin: '0.25rem 0 0', fontSize: '0.75rem', color: '#64748b' }}>
+                          บันทึกลงฐานข้อมูลตาราง event_audit_logs อย่างถาวร เรียกดูและดาวน์โหลด CSV สำรองย้อนหลังได้ตลอดเวลา
+                        </p>
+                      </div>
                       <button
                         type="button"
                         className="secondary-button export-now-btn"
@@ -3367,14 +3581,20 @@ export function OwnerSessionApprovalManager() {
                                 <li key={`${log.id}-${c}`}>{c}</li>
                               ))}
                             </ul>
-                            <button
-                              type="button"
-                              className="secondary-button dl-backup-btn"
-                              onClick={() => triggerCsvDownload(log.snapshotCsv, `snapshot-${editingEvent.id}-${log.id}.csv`)}
-                            >
-                              <DownloadIcon className="btn-icon" />
-                              <span>ดาวน์โหลด CSV ฉบับก่อนแก้ไขนี้</span>
-                            </button>
+                            {log.snapshotCsv && (
+                              <button
+                                type="button"
+                                className="secondary-button dl-backup-btn"
+                                onClick={() => {
+                                  if (log.snapshotCsv) {
+                                    triggerCsvDownload(log.snapshotCsv, `snapshot-${editingEvent.id}-${log.id}.csv`);
+                                  }
+                                }}
+                              >
+                                <DownloadIcon className="btn-icon" />
+                                <span>ดาวน์โหลด CSV ฉบับก่อนแก้ไขนี้</span>
+                              </button>
+                            )}
                           </div>
                         ))}
                       </div>
@@ -3386,27 +3606,76 @@ export function OwnerSessionApprovalManager() {
               ) : null}
             </div>
 
-            <footer className="review-modal-footer">
-              <button
-                type="button"
-                className="secondary-button"
-                disabled={savingEdit}
-                onClick={() => {
-                  setEditingEvent(null);
-                  setEditFormData(null);
-                }}
-              >
-                <span>ยกเลิก</span>
-              </button>
-              <button
-                type="button"
-                className="primary-button"
-                disabled={savingEdit || loadingEditData || !editFormData}
-                onClick={handleSaveAdminEdit}
-              >
-                <CheckCircleIcon className="btn-icon" />
-                <span>ตรวจสอบและบันทึกข้อมูลคอนเสิร์ต</span>
-              </button>
+            <footer className="review-modal-footer" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', gap: '1rem', flexWrap: 'wrap' }}>
+              <div className="footer-left-actions">
+                {editFormData && (
+                  <button
+                    type="button"
+                    className="secondary-button emergency-sales-footer-btn"
+                    onClick={() => {
+                      if (!editFormData) return;
+                      const nextPaused = !editFormData.isSalesPaused;
+                      setEditFormData({
+                        ...editFormData,
+                        isSalesPaused: nextPaused,
+                        salesPausedReason: nextPaused ? (editFormData.salesPausedReason || 'ระงับการจำหน่ายบัตรชั่วคราวโดยผู้ดูแลระบบ') : '',
+                      });
+                      triggerToast({
+                        type: 'info',
+                        message: nextPaused
+                          ? 'เปลี่ยนสถานะเป็น: ระงับการขายด่วน (กดปุ่มบันทึกข้อมูลเพื่อมีผลจริง)'
+                          : 'เปลี่ยนสถานะเป็น: เปิดจำหน่ายตามปกติ (กดปุ่มบันทึกข้อมูลเพื่อมีผลจริง)',
+                      });
+                    }}
+                    title="คลิกเพื่อสลับสถานะเปิด/ปิดการจำหน่ายบัตรด่วน"
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '0.5rem',
+                      borderColor: editFormData.isSalesPaused ? '#fca5a5' : '#cbd5e1',
+                      backgroundColor: editFormData.isSalesPaused ? '#fef2f2' : '#ffffff',
+                      color: editFormData.isSalesPaused ? '#dc2626' : '#334155',
+                      fontWeight: 500,
+                    }}
+                  >
+                    <span
+                      style={{
+                        width: '8px',
+                        height: '8px',
+                        borderRadius: '50%',
+                        backgroundColor: editFormData.isSalesPaused ? '#dc2626' : '#16a34a',
+                      }}
+                    />
+                    <span>
+                      {editFormData.isSalesPaused
+                        ? 'สวิตช์เปิด/ปิดการจำหน่ายบัตรด่วน: [ระงับการขายอยู่]'
+                        : 'สวิตช์เปิด/ปิดการจำหน่ายบัตรด่วน: [เปิดจำหน่ายปกติ]'}
+                    </span>
+                  </button>
+                )}
+              </div>
+              <div className="footer-right-actions" style={{ display: 'flex', gap: '0.75rem' }}>
+                <button
+                  type="button"
+                  className="secondary-button"
+                  disabled={savingEdit}
+                  onClick={() => {
+                    setEditingEvent(null);
+                    setEditFormData(null);
+                  }}
+                >
+                  <span>ยกเลิก</span>
+                </button>
+                <button
+                  type="button"
+                  className="primary-button"
+                  disabled={savingEdit || loadingEditData || !editFormData}
+                  onClick={handleSaveAdminEdit}
+                >
+                  <CheckCircleIcon className="btn-icon" />
+                  <span>บันทึกข้อมูล</span>
+                </button>
+              </div>
             </footer>
           </div>
         </div>
@@ -3530,7 +3799,7 @@ export function OwnerSessionApprovalManager() {
               </p>
               {!togglingEvent.isSalesPaused && (
                 <div style={{ marginTop: '1rem' }}>
-                  <label htmlFor="toggle-reason-input" style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: '#475569', marginBottom: '0.35rem' }}>
+                  <label htmlFor="toggle-reason-input" style={{ display: 'block', fontSize: '0.85rem', fontWeight: 400, color: '#475569', marginBottom: '0.35rem' }}>
                     ข้อความเหตุผลแจ้งลูกค้า (แสดงบนป้ายเตือนในหน้าคอนเสิร์ต):
                   </label>
                   <input

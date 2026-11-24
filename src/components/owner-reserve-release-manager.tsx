@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import type { EventMoneyReportDetail } from '@/server/reports';
 import { formatDate, formatTime } from '@/lib/locale';
 import { RefreshIcon, ClockIcon } from './icons';
+import { triggerRefreshToast } from './toast-notification';
 import { AlertIcon } from './alert-icon';
 
 export interface EventOption {
@@ -173,7 +174,7 @@ export function OwnerReserveReleaseManager() {
     >
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px', flexWrap: 'wrap', gap: '12px' }}>
         <div>
-          <h2 style={{ fontSize: '20px', fontWeight: 'bold', color: '#0f172a', margin: '0 0 4px 0' }}>
+          <h2 style={{ fontSize: '20px', fontWeight: 400, color: '#0f172a', margin: '0 0 4px 0' }}>
             การปล่อยเงินสำรองหลังรอบสุดท้าย (Reserve Release)
           </h2>
           <p style={{ fontSize: '13px', color: '#64748b', margin: 0 }}>
@@ -209,7 +210,10 @@ export function OwnerReserveReleaseManager() {
 
           <button
             type="button"
-            onClick={() => fetchReport()}
+            onClick={async () => {
+              await fetchReport();
+              triggerRefreshToast('เงินสำรองและคืนเงิน');
+            }}
             disabled={loading}
             style={{
               display: 'inline-flex',
@@ -217,7 +221,7 @@ export function OwnerReserveReleaseManager() {
               gap: '6px',
               padding: '8px 14px',
               fontSize: '13px',
-              fontWeight: 600,
+              fontWeight: 400,
               borderRadius: '6px',
               border: '1px solid #cbd5e1',
               backgroundColor: '#f8fafc',
@@ -278,7 +282,7 @@ export function OwnerReserveReleaseManager() {
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
               <ClockIcon style={{ width: '20px', height: '20px', color: report.isFinalSessionEnded ? '#16a34a' : '#d97706' }} />
               <div>
-                <div style={{ fontSize: '14px', fontWeight: 'bold', color: report.isFinalSessionEnded ? '#166534' : '#92400e' }}>
+                <div style={{ fontSize: '14px', fontWeight: 400, color: report.isFinalSessionEnded ? '#166534' : '#92400e' }}>
                   {report.isFinalSessionEnded
                     ? 'รอบสุดท้ายของงานสิ้นสุดแล้ว (พร้อมตรวจสอบและปล่อยเงินสำรอง)'
                     : 'รอบสุดท้ายยังไม่สิ้นสุด — ไม่ปล่อยตามเวลาเดิน ต้องรอรอบสุดท้ายจบ'}
@@ -295,7 +299,7 @@ export function OwnerReserveReleaseManager() {
               data-testid="final-session-status-badge"
               style={{
                 fontSize: '12px',
-                fontWeight: 600,
+                fontWeight: 400,
                 padding: '4px 10px',
                 borderRadius: '4px',
                 backgroundColor: report.isFinalSessionEnded ? '#dcfce7' : '#fef3c7',
@@ -317,14 +321,14 @@ export function OwnerReserveReleaseManager() {
           >
             <div style={{ padding: '14px', backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '6px' }}>
               <div style={{ fontSize: '11px', color: '#64748b', marginBottom: '2px' }}>สิทธิ์สุทธิผู้จัดงาน (E)</div>
-              <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#0f172a' }}>
+              <div style={{ fontSize: '18px', fontWeight: 400, color: '#0f172a' }}>
                 ฿{report.netEntitlement.toLocaleString('th-TH', { minimumFractionDigits: 2 })}
               </div>
             </div>
 
             <div style={{ padding: '14px', backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '6px' }}>
               <div style={{ fontSize: '11px', color: '#64748b', marginBottom: '2px' }}>เป้าหมายเงินสำรอง (Target)</div>
-              <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#475569' }}>
+              <div style={{ fontSize: '18px', fontWeight: 400, color: '#475569' }}>
                 ฿{report.reserveTarget.toLocaleString('th-TH', { minimumFractionDigits: 2 })}
               </div>
               <div style={{ fontSize: '10px', color: '#64748b' }}>อัตราสำรอง {report.reservePercentage}%</div>
@@ -332,16 +336,16 @@ export function OwnerReserveReleaseManager() {
 
             <div style={{ padding: '14px', backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '6px' }}>
               <div style={{ fontSize: '11px', color: '#64748b', marginBottom: '2px' }}>สำรองที่ปล่อยแล้ว (Released U)</div>
-              <div data-testid="owner-total-reserve-released" style={{ fontSize: '18px', fontWeight: 'bold', color: '#0284c7' }}>
+              <div data-testid="owner-total-reserve-released" style={{ fontSize: '18px', fontWeight: 400, color: '#0284c7' }}>
                 ฿{report.totalReserveReleased.toLocaleString('th-TH', { minimumFractionDigits: 2 })}
               </div>
             </div>
 
             <div style={{ padding: '14px', backgroundColor: '#f8fafc', border: '1px solid #cbd5e1', borderRadius: '6px' }}>
-              <div style={{ fontSize: '11px', color: '#334155', fontWeight: 600, marginBottom: '2px' }}>เงินสำรองที่กันไว้จริง (Held H)</div>
+              <div style={{ fontSize: '11px', color: '#334155', fontWeight: 400, marginBottom: '2px' }}>เงินสำรองที่กันไว้จริง (Held H)</div>
               <div
                 data-testid="owner-held-reserve-amount"
-                style={{ fontSize: '20px', fontWeight: 'bold', color: report.actualHeldReserve > 0 ? '#b45309' : '#64748b' }}
+                style={{ fontSize: '20px', fontWeight: 400, color: report.actualHeldReserve > 0 ? '#b45309' : '#64748b' }}
               >
                 ฿{report.actualHeldReserve.toLocaleString('th-TH', { minimumFractionDigits: 2 })}
               </div>
@@ -355,12 +359,12 @@ export function OwnerReserveReleaseManager() {
                 borderRadius: '6px',
               }}
             >
-              <div style={{ fontSize: '11px', color: '#166534', fontWeight: 600, marginBottom: '2px' }}>
+              <div style={{ fontSize: '11px', color: '#166534', fontWeight: 400, marginBottom: '2px' }}>
                 ยอดพร้อมจ่ายปัจจุบัน (Payable A_pay)
               </div>
               <div
                 data-testid="owner-payable-after-release"
-                style={{ fontSize: '20px', fontWeight: 'bold', color: '#15803d' }}
+                style={{ fontSize: '20px', fontWeight: 400, color: '#15803d' }}
               >
                 ฿{report.payableAmount.toLocaleString('th-TH', { minimumFractionDigits: 2 })}
               </div>
@@ -377,13 +381,13 @@ export function OwnerReserveReleaseManager() {
               marginBottom: '28px',
             }}
           >
-            <h3 style={{ fontSize: '15px', fontWeight: 'bold', color: '#0f172a', margin: '0 0 14px 0' }}>
+            <h3 style={{ fontSize: '15px', fontWeight: 400, color: '#0f172a', margin: '0 0 14px 0' }}>
               สั่งปล่อยเงินสำรองเข้ายอดพร้อมจ่าย (Release Reserve to Payable)
             </h3>
 
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '16px' }}>
               <div>
-                <label htmlFor="reserve-release-amount-input" style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#334155', marginBottom: '4px' }}>
+                <label htmlFor="reserve-release-amount-input" style={{ display: 'block', fontSize: '12px', fontWeight: 400, color: '#334155', marginBottom: '4px' }}>
                   จำนวนเงินที่ต้องการปล่อย (บาท) *
                 </label>
                 <input
@@ -409,7 +413,7 @@ export function OwnerReserveReleaseManager() {
               </div>
 
               <div>
-                <label htmlFor="reserve-release-notes-input" style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: '#334155', marginBottom: '4px' }}>
+                <label htmlFor="reserve-release-notes-input" style={{ display: 'block', fontSize: '12px', fontWeight: 400, color: '#334155', marginBottom: '4px' }}>
                   หมายเหตุการปล่อยเงินสำรอง (ถ้ามี)
                 </label>
                 <input
@@ -442,7 +446,7 @@ export function OwnerReserveReleaseManager() {
                 style={{
                   padding: '8px 20px',
                   fontSize: '14px',
-                  fontWeight: 600,
+                  fontWeight: 400,
                   borderRadius: '6px',
                   backgroundColor:
                     report.isFinalSessionEnded && report.actualHeldReserve > 0 ? '#0284c7' : '#94a3b8',
@@ -461,7 +465,7 @@ export function OwnerReserveReleaseManager() {
 
           {/* Reserve Release History Table */}
           <div>
-            <h3 style={{ fontSize: '16px', fontWeight: 'bold', color: '#0f172a', margin: '0 0 12px 0' }}>
+            <h3 style={{ fontSize: '16px', fontWeight: 400, color: '#0f172a', margin: '0 0 12px 0' }}>
               ประวัติการปล่อยเงินสำรองของงาน (Reserve Release History)
             </h3>
 
@@ -498,11 +502,11 @@ export function OwnerReserveReleaseManager() {
                         data-testid={`reserve-release-row-${r.id}`}
                         style={{ borderBottom: '1px solid #f1f5f9' }}
                       >
-                        <td style={{ padding: '10px 12px', fontWeight: 600, color: '#0f172a' }}>{r.id}</td>
+                        <td style={{ padding: '10px 12px', fontWeight: 400, color: '#0f172a' }}>{r.id}</td>
                         <td style={{ padding: '10px 12px', color: '#475569' }}>
                           {formatDate(new Date(r.releasedAt))} {formatTime(new Date(r.releasedAt))} น.
                         </td>
-                        <td style={{ padding: '10px 12px', fontWeight: 600, color: '#0284c7' }}>
+                        <td style={{ padding: '10px 12px', fontWeight: 400, color: '#0284c7' }}>
                           ฿{r.amount.toLocaleString('th-TH', { minimumFractionDigits: 2 })}
                         </td>
                         <td style={{ padding: '10px 12px', color: '#475569' }}>{r.notes || '-'}</td>

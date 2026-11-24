@@ -18,6 +18,24 @@ function extractVerifiedToken(request: Request): string {
   );
 }
 
+async function flattenQrToPngBuffer(input: Buffer): Promise<Buffer> {
+  return sharp(input)
+    .resize(536, 536, {
+      fit: 'contain',
+      background: { r: 255, g: 255, b: 255, alpha: 1 },
+    })
+    .flatten({ background: { r: 255, g: 255, b: 255 } })
+    .extend({
+      top: 32,
+      bottom: 32,
+      left: 32,
+      right: 32,
+      background: { r: 255, g: 255, b: 255, alpha: 1 },
+    })
+    .png()
+    .toBuffer();
+}
+
 export async function GET(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
@@ -25,6 +43,7 @@ export async function GET(
   const { id: orderId } = await params;
   const pool = getDatabasePool();
   const token = extractVerifiedToken(request);
+  const isInline = new URL(request.url).searchParams.get('inline') === '1';
 
   if (!token) {
     return Response.json(
@@ -94,10 +113,7 @@ export async function GET(
       const svgText = decodeURIComponent(
         qrCodeUrl.replace(/^data:image\/svg\+xml;?(utf8|charset=utf-8)?,/i, ''),
       );
-      pngBuffer = await sharp(Buffer.from(svgText))
-        .resize(600, 600, { fit: 'contain', background: '#ffffff' })
-        .png()
-        .toBuffer();
+      pngBuffer = await flattenQrToPngBuffer(Buffer.from(svgText));
     } else if (qrCodeUrl.startsWith('http://') || qrCodeUrl.startsWith('https://')) {
       const upstreamRes = await fetch(qrCodeUrl, {
         signal: AbortSignal.timeout(8000),
@@ -106,10 +122,7 @@ export async function GET(
         throw new Error(`Failed to fetch QR image from upstream provider: ${upstreamRes.status}`);
       }
       const arrayBuffer = await upstreamRes.arrayBuffer();
-      pngBuffer = await sharp(Buffer.from(arrayBuffer))
-        .resize(600, 600, { fit: 'contain', background: '#ffffff' })
-        .png()
-        .toBuffer();
+      pngBuffer = await flattenQrToPngBuffer(Buffer.from(arrayBuffer));
     } else {
       return Response.json(
         { message: 'รูปแบบ QR Code ไม่ถูกต้อง' },
@@ -121,7 +134,7 @@ export async function GET(
       status: 200,
       headers: {
         'Content-Type': 'image/png',
-        'Content-Disposition': `attachment; filename="promptpay-qr-${orderId}.png"`,
+        'Content-Disposition': `${isInline ? 'inline' : 'attachment'}; filename="promptpay-qr-${orderId}.png"`,
         'Cache-Control': 'private, no-cache, no-store',
       },
     });

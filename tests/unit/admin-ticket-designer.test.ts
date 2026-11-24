@@ -54,25 +54,38 @@ describe('Admin Concert Ticket Designer & Background Testing Studio', () => {
     expect(designerSrc).toContain('tearLineX');
     expect(designerSrc).toContain('tearLineStyle');
 
-    // Background testing modes
+    // Background testing modes (Solid, Gradient, Image Upload <= 0.99MB; no Pattern/URL/Sample stages)
     expect(designerSrc).toContain('bgType');
     expect(designerSrc).toContain('gradient');
-    expect(designerSrc).toContain('pattern');
     expect(designerSrc).toContain('bgImageUrl');
     expect(designerSrc).toContain('bgOverlayDarkness');
     expect(designerSrc).toContain('bgOverlayBlur');
+    expect(designerSrc).toContain('compressImageUnderLimit');
+    expect(designerSrc).not.toContain('SAMPLE_BACKGROUNDS');
+    expect(designerSrc).not.toContain('imageUrlText');
 
-    // Typography and contextual inspector controls
+    // Typography, Font Upload, Fine Weight Sliders & Contextual Inspector Controls
     expect(designerSrc).toContain('fontFamily');
+    expect(designerSrc).toContain('titleFontWeight');
+    expect(designerSrc).toContain('bodyFontWeight');
+    expect(designerSrc).toContain('handleCustomFontUpload');
     expect(designerSrc).toContain('itemFontSize');
+    expect(designerSrc).toContain('itemSecondaryFontSize');
     expect(designerSrc).toContain('itemColor');
+    expect(designerSrc).toContain('toggleSecondaryText');
+    expect(designerSrc).toContain('showSecondaryText');
     expect(designerSrc).toContain('inspector-card');
+    expect(designerSrc).not.toContain('color-swatches');
+    expect(designerSrc).not.toContain('itemBgColor');
+    expect(designerSrc).not.toContain('itemBorderColor');
 
-    // QR Code controls
+    // QR Code controls (No frame/border/radius per D-289)
     expect(designerSrc).toContain('qrSize');
     expect(designerSrc).toContain('qrFgColor');
     expect(designerSrc).toContain('qrBgColor');
     expect(designerSrc).toContain('qrPayload');
+    expect(designerSrc).not.toContain('qrBorderColor');
+    expect(designerSrc).not.toContain('qrRadiusVal');
 
     // Anatomical Concert Ticket Sections (Gate, Seat, Price, Barcode, Stub Summary)
     expect(designerSrc).toContain('gateInfo');
@@ -94,43 +107,63 @@ describe('Admin Concert Ticket Designer & Background Testing Studio', () => {
     expect(designerSrc).toContain('handleExportPng');
     expect(designerSrc).toContain('toDataURL');
 
-    // Workspace Stage Environment Customizer (ฉากหลังโต๊ะทำงานรอบบัตร ไม่ใช่พื้นหลังบัตร)
+    // Workspace Stage Environment Customizer (Floating next to Zoom Dock, 3 modes, no custom color)
     expect(designerSrc).toContain('workspaceStage');
     expect(designerSrc).toContain('DEFAULT_WORKSPACE_STAGE');
-    expect(designerSrc).toContain('stage-style-card');
-    expect(designerSrc).toContain('customStageColor');
+    expect(designerSrc).toContain('dock-stage-group');
+    expect(designerSrc).toContain('stage-dock-btn');
+    expect(designerSrc).not.toContain('customStageColor');
+    expect(designerSrc).not.toContain('stage-backdrop-clickarea');
+    expect(designerSrc).not.toContain('floating-expand-sidebar-btn');
 
-    // Ticket Card Test Image File Upload & Dropzone
+    // Ticket Card Image File Upload & Dropzone
     expect(designerSrc).toContain('handleTicketImageUpload');
     expect(designerSrc).toContain('ticket-upload-dropzone');
     expect(designerSrc).toContain('ticket-upload-thumbnail');
     expect(designerSrc).toContain('handleClearCardImage');
 
-    // 5 Redesigned Menu Tabs
+    // 4 Focused Menu Tabs in Floating Right Drawer
+    expect(designerSrc).toContain('floating-right-drawer');
     expect(designerSrc).toContain("activeSideTab === 'elements'");
-    expect(designerSrc).toContain("activeSideTab === 'cardBg'");
-    expect(designerSrc).toContain("activeSideTab === 'stageBg'");
-    expect(designerSrc).toContain("activeSideTab === 'tearLine'");
-    expect(designerSrc).toContain("activeSideTab === 'allElements'");
+    expect(designerSrc).toContain("activeSideTab === 'layers'");
+    expect(designerSrc).toContain("activeSideTab === 'card'");
+    expect(designerSrc).toContain("activeSideTab === 'font'");
+    expect(designerSrc).toContain('ชิ้นส่วน');
+    expect(designerSrc).toContain('เลเยอร์');
+    expect(designerSrc).toContain('พื้นหลัง');
+    expect(designerSrc).toContain('ฟอนต์');
 
-    // Non-Solid Button Architecture
+    // Layer Reordering Controls
+    expect(designerSrc).toContain('layerOrder');
+    expect(designerSrc).toContain('handleMoveLayer');
+    expect(designerSrc).toContain('layer-move-btn');
+
+    // Non-Solid Button Architecture & Single Topbar Toggle
     expect(designerSrc).toContain('studio-btn save-master');
-    expect(designerSrc).toContain('studio-preset-pill');
-    expect(designerSrc).toContain('studio-view-mode-btn');
+    expect(designerSrc).toContain('studio-btn secondary');
+    expect(designerSrc).toContain('studio-btn primary');
+    expect(designerSrc).toContain('toggle-sidebar-btn');
 
-    // Element Visibility & Hide Controls (สำหรับส่วนที่ไม่ต้องการใช้บนบัตร)
+    // Element Visibility & Hide Controls
     expect(designerSrc).toContain('hide-element-action-btn');
     expect(designerSrc).toContain('section-quick-item-pill-group');
     expect(designerSrc).toContain('quick-item-eye-btn');
     expect(designerSrc).toContain('layers-batch-actions');
     expect(designerSrc).toContain('layers-preset-btn');
 
-    // Subtitle Color & Transparent Background/Border Customization
+    // Subtitle Color, Text Alignment & Countdown Toast
     expect(designerSrc).toContain('secondaryColor');
     expect(designerSrc).toContain('itemSecondaryColor');
-    expect(designerSrc).toContain('transparent-swatch');
-    expect(designerSrc).toContain('itemBorderColor');
-    expect(designerSrc).toContain('getElementBoxStyle');
+    expect(designerSrc).toContain('align-btn-group');
+    expect(designerSrc).toContain('align-option-btn');
+    expect(designerSrc).toContain('handleCenterOnCard');
+    expect(designerSrc).toContain('center-on-card-btn');
+    expect(designerSrc).toContain('แบบตาราง');
+    expect(designerSrc).toContain('สีขาว');
+    expect(designerSrc).toContain('สีดำ');
+    expect(designerSrc).toContain('studio-countdown-toast');
+    expect(designerSrc).toContain('studio-countdown-toast-bar');
+    expect(designerSrc).toContain('showStudioToast');
   });
 
   it('verifies ticket designer page route exists under back-office and expands to 1920 full screen', () => {
@@ -157,7 +190,7 @@ describe('Admin Concert Ticket Designer & Background Testing Studio', () => {
     expect(workspaceSrc).not.toMatch(/\p{Extended_Pictographic}/u);
   });
 
-  it('verifies non-solid button CSS rules and universal back-office button exclusion', () => {
+  it('verifies non-solid button CSS rules, floating right drawer, and countdown toast CSS', () => {
     const cssSrc = readFileSync(
       join(rootDir, 'src/app/back-office/back-office.css'),
       'utf8',
@@ -168,6 +201,11 @@ describe('Admin Concert Ticket Designer & Background Testing Studio', () => {
     expect(cssSrc).toContain('.fullscreen-ticket-studio .studio-view-mode-btn');
     expect(cssSrc).toContain('.fullscreen-ticket-studio .side-tab-btn');
     expect(cssSrc).toContain('.fullscreen-ticket-studio .section-quick-item-btn');
-    expect(cssSrc).toContain('.fullscreen-ticket-studio .stage-backdrop-clickarea');
+    expect(cssSrc).toContain('.studio-side-panel.floating-right-drawer');
+    expect(cssSrc).toContain('.side-panel-header');
+    expect(cssSrc).toContain('.dock-stage-group');
+    expect(cssSrc).toContain('.fullscreen-ticket-studio .layer-move-btn');
+    expect(cssSrc).toContain('.studio-countdown-toast');
+    expect(cssSrc).toContain('.studio-countdown-toast-bar');
   });
 });

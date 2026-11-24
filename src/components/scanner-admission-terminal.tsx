@@ -619,6 +619,16 @@ export function ScannerAdmissionTerminal({
             </div>
 
             <div className="terminal-top-actions">
+              <Link
+                href="/back-office/ticket-inspector"
+                className="secondary-button mini-btn"
+                id="open-ticket-inspector-btn"
+                title="เปิดระบบตรวจสอบและทดสอบคิวอาร์โค้ดบัตร (โหมดปลอดภัย ไม่ตัดรอบ)"
+                style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}
+              >
+                <QrCodeIcon width={14} height={14} />
+                <span>ตรวจสอบบัตร</span>
+              </Link>
               {(actorRole === 'organizer' || actorRole === 'owner') && (
                 <Link
                   href="/back-office/organizer?section=scanners"

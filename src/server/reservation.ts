@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto';
+﻿import { randomUUID } from 'node:crypto';
 import type { Pool, PoolClient } from 'pg';
 import { inTransaction } from './database.ts';
 import { EVENT_FEE_RESERVATION_LOCK_NAMESPACE, lockEventFeeReservation } from './event-lock.ts';
@@ -144,9 +144,15 @@ export async function ensureReservationSchema(pool: Pool): Promise<void> {
     ALTER TABLE orders ADD COLUMN IF NOT EXISTS "organizerFeeRate" NUMERIC(12, 2);
     ALTER TABLE orders ADD COLUMN IF NOT EXISTS "organizerFeePrivilegeRate" NUMERIC(12, 2);
     ALTER TABLE orders ADD COLUMN IF NOT EXISTS "organizerFeeMode" TEXT;
+    ALTER TABLE orders ADD COLUMN IF NOT EXISTS "orderSource" TEXT NOT NULL DEFAULT 'web';
+    ALTER TABLE orders ADD COLUMN IF NOT EXISTS "issuedByUserId" TEXT;
+    ALTER TABLE orders ADD COLUMN IF NOT EXISTS "issuedForUserId" TEXT;
+    ALTER TABLE orders ADD COLUMN IF NOT EXISTS "referenceNote" TEXT;
+    ALTER TABLE orders ADD COLUMN IF NOT EXISTS "priceDisplayMode" TEXT NOT NULL DEFAULT 'face_value';
     CREATE INDEX IF NOT EXISTS idx_orders_event_session ON orders("eventId", "sessionId");
     CREATE INDEX IF NOT EXISTS idx_orders_buyer ON orders("buyerEmail");
     CREATE INDEX IF NOT EXISTS idx_orders_status ON orders(status);
+    CREATE INDEX IF NOT EXISTS idx_orders_source ON orders("orderSource", "eventId");
     CREATE INDEX IF NOT EXISTS idx_orders_event_lower_email ON orders("eventId", LOWER(TRIM("buyerEmail")));
     CREATE INDEX IF NOT EXISTS idx_orders_active_event ON orders("eventId", status, "expiresAt") WHERE status IN ('paid', 'reserved');
     CREATE INDEX IF NOT EXISTS idx_orders_id_active_include ON orders(id) INCLUDE (status, "expiresAt") WHERE status IN ('paid', 'reserved');
@@ -187,6 +193,7 @@ export async function ensureReservationSchema(pool: Pool): Promise<void> {
     CREATE INDEX IF NOT EXISTS idx_tickets_code ON tickets("ticketCode");
     CREATE INDEX IF NOT EXISTS idx_tickets_qr_payload ON tickets("qrPayload");
     CREATE INDEX IF NOT EXISTS idx_tickets_refunded_type ON tickets("ticketTypeId") WHERE status = 'refunded';
+    CREATE INDEX IF NOT EXISTS idx_tickets_released_type ON tickets("ticketTypeId") WHERE status IN ('refunded', 'cancelled');
   `);
 
         if (isRealPgPool(pool)) {
@@ -462,6 +469,7 @@ export async function ensureReservationSchema(pool: Pool): Promise<void> {
           JOIN order_items oi ON o.id = oi."orderId"
           WHERE o."eventId" = p_event_id
             AND LOWER(TRIM(o."buyerEmail")) = p_buyer_email_norm
+            AND COALESCE(o."orderSource", 'web') <> 'direct_issue'
             AND (o.status = 'paid' OR (o.status = 'reserved' AND o."expiresAt" > p_now))
         ), 0) - COALESCE((
           SELECT COUNT(*)::int
@@ -469,7 +477,8 @@ export async function ensureReservationSchema(pool: Pool): Promise<void> {
           JOIN orders o2 ON t."orderId" = o2.id
           WHERE o2."eventId" = p_event_id
             AND LOWER(TRIM(o2."buyerEmail")) = p_buyer_email_norm
-            AND t.status = 'refunded'
+            AND COALESCE(o2."orderSource", 'web') <> 'direct_issue'
+            AND t.status IN ('refunded', 'cancelled')
         ), 0)
       )::int INTO v_already;
 
@@ -623,7 +632,7 @@ export async function ensureReservationSchema(pool: Pool): Promise<void> {
             SELECT COUNT(*)::int
             FROM tickets t
             WHERE t."ticketTypeId" = v_tt.id
-              AND t.status = 'refunded'
+              AND t.status IN ('refunded', 'cancelled')
           ), 0)
         )::int INTO v_held;
 
@@ -721,13 +730,15 @@ export async function getBuyerTicketCountForEvent(
          JOIN orders o2 ON t."orderId" = o2.id
          WHERE o2."eventId" = $1
            AND LOWER(TRIM(o2."buyerEmail")) = $2
-           AND t.status = 'refunded'
+           AND COALESCE(o2."orderSource", 'web') <> 'direct_issue'
+           AND t.status IN ('refunded', 'cancelled')
        ), 0)
      )::int as total
      FROM orders o
      JOIN order_items oi ON o.id = oi."orderId"
      WHERE o."eventId" = $1
        AND LOWER(TRIM(o."buyerEmail")) = $2
+       AND COALESCE(o."orderSource", 'web') <> 'direct_issue'
        AND (o.status = 'paid' OR (o.status = 'reserved' AND o."expiresAt" > $3))`,
     [eventId, emailNorm, now],
   );
@@ -751,6 +762,7 @@ export async function getEventLimitAndBuyerTicketCount(
                 JOIN order_items oi ON o.id = oi."orderId"
                 WHERE o."eventId" = e.id
                   AND LOWER(TRIM(o."buyerEmail")) = $2
+                  AND COALESCE(o."orderSource", 'web') <> 'direct_issue'
                   AND (o.status = 'paid' OR (o.status = 'reserved' AND o."expiresAt" > $3))
               ), 0) - COALESCE((
                 SELECT count(*)::int
@@ -758,7 +770,8 @@ export async function getEventLimitAndBuyerTicketCount(
                 JOIN orders o2 ON t."orderId" = o2.id
                 WHERE o2."eventId" = e.id
                   AND LOWER(TRIM(o2."buyerEmail")) = $2
-                  AND t.status = 'refunded'
+                  AND COALESCE(o2."orderSource", 'web') <> 'direct_issue'
+                  AND t.status IN ('refunded', 'cancelled')
               ), 0)
             )::int AS total
      FROM events e
@@ -1033,6 +1046,7 @@ export async function verifyQueueAndGetEventBuyerQuota(
            JOIN order_items oi ON o.id = oi."orderId"
            WHERE o."eventId" = e.id
              AND LOWER(TRIM(o."buyerEmail")) = $3
+             AND COALESCE(o."orderSource", 'web') <> 'direct_issue'
              AND (o.status = 'paid' OR (o.status = 'reserved' AND o."expiresAt" > $4))
          ), 0) - COALESCE((
            SELECT COUNT(*)::int
@@ -1040,7 +1054,8 @@ export async function verifyQueueAndGetEventBuyerQuota(
            JOIN orders o2 ON t."orderId" = o2.id
            WHERE o2."eventId" = e.id
              AND LOWER(TRIM(o2."buyerEmail")) = $3
-             AND t.status = 'refunded'
+             AND COALESCE(o2."orderSource", 'web') <> 'direct_issue'
+             AND t.status IN ('refunded', 'cancelled')
          ), 0)
        )::int END AS total
      FROM (SELECT 1) AS dummy
@@ -1134,6 +1149,7 @@ async function createReservationFast(
              JOIN order_items oi ON o.id = oi."orderId"
              WHERE o."eventId" = $2
                AND LOWER(TRIM(o."buyerEmail")) = LOWER(TRIM(gvs.email))
+               AND COALESCE(o."orderSource", 'web') <> 'direct_issue'
                AND (o.status = 'paid' OR (o.status = 'reserved' AND o."expiresAt" > $5))
            ), 0) - COALESCE((
              SELECT COUNT(*)::int
@@ -1141,7 +1157,8 @@ async function createReservationFast(
              JOIN orders o2 ON t."orderId" = o2.id
              WHERE o2."eventId" = $2
                AND LOWER(TRIM(o2."buyerEmail")) = LOWER(TRIM(gvs.email))
-               AND t.status = 'refunded'
+               AND COALESCE(o2."orderSource", 'web') <> 'direct_issue'
+               AND t.status IN ('refunded', 'cancelled')
            ), 0)
          )::int END AS "alreadyPurchased",
          COALESCE((
@@ -1648,7 +1665,7 @@ export async function createReservation(
         `WITH held_calc AS (
            SELECT GREATEST(0,
              coalesce(sum(oi.quantity), 0)::int -
-             coalesce((SELECT count(*)::int FROM tickets t WHERE t."ticketTypeId" = $20 AND t.status = 'refunded'), 0)
+             coalesce((SELECT count(*)::int FROM tickets t WHERE t."ticketTypeId" = $20 AND t.status IN ('refunded', 'cancelled')), 0)
            )::int AS held
            FROM order_items oi
            JOIN orders o ON oi."orderId" = o.id
@@ -1724,7 +1741,7 @@ export async function createReservation(
                   ), 0) - COALESCE((
                     SELECT COUNT(*)::int
                     FROM tickets t
-                    WHERE t."ticketTypeId" = tt.id AND t.status = 'refunded'
+                    WHERE t."ticketTypeId" = tt.id AND t.status IN ('refunded', 'cancelled')
                   ), 0)
                 )::int AS held
          FROM UNNEST($1::text[]) AS tt(id)`,
@@ -1839,7 +1856,7 @@ export async function getTicketTypeAvailableQuota(
             ) - COALESCE(
               (SELECT COUNT(*)::int
                FROM tickets t
-               WHERE t."ticketTypeId" = tt.id AND t.status = 'refunded'
+               WHERE t."ticketTypeId" = tt.id AND t.status IN ('refunded', 'cancelled')
               ), 0
             )) as "heldQuota"
      FROM ticket_types tt

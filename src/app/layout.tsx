@@ -1,8 +1,8 @@
 import type { Metadata } from 'next';
+import '@fontsource/kanit/thai-200.css';
 import '@fontsource/kanit/thai-400.css';
-import '@fontsource/kanit/thai-600.css';
+import '@fontsource/kanit/latin-200.css';
 import '@fontsource/kanit/latin-400.css';
-import '@fontsource/kanit/latin-600.css';
 import './globals.css';
 import { SiteShell } from '@/components/site-shell';
 

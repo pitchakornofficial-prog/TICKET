@@ -5,12 +5,14 @@
 เริ่มอ่านไฟล์นี้ แล้วเปิดเฉพาะเอกสารที่เกี่ยวข้องกับงานปัจจุบัน:
 
 - [Product requirements and UI design](docs/requirement.md)
+- [Design System Audit & Style Catalog (อ่านก่อนแตะ UI/สไตล์/ปุ่ม/การ์ด/ตาราง)](docs/design-system-audit.md)
 - [Domain context and setup status](CONTEXT.md)
 - [Workflow and source ownership](docs/workflow.md)
 - [Data Integrity Rules (อ่านก่อนแตะข้อมูล/ข่าว/แจ้งเตือน/การเงิน)](CONTEXT.md#data-integrity-rules)
 - [Application and shared data](docs/adr/0001-application-and-shared-data.md)
 - [AWS production target and local-first development](docs/adr/0002-local-first-and-aws-production.md)
 - [Payment, email, and storage integrations](docs/adr/0003-external-integrations.md)
+- [Email System Architecture & Troubleshooting Map (แผนที่หน้าจอและคู่มือแก้บั๊กระบบอีเมล)](docs/email-system/README.md)
 - [Invitation and back-office login](docs/adr/0004-invitation-and-back-office-login.md)
 - [SPEC-001: Concert ticket lifecycle (ready)](docs/specs/SPEC-001-concert-ticket-lifecycle.md)
 - [SPEC-001 task plan and acceptance coverage](docs/tasks/README.md)

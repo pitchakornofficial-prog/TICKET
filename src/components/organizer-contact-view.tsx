@@ -251,7 +251,7 @@ export function OrganizerContactView() {
                       <div className="channel-name-row">
                         <span className="channel-name">ที่อยู่สำนักงานใหญ่ (Headquarters)</span>
                       </div>
-                      <span className="channel-value" style={{ fontWeight: 500, fontSize: '0.92rem', lineHeight: '1.5' }}>
+                      <span className="channel-value" style={{ fontWeight: 400, fontSize: '0.92rem', lineHeight: '1.5' }}>
                         {contactInfo.address}
                       </span>
                       <p className="channel-subtext">{contactInfo.addressNote}</p>

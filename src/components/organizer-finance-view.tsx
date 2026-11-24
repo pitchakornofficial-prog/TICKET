@@ -25,6 +25,7 @@ import { generateBankSlipSvgDataUrl } from '@/lib/bank-slip';
 import {
   loadPayoutAccounts,
   getPrimaryPayoutAccount,
+  loadSharedPayoutAccounts,
   EVENT_PAYOUT_ACCOUNTS_CHANGED,
   type PayoutBankAccount,
 } from '@/lib/organizer-payout-sync';
@@ -34,6 +35,9 @@ export interface OrganizerEventItem {
   title: string;
   location?: string;
   status: string;
+  payoutBankName?: string | null;
+  payoutAccountNumber?: string | null;
+  payoutAccountName?: string | null;
 }
 
 export type FinanceTab = 'breakdown' | 'payouts';
@@ -119,12 +123,23 @@ export function OrganizerFinanceView({
   const [payoutAccounts, setPayoutAccounts] = useState<PayoutBankAccount[]>(() => loadPayoutAccounts());
 
   useEffect(() => {
+    let isCancelled = false;
     const handleSync = () => {
       setPayoutAccounts(loadPayoutAccounts());
     };
     window.addEventListener(EVENT_PAYOUT_ACCOUNTS_CHANGED, handleSync);
     window.addEventListener('storage', handleSync);
+
+    loadSharedPayoutAccounts()
+      .then((accs) => {
+        if (!isCancelled && accs.length > 0) {
+          setPayoutAccounts(accs);
+        }
+      })
+      .catch(() => {});
+
     return () => {
+      isCancelled = true;
       window.removeEventListener(EVENT_PAYOUT_ACCOUNTS_CHANGED, handleSync);
       window.removeEventListener('storage', handleSync);
     };
@@ -222,13 +237,41 @@ export function OrganizerFinanceView({
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch('/api/scanner/events', { cache: 'no-store' });
+      // Primary: fetch from organizer finance summaries (Single-query from PostgreSQL)
+      const res = await fetch('/api/organizer/finance/summaries', { cache: 'no-store' });
       const data = await res.json();
-      if (!res.ok) {
-        setError(data.message || 'ไม่สามารถโหลดรายชื่อคอนเสิร์ตได้');
+      if (res.ok && Array.isArray(data?.summaries) && data.summaries.length > 0) {
+        const loadedEvents: OrganizerEventItem[] = (data.summaries as EventFinanceSummaryItem[]).map((s) => ({
+          id: s.eventId,
+          title: s.eventTitle,
+          location: s.location,
+          status: s.status,
+          payoutBankName: s.payoutBankName,
+          payoutAccountNumber: s.payoutAccountNumber,
+          payoutAccountName: s.payoutAccountName,
+        }));
+        setEvents(loadedEvents);
+
+        const summaryMap: Record<string, EventFinanceSummaryItem> = {};
+        for (const s of data.summaries as EventFinanceSummaryItem[]) {
+          summaryMap[s.eventId] = s;
+        }
+        setAllReports((prev) => ({ ...summaryMap, ...prev }));
+
+        if (loadedEvents.length > 0) {
+          setSelectedEventId((prev) => (prev ? prev : (initialSelectedEventId || loadedEvents[0].id)));
+        }
         return;
       }
-      const loadedEvents: OrganizerEventItem[] = data.events || [];
+
+      // Fallback: fetch from /api/scanner/events if summaries returned empty
+      const scannerRes = await fetch('/api/scanner/events', { cache: 'no-store' });
+      const scannerData = await scannerRes.json();
+      if (!scannerRes.ok) {
+        setError(scannerData.message || 'ไม่สามารถโหลดรายชื่อคอนเสิร์ตได้');
+        return;
+      }
+      const loadedEvents: OrganizerEventItem[] = scannerData.events || [];
       setEvents(loadedEvents);
       if (loadedEvents.length > 0) {
         setSelectedEventId((prev) => (prev ? prev : (initialSelectedEventId || loadedEvents[0].id)));
@@ -703,6 +746,69 @@ export function OrganizerFinanceView({
                   </p>
                 </div>
               )}
+
+              {/* Linked Concert Payout Account Banner */}
+              <div
+                className="finance-concert-payout-box"
+                data-testid="finance-concert-payout-box"
+                style={{
+                  background: '#f8fafc',
+                  border: '1px solid #e2e8f0',
+                  borderRadius: '10px',
+                  padding: '0.75rem 1rem',
+                  marginBottom: '1rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  flexWrap: 'wrap',
+                  gap: '0.75rem',
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                  <div
+                    style={{
+                      width: '32px',
+                      height: '32px',
+                      borderRadius: '8px',
+                      background: '#eff6ff',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: '#1848ed',
+                    }}
+                  >
+                    <BanknotesIcon width={18} height={18} />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '0.75rem', color: '#64748b' }}>บัญชีธนาคารสำหรับรับเงินของคอนเสิร์ตนี้:</div>
+                    <div style={{ fontSize: '0.88rem', fontWeight: 600, color: '#0f172a' }}>
+                      {selectedEvent?.payoutBankName ? (
+                        <span>
+                          {selectedEvent.payoutBankName} ({selectedEvent.payoutAccountNumber}) - {selectedEvent.payoutAccountName}
+                        </span>
+                      ) : (
+                        <span>
+                          {primaryPayoutAccount.bankName} ({primaryPayoutAccount.accountNumber}) - {primaryPayoutAccount.accountName}{' '}
+                          <small style={{ fontWeight: 400, color: '#64748b' }}>(ตามบัญชีหลัก)</small>
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+                <span
+                  style={{
+                    fontSize: '0.75rem',
+                    padding: '0.25rem 0.65rem',
+                    borderRadius: '9999px',
+                    background: '#ecfdf5',
+                    color: '#047857',
+                    border: '1px solid #a7f3d0',
+                    fontWeight: 500,
+                  }}
+                >
+                  ซิงก์กับฐานข้อมูลจริง
+                </span>
+              </div>
 
               {/* Event Detailed Financial Metric Cards */}
               <div className="finance-event-metrics-grid">

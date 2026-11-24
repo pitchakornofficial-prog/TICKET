@@ -110,7 +110,7 @@ export default async function EventDetailPage({ params, searchParams }: EventDet
           }}
         >
           <AlertIcon />
-          <span style={{ fontWeight: 500 }}>
+          <span style={{ fontWeight: 400 }}>
             {salesStatus.reason === 'paused'
               ? `ระงับการจำหน่ายบัตรชั่วคราว: ${salesStatus.message}`
               : salesStatus.reason === 'not_started' && salesStatus.opensAt
@@ -139,7 +139,7 @@ export default async function EventDetailPage({ params, searchParams }: EventDet
           }}
         >
           <AlertIcon />
-          <span style={{ fontWeight: 500 }}>
+          <span style={{ fontWeight: 400 }}>
             หมดเวลาทำรายการ 15 นาที ระบบได้คืนโควตาบัตรแล้ว กรุณาเริ่มทำรายการใหม่อีกครั้ง
           </span>
         </div>

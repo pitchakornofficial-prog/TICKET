@@ -46,6 +46,8 @@ export async function migrateAuth(pool: Pool): Promise<void> {
     await ensureStripeWebhookInboxSchema(pool);
     const { ensureUploadFinalizeSchema } = await import('./upload-finalization.ts');
     await ensureUploadFinalizeSchema(pool);
+    const { ensureEventAuditSchema } = await import('./event-audit.ts');
+    await ensureEventAuditSchema(pool);
     const { ensurePasswordResetTokenSchema } = await import('./password-reset.ts');
     await ensurePasswordResetTokenSchema(pool);
     const { ensureOwnerContactInfoSchema } = await import('./owner-contact-info.ts');

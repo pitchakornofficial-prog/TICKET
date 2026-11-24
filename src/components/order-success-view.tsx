@@ -182,6 +182,9 @@ export function OrderSuccessView({ orderId }: OrderSuccessViewProps) {
             setTickets(tktData.tickets);
           }
         }
+        if (typeof window !== 'undefined' && guestToken) {
+          sessionStorage.setItem('ticket_guest_otp_token', guestToken);
+        }
         setLinkChallengeToken(null);
         setIsLoading(false);
       } catch (err) {
@@ -210,14 +213,9 @@ export function OrderSuccessView({ orderId }: OrderSuccessViewProps) {
           ''
         : '';
 
-    // AC-63 / G-17: Never use ordtok_ directly to fetch order or tickets; prompt OTP first
-    if (!savedToken && urlToken.startsWith('ordtok_')) {
-      setLinkChallengeToken(urlToken);
-      setIsLoading(false);
-      return;
-    }
-
-    loadOrderAndTickets(savedToken, urlToken);
+    // Direct ticket access: if urlToken is a signed order token (ordtok_), use it directly
+    const effectiveToken = savedToken || (urlToken.startsWith('ordtok_') ? urlToken : urlToken);
+    loadOrderAndTickets(effectiveToken, urlToken);
   }, [loadOrderAndTickets]);
 
   const handleLinkOtpVerified = (verifiedToken: string) => {
@@ -527,7 +525,7 @@ export function OrderSuccessView({ orderId }: OrderSuccessViewProps) {
                             padding: '0.45rem 0.9rem',
                             borderRadius: '8px',
                             fontSize: '0.82rem',
-                            fontWeight: 600,
+                            fontWeight: 400,
                             cursor: 'pointer',
                             border: '1px dashed #94a3b8',
                             background: '#f8fafc',
@@ -667,16 +665,22 @@ export function OrderSuccessView({ orderId }: OrderSuccessViewProps) {
 
                           {/* Right: Scan Stub Area */}
                           <div className="stub-scan-side">
-                            <div className="stub-qr-frame">
-                              {/* biome-ignore lint/performance/noImgElement: Data URL SVG QR representation */}
+                            <div className="stub-qr-frame" style={{ backgroundColor: '#ffffff', colorScheme: 'light' }}>
+                              {/* biome-ignore lint/performance/noImgElement: Opaque PNG ticket QR representation */}
                               <img
                                 id={`ticket-qr-${idx}`}
-                                src={tkt.qrCodeUrl}
+                                src={`/api/public/tickets/${tkt.id}/qr`}
                                 alt={`QR Code ${tkt.ticketCode}`}
                                 data-qr-payload={tkt.qrPayload}
                                 width={160}
                                 height={160}
-                                style={{ display: 'block', margin: '0 auto', borderRadius: '12px', border: '1px solid #e2e8f0', padding: '8px', background: '#ffffff' }}
+                                style={{ display: 'block', margin: '0 auto', borderRadius: '10px', backgroundColor: '#ffffff', padding: 0, border: 'none' }}
+                                onError={(e) => {
+                                  const img = e.currentTarget;
+                                  if (img.dataset.fallbackApplied || !tkt.qrCodeUrl) return;
+                                  img.dataset.fallbackApplied = '1';
+                                  img.src = tkt.qrCodeUrl;
+                                }}
                               />
                             </div>
 
@@ -776,7 +780,7 @@ export function OrderSuccessView({ orderId }: OrderSuccessViewProps) {
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                 <MailIcon style={{ width: '20px', height: '20px', color: '#0f172a' }} />
-                <h3 id="dev-email-modal-title" style={{ margin: 0, fontSize: '1rem', fontWeight: 700, color: '#0f172a' }}>
+                <h3 id="dev-email-modal-title" style={{ margin: 0, fontSize: '1rem', fontWeight: 400, color: '#0f172a' }}>
                   ตัวอย่างอีเมลบัตรเข้างาน
                 </h3>
               </div>

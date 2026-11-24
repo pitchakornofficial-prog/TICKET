@@ -5,6 +5,8 @@ import {
   queryPublicEventsCatalog,
   type PublicEventCatalogResult,
 } from '@/server/events';
+import { readHomeBanners } from '@/server/home-banners';
+import type { HeroBannerItem } from '@/lib/home-banners-sync';
 import { HomeConcertCatalog } from '@/components/home-concert-catalog';
 import { HomeCatalogSkeleton } from '@/components/home-catalog-skeleton';
 
@@ -58,6 +60,14 @@ async function AsyncHomeCatalog({ q }: { q?: string }) {
     }
   }
 
+  let initialBanners: HeroBannerItem[] = [];
+  try {
+    const pool = getDatabasePool();
+    initialBanners = await readHomeBanners(pool);
+  } catch {
+    // handled gracefully
+  }
+
   return (
     <HomeConcertCatalog
       allEvents={initialCatalog.events}
@@ -66,6 +76,7 @@ async function AsyncHomeCatalog({ q }: { q?: string }) {
       initialLocations={initialCatalog.locations}
       serverCatalogEnabled
       initialQuery={q}
+      initialBanners={initialBanners}
     />
   );
 }

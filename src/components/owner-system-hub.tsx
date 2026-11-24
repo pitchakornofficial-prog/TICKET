@@ -27,6 +27,7 @@ import {
 } from './icons';
 import type { ProhibitedItemData } from '@/server/prohibited-items';
 import { formatDate } from '@/lib/locale';
+import { triggerRefreshToast } from './toast-notification';
 import {
   EMPTY_OWNER_CONTACT_INFO,
   loadSharedOwnerContactInfo,
@@ -35,8 +36,9 @@ import {
 } from '@/lib/owner-contact-sync';
 import {
   loadHomeBanners,
-  saveHomeBanners,
-  resetHomeBanners,
+  loadSharedHomeBanners,
+  saveSharedHomeBanners,
+  DEFAULT_HERO_BANNERS,
   isBannerScheduleActive,
   type HeroBannerItem,
   type BannerType,
@@ -320,6 +322,15 @@ export function OwnerSystemHub() {
       .catch(() => {});
   }, []);
 
+  // Load shared banners on mount
+  useEffect(() => {
+    loadSharedHomeBanners()
+      .then(banners => {
+        setBannersList(banners);
+      })
+      .catch(() => {});
+  }, []);
+
   // Listen to banner updates
   useEffect(() => {
     const handleBannersSync = (e: Event) => {
@@ -455,7 +466,9 @@ export function OwnerSystemHub() {
       .map((b, idx) => ({ ...b, order: idx + 1 }));
 
     setBannersList(normalized);
-    saveHomeBanners(normalized);
+    saveSharedHomeBanners(normalized).catch(() => {
+      triggerToast('error', 'บันทึกแบนเนอร์ไปยังเซิร์ฟเวอร์ไม่สำเร็จ');
+    });
     setIsBannerModalOpen(false);
   };
 
@@ -463,7 +476,9 @@ export function OwnerSystemHub() {
   const handleToggleBannerStatus = (id: string) => {
     const updated = bannersList.map(b => (b.id === id ? { ...b, isActive: !b.isActive, updatedAt: new Date().toISOString() } : b));
     setBannersList(updated);
-    saveHomeBanners(updated);
+    saveSharedHomeBanners(updated).catch(() => {
+      triggerToast('error', 'บันทึกแบนเนอร์ไปยังเซิร์ฟเวอร์ไม่สำเร็จ');
+    });
     const target = updated.find(b => b.id === id);
     triggerToast('success', target?.isActive ? 'เปิดใช้งานแบนเนอร์แล้ว' : 'ปิดใช้งานแบนเนอร์แล้ว');
   };
@@ -482,7 +497,9 @@ export function OwnerSystemHub() {
 
     const normalized = reordered.map((b, idx) => ({ ...b, order: idx + 1 }));
     setBannersList(normalized);
-    saveHomeBanners(normalized);
+    saveSharedHomeBanners(normalized).catch(() => {
+      triggerToast('error', 'บันทึกแบนเนอร์ไปยังเซิร์ฟเวอร์ไม่สำเร็จ');
+    });
     triggerToast('success', 'ปรับเปลี่ยนลำดับการแสดงผลแบนเนอร์เรียบร้อยแล้ว');
   };
 
@@ -495,17 +512,24 @@ export function OwnerSystemHub() {
         .filter(b => b.id !== id)
         .map((b, idx) => ({ ...b, order: idx + 1 }));
       setBannersList(remaining);
-      saveHomeBanners(remaining);
+      saveSharedHomeBanners(remaining).catch(() => {
+        triggerToast('error', 'บันทึกแบนเนอร์ไปยังเซิร์ฟเวอร์ไม่สำเร็จ');
+      });
       triggerToast('success', 'ลบแบนเนอร์เรียบร้อยแล้ว');
     }
   };
 
   // Reset Banners
-  const handleResetBanners = () => {
+  const handleResetBanners = async () => {
     if (confirm('คุณต้องการรีเซ็ตแบนเนอร์หน้าแรกกลับเป็นค่าเริ่มต้นของระบบหรือไม่?')) {
-      const resetList = resetHomeBanners();
+      const resetList = [...DEFAULT_HERO_BANNERS];
       setBannersList(resetList);
-      triggerToast('success', 'รีเซ็ตแบนเนอร์หน้าแรกกลับเป็นค่าเริ่มต้นเรียบร้อยแล้ว');
+      try {
+        await saveSharedHomeBanners(resetList);
+        triggerToast('success', 'รีเซ็ตแบนเนอร์หน้าแรกกลับเป็นค่าเริ่มต้นเรียบร้อยแล้ว');
+      } catch {
+        triggerToast('error', 'รีเซ็ตแบนเนอร์ไปยังเซิร์ฟเวอร์ไม่สำเร็จ');
+      }
     }
   };
 
@@ -582,7 +606,7 @@ export function OwnerSystemHub() {
                   background: '#f59e0b',
                   color: '#ffffff',
                   fontSize: '0.7rem',
-                  fontWeight: 700,
+                  fontWeight: 400,
                   borderRadius: '9999px',
                   padding: '0.1rem 0.45rem',
                   marginLeft: '0.25rem',
@@ -613,7 +637,7 @@ export function OwnerSystemHub() {
                   background: '#10b981',
                   color: '#ffffff',
                   fontSize: '0.7rem',
-                  fontWeight: 700,
+                  fontWeight: 400,
                   borderRadius: '9999px',
                   padding: '0.1rem 0.45rem',
                   marginLeft: '0.25rem',
@@ -720,7 +744,10 @@ export function OwnerSystemHub() {
             <button
               type="button"
               className="hub-refresh-btn"
-              onClick={fetchNews}
+              onClick={async () => {
+                await fetchNews();
+                triggerRefreshToast('ระบบข่าวสาร');
+              }}
               title="รีเฟรชข้อมูลข่าวสาร"
               aria-label="รีเฟรชข้อมูลข่าวสาร"
             >
@@ -741,7 +768,7 @@ export function OwnerSystemHub() {
                 gap: '0.45rem',
                 padding: '0 1rem',
                 fontSize: '0.85rem',
-                fontWeight: 600,
+                fontWeight: 400,
                 borderRadius: '8px',
                 whiteSpace: 'nowrap',
               }}
@@ -834,7 +861,7 @@ export function OwnerSystemHub() {
                 gap: '0.45rem',
                 padding: '0 1rem',
                 fontSize: '0.85rem',
-                fontWeight: 600,
+                fontWeight: 400,
                 borderRadius: '8px',
                 whiteSpace: 'nowrap',
               }}
@@ -878,7 +905,7 @@ export function OwnerSystemHub() {
                       {isPending && (
                         <span
                           className="row-detail-pill"
-                          style={{ backgroundColor: '#fffbeb', color: '#b45309', borderColor: '#fde68a', fontWeight: 600 }}
+                          style={{ backgroundColor: '#fffbeb', color: '#b45309', borderColor: '#fde68a', fontWeight: 400 }}
                         >
                           <ClockIcon style={{ width: '13px', height: '13px' }} />
                           <span>รอการอนุมัติ</span>
@@ -891,14 +918,14 @@ export function OwnerSystemHub() {
                         </span>
                       )}
                       {isDraft && (
-                        <span className="row-detail-pill" style={{ color: '#64748b', fontWeight: 600 }}>
+                        <span className="row-detail-pill" style={{ color: '#64748b', fontWeight: 400 }}>
                           <span>ฉบับร่าง</span>
                         </span>
                       )}
                       {isRejected && (
                         <span
                           className="row-detail-pill"
-                          style={{ backgroundColor: '#fef2f2', color: '#b91c1c', borderColor: '#fecaca', fontWeight: 600 }}
+                          style={{ backgroundColor: '#fef2f2', color: '#b91c1c', borderColor: '#fecaca', fontWeight: 400 }}
                         >
                           <AlertTriangleIcon style={{ width: '13px', height: '13px' }} />
                           <span>ส่งกลับแก้ไข</span>
@@ -912,7 +939,7 @@ export function OwnerSystemHub() {
                           backgroundColor: item.source === 'admin' ? '#0f172a' : '#eff6ff',
                           color: item.source === 'admin' ? '#ffffff' : '#1d4ed8',
                           borderColor: item.source === 'admin' ? '#0f172a' : '#bfdbfe',
-                          fontWeight: 600,
+                          fontWeight: 400,
                         }}
                       >
                         {item.source === 'admin'
@@ -1155,7 +1182,7 @@ export function OwnerSystemHub() {
                           <span
                             style={{
                               fontSize: '0.7rem',
-                              fontWeight: 600,
+                              fontWeight: 400,
                               padding: '0.15rem 0.45rem',
                               borderRadius: '9999px',
                               background: '#f1f5f9',
@@ -1176,7 +1203,7 @@ export function OwnerSystemHub() {
                             <span>{scheduleText}</span>
                           </span>
                           {!isCurrentlyActive && banner.isActive && (
-                            <span style={{ color: '#f59e0b', fontWeight: 700 }}>
+                            <span style={{ color: '#f59e0b', fontWeight: 400 }}>
                               (อยู่นอกช่วงเวลาแสดงผล)
                             </span>
                           )}
@@ -1254,7 +1281,7 @@ export function OwnerSystemHub() {
               </div>
               <div className="modal-form-grid" style={{ gap: '1rem', marginBottom: '1rem' }}>
                 <div className="form-group">
-                  <label htmlFor="owner-contact-hotline" style={{ display: 'block', fontSize: '0.825rem', fontWeight: 600, color: '#334155', marginBottom: '0.35rem' }}>
+                  <label htmlFor="owner-contact-hotline" style={{ display: 'block', fontSize: '0.825rem', fontWeight: 400, color: '#334155', marginBottom: '0.35rem' }}>
                     เบอร์โทรสายด่วน *
                   </label>
                   <input
@@ -1269,7 +1296,7 @@ export function OwnerSystemHub() {
                   />
                 </div>
                 <div className="form-group">
-                  <label htmlFor="owner-contact-hotline-badge" style={{ display: 'block', fontSize: '0.825rem', fontWeight: 600, color: '#334155', marginBottom: '0.35rem' }}>
+                  <label htmlFor="owner-contact-hotline-badge" style={{ display: 'block', fontSize: '0.825rem', fontWeight: 400, color: '#334155', marginBottom: '0.35rem' }}>
                     ป้ายกำกับสายด่วน
                   </label>
                   <input
@@ -1284,7 +1311,7 @@ export function OwnerSystemHub() {
                 </div>
               </div>
               <div className="form-group">
-                <label htmlFor="owner-contact-hotline-note" style={{ display: 'block', fontSize: '0.825rem', fontWeight: 600, color: '#334155', marginBottom: '0.35rem' }}>
+                <label htmlFor="owner-contact-hotline-note" style={{ display: 'block', fontSize: '0.825rem', fontWeight: 400, color: '#334155', marginBottom: '0.35rem' }}>
                   คำอธิบายสายด่วน
                 </label>
                 <input
@@ -1307,7 +1334,7 @@ export function OwnerSystemHub() {
               </div>
               <div className="modal-form-grid" style={{ gap: '1rem', marginBottom: '1rem' }}>
                 <div className="form-group">
-                  <label htmlFor="owner-contact-email" style={{ display: 'block', fontSize: '0.825rem', fontWeight: 600, color: '#334155', marginBottom: '0.35rem' }}>
+                  <label htmlFor="owner-contact-email" style={{ display: 'block', fontSize: '0.825rem', fontWeight: 400, color: '#334155', marginBottom: '0.35rem' }}>
                     อีเมลฝ่ายประสานงาน *
                   </label>
                   <input
@@ -1322,7 +1349,7 @@ export function OwnerSystemHub() {
                   />
                 </div>
                 <div className="form-group">
-                  <label htmlFor="owner-contact-email-badge" style={{ display: 'block', fontSize: '0.825rem', fontWeight: 600, color: '#334155', marginBottom: '0.35rem' }}>
+                  <label htmlFor="owner-contact-email-badge" style={{ display: 'block', fontSize: '0.825rem', fontWeight: 400, color: '#334155', marginBottom: '0.35rem' }}>
                     ป้ายกำกับอีเมล
                   </label>
                   <input
@@ -1337,7 +1364,7 @@ export function OwnerSystemHub() {
                 </div>
               </div>
               <div className="form-group">
-                <label htmlFor="owner-contact-email-note" style={{ display: 'block', fontSize: '0.825rem', fontWeight: 600, color: '#334155', marginBottom: '0.35rem' }}>
+                <label htmlFor="owner-contact-email-note" style={{ display: 'block', fontSize: '0.825rem', fontWeight: 400, color: '#334155', marginBottom: '0.35rem' }}>
                   คำอธิบายอีเมล
                 </label>
                 <input
@@ -1360,7 +1387,7 @@ export function OwnerSystemHub() {
               </div>
               <div className="modal-form-grid" style={{ gap: '1rem', marginBottom: '1rem' }}>
                 <div className="form-group">
-                  <label htmlFor="owner-contact-line" style={{ display: 'block', fontSize: '0.825rem', fontWeight: 600, color: '#334155', marginBottom: '0.35rem' }}>
+                  <label htmlFor="owner-contact-line" style={{ display: 'block', fontSize: '0.825rem', fontWeight: 400, color: '#334155', marginBottom: '0.35rem' }}>
                     LINE ID *
                   </label>
                   <input
@@ -1375,7 +1402,7 @@ export function OwnerSystemHub() {
                   />
                 </div>
                 <div className="form-group">
-                  <label htmlFor="owner-contact-line-badge" style={{ display: 'block', fontSize: '0.825rem', fontWeight: 600, color: '#334155', marginBottom: '0.35rem' }}>
+                  <label htmlFor="owner-contact-line-badge" style={{ display: 'block', fontSize: '0.825rem', fontWeight: 400, color: '#334155', marginBottom: '0.35rem' }}>
                     ป้ายกำกับ LINE
                   </label>
                   <input
@@ -1390,7 +1417,7 @@ export function OwnerSystemHub() {
                 </div>
               </div>
               <div className="form-group">
-                <label htmlFor="owner-contact-line-note" style={{ display: 'block', fontSize: '0.825rem', fontWeight: 600, color: '#334155', marginBottom: '0.35rem' }}>
+                <label htmlFor="owner-contact-line-note" style={{ display: 'block', fontSize: '0.825rem', fontWeight: 400, color: '#334155', marginBottom: '0.35rem' }}>
                   คำอธิบาย LINE
                 </label>
                 <input
@@ -1412,7 +1439,7 @@ export function OwnerSystemHub() {
                 <h3 className="contacts-subgroup-title">เวลาทำการและที่อยู่สำนักงานใหญ่</h3>
               </div>
               <div className="form-group" style={{ marginBottom: '1rem' }}>
-                <label htmlFor="owner-contact-hours" style={{ display: 'block', fontSize: '0.825rem', fontWeight: 600, color: '#334155', marginBottom: '0.35rem' }}>
+                <label htmlFor="owner-contact-hours" style={{ display: 'block', fontSize: '0.825rem', fontWeight: 400, color: '#334155', marginBottom: '0.35rem' }}>
                   เวลาทำการ *
                 </label>
                 <input
@@ -1427,7 +1454,7 @@ export function OwnerSystemHub() {
                 />
               </div>
               <div className="form-group" style={{ marginBottom: '1rem' }}>
-                <label htmlFor="owner-contact-address" style={{ display: 'block', fontSize: '0.825rem', fontWeight: 600, color: '#334155', marginBottom: '0.35rem' }}>
+                <label htmlFor="owner-contact-address" style={{ display: 'block', fontSize: '0.825rem', fontWeight: 400, color: '#334155', marginBottom: '0.35rem' }}>
                   ที่อยู่สำนักงานใหญ่ *
                 </label>
                 <textarea
@@ -1468,7 +1495,7 @@ export function OwnerSystemHub() {
                   minHeight: '38px',
                   padding: '0 1.25rem',
                   fontSize: '0.85rem',
-                  fontWeight: 600,
+                  fontWeight: 400,
                   borderRadius: '8px',
                   display: 'inline-flex',
                   alignItems: 'center',
@@ -1486,7 +1513,7 @@ export function OwnerSystemHub() {
             <div className="contact-live-preview-card">
               <div className="preview-card-header">
                 <div>
-                  <h4 style={{ margin: 0, fontSize: '0.9rem', fontWeight: 700 }}>มุมมองจำลอง (Live Preview)</h4>
+                  <h4 style={{ margin: 0, fontSize: '0.9rem', fontWeight: 400 }}>มุมมองจำลอง (Live Preview)</h4>
                   <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>หน้าจอติดต่อที่ผู้จัดงานและลูกค้าเห็น</span>
                 </div>
                 <span className="preview-badge-live">LIVE SYNC</span>
@@ -1497,7 +1524,7 @@ export function OwnerSystemHub() {
                 <div className="preview-item-box">
                   <div className="preview-item-label">
                     <span>สายด่วน (Hotline)</span>
-                    <span style={{ background: '#dcfce7', color: '#166534', padding: '1px 6px', borderRadius: '4px', fontSize: '0.68rem', fontWeight: 600 }}>
+                    <span style={{ background: '#dcfce7', color: '#166534', padding: '1px 6px', borderRadius: '4px', fontSize: '0.68rem', fontWeight: 400 }}>
                       {contactInfo.hotlineBadge || 'ด่วน'}
                     </span>
                   </div>
@@ -1509,7 +1536,7 @@ export function OwnerSystemHub() {
                 <div className="preview-item-box">
                   <div className="preview-item-label">
                     <span>อีเมลทางการ</span>
-                    <span style={{ background: '#dbeafe', color: '#1d4ed8', padding: '1px 6px', borderRadius: '4px', fontSize: '0.68rem', fontWeight: 600 }}>
+                    <span style={{ background: '#dbeafe', color: '#1d4ed8', padding: '1px 6px', borderRadius: '4px', fontSize: '0.68rem', fontWeight: 400 }}>
                       {contactInfo.emailBadge || 'ทางการ'}
                     </span>
                   </div>
@@ -1521,7 +1548,7 @@ export function OwnerSystemHub() {
                 <div className="preview-item-box">
                   <div className="preview-item-label">
                     <span>LINE Official</span>
-                    <span style={{ background: '#d1fae5', color: '#065f46', padding: '1px 6px', borderRadius: '4px', fontSize: '0.68rem', fontWeight: 600 }}>
+                    <span style={{ background: '#d1fae5', color: '#065f46', padding: '1px 6px', borderRadius: '4px', fontSize: '0.68rem', fontWeight: 400 }}>
                       {contactInfo.lineBadge || 'แชท'}
                     </span>
                   </div>
@@ -1604,7 +1631,7 @@ export function OwnerSystemHub() {
             }}
           >
             <div>
-              <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 700, color: '#0f172a' }}>
+              <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 400, color: '#0f172a' }}>
                 กฎระเบียบและสิ่งของต้องห้ามนำเข้างาน (Regulations & Prohibited Items)
               </h3>
               <p style={{ margin: '0.25rem 0 0', fontSize: '0.85rem', color: '#64748b' }}>
@@ -1832,7 +1859,7 @@ export function OwnerSystemHub() {
               <div className="modal-body-scrollable" style={{ padding: '1.25rem 1.5rem', maxHeight: '68vh', overflowY: 'auto' }}>
                 {/* News Title */}
                 <div className="form-group" style={{ marginBottom: '1.15rem' }}>
-                  <label htmlFor="news-title" style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: '#0f172a', marginBottom: '0.4rem' }}>
+                  <label htmlFor="news-title" style={{ display: 'block', fontSize: '0.85rem', fontWeight: 400, color: '#0f172a', marginBottom: '0.4rem' }}>
                     หัวข้อข่าวและประกาศ *
                   </label>
                   <input
@@ -1852,7 +1879,7 @@ export function OwnerSystemHub() {
                 {/* News Category & Channels */}
                 <div className="modal-form-grid" style={{ gap: '1rem', marginBottom: '1.15rem' }}>
                   <div className="form-group">
-                    <label htmlFor="news-category" style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: '#0f172a', marginBottom: '0.4rem' }}>
+                    <label htmlFor="news-category" style={{ display: 'block', fontSize: '0.85rem', fontWeight: 400, color: '#0f172a', marginBottom: '0.4rem' }}>
                       หมวดหมู่ประกาศ
                     </label>
                     <select
@@ -1871,7 +1898,7 @@ export function OwnerSystemHub() {
                   </div>
 
                   <div className="form-group">
-                    <span style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: '#0f172a', marginBottom: '0.4rem' }}>
+                    <span style={{ display: 'block', fontSize: '0.85rem', fontWeight: 400, color: '#0f172a', marginBottom: '0.4rem' }}>
                       ช่องทางเผยแพร่
                     </span>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', paddingTop: '0.25rem' }}>
@@ -1903,7 +1930,7 @@ export function OwnerSystemHub() {
 
                 {/* News Content */}
                 <div className="form-group" style={{ marginBottom: '1.15rem' }}>
-                  <label htmlFor="news-content" style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: '#0f172a', marginBottom: '0.4rem' }}>
+                  <label htmlFor="news-content" style={{ display: 'block', fontSize: '0.85rem', fontWeight: 400, color: '#0f172a', marginBottom: '0.4rem' }}>
                     เนื้อหาข่าวสารและประกาศ *
                   </label>
                   <textarea
@@ -1922,7 +1949,7 @@ export function OwnerSystemHub() {
 
                 {/* Publish Mode Options */}
                 <div style={{ backgroundColor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '0.75rem 1rem' }}>
-                  <span style={{ display: 'block', fontSize: '0.825rem', fontWeight: 600, color: '#0f172a', marginBottom: '0.35rem' }}>
+                  <span style={{ display: 'block', fontSize: '0.825rem', fontWeight: 400, color: '#0f172a', marginBottom: '0.35rem' }}>
                     สถานะการเผยแพร่:
                   </span>
                   <div style={{ display: 'flex', gap: '1.5rem' }}>
@@ -1934,7 +1961,7 @@ export function OwnerSystemHub() {
                         checked={newsStatusOption === 'published'}
                         onChange={() => setNewsStatusOption('published')}
                       />
-                      <span style={{ fontWeight: 600, color: '#166534' }}>เผยแพร่ทันที</span>
+                      <span style={{ fontWeight: 400, color: '#166534' }}>เผยแพร่ทันที</span>
                     </label>
                     <label style={{ display: 'inline-flex', alignItems: 'center', gap: '0.45rem', fontSize: '0.85rem', color: '#334155', cursor: 'pointer' }}>
                       <input
@@ -2045,7 +2072,7 @@ export function OwnerSystemHub() {
 
               {/* News Preview */}
               <div style={{ backgroundColor: '#ffffff', border: '1px solid #cbd5e1', borderRadius: '10px', padding: '1.25rem', marginBottom: '1.25rem' }}>
-                <h4 style={{ margin: '0 0 0.75rem 0', fontSize: '1.1rem', fontWeight: 700, color: '#0f172a' }}>
+                <h4 style={{ margin: '0 0 0.75rem 0', fontSize: '1.1rem', fontWeight: 400, color: '#0f172a' }}>
                   {reviewingNewsItem.title}
                 </h4>
                 <p style={{ margin: 0, fontSize: '0.875rem', color: '#334155', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>
@@ -2056,7 +2083,7 @@ export function OwnerSystemHub() {
               {/* Rejection / Feedback Note Input (for pending news) */}
               {reviewingNewsItem.status === 'pending' && (
                 <div className="form-group">
-                  <label htmlFor="rejection-notes" style={{ display: 'block', fontSize: '0.825rem', fontWeight: 600, color: '#b91c1c', marginBottom: '0.35rem' }}>
+                  <label htmlFor="rejection-notes" style={{ display: 'block', fontSize: '0.825rem', fontWeight: 400, color: '#b91c1c', marginBottom: '0.35rem' }}>
                     ข้อความส่งกลับแก้ไข (กรณีไม่อนุมัติ):
                   </label>
                   <textarea
@@ -2196,7 +2223,7 @@ export function OwnerSystemHub() {
               {/* Mode 1: Event Selector */}
               {formBannerType === 'featured_concert' && (
                 <div className="form-group" style={{ marginBottom: '1rem' }}>
-                  <label htmlFor="banner-select-event" className="form-label" style={{ fontWeight: 600 }}>
+                  <label htmlFor="banner-select-event" className="form-label" style={{ fontWeight: 400 }}>
                     เลือกคอนเสิร์ตในระบบ:
                   </label>
                   <select
@@ -2218,7 +2245,7 @@ export function OwnerSystemHub() {
               {/* Mode 2: Custom Image URL Input */}
               {formBannerType === 'custom' && (
                 <div className="form-group" style={{ marginBottom: '1rem' }}>
-                  <label htmlFor="banner-image-url" className="form-label" style={{ fontWeight: 600 }}>
+                  <label htmlFor="banner-image-url" className="form-label" style={{ fontWeight: 400 }}>
                     URL รูปภาพแบนเนอร์ (อัตราส่วน 21:9 แนวนอน) *
                   </label>
                   <input
@@ -2237,7 +2264,7 @@ export function OwnerSystemHub() {
               {/* Live Preview Box: Pure Panoramic Graphic (Q1A) */}
               {formBannerImageUrl && (
                 <div style={{ marginBottom: '1rem' }}>
-                  <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#64748b', display: 'block', marginBottom: '0.25rem' }}>
+                  <span style={{ fontSize: '0.75rem', fontWeight: 400, color: '#64748b', display: 'block', marginBottom: '0.25rem' }}>
                     พรีวิวภาพแบนเนอร์หน้าแรก (ไม่มีข้อความหรือปุ่มทับบนภาพ):
                   </span>
                   <div
@@ -2268,7 +2295,7 @@ export function OwnerSystemHub() {
               {/* Destination Link Settings for Custom Banner (Q3A) */}
               {formBannerType === 'custom' && (
                 <div className="form-group" style={{ marginBottom: '1rem' }}>
-                  <label htmlFor="banner-link-type" className="form-label" style={{ fontWeight: 600 }}>
+                  <label htmlFor="banner-link-type" className="form-label" style={{ fontWeight: 400 }}>
                     จุดเชื่อมโยงเมื่อคลิกที่รูปภาพ:
                   </label>
                   <select
@@ -2287,7 +2314,7 @@ export function OwnerSystemHub() {
 
               {formBannerType === 'custom' && formBannerLinkType === 'custom_url' && (
                 <div className="form-group" style={{ marginBottom: '1rem' }}>
-                  <label htmlFor="banner-custom-url" className="form-label" style={{ fontWeight: 600 }}>
+                  <label htmlFor="banner-custom-url" className="form-label" style={{ fontWeight: 400 }}>
                     URL ปลายทางที่ต้องการลิงก์ไป:
                   </label>
                   <input
@@ -2305,7 +2332,7 @@ export function OwnerSystemHub() {
 
               {formBannerType === 'custom' && formBannerLinkType === 'concert' && (
                 <div className="form-group" style={{ marginBottom: '1rem' }}>
-                  <label htmlFor="banner-custom-event" className="form-label" style={{ fontWeight: 600 }}>
+                  <label htmlFor="banner-custom-event" className="form-label" style={{ fontWeight: 400 }}>
                     เลือกคอนเสิร์ตปลายทาง:
                   </label>
                   <select
@@ -2327,7 +2354,7 @@ export function OwnerSystemHub() {
               {/* Display Order & Active Settings (Q4A) */}
               <div className="banner-form-row-2" style={{ marginBottom: '1rem' }}>
                 <div className="form-group">
-                  <label htmlFor="banner-order" className="form-label" style={{ fontWeight: 600 }}>
+                  <label htmlFor="banner-order" className="form-label" style={{ fontWeight: 400 }}>
                     ลำดับการแสดงผล (Order):
                   </label>
                   <input
@@ -2349,7 +2376,7 @@ export function OwnerSystemHub() {
                       onChange={e => setFormBannerIsActive(e.target.checked)}
                       style={{ width: '18px', height: '18px' }}
                     />
-                    <span style={{ fontSize: '0.875rem', fontWeight: 600, color: '#0f172a' }}>
+                    <span style={{ fontSize: '0.875rem', fontWeight: 400, color: '#0f172a' }}>
                       เปิดใช้งานแบนเนอร์นี้ทันที
                     </span>
                   </label>
@@ -2523,7 +2550,7 @@ export function OwnerSystemHub() {
                       }}
                       onClick={() => setItemIcon(ico.id as ProhibitedItemData['iconName'])}
                     >
-                      <span style={{ fontWeight: itemIcon === ico.id ? 700 : 400 }}>{ico.label}</span>
+                      <span style={{ fontWeight: itemIcon === ico.id ? 400 : 200 }}>{ico.label}</span>
                     </button>
                   ))}
                 </div>

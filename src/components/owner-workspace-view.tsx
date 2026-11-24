@@ -13,7 +13,9 @@ import {
   ChevronDownIcon,
   UserPlusIcon,
   MailIcon,
+  QrCodeIcon,
 } from '@/components/icons';
+import { useHorizontalSubnavScroll } from '@/components/use-horizontal-subnav-scroll';
 import { OwnerOverviewDashboard } from '@/components/owner-overview-dashboard';
 import { ToastNotification } from '@/components/toast-notification';
 // Sub-managers integrated within OwnerSystemHub: OwnerContactInfoManager, OwnerNewsManager, OwnerSyncConflictManager
@@ -53,6 +55,15 @@ const OwnerInboundMailbox = dynamic(() =>
 );
 const AdminTicketDesigner = dynamic(() =>
   import('@/components/admin-ticket-designer').then(m => m.AdminTicketDesigner),
+);
+const AdminEmailDesigner = dynamic(() =>
+  import('@/components/admin-email-designer').then(m => m.AdminEmailDesigner),
+);
+const OwnerDirectTicketsManager = dynamic(() =>
+  import('@/components/owner-direct-tickets-manager').then(m => m.OwnerDirectTicketsManager),
+);
+const TicketInspectorView = dynamic(() =>
+  import('@/components/ticket-inspector-view').then(m => m.TicketInspectorView),
 );
 
 const GOV_CHARTER_TAB_ID = ['poli', 'cies'].join('');
@@ -137,6 +148,24 @@ const SECTIONS: SectionConfig[] = [
     description: 'จัดองค์ประกอบ สี ฟอนต์ คิวอาร์โค้ด และทดสอบพื้นหลังบัตรคอนเสิร์ต',
     icon: SlidersIcon,
   },
+  {
+    id: 'direct-tickets',
+    label: 'ออกบัตรตรง (โควตา)',
+    description: 'ดึงบัตรตรงจากโควตาคอนเสิร์ตกรณีโอนเงินนอกระบบ พร้อมดาวน์โหลด .zip และเพิกถอนคืนโควตา',
+    icon: ReceiptIcon,
+  },
+  {
+    id: 'email-designer',
+    label: 'ออกแบบอีเมล',
+    description: 'จัดองค์ประกอบ ตัวแปร รูปแบบบัตร คิวอาร์โค้ด และปุ่มกดสำหรับส่งอีเมล',
+    icon: MailIcon,
+  },
+  {
+    id: 'ticket-inspector',
+    label: 'ตรวจสอบบัตร',
+    description: 'สแกนคิวอาร์โค้ด ทดสอบความถูกต้องของบัตร ตรวจสอบสถานะและรายละเอียดคำสั่งซื้อ',
+    icon: QrCodeIcon,
+  },
 ];
 
 interface SectionGroupConfig {
@@ -155,12 +184,12 @@ const SECTION_GROUPS: SectionGroupConfig[] = [
   {
     id: 'concerts-operations',
     name: 'งานคอนเสิร์ตและตั๋ว',
-    sections: [SECTIONS[1], SECTIONS[2], SECTIONS[9]], // approval, refunds, ticket-designer
+    sections: [SECTIONS[1], SECTIONS[2], SECTIONS[9], SECTIONS[10], SECTIONS[12]], // approval, refunds, ticket-designer, direct-tickets, ticket-inspector
   },
   {
     id: 'commerce-finance',
     name: 'การเงินและลูกค้า',
-    sections: [SECTIONS[3], SECTIONS[4], SECTIONS[8]], // finance, customer, inbox
+    sections: [SECTIONS[3], SECTIONS[4], SECTIONS[8], SECTIONS[11]], // finance, customer, inbox, email-designer
   },
   {
     id: 'governance-system',
@@ -177,6 +206,13 @@ const HASH_TO_SECTION: Record<string, OwnerSectionId> = {
   'owner-refund-approval-manager': 'refunds',
   'ticket-designer': 'ticket-designer',
   'ticket-design': 'ticket-designer',
+  'ticket-inspector': 'ticket-inspector',
+  'ticket-inspect': 'ticket-inspector',
+  'qr-inspector': 'ticket-inspector',
+  'email-designer': 'email-designer',
+  'email-design': 'email-designer',
+  'direct-tickets': 'direct-tickets',
+  'owner-direct-tickets-manager': 'direct-tickets',
   finance: 'finance',
   'owner-fee-settings-manager': 'finance',
   'owner-weekly-payout-manager': 'finance',
@@ -213,6 +249,15 @@ export function OwnerWorkspaceView({ initialSection }: OwnerWorkspaceViewProps) 
   });
   const [activeSubTab, setActiveSubTab] = useState<string>('all');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  const { tabsRef, canScrollLeft, canScrollRight, scrollActiveIntoView } =
+    useHorizontalSubnavScroll();
+
+  useEffect(() => {
+    if (!mobileMenuOpen) {
+      scrollActiveIntoView(`[data-testid="owner-nav-${activeSection}"]`);
+    }
+  }, [activeSection, mobileMenuOpen, scrollActiveIntoView]);
 
   useEffect(() => {
     function handleHashChange() {
@@ -291,6 +336,9 @@ export function OwnerWorkspaceView({ initialSection }: OwnerWorkspaceViewProps) 
       {/* Horizontal Sub-Nav Bar (D-115, D-221, D-222) */}
       <nav className="owner-subnav-bar" aria-label="แถบเมนูหลักเจ้าของระบบ">
         <div className="owner-subnav-inner">
+          {/* Subtle Left Edge Fade Gradient */}
+          <div className={`subnav-fade-left ${canScrollLeft && !mobileMenuOpen ? 'visible' : ''}`} aria-hidden="true" />
+
           {/* Mobile Menu Toggle Button (preserves testid and text for backward compatibility) */}
           <div className="owner-mobile-nav-bar">
             <button
@@ -310,7 +358,10 @@ export function OwnerWorkspaceView({ initialSection }: OwnerWorkspaceViewProps) 
           </div>
 
           {/* Desktop/Tablet Horizontal Tabs (D-221, D-222, D-248) */}
-          <div className={`owner-subnav-tabs ${mobileMenuOpen ? 'mobile-open' : ''}`}>
+          <div
+            ref={tabsRef}
+            className={`owner-subnav-tabs ${mobileMenuOpen ? 'mobile-open' : ''}`}
+          >
             <div className="owner-subnav-left-group">
               {SECTION_GROUPS.map((group, groupIdx) => (
                 <Fragment key={group.id}>
@@ -344,6 +395,9 @@ export function OwnerWorkspaceView({ initialSection }: OwnerWorkspaceViewProps) 
               ))}
             </div>
           </div>
+
+          {/* Subtle Right Edge Fade Gradient */}
+          <div className={`subnav-fade-right ${canScrollRight && !mobileMenuOpen ? 'visible' : ''}`} aria-hidden="true" />
         </div>
       </nav>
 
@@ -358,6 +412,14 @@ export function OwnerWorkspaceView({ initialSection }: OwnerWorkspaceViewProps) 
             isFullOverview={true}
           />
         </main>
+      ) : activeSection === 'ticket-designer' ? (
+        <main
+          className="owner-content-stage ticket-designer-stage"
+          data-testid="owner-section-content-ticket-designer"
+          style={{ maxWidth: '1920px', width: '100%', margin: '0 auto', padding: '1rem 1.25rem' }}
+        >
+          <AdminTicketDesigner />
+        </main>
       ) : (
         <div className="owner-workspace-content-wrap">
           <main
@@ -369,9 +431,9 @@ export function OwnerWorkspaceView({ initialSection }: OwnerWorkspaceViewProps) 
             {activeSection !== 'approval' && (
               <div
                 className="owner-section-header"
-                style={activeSection === 'refunds' || activeSection === 'customer' || activeSection === 'inbox' || activeSection === 'finance' || activeSection === 'invitations' || activeSection === 'system' ? { display: 'none' } : undefined}
+                style={activeSection === 'email-designer' ? { display: 'none' } : activeSection === 'refunds' || activeSection === 'customer' || activeSection === 'inbox' || activeSection === 'finance' || activeSection === 'invitations' || activeSection === 'system' || activeSection === 'direct-tickets' || activeSection === 'ticket-designer' || activeSection === 'ticket-inspector' ? { display: 'none' } : undefined}
               >
-                {activeSection !== 'refunds' && activeSection !== 'customer' && activeSection !== 'inbox' && activeSection !== 'finance' && activeSection !== 'invitations' && activeSection !== 'system' && (
+                {activeSection !== 'refunds' && activeSection !== 'customer' && activeSection !== 'inbox' && activeSection !== 'finance' && activeSection !== 'invitations' && activeSection !== 'system' && activeSection !== 'direct-tickets' && activeSection !== 'email-designer' && activeSection !== 'ticket-designer' && activeSection !== 'ticket-inspector' && (
                   <>
                     <div className="owner-section-header-titles">
                       <h2 className="owner-section-title">{currentSection.label}</h2>
@@ -525,10 +587,7 @@ export function OwnerWorkspaceView({ initialSection }: OwnerWorkspaceViewProps) 
 
             <div className="owner-section-body">
               {activeSection === 'approval' && (
-                <>
-                  <OwnerSessionApprovalManager />
-                  <OwnerRefundApprovalManager />
-                </>
+                <OwnerSessionApprovalManager />
               )}
 
               {activeSection === 'refunds' && (
@@ -537,6 +596,20 @@ export function OwnerWorkspaceView({ initialSection }: OwnerWorkspaceViewProps) 
 
               {activeSection === 'ticket-designer' && (
                 <AdminTicketDesigner />
+              )}
+
+              {activeSection === 'email-designer' && (
+                <div className="email-designer-container">
+                  <AdminEmailDesigner />
+                </div>
+              )}
+
+              {activeSection === 'direct-tickets' && (
+                <OwnerDirectTicketsManager />
+              )}
+
+              {activeSection === 'ticket-inspector' && (
+                <TicketInspectorView />
               )}
 
               {activeSection === 'finance' && (

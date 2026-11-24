@@ -271,6 +271,17 @@ export function OrderPaymentView({ orderId }: OrderPaymentViewProps) {
   const timerMinutes = Math.floor(remainingSeconds / 60);
   const timerSeconds = remainingSeconds % 60;
 
+  const paymentToken =
+    typeof window !== 'undefined'
+      ? sessionStorage.getItem('ticket_guest_otp_token') || ''
+      : '';
+  const rawQrUrl = charge?.qrCodeUrl || '';
+  const isRemoteQrUrl = rawQrUrl.startsWith('http://') || rawQrUrl.startsWith('https://');
+  const displayQrSrc =
+    charge && reservation && isRemoteQrUrl && paymentToken
+      ? `/api/public/checkout/orders/${reservation.id}/payment-qr/download?token=${encodeURIComponent(paymentToken)}&inline=1`
+      : rawQrUrl;
+
   async function handleSimulatePaymentSuccess() {
     if (!reservation) return;
     setIsVerifyingPayment(true);
@@ -472,7 +483,7 @@ export function OrderPaymentView({ orderId }: OrderPaymentViewProps) {
                       animation: 'spin 0.8s linear infinite',
                     }}
                   />
-                  <p style={{ margin: 0, fontSize: '0.95rem', fontWeight: 600, color: 'var(--black)' }}>
+                  <p style={{ margin: 0, fontSize: '0.95rem', fontWeight: 400, color: 'var(--black)' }}>
                     กำลังโหลด QR Code ชำระเงิน PromptPay...
                   </p>
                   <p style={{ margin: '0.25rem 0 1rem', fontSize: '0.85rem', color: 'var(--muted)' }}>
@@ -491,15 +502,21 @@ export function OrderPaymentView({ orderId }: OrderPaymentViewProps) {
                 </div>
               ) : (
                 <>
-                  <div className="payment-qr-frame">
+                  <div className="payment-qr-frame" style={{ backgroundColor: '#ffffff', colorScheme: 'light' }}>
                     {/* biome-ignore lint/performance/noImgElement: Data URL SVG QR representation */}
                     <img
                       id="promptpay-qr-image"
-                      src={charge.qrCodeUrl}
+                      src={displayQrSrc}
                       alt="PromptPay QR Code"
                       width={220}
                       height={220}
-                      style={{ display: 'block', margin: '0 auto' }}
+                      style={{ display: 'block', margin: '0 auto', backgroundColor: '#ffffff', borderRadius: '8px' }}
+                      onError={(e) => {
+                        const img = e.currentTarget;
+                        if (img.dataset.fallbackApplied || !charge?.qrCodeUrl || img.src === charge.qrCodeUrl) return;
+                        img.dataset.fallbackApplied = '1';
+                        img.src = charge.qrCodeUrl;
+                      }}
                     />
                   </div>
 
@@ -657,7 +674,7 @@ export function OrderPaymentView({ orderId }: OrderPaymentViewProps) {
               <Link
                 href={`/orders/${reservation.id}/success`}
                 className="primary-button button-link"
-                style={{ padding: '0.85rem 2rem', fontSize: '1rem', fontWeight: 600, background: '#16a34a', borderColor: '#16a34a' }}
+                style={{ padding: '0.85rem 2rem', fontSize: '1rem', fontWeight: 400, background: '#16a34a', borderColor: '#16a34a' }}
               >
                 ไปยังหน้าสลิปและตั๋วคอนเสิร์ตทันที →
               </Link>
@@ -726,7 +743,7 @@ export function OrderPaymentView({ orderId }: OrderPaymentViewProps) {
           )}
 
           <div className="payment-grand-total-row">
-            <span style={{ fontWeight: 700 }}>ยอดรวมสุทธิ:</span>
+            <span style={{ fontWeight: 400 }}>ยอดรวมสุทธิ:</span>
             <strong id="quote-total">{formatBaht(reservation.total)}</strong>
           </div>
         </div>

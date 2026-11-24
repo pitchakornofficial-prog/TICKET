@@ -15,6 +15,11 @@ import { HeaderInfoTooltip } from './header-info-tooltip';
 import {
   loadPayoutAccounts,
   savePayoutAccounts,
+  loadSharedPayoutAccounts,
+  createSharedPayoutAccount,
+  updateSharedPayoutAccount,
+  deleteSharedPayoutAccount,
+  setPrimarySharedPayoutAccount,
   EVENT_PAYOUT_ACCOUNTS_CHANGED,
   type PayoutBankAccount,
 } from '@/lib/organizer-payout-sync';
@@ -49,6 +54,8 @@ export function OrganizerSettingsView() {
   const [backupContactName, setBackupContactName] = useState('วิภาดา การเงิน');
   const [backupPhone, setBackupPhone] = useState('089-876-5432');
   const [profileSuccess, setProfileSuccess] = useState(false);
+  const [savingProfile, setSavingProfile] = useState(false);
+  const [profileError, setProfileError] = useState('');
 
   // Password & Password Strength Meter State (D-79)
   const [currentPassword, setCurrentPassword] = useState('');
@@ -87,12 +94,37 @@ export function OrganizerSettingsView() {
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>(() => loadPayoutAccounts());
 
   useEffect(() => {
+    let isCancelled = false;
     const handleSync = () => {
       setBankAccounts(loadPayoutAccounts());
     };
     window.addEventListener(EVENT_PAYOUT_ACCOUNTS_CHANGED, handleSync);
     window.addEventListener('storage', handleSync);
+
+    // Initial load from real database
+    loadSharedPayoutAccounts()
+      .then((accs) => {
+        if (!isCancelled && accs.length > 0) {
+          setBankAccounts(accs);
+        }
+      })
+      .catch(() => {});
+
+    // Initial load of organizer profile from database
+    fetch('/api/organizer/profile', { cache: 'no-store' })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (isCancelled || !data?.profile) return;
+        if (data.profile.organizerName) setOrganizerName(data.profile.organizerName);
+        if (data.profile.organizerEmail) setOrganizerEmail(data.profile.organizerEmail);
+        if (data.profile.primaryPhone) setPrimaryPhone(data.profile.primaryPhone);
+        if (data.profile.backupContactName) setBackupContactName(data.profile.backupContactName);
+        if (data.profile.backupPhone) setBackupPhone(data.profile.backupPhone);
+      })
+      .catch(() => {});
+
     return () => {
+      isCancelled = true;
       window.removeEventListener(EVENT_PAYOUT_ACCOUNTS_CHANGED, handleSync);
       window.removeEventListener('storage', handleSync);
     };
@@ -108,17 +140,40 @@ export function OrganizerSettingsView() {
   const [qrFile, setQrFile] = useState<File | null>(null);
   const [qrPreviewUrl, setQrPreviewUrl] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState('');
-
+  const [savingAccount, setSavingAccount] = useState(false);
 
   // Back to top
   const handleScrollToTop = () => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const handleSaveProfile = (e: React.FormEvent) => {
+  const handleSaveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
-    setProfileSuccess(true);
-    setTimeout(() => setProfileSuccess(false), 3000);
+    setSavingProfile(true);
+    setProfileError('');
+    try {
+      const res = await fetch('/api/organizer/profile', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          organizerName,
+          primaryPhone,
+          backupContactName,
+          backupPhone,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setProfileError(data.message || 'เกิดข้อผิดพลาดในการบันทึกข้อมูล');
+        return;
+      }
+      setProfileSuccess(true);
+      setTimeout(() => setProfileSuccess(false), 3000);
+    } catch {
+      setProfileError('เกิดข้อผิดพลาดในการเชื่อมต่อเซิร์ฟเวอร์');
+    } finally {
+      setSavingProfile(false);
+    }
   };
 
   const handleUpdatePassword = (e: React.FormEvent) => {
@@ -139,18 +194,23 @@ export function OrganizerSettingsView() {
     setTimeout(() => setPasswordSuccess(false), 3000);
   };
 
-  const handleSetPrimaryAccount = (id: string) => {
-    setBankAccounts(prev => {
-      const updated = prev.map(acc => ({
-        ...acc,
-        isPrimary: acc.id === id,
-      }));
-      savePayoutAccounts(updated);
-      return updated;
-    });
+  const handleSetPrimaryAccount = async (id: string) => {
+    try {
+      const updated = await setPrimarySharedPayoutAccount(id);
+      setBankAccounts((prev) => {
+        const next = prev.map((acc) => ({
+          ...acc,
+          isPrimary: acc.id === updated.id,
+        }));
+        savePayoutAccounts(next);
+        return next;
+      });
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : 'ไม่สามารถตั้งเป็นบัญชีหลักได้');
+    }
   };
 
-  const handleDeleteAccount = (id: string) => {
+  const handleDeleteAccount = async (id: string) => {
     if (bankAccounts.length <= 1) {
       alert('ต้องมีบัญชีรับเงินอย่างน้อย 1 บัญชีในระบบสำหรับรับเงินยอดขาย');
       return;
@@ -158,14 +218,14 @@ export function OrganizerSettingsView() {
     const confirmed = window.confirm('คุณแน่ใจหรือไม่ที่จะลบบัญชีรับเงินนี้?');
     if (!confirmed) return;
 
-    setBankAccounts(prev => {
-      const filtered = prev.filter(acc => acc.id !== id);
-      if (!filtered.some(acc => acc.isPrimary) && filtered.length > 0) {
-        filtered[0].isPrimary = true;
-      }
-      savePayoutAccounts(filtered);
-      return filtered;
-    });
+    try {
+      await deleteSharedPayoutAccount(id);
+      const latest = await loadSharedPayoutAccounts();
+      setBankAccounts(latest);
+      savePayoutAccounts(latest);
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : 'ไม่สามารถลบบัญชีรับเงินได้');
+    }
   };
 
   const handleOpenAddModal = () => {
@@ -218,7 +278,7 @@ export function OrganizerSettingsView() {
     setQrPreviewUrl(URL.createObjectURL(file));
   };
 
-  const handleSaveAccountModal = (e: React.FormEvent) => {
+  const handleSaveAccountModal = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingAccountId && bankAccounts.length >= 3) {
       alert('สามารถเพิ่มบัญชีรับเงินได้สูงสุด 3 บัญชีเท่านั้น');
@@ -231,42 +291,37 @@ export function OrganizerSettingsView() {
       return;
     }
 
-    if (editingAccountId) {
-      // Edit existing account
-      setBankAccounts(prev => {
-        const updated = prev.map(acc => {
-          if (acc.id === editingAccountId) {
-            return {
-              ...acc,
-              accountName: accName,
-              accountNumber: accNumber,
-              bankName: finalBankName,
-              qrCodeUrl: qrPreviewUrl || undefined,
-            };
-          }
-          return acc;
+    setSavingAccount(true);
+    try {
+      if (editingAccountId) {
+        // Edit existing account in database
+        await updateSharedPayoutAccount({
+          id: editingAccountId,
+          accountName: accName,
+          accountNumber: accNumber,
+          bankName: finalBankName,
+          qrCodeUrl: qrPreviewUrl || undefined,
         });
-        savePayoutAccounts(updated);
-        return updated;
-      });
-    } else {
-      // Add new account
-      const newAcc: BankAccount = {
-        id: `acc-${Date.now()}`,
-        accountName: accName,
-        accountNumber: accNumber,
-        bankName: finalBankName,
-        isPrimary: bankAccounts.length === 0,
-        qrCodeUrl: qrPreviewUrl || undefined,
-      };
-      setBankAccounts(prev => {
-        const updated = [...prev, newAcc];
-        savePayoutAccounts(updated);
-        return updated;
-      });
-    }
+      } else {
+        // Add new account in database
+        await createSharedPayoutAccount({
+          accountName: accName,
+          accountNumber: accNumber,
+          bankName: finalBankName,
+          isPrimary: bankAccounts.length === 0,
+          qrCodeUrl: qrPreviewUrl || undefined,
+        });
+      }
 
-    setShowModal(false);
+      const latest = await loadSharedPayoutAccounts();
+      setBankAccounts(latest);
+      savePayoutAccounts(latest);
+      setShowModal(false);
+    } catch (err: unknown) {
+      alert(err instanceof Error ? err.message : 'ไม่สามารถบันทึกบัญชีรับเงินได้');
+    } finally {
+      setSavingAccount(false);
+    }
   };
 
   return (
@@ -309,6 +364,12 @@ export function OrganizerSettingsView() {
               <div className="settings-alert-success" role="alert">
                 <CheckCircleIcon style={{ width: '18px', height: '18px' }} />
                 <span>บันทึกข้อมูลผู้จัดงานและการติดต่อเรียบร้อยแล้ว</span>
+              </div>
+            )}
+
+            {profileError && (
+              <div className="settings-alert-error" role="alert">
+                <span>{profileError}</span>
               </div>
             )}
 
@@ -395,7 +456,7 @@ export function OrganizerSettingsView() {
             </div>
 
             <div className="settings-form-actions">
-              <Button type="submit" variant="primary" size="md">
+              <Button type="submit" variant="primary" size="md" loading={savingProfile} disabled={savingProfile}>
                 บันทึกข้อมูลโปรไฟล์
               </Button>
             </div>
@@ -675,7 +736,7 @@ export function OrganizerSettingsView() {
                 onClick={() => setShowModal(false)}
                 aria-label="ปิดหน้าต่าง"
               >
-                ✕
+                <CrossCircleIcon style={{ width: '20px', height: '20px' }} />
               </button>
             </div>
 
@@ -830,8 +891,8 @@ export function OrganizerSettingsView() {
                 >
                   ยกเลิก
                 </button>
-                <button type="submit" className="primary-button">
-                  {editingAccountId ? 'บันทึกการแก้ไข' : 'บันทึกบัญชีรับเงิน'}
+                <button type="submit" className="primary-button" disabled={savingAccount}>
+                  {savingAccount ? 'กำลังบันทึก...' : (editingAccountId ? 'บันทึกการแก้ไข' : 'บันทึกบัญชีรับเงิน')}
                 </button>
               </div>
             </form>

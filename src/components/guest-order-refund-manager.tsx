@@ -148,7 +148,7 @@ export function GuestOrderRefundManager({
       {/* Existing Refund Requests History */}
       {requests.length > 0 && (
         <div style={{ marginBottom: '20px' }}>
-          <h4 style={{ fontSize: '15px', fontWeight: 'bold', color: '#0f172a', margin: '0 0 10px 0' }}>
+          <h4 style={{ fontSize: '15px', fontWeight: 400, color: '#0f172a', margin: '0 0 10px 0' }}>
             ประวัติคำขอคืนเงินของคำสั่งซื้อนี้ ({requests.length} รายการ)
           </h4>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
@@ -179,7 +179,7 @@ export function GuestOrderRefundManager({
                     }}
                   >
                     <div>
-                      <span style={{ fontWeight: 'bold', color: '#0f172a', marginRight: '8px' }}>
+                      <span style={{ fontWeight: 400, color: '#0f172a', marginRight: '8px' }}>
                         {req.id}
                       </span>
                       <span style={{ fontSize: '12px', color: '#64748b' }}>
@@ -194,7 +194,7 @@ export function GuestOrderRefundManager({
                             backgroundColor: '#fef3c7',
                             color: '#92400e',
                             fontSize: '12px',
-                            fontWeight: 'bold',
+                            fontWeight: 400,
                             padding: '3px 8px',
                             borderRadius: '4px',
                             display: 'inline-flex',
@@ -211,7 +211,7 @@ export function GuestOrderRefundManager({
                             backgroundColor: '#dbeafe',
                             color: '#1e40af',
                             fontSize: '12px',
-                            fontWeight: 'bold',
+                            fontWeight: 400,
                             padding: '3px 8px',
                             borderRadius: '4px',
                             display: 'inline-flex',
@@ -228,7 +228,7 @@ export function GuestOrderRefundManager({
                             backgroundColor: '#dcfce7',
                             color: '#166534',
                             fontSize: '12px',
-                            fontWeight: 'bold',
+                            fontWeight: 400,
                             padding: '3px 8px',
                             borderRadius: '4px',
                             display: 'inline-flex',
@@ -245,7 +245,7 @@ export function GuestOrderRefundManager({
                             backgroundColor: '#fee2e2',
                             color: '#991b1b',
                             fontSize: '12px',
-                            fontWeight: 'bold',
+                            fontWeight: 400,
                             padding: '3px 8px',
                             borderRadius: '4px',
                             display: 'inline-flex',
@@ -314,7 +314,7 @@ export function GuestOrderRefundManager({
             borderRadius: '6px',
             padding: '8px 16px',
             fontSize: '13px',
-            fontWeight: 'bold',
+            fontWeight: 400,
             color: '#1848ed',
             cursor: 'pointer',
             display: 'inline-flex',
@@ -344,7 +344,7 @@ export function GuestOrderRefundManager({
             boxShadow: '0 4px 12px rgba(0, 0, 0, 0.03)',
           }}
         >
-          <h4 style={{ fontSize: '16px', fontWeight: 'bold', color: '#0f172a', margin: '0 0 8px 0' }}>
+          <h4 style={{ fontSize: '16px', fontWeight: 400, color: '#0f172a', margin: '0 0 8px 0' }}>
             แบบฟอร์มยื่นคำขอคืนเงิน (Partial / Whole Refund)
           </h4>
 
@@ -403,7 +403,7 @@ export function GuestOrderRefundManager({
                   กำหนดเวลาสิ้นสุด: {formatDate(new Date(eligibility.cutoffTime))} เวลา {formatTime(new Date(eligibility.cutoffTime))}
                 </div>
                 {!eligibility.isWithinNormalCutoff && (
-                  <div style={{ marginTop: '4px', fontWeight: 'bold' }}>
+                  <div style={{ marginTop: '4px', fontWeight: 400 }}>
                     ขณะนี้พ้นกำหนดเวลายื่นคำขอคืนเงินตามเงื่อนไขปกติแล้ว
                   </div>
                 )}
@@ -459,7 +459,7 @@ export function GuestOrderRefundManager({
             <form onSubmit={handleSubmitRefund}>
               {/* Ticket Selection List */}
               <div style={{ marginBottom: '18px' }}>
-                <div style={{ display: 'block', fontSize: '14px', fontWeight: 'bold', color: '#334155', marginBottom: '8px' }}>
+                <div style={{ display: 'block', fontSize: '14px', fontWeight: 400, color: '#334155', marginBottom: '8px' }}>
                   เลือกบัตรที่ต้องการขอคืนเงิน <span style={{ color: '#ef4444' }}>*</span>
                 </div>
 
@@ -493,7 +493,7 @@ export function GuestOrderRefundManager({
                               style={{ width: '16px', height: '16px', cursor: ticket.eligible ? 'pointer' : 'not-allowed' }}
                             />
                             <div>
-                              <div style={{ fontSize: '14px', fontWeight: 'bold', color: '#0f172a' }}>
+                              <div style={{ fontSize: '14px', fontWeight: 400, color: '#0f172a' }}>
                                 {ticket.ticketCode} — {ticket.ticketTypeName}
                               </div>
                               {ticket.reason && (
@@ -504,7 +504,7 @@ export function GuestOrderRefundManager({
                             </div>
                           </div>
 
-                          <div style={{ fontSize: '14px', fontWeight: 'bold', color: '#1848ed' }}>
+                          <div style={{ fontSize: '14px', fontWeight: 400, color: '#1848ed' }}>
                             {formatBaht(ticket.ticketPrice)}
                           </div>
                         </label>
@@ -530,7 +530,7 @@ export function GuestOrderRefundManager({
                   <span style={{ fontSize: '13px', color: '#475569' }}>
                     จำนวนบัตรที่เลือกขอคืน ({selectedTicketIds.length} ใบ)
                   </span>
-                  <span style={{ fontSize: '15px', fontWeight: 'bold', color: '#0f172a' }}>
+                  <span style={{ fontSize: '15px', fontWeight: 400, color: '#0f172a' }}>
                     {formatBaht(selectedAmount)}
                   </span>
                 </div>
@@ -554,7 +554,7 @@ export function GuestOrderRefundManager({
               <div style={{ marginBottom: '16px' }}>
                 <label
                   htmlFor="refund-reason-input"
-                  style={{ display: 'block', fontSize: '13px', fontWeight: 'bold', color: '#334155', marginBottom: '6px' }}
+                  style={{ display: 'block', fontSize: '13px', fontWeight: 400, color: '#334155', marginBottom: '6px' }}
                 >
                   เหตุผลการขอคืนเงิน <span style={{ color: '#ef4444' }}>*</span>
                 </label>
@@ -578,7 +578,7 @@ export function GuestOrderRefundManager({
 
               {/* Bank Details */}
               <div style={{ marginBottom: '18px' }}>
-                <div style={{ fontSize: '13px', fontWeight: 'bold', color: '#334155', marginBottom: '8px' }}>
+                <div style={{ fontSize: '13px', fontWeight: 400, color: '#334155', marginBottom: '8px' }}>
                   ข้อมูลบัญชีสำหรับรับเงินโอนคืน
                 </div>
 
@@ -676,7 +676,7 @@ export function GuestOrderRefundManager({
                       borderRadius: '6px',
                       padding: '12px 20px',
                       fontSize: '14px',
-                      fontWeight: 'bold',
+                      fontWeight: 400,
                       cursor:
                         selectedTicketIds.length === 0 || !isWindowOpen
                           ? 'not-allowed'

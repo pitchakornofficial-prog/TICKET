@@ -198,7 +198,7 @@ export function OrderLinkOtpGate({ orderId, linkToken, onVerified }: OrderLinkOt
           </div>
 
           <div style={{ textAlign: 'center', marginBottom: '1.5rem' }}>
-            <h1 style={{ fontSize: '1.35rem', fontWeight: 800, color: '#0f172a', margin: '0 0 0.4rem 0' }}>
+            <h1 style={{ fontSize: '1.35rem', fontWeight: 400, color: '#0f172a', margin: '0 0 0.4rem 0' }}>
               ยืนยันรหัส OTP เพื่อเปิดดูบัตร
             </h1>
             <p style={{ fontSize: '0.9rem', color: '#475569', margin: '0 0 0.35rem 0' }}>
@@ -310,7 +310,7 @@ export function OrderLinkOtpGate({ orderId, linkToken, onVerified }: OrderLinkOt
                     border: 'none',
                     color: cooldownSeconds > 0 ? '#94a3b8' : '#1848ed',
                     fontSize: '0.85rem',
-                    fontWeight: 600,
+                    fontWeight: 400,
                     cursor: cooldownSeconds > 0 || isRequesting || isVerifying ? 'not-allowed' : 'pointer',
                     display: 'inline-flex',
                     alignItems: 'center',

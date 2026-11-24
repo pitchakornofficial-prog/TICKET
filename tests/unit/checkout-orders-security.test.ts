@@ -258,8 +258,8 @@ describe('Checkout Orders & Tickets Authorization Security Gate', () => {
     });
   });
 
-  describe('Direct Email Link Signed Token OTP Gate (AC-63, G-17)', () => {
-    it('rejects direct ordtok_ access to paid order and tickets with 401 when OTP has not been verified', async () => {
+  describe('Direct Email Link Signed Token Access', () => {
+    it('allows direct ordtok_ access to paid order and tickets when signature is valid', async () => {
       if (mockReservation) {
         mockReservation.status = 'paid';
       }
@@ -269,13 +269,13 @@ describe('Checkout Orders & Tickets Authorization Security Gate', () => {
         new Request(`http://localhost/api/public/checkout/orders/ORD-SEC-001?token=${encodeURIComponent(token)}`),
         { params: Promise.resolve({ id: 'ORD-SEC-001' }) },
       );
-      expect(orderRes.status).toBe(401);
+      expect(orderRes.status).toBe(200);
 
       const ticketsRes = await getTicketsHandler(
         new Request(`http://localhost/api/public/checkout/orders/ORD-SEC-001/tickets?token=${encodeURIComponent(token)}`),
         { params: Promise.resolve({ id: 'ORD-SEC-001' }) },
       );
-      expect(ticketsRes.status).toBe(401);
+      expect(ticketsRes.status).toBe(200);
 
       const headerTicketsRes = await getTicketsHandler(
         new Request('http://localhost/api/public/checkout/orders/ORD-SEC-001/tickets', {
@@ -283,7 +283,7 @@ describe('Checkout Orders & Tickets Authorization Security Gate', () => {
         }),
         { params: Promise.resolve({ id: 'ORD-SEC-001' }) },
       );
-      expect(headerTicketsRes.status).toBe(401);
+      expect(headerTicketsRes.status).toBe(200);
     });
 
     it('allows opening paid order and tickets using an OTP-verified order_lookup session token', async () => {

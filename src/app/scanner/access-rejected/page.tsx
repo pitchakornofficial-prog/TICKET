@@ -98,7 +98,7 @@ export default async function ScannerAccessRejectedPage({
             <AlertTriangleIcon width={28} height={28} />
           </div>
 
-          <h2 style={{ fontSize: '1.25rem', fontWeight: 700, color: '#0f172a', marginBottom: '0.6rem' }}>
+          <h2 style={{ fontSize: '1.25rem', fontWeight: 400, color: '#0f172a', marginBottom: '0.6rem' }}>
             {copy.title}
           </h2>
 

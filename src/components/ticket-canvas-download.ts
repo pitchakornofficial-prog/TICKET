@@ -26,10 +26,11 @@ export function renderTextFitted(
 ): void {
   if (!text) return;
   let fontSize = initialFontSize;
-  ctx.font = `${isBold ? 'bold ' : ''}${fontSize}px ${fontFamily}`;
+  const weight = isBold ? '400 ' : '200 ';
+  ctx.font = `${weight}${fontSize}px ${fontFamily}`;
   while (ctx.measureText(text).width > maxWidth && fontSize > minFontSize) {
     fontSize -= 1;
-    ctx.font = `${isBold ? 'bold ' : ''}${fontSize}px ${fontFamily}`;
+    ctx.font = `${weight}${fontSize}px ${fontFamily}`;
   }
   ctx.fillText(text, x, y);
 }
@@ -51,7 +52,7 @@ export function renderFullEventTitle(
   if (!text) return y;
 
   let fontSize = initialFontSize;
-  ctx.font = `bold ${fontSize}px ${FONT_SANS}`;
+  ctx.font = `400 ${fontSize}px ${FONT_SANS}`;
 
   if (ctx.measureText(text).width <= maxWidth) {
     ctx.fillText(text, x, y);
@@ -60,7 +61,7 @@ export function renderFullEventTitle(
 
   while (fontSize > minFontSize) {
     fontSize -= 1;
-    ctx.font = `bold ${fontSize}px ${FONT_SANS}`;
+    ctx.font = `400 ${fontSize}px ${FONT_SANS}`;
     if (ctx.measureText(text).width <= maxWidth) {
       ctx.fillText(text, x, y);
       return y;
@@ -275,11 +276,11 @@ export async function generateTicketCanvas(
     const logoX = logo.x * scaleFactor;
     const logoY = logo.y * scaleFactor;
     ctx.fillStyle = logo.color || '#0f172a';
-    ctx.font = `bold 16px ${fontFam}`;
+    ctx.font = `400 16px ${fontFam}`;
     ctx.fillText(logo.text || 'TICKET', logoX + 24, logoY);
     if (logo.secondaryText) {
       ctx.fillStyle = logo.secondaryColor || '#64748b';
-      ctx.font = `10px ${fontFam}`;
+      ctx.font = `200 10px ${fontFam}`;
       ctx.fillText(logo.secondaryText, logoX + 92, logoY + 4);
     }
   }
@@ -301,7 +302,7 @@ export async function generateTicketCanvas(
     const badgeX = badge.x * scaleFactor;
     const badgeY = badge.y * scaleFactor;
     const fs = Math.round((badge.fontSize || 16) * scaleFactor);
-    ctx.font = `13px ${fontFam}`;
+    ctx.font = `200 13px ${fontFam}`;
     ctx.fillStyle = badge.secondaryColor || '#64748b';
     ctx.fillText(badge.secondaryText || 'โซน / ประเภทบัตร (ZONE & CATEGORY)', badgeX, badgeY);
     ctx.fillStyle = badge.color || '#0f172a';
@@ -314,7 +315,7 @@ export async function generateTicketCanvas(
     const gX = gate.x * scaleFactor;
     const gY = gate.y * scaleFactor;
     const val = (ticket as unknown as { gate?: string }).gate || gate.text || 'GATE 2';
-    ctx.font = `13px ${fontFam}`;
+    ctx.font = `200 13px ${fontFam}`;
     ctx.fillStyle = gate.secondaryColor || '#64748b';
     ctx.fillText(gate.secondaryText || 'ประตูทางเข้า (GATE)', gX, gY);
     ctx.fillStyle = gate.color || '#0f172a';
@@ -331,7 +332,7 @@ export async function generateTicketCanvas(
       (ticket as unknown as { seatNumber?: string; seat?: string }).seat ||
       seat.text ||
       'แถว A / ที่นั่ง 14';
-    ctx.font = `13px ${fontFam}`;
+    ctx.font = `200 13px ${fontFam}`;
     ctx.fillStyle = seat.secondaryColor || '#64748b';
     ctx.fillText(seat.secondaryText || 'แถว/ที่นั่ง (ROW / SEAT)', sX, sY);
     ctx.fillStyle = seat.color || '#0f172a';
@@ -343,10 +344,18 @@ export async function generateTicketCanvas(
   if (price?.visible) {
     const pX = price.x * scaleFactor;
     const pY = price.y * scaleFactor;
-    const priceNum = (ticket as unknown as { price?: number }).price;
-    const val = typeof priceNum === 'number' ? `THB ${priceNum.toLocaleString('th-TH')}` : price.text || '';
+    const priceNum = (ticket as unknown as { price?: number; ticketPrice?: number }).ticketPrice ?? (ticket as unknown as { price?: number }).price;
+    const priceDisplayMode = (ticket as unknown as { priceDisplayMode?: string }).priceDisplayMode;
+    let val = '';
+    if (priceDisplayMode === 'complimentary') {
+      val = 'บัตรเชิญ (COMPLIMENTARY)';
+    } else if (typeof priceNum === 'number') {
+      val = `THB ${priceNum.toLocaleString('th-TH')}`;
+    } else {
+      val = price.text || '';
+    }
     if (val) {
-      ctx.font = `13px ${fontFam}`;
+      ctx.font = `200 13px ${fontFam}`;
       ctx.fillStyle = price.secondaryColor || '#64748b';
       ctx.fillText(price.secondaryText || 'ราคาบัตร (PRICE)', pX, pY);
       ctx.fillStyle = price.color || '#0f172a';
@@ -364,7 +373,7 @@ export async function generateTicketCanvas(
           ticket.sessionEndTime ? ` - ${formatTime(new Date(ticket.sessionEndTime))}` : ''
         }`
       : dt.text || '-';
-    ctx.font = `13px ${fontFam}`;
+    ctx.font = `200 13px ${fontFam}`;
     ctx.fillStyle = dt.secondaryColor || '#64748b';
     ctx.fillText('วันและเวลาแสดง (DATE & TIME)', dtX, dtY);
     ctx.fillStyle = dt.color || '#0f172a';
@@ -376,7 +385,7 @@ export async function generateTicketCanvas(
   if (ven?.visible) {
     const venX = ven.x * scaleFactor;
     const venY = ven.y * scaleFactor;
-    ctx.font = `13px ${fontFam}`;
+    ctx.font = `200 13px ${fontFam}`;
     ctx.fillStyle = ven.secondaryColor || '#64748b';
     ctx.fillText('สถานที่จัดงาน (VENUE)', venX, venY);
     ctx.fillStyle = ven.color || '#0f172a';
@@ -388,7 +397,7 @@ export async function generateTicketCanvas(
   if (buyer?.visible) {
     const bX = buyer.x * scaleFactor;
     const bY = buyer.y * scaleFactor;
-    ctx.font = `13px ${fontFam}`;
+    ctx.font = `200 13px ${fontFam}`;
     ctx.fillStyle = buyer.secondaryColor || '#64748b';
     ctx.fillText('ผู้สั่งซื้อ (BUYER)', bX, bY);
     ctx.fillStyle = buyer.color || '#0f172a';
@@ -400,7 +409,7 @@ export async function generateTicketCanvas(
   if (tCode?.visible) {
     const tcX = tCode.x * scaleFactor;
     const tcY = tCode.y * scaleFactor;
-    ctx.font = `13px ${fontFam}`;
+    ctx.font = `200 13px ${fontFam}`;
     ctx.fillStyle = tCode.secondaryColor || '#64748b';
     ctx.fillText('รหัสบัตร (TICKET CODE)', tcX, tcY);
     ctx.fillStyle = tCode.color || '#0f172a';
@@ -414,7 +423,7 @@ export async function generateTicketCanvas(
     const bcY = bcode.y * scaleFactor;
     ctx.save();
     ctx.fillStyle = bcode.secondaryColor || '#64748b';
-    ctx.font = `11px ${fontFam}`;
+    ctx.font = `200 11px ${fontFam}`;
     ctx.fillText(bcode.secondaryText || 'SECURITY VERIFICATION', bcX, bcY);
     ctx.fillStyle = bcode.color || '#0f172a';
     let barOffset = 0;
@@ -437,7 +446,7 @@ export async function generateTicketCanvas(
   if (fn?.visible) {
     const fnX = fn.x * scaleFactor;
     const fnY = fn.y * scaleFactor;
-    ctx.font = `13px ${fontFam}`;
+    ctx.font = `200 13px ${fontFam}`;
     ctx.fillStyle = fn.color || '#64748b';
     ctx.fillText(fn.text || '* กรุณาแสดง QR Code ต่อเจ้าหน้าที่เพื่อสแกนเข้างาน · บัตรนี้สามารถสแกนได้ 1 ครั้ง', fnX, fnY);
   }
@@ -450,7 +459,7 @@ export async function generateTicketCanvas(
     const isCenter = ses.align === 'center';
     ctx.save();
     ctx.fillStyle = ses.secondaryColor || '#64748b';
-    ctx.font = `11px ${fontFam}`;
+    ctx.font = `200 11px ${fontFam}`;
     const badgeText = ses.secondaryText || 'ADMISSION STUB';
     const sumText = `${ticket.eventTitle} · ${ticket.ticketTypeName}`;
     const availableWidth = width - sesX - 20;
@@ -481,9 +490,9 @@ export async function generateTicketCanvas(
     const boxW = qrSize + qrPad * 2;
     const boxH = qrSize + qrPad * 2;
 
-    // Draw rounded QR container card (matches .surface-qr-btn in studio)
+    // Always draw pure white #ffffff QR container box (never invert to dark on dark ticket themes)
     ctx.save();
-    ctx.fillStyle = template.qrBgColor && template.qrBgColor !== 'transparent' ? template.qrBgColor : '#ffffff';
+    ctx.fillStyle = '#ffffff';
     if (typeof ctx.beginPath === 'function') {
       ctx.beginPath();
       drawRoundedRect(ctx, boxX, boxY, boxW, boxH, qrRadius);
@@ -500,13 +509,26 @@ export async function generateTicketCanvas(
     }
     ctx.restore();
 
-    if (ticket.qrCodeUrl) {
+    let pureBwQrSrc = ticket.qrCodeUrl;
+    try {
+      const qrInput = ticket.qrPayload || ticket.ticketCode;
+      if (qrInput) {
+        pureBwQrSrc = generateCustomQrSvg(qrInput, {
+          fgColor: '#000000',
+          bgColor: '#ffffff',
+        });
+      }
+    } catch {
+      pureBwQrSrc = ticket.qrCodeUrl;
+    }
+
+    if (pureBwQrSrc) {
       try {
         const qrImg = new Image();
         await new Promise<void>((resolve, reject) => {
           qrImg.onload = () => resolve();
           qrImg.onerror = () => reject();
-          qrImg.src = ticket.qrCodeUrl;
+          qrImg.src = pureBwQrSrc;
         });
         ctx.save();
         if (typeof ctx.beginPath === 'function' && typeof ctx.clip === 'function') {
@@ -518,15 +540,18 @@ export async function generateTicketCanvas(
         ctx.restore();
       } catch {
         try {
-          const svgUrl = generateCustomQrSvg(ticket.ticketCode, {
-            fgColor: template.qrFgColor || '#000000',
-            bgColor: template.qrBgColor || '#ffffff',
-          });
+          const fallbackSrc =
+            ticket.qrCodeUrl && ticket.qrCodeUrl !== pureBwQrSrc
+              ? ticket.qrCodeUrl
+              : generateCustomQrSvg(ticket.ticketCode, {
+                  fgColor: '#000000',
+                  bgColor: '#ffffff',
+                });
           const qrSvgImg = new Image();
           await new Promise<void>((resolve, reject) => {
             qrSvgImg.onload = () => resolve();
             qrSvgImg.onerror = () => reject();
-            qrSvgImg.src = svgUrl;
+            qrSvgImg.src = fallbackSrc;
           });
           ctx.save();
           if (typeof ctx.beginPath === 'function' && typeof ctx.clip === 'function') {
@@ -538,7 +563,7 @@ export async function generateTicketCanvas(
           ctx.restore();
         } catch {
           ctx.fillStyle = '#0f172a';
-          ctx.font = `14px ${fontFam}`;
+          ctx.font = `200 14px ${fontFam}`;
           ctx.textAlign = 'center';
           ctx.fillText(ticket.ticketCode, qrX + qrSize / 2, qrY + qrSize / 2);
           ctx.textAlign = 'left';
@@ -556,25 +581,25 @@ export async function generateTicketCanvas(
     ctx.save();
     const tagText = qrl.secondaryText || 'รหัสบัตรสำหรับเข้างาน';
     const codeText = ticket.ticketCode;
-    ctx.font = `13px ${fontFam}`;
+    ctx.font = `200 13px ${fontFam}`;
     ctx.fillStyle = qrl.secondaryColor || '#64748b';
 
     if (isCenter) {
       const tagW = ctx.measureText(tagText).width;
-      ctx.font = `bold 18px ${FONT_MONO}`;
+      ctx.font = `400 18px ${FONT_MONO}`;
       const codeW = ctx.measureText(codeText).width;
       const blockCenter = qrlX + Math.max(tagW, codeW) / 2;
 
       ctx.textAlign = 'center';
-      ctx.font = `13px ${fontFam}`;
+      ctx.font = `200 13px ${fontFam}`;
       ctx.fillText(tagText, blockCenter, qrlY);
-      ctx.font = `bold 18px ${FONT_MONO}`;
+      ctx.font = `400 18px ${FONT_MONO}`;
       ctx.fillStyle = qrl.color || '#0f172a';
       ctx.fillText(codeText, blockCenter, qrlY + 20);
     } else {
       ctx.textAlign = 'left';
       ctx.fillText(tagText, qrlX, qrlY);
-      ctx.font = `bold 18px ${FONT_MONO}`;
+      ctx.font = `400 18px ${FONT_MONO}`;
       ctx.fillStyle = qrl.color || '#0f172a';
       ctx.fillText(codeText, qrlX, qrlY + 20);
     }
@@ -588,7 +613,7 @@ export async function generateTicketCanvas(
     const shY = sh.y * scaleFactor;
     const isCenter = sh.align !== 'left'; // default centered in stub caption
     ctx.save();
-    ctx.font = `11px ${fontFam}`;
+    ctx.font = `200 11px ${fontFam}`;
     ctx.fillStyle = sh.color || '#64748b';
     const hintText = sh.text || 'แสดง QR เพื่อสแกนเข้างาน';
     if (isCenter) {
@@ -611,25 +636,25 @@ export async function generateTicketCanvas(
     ctx.save();
     const tagText = oid.secondaryText || 'หมายเลขคำสั่งซื้อ (ORDER ID)';
     const orderText = ticket.orderId || oid.text || '-';
-    ctx.font = `11px ${fontFam}`;
+    ctx.font = `200 11px ${fontFam}`;
     ctx.fillStyle = oid.secondaryColor || '#64748b';
 
     if (isCenter) {
       const tagW = ctx.measureText(tagText).width;
-      ctx.font = `bold 13px ${FONT_MONO}`;
+      ctx.font = `400 13px ${FONT_MONO}`;
       const orderW = ctx.measureText(orderText).width;
       const blockCenter = oX + Math.max(tagW, orderW) / 2;
 
       ctx.textAlign = 'center';
-      ctx.font = `11px ${fontFam}`;
+      ctx.font = `200 11px ${fontFam}`;
       ctx.fillText(tagText, blockCenter, oY);
-      ctx.font = `bold 13px ${FONT_MONO}`;
+      ctx.font = `400 13px ${FONT_MONO}`;
       ctx.fillStyle = oid.color || '#0f172a';
       ctx.fillText(orderText, blockCenter, oY + 16);
     } else {
       ctx.textAlign = 'left';
       ctx.fillText(tagText, oX, oY);
-      ctx.font = `bold 13px ${FONT_MONO}`;
+      ctx.font = `400 13px ${FONT_MONO}`;
       ctx.fillStyle = oid.color || '#0f172a';
       ctx.fillText(orderText, oX, oY + 16);
     }
@@ -671,4 +696,72 @@ export async function downloadAllTicketsAsPng(
       await new Promise(r => setTimeout(r, 400));
     }
   }
+}
+
+export async function downloadAllTicketsAsZip(
+  tickets: TicketDetail[],
+  zipFilename: string,
+  options?: {
+    priceDisplayMode?: 'face_value' | 'complimentary';
+    overrideTemplate?: TicketDesignerState;
+    onProgress?: (current: number, total: number) => void;
+  },
+): Promise<void> {
+  const { buildZipBlob } = await import('@/lib/zip-builder');
+  const files: { name: string; data: Uint8Array | string }[] = [];
+
+  const csvRows: string[] = [
+    '\uFEFF"ลำดับ","รหัสบัตร","ประเภทบัตร","ราคาบัตร","คอนเสิร์ต","รอบการแสดง","สถานที่","ชื่อผู้ถือบัตร","อีเมล","หมายเลขรายการ","สถานะ"',
+  ];
+
+  for (let i = 0; i < tickets.length; i++) {
+    const t = tickets[i];
+    if (options?.priceDisplayMode) {
+      (t as unknown as { priceDisplayMode?: string }).priceDisplayMode = options.priceDisplayMode;
+    }
+
+    const canvas = await generateTicketCanvas(t, options?.overrideTemplate);
+    const dataUrl = canvas.toDataURL('image/png');
+    const base64Data = dataUrl.split(',')[1];
+    const binaryStr = atob(base64Data);
+    const bytes = new Uint8Array(binaryStr.length);
+    for (let j = 0; j < binaryStr.length; j++) {
+      bytes[j] = binaryStr.charCodeAt(j);
+    }
+
+    const paddedIdx = String(i + 1).padStart(3, '0');
+    const safeTypeName = t.ticketTypeName.replace(/[/\\?%*:|"<>]/g, '_');
+    const safeCode = t.ticketCode.replace(/[/\\?%*:|"<>]/g, '_');
+    const filename = `${paddedIdx}_${safeTypeName}_${safeCode}.png`;
+
+    files.push({ name: filename, data: bytes });
+
+    const priceText = options?.priceDisplayMode === 'complimentary' ? 'บัตรเชิญ' : `${t.ticketPrice} บาท`;
+    csvRows.push(
+      `"${i + 1}","${t.ticketCode}","${t.ticketTypeName.replace(/"/g, '""')}","${priceText}","${t.eventTitle.replace(/"/g, '""')}","${t.sessionStartTime}","${t.location.replace(/"/g, '""')}","${t.buyerName.replace(/"/g, '""')}","${t.buyerEmail}","${t.orderId}","${t.status}"`,
+    );
+
+    if (options?.onProgress) {
+      options.onProgress(i + 1, tickets.length);
+    }
+
+    if (i % 5 === 0) {
+      await new Promise(r => setTimeout(r, 20));
+    }
+  }
+
+  files.push({
+    name: 'tickets-summary.csv',
+    data: csvRows.join('\r\n'),
+  });
+
+  const zipBlob = buildZipBlob(files);
+  const downloadUrl = URL.createObjectURL(zipBlob);
+  const a = document.createElement('a');
+  a.href = downloadUrl;
+  a.download = zipFilename.endsWith('.zip') ? zipFilename : `${zipFilename}.zip`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(downloadUrl);
 }

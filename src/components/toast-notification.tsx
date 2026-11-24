@@ -137,3 +137,21 @@ export function triggerToast(payload: ToastPayload) {
     window.dispatchEvent(new CustomEvent('app-toast', { detail: payload }));
   }
 }
+
+/**
+ * Helper function to trigger a standardized refresh success toast with current timestamp (D-282)
+ */
+export function triggerRefreshToast(contextLabel?: string) {
+  const now = new Date();
+  const timeStr = now.toLocaleTimeString('th-TH', {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  });
+  const prefix = contextLabel ? `${contextLabel}: ` : '';
+  triggerToast({
+    type: 'success',
+    message: `${prefix}อัปเดตข้อมูลล่าสุดเรียบร้อยแล้ว (เวลา ${timeStr})`,
+    duration: 3500,
+  });
+}

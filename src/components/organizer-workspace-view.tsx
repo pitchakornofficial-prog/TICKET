@@ -10,7 +10,9 @@ import {
   SlidersIcon,
   ChatBubbleLeftRightIcon,
   BookOpenIcon,
+  QrCodeIcon,
 } from '@/components/icons';
+import { useHorizontalSubnavScroll } from '@/components/use-horizontal-subnav-scroll';
 import { TicketIcon } from '@/components/ticket-icon';
 import { OrganizerOverviewView } from '@/components/organizer-overview-view';
 
@@ -38,6 +40,12 @@ const OrganizerEventsManager = dynamic(() =>
 const OrganizerFinanceView = dynamic(() =>
   import('@/components/organizer-finance-view').then(m => m.OrganizerFinanceView),
 );
+const OrganizerDirectTicketsView = dynamic(() =>
+  import('@/components/organizer-direct-tickets-view').then(m => m.OrganizerDirectTicketsView),
+);
+const TicketInspectorView = dynamic(() =>
+  import('@/components/ticket-inspector-view').then(m => m.TicketInspectorView),
+);
 
 const ORG_CHARTER_TAB_ID = ['poli', 'cies'].join('');
 const ORG_CHARTER_NAV_TEST_ID = ['organizer-nav', ORG_CHARTER_TAB_ID].join('-');
@@ -45,6 +53,7 @@ const ORG_CHARTER_NAV_TEST_ID = ['organizer-nav', ORG_CHARTER_TAB_ID].join('-');
 export type OrganizerSectionId =
   | 'overview'
   | 'events'
+  | 'direct-tickets'
   | 'scanners'
   | 'finance'
   | 'news'
@@ -63,6 +72,12 @@ const HASH_TO_SECTION: Record<string, OrganizerSectionId> = {
   events: 'events',
   concerts: 'events',
   'organizer-events': 'events',
+  'direct-tickets': 'direct-tickets',
+  'direct-ticket': 'direct-tickets',
+  'ticket-inspector': 'ticket-inspector',
+  'ticket-inspect': 'ticket-inspector',
+  'qr-inspector': 'ticket-inspector',
+  inspector: 'ticket-inspector',
   scanners: 'scanners',
   scanner: 'scanners',
   team: 'scanners',
@@ -96,6 +111,15 @@ export function OrganizerWorkspaceView({ initialSection }: OrganizerWorkspaceVie
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [openCreateOnEvents, setOpenCreateOnEvents] = useState(false);
   const [targetHighlightEventId, setTargetHighlightEventId] = useState<string | null>(null);
+
+  const { tabsRef, canScrollLeft, canScrollRight, scrollActiveIntoView } =
+    useHorizontalSubnavScroll();
+
+  useEffect(() => {
+    if (!mobileMenuOpen) {
+      scrollActiveIntoView(`[data-testid="organizer-nav-${activeSection}"]`);
+    }
+  }, [activeSection, mobileMenuOpen, scrollActiveIntoView]);
 
   const handleNavigateWithEvent = (section: OrganizerSectionId, eventId?: string) => {
     if (eventId) {
@@ -140,6 +164,9 @@ export function OrganizerWorkspaceView({ initialSection }: OrganizerWorkspaceVie
       {/* Sub-Nav Bar directly connected to Topbar (D-77: 7-Item Sub-Nav Menu) */}
       <nav className="organizer-subnav-bar" aria-label="แถบเมนูหลักผู้จัดงาน">
         <div className="organizer-subnav-inner">
+          {/* Subtle Left Edge Fade Gradient */}
+          <div className={`subnav-fade-left ${canScrollLeft && !mobileMenuOpen ? 'visible' : ''}`} aria-hidden="true" />
+
           {/* Mobile Menu Toggle Button */}
           <button
             type="button"
@@ -155,7 +182,10 @@ export function OrganizerWorkspaceView({ initialSection }: OrganizerWorkspaceVie
           </button>
 
           {/* Horizontal Tabs: Left group (1-6) and Right group (7: Settings) */}
-          <div className={`organizer-subnav-tabs ${mobileMenuOpen ? 'mobile-open' : ''}`}>
+          <div
+            ref={tabsRef}
+            className={`organizer-subnav-tabs ${mobileMenuOpen ? 'mobile-open' : ''}`}
+          >
             <div className="organizer-subnav-left-group">
               <button
                 type="button"
@@ -175,6 +205,26 @@ export function OrganizerWorkspaceView({ initialSection }: OrganizerWorkspaceVie
               >
                 <TicketIcon className="organizer-subnav-icon" />
                 <span>คอนเสิร์ต</span>
+              </button>
+
+              <button
+                type="button"
+                data-testid="organizer-nav-direct-tickets"
+                className={`organizer-subnav-tab ${activeSection === 'direct-tickets' ? 'active' : ''}`}
+                onClick={() => handleSelectTab('direct-tickets')}
+              >
+                <TicketIcon className="organizer-subnav-icon" />
+                <span>บัตรดึงตรง</span>
+              </button>
+
+              <button
+                type="button"
+                data-testid="organizer-nav-ticket-inspector"
+                className={`organizer-subnav-tab ${activeSection === 'ticket-inspector' ? 'active' : ''}`}
+                onClick={() => handleSelectTab('ticket-inspector')}
+              >
+                <QrCodeIcon className="organizer-subnav-icon" />
+                <span>ตรวจสอบบัตร</span>
               </button>
 
               <button
@@ -249,6 +299,9 @@ export function OrganizerWorkspaceView({ initialSection }: OrganizerWorkspaceVie
               </button>
             </div>
           </div>
+
+          {/* Subtle Right Edge Fade Gradient */}
+          <div className={`subnav-fade-right ${canScrollRight && !mobileMenuOpen ? 'visible' : ''}`} aria-hidden="true" />
         </div>
       </nav>
 
@@ -285,6 +338,10 @@ export function OrganizerWorkspaceView({ initialSection }: OrganizerWorkspaceVie
             onCloseCreate={() => setOpenCreateOnEvents(false)}
             initialHighlightEventId={targetHighlightEventId || undefined}
           />
+        ) : activeSection === 'direct-tickets' ? (
+          <OrganizerDirectTicketsView />
+        ) : activeSection === 'ticket-inspector' ? (
+          <TicketInspectorView />
         ) : (
           <div
             className="organizer-blank-canvas"

@@ -14,6 +14,7 @@ import { formatBahtCompact } from '@/lib/locale';
 import type { PublicCatalogLocationFacet, PublicEventSummary } from '@/server/events';
 import {
   loadHomeBanners,
+  loadSharedHomeBanners,
   isBannerScheduleActive,
   EVENT_HOME_BANNERS_CHANGED,
   type HeroBannerItem,
@@ -27,6 +28,7 @@ interface HomeConcertCatalogProps {
   initialHasMore?: boolean;
   initialLocations?: PublicCatalogLocationFacet[];
   serverCatalogEnabled?: boolean;
+  initialBanners?: HeroBannerItem[];
 }
 
 type FilterTab = 'all' | 'available' | 'upcoming';
@@ -47,6 +49,7 @@ export function HomeConcertCatalog({
   initialHasMore = false,
   initialLocations,
   serverCatalogEnabled = false,
+  initialBanners,
 }: HomeConcertCatalogProps) {
   const router = useRouter();
   const [query, setQuery] = useState(initialQuery);
@@ -144,9 +147,23 @@ export function HomeConcertCatalog({
   }, [serverCatalogEnabled, locationFacets, activeEvents]);
 
   // Configured Hero Banners from Store (Q1A, Q2A, Q3A, Q4A)
-  const [configuredBanners, setConfiguredBanners] = useState<HeroBannerItem[]>(() => loadHomeBanners());
+  const [configuredBanners, setConfiguredBanners] = useState<HeroBannerItem[]>(() => {
+    if (initialBanners && Array.isArray(initialBanners)) {
+      return initialBanners;
+    }
+    return loadHomeBanners();
+  });
 
   useEffect(() => {
+    // Sync shared banners in background
+    loadSharedHomeBanners()
+      .then(banners => {
+        setConfiguredBanners(banners);
+      })
+      .catch(() => {
+        // Fallback to initial / local
+      });
+
     const handleBannersChanged = (e: Event) => {
       const customEvent = e as CustomEvent<HeroBannerItem[]>;
       if (customEvent.detail && Array.isArray(customEvent.detail)) {

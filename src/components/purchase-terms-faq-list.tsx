@@ -20,7 +20,7 @@ export function PurchaseTermsFaqList({
     <section className="purchase-terms-faq-section" aria-labelledby="purchase-terms-faq-heading" style={{ marginTop: '2rem' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', marginBottom: '1rem' }}>
         <ShieldCheckIcon style={{ width: '22px', height: '22px', color: 'var(--blue)' }} />
-        <h3 id="purchase-terms-faq-heading" style={{ margin: 0, fontSize: '1.2rem', fontWeight: 700 }}>
+        <h3 id="purchase-terms-faq-heading" style={{ margin: 0, fontSize: '1.2rem', fontWeight: 400 }}>
           {title}
         </h3>
       </div>

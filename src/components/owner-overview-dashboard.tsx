@@ -21,6 +21,7 @@ import { TicketIcon } from '@/components/ticket-icon';
 import { HeaderInfoTooltip } from '@/components/header-info-tooltip';
 import { Badge } from '@/components/ui';
 import { formatBaht } from '@/lib/locale';
+import { triggerRefreshToast } from '@/components/toast-notification';
 
 interface MetricCardConfig {
   id: string;
@@ -267,7 +268,10 @@ export function OwnerOverviewDashboard({
                 type="button"
                 className="secondary-button overview-refresh-btn"
                 data-testid="owner-overview-refresh-btn"
-                onClick={fetchOverview}
+                onClick={async () => {
+                  await fetchOverview();
+                  triggerRefreshToast('ภาพรวม');
+                }}
                 disabled={loading}
                 aria-label="รีเฟรชข้อมูลภาพรวม"
                 style={{ height: '38px', minHeight: '38px', display: 'inline-flex', alignItems: 'center', gap: '0.45rem' }}
@@ -395,7 +399,10 @@ export function OwnerOverviewDashboard({
 
           <button
             type="button"
-            onClick={fetchOverview}
+            onClick={async () => {
+              await fetchOverview();
+              triggerRefreshToast('ภาพรวม');
+            }}
             disabled={loading}
             className="secondary-button mini-btn"
             data-testid="overview-refresh-btn"

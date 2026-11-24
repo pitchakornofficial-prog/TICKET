@@ -409,6 +409,7 @@ const ORDER_FEES_CTE = `
     JOIN order_items oi ON oi."orderId" = o.id
     JOIN tickets t ON t."orderItemId" = oi.id
     WHERE o."eventId" = ANY($1::text[])
+      AND COALESCE(o."orderSource", 'web') <> 'direct_issue'
     GROUP BY o.id, o."eventId", o."buyerName", o."buyerEmail", o."buyerPhone", o."createdAt",
              o."ubuPrivilegeApplied", o."organizerFeeMode", o."organizerFeeRate", o."organizerFeePrivilegeRate",
              cfg."defaultFeeMode", cfg."defaultFeeRate", cfg."defaultPrivRate", cfg."ubuPrivilegeMode"
@@ -612,6 +613,7 @@ async function readEventMoneyReport(
        JOIN order_items oi ON oi."orderId" = o.id
        JOIN tickets t ON t."orderItemId" = oi.id
        WHERE o."eventId" = $1
+         AND COALESCE(o."orderSource", 'web') <> 'direct_issue'
        GROUP BY t."sessionId"
      )
      SELECT s.id, s."startTime", s."endTime", s.status,

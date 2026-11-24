@@ -385,7 +385,7 @@ export function GuestCheckoutEntry({
       <div className="checkout-step-card-header" style={{ display: 'flex', alignItems: 'flex-start', gap: '0.75rem', marginBottom: '1.25rem' }}>
         <span className="step-badge-number step-card-number" style={{ marginTop: '0.2rem' }}>{stepNumber ?? 2}</span>
         <div>
-          <h2 className="step-card-title" id="checkout-step-title" aria-label="ข้อมูลผู้ซื้อและยืนยันอีเมล (Guest Checkout)" style={{ margin: 0, fontSize: '1.3rem', fontWeight: 600 }}>
+          <h2 className="step-card-title" id="checkout-step-title" aria-label="ข้อมูลผู้ซื้อและยืนยันอีเมล (Guest Checkout)" style={{ margin: 0, fontSize: '1.3rem', fontWeight: 400 }}>
             ข้อมูลผู้ซื้อและยืนยันอีเมล (Guest Checkout)
           </h2>
           <p className="step-card-subtitle" style={{ margin: '0.35rem 0 0', color: 'var(--muted)', fontSize: '0.9rem' }}>
@@ -527,7 +527,7 @@ export function GuestCheckoutEntry({
               </div>
               <div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
-                  <h3 id="otp-modal-title" style={{ margin: 0, fontSize: '1.2rem', fontWeight: 700 }}>
+                  <h3 id="otp-modal-title" style={{ margin: 0, fontSize: '1.2rem', fontWeight: 400 }}>
                     ยืนยันรหัส OTP
                   </h3>
                   {isUbuEmail(email) && (
@@ -697,7 +697,7 @@ export function GuestCheckoutEntry({
                 fontSize: '0.85rem',
                 color: '#475569',
                 cursor: 'pointer',
-                fontWeight: 500,
+                fontWeight: 400,
                 transition: 'all 0.15s ease',
               }}
             >

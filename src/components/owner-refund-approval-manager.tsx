@@ -12,6 +12,7 @@ import {
   EyeIcon,
 } from './icons';
 import { AlertIcon } from './alert-icon';
+import { triggerRefreshToast } from './toast-notification';
 
 export function OwnerRefundApprovalManager() {
   const [requests, setRequests] = useState<OwnerRefundRequestItem[]>([]);
@@ -324,7 +325,7 @@ export function OwnerRefundApprovalManager() {
             color: feedback.type === 'success' ? '#166534' : '#991b1b',
             border: `1px solid ${feedback.type === 'success' ? '#bbf7d0' : '#fecaca'}`,
             fontSize: '0.9rem',
-            fontWeight: 500,
+            fontWeight: 400,
           }}
         >
           {feedback.type === 'success' ? (
@@ -431,7 +432,10 @@ export function OwnerRefundApprovalManager() {
           <button
             type="button"
             className="secondary-button hub-refresh-btn"
-            onClick={() => fetchRequests()}
+            onClick={async () => {
+              await fetchRequests();
+              triggerRefreshToast('อนุมัติคืนเงิน');
+            }}
             title="รีเฟรชข้อมูลล่าสุด"
             aria-label="รีเฟรชข้อมูลล่าสุด"
           >
@@ -445,7 +449,7 @@ export function OwnerRefundApprovalManager() {
       <div className="concert-horizontal-list">
         {sortedDataset.length === 0 ? (
           <div style={{ padding: '3rem 1.5rem', textAlign: 'center', color: '#64748b' }}>
-            <p style={{ fontSize: '1rem', fontWeight: 500 }}>
+            <p style={{ fontSize: '1rem', fontWeight: 400 }}>
               {searchQuery
                 ? `ไม่พบคำขอคืนเงินที่ตรงกับคำค้นหา "${searchQuery}"`
                 : 'ไม่มีคำขอคืนเงินในสถานะนี้ในขณะนี้'}
@@ -487,7 +491,7 @@ export function OwnerRefundApprovalManager() {
                             ? 'โอนสำเร็จแล้ว (completed)'
                             : 'ปฏิเสธคำขอ'}
                     </span>
-                    <span style={{ fontSize: '0.875rem', fontWeight: 700, color: '#0f172a' }}>
+                    <span style={{ fontSize: '0.875rem', fontWeight: 400, color: '#0f172a' }}>
                       {req.id}
                     </span>
                     <span style={{ fontSize: '0.8rem', color: '#64748b' }}>
@@ -536,7 +540,7 @@ export function OwnerRefundApprovalManager() {
                   <div className="row-tags-strip">
                     <span
                       className="row-detail-pill"
-                      style={{ fontWeight: 700, color: '#0f172a', backgroundColor: '#f1f5f9' }}
+                      style={{ fontWeight: 400, color: '#0f172a', backgroundColor: '#f1f5f9' }}
                     >
                       ยอดเงินคืนสุทธิ: <strong>{formatBaht(req.requestedAmount)}</strong>
                     </span>
@@ -675,7 +679,7 @@ export function OwnerRefundApprovalManager() {
                       style={{ position: 'relative', zIndex: 1, background: '#ffffff', borderRadius: '14px', maxWidth: '520px', width: '100%', padding: '1.5rem', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)' }}
                     >
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', borderBottom: '1px solid #e2e8f0', paddingBottom: '0.75rem' }}>
-                        <h4 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 700, color: '#0f172a' }}>
+                        <h4 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 400, color: '#0f172a' }}>
                           บันทึกการโอนเงินคืนลูกค้า (Complete Transfer)
                         </h4>
                         <button
@@ -695,7 +699,7 @@ export function OwnerRefundApprovalManager() {
                             <strong>รหัสคำขอ:</strong> {req.id} (คำสั่งซื้อ: {req.orderId})
                           </p>
                           <p style={{ margin: '0 0 0.35rem 0' }}>
-                            <strong>ยอดเงินที่ต้องโอนคืน:</strong> <span style={{ fontSize: '1.05rem', fontWeight: 700, color: '#0f172a' }}>{formatBaht(req.requestedAmount)}</span>
+                            <strong>ยอดเงินที่ต้องโอนคืน:</strong> <span style={{ fontSize: '1.05rem', fontWeight: 400, color: '#0f172a' }}>{formatBaht(req.requestedAmount)}</span>
                           </p>
                           <p style={{ margin: 0 }}>
                             <strong>บัญชีปลายทาง:</strong> {req.bankName} {req.bankAccountNo} ({req.bankAccountName || req.buyerName})
@@ -703,7 +707,7 @@ export function OwnerRefundApprovalManager() {
                         </div>
 
                         <div>
-                          <label htmlFor={`file-input-${req.id}`} style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: '#0f172a', marginBottom: '0.35rem' }}>
+                          <label htmlFor={`file-input-${req.id}`} style={{ display: 'block', fontSize: '0.85rem', fontWeight: 400, color: '#0f172a', marginBottom: '0.35rem' }}>
                             สลิปหลักฐานการโอนเงิน (Private Proof):
                           </label>
                           <input
@@ -717,7 +721,7 @@ export function OwnerRefundApprovalManager() {
                         </div>
 
                         <div>
-                          <label htmlFor={`note-input-${req.id}`} style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: '#0f172a', marginBottom: '0.35rem' }}>
+                          <label htmlFor={`note-input-${req.id}`} style={{ display: 'block', fontSize: '0.85rem', fontWeight: 400, color: '#0f172a', marginBottom: '0.35rem' }}>
                             บันทึกช่วยจำ / เลขที่อ้างอิงสลิป:
                           </label>
                           <input
@@ -777,7 +781,7 @@ export function OwnerRefundApprovalManager() {
                       style={{ position: 'relative', zIndex: 1, background: '#ffffff', borderRadius: '14px', maxWidth: '480px', width: '100%', padding: '1.5rem', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)' }}
                     >
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', borderBottom: '1px solid #e2e8f0', paddingBottom: '0.75rem' }}>
-                        <h4 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 700, color: '#dc2626' }}>
+                        <h4 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 400, color: '#dc2626' }}>
                           ปฏิเสธคำขอคืนเงิน (Reject Refund)
                         </h4>
                         <button
@@ -796,7 +800,7 @@ export function OwnerRefundApprovalManager() {
                           คำขอของ <strong>{req.buyerName}</strong> ({req.eventTitle}) ยอดเงิน {formatBaht(req.requestedAmount)}
                         </p>
                         <div>
-                          <label htmlFor={`reject-reason-${req.id}`} style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: '#0f172a', marginBottom: '0.35rem' }}>
+                          <label htmlFor={`reject-reason-${req.id}`} style={{ display: 'block', fontSize: '0.85rem', fontWeight: 400, color: '#0f172a', marginBottom: '0.35rem' }}>
                             ระบุเหตุผลในการปฏิเสธคำขอ (ลูกค้าจะเห็นข้อความนี้):
                           </label>
                           <textarea
@@ -854,7 +858,7 @@ export function OwnerRefundApprovalManager() {
                       style={{ position: 'relative', zIndex: 1, background: '#ffffff', borderRadius: '14px', maxWidth: '480px', width: '100%', padding: '1.5rem', boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)' }}
                     >
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', borderBottom: '1px solid #e2e8f0', paddingBottom: '0.75rem' }}>
-                        <h4 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 700, color: '#dc2626' }}>
+                        <h4 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 400, color: '#dc2626' }}>
                           บันทึกการโอนเงินล้มเหลว (Record Transfer Failure)
                         </h4>
                         <button
@@ -873,7 +877,7 @@ export function OwnerRefundApprovalManager() {
                           บันทึกเหตุผลที่ธนาคารปฏิเสธการโอนเงิน (เช่น เลขที่บัญชีไม่ถูกต้อง หรือบัญชีปิด) โดยยอดหนี้ยังคงค้างชำระเพื่อรอการติดต่อแก้ไข
                         </p>
                         <div>
-                          <label htmlFor={`failure-reason-${req.id}`} style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, color: '#0f172a', marginBottom: '0.35rem' }}>
+                          <label htmlFor={`failure-reason-${req.id}`} style={{ display: 'block', fontSize: '0.85rem', fontWeight: 400, color: '#0f172a', marginBottom: '0.35rem' }}>
                             ระบุเหตุผลที่การโอนเงินล้มเหลว:
                           </label>
                           <input
@@ -937,7 +941,7 @@ export function OwnerRefundApprovalManager() {
           >
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem', borderBottom: '1px solid #e2e8f0', paddingBottom: '0.75rem' }}>
               <div>
-                <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 800, color: '#0f172a' }}>
+                <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 400, color: '#0f172a' }}>
                   รายละเอียดคำขอคืนเงิน ({inspectingReq.id})
                 </h3>
                 <span style={{ fontSize: '0.85rem', color: '#64748b' }}>
@@ -972,11 +976,11 @@ export function OwnerRefundApprovalManager() {
               </div>
 
               <div>
-                <p style={{ margin: '0 0 0.35rem 0', fontWeight: 600, color: '#0f172a' }}>
+                <p style={{ margin: '0 0 0.35rem 0', fontWeight: 400, color: '#0f172a' }}>
                   ยอดเงินและเหตุผลการขอคืน:
                 </p>
                 <p style={{ margin: '0 0 0.35rem 0' }}>
-                  <strong>ยอดเงินคืนสุทธิ:</strong> <span style={{ fontSize: '1.1rem', fontWeight: 700, color: '#0f172a' }}>{formatBaht(inspectingReq.requestedAmount)}</span>
+                  <strong>ยอดเงินคืนสุทธิ:</strong> <span style={{ fontSize: '1.1rem', fontWeight: 400, color: '#0f172a' }}>{formatBaht(inspectingReq.requestedAmount)}</span>
                 </p>
                 <p style={{ margin: 0, color: '#475569' }}>
                   <strong>เหตุผล:</strong> {inspectingReq.reason}
@@ -985,7 +989,7 @@ export function OwnerRefundApprovalManager() {
 
               {inspectingReq.transferredAt && (
                 <div style={{ background: '#f0fdf4', padding: '0.85rem', borderRadius: '8px', border: '1px solid #bbf7d0', color: '#166534' }}>
-                  <p style={{ margin: '0 0 0.25rem 0', fontWeight: 700 }}>
+                  <p style={{ margin: '0 0 0.25rem 0', fontWeight: 400 }}>
                     โอนเงินคืนสำเร็จแล้วเมื่อ: {formatDate(new Date(inspectingReq.transferredAt))} เวลา {formatTime(new Date(inspectingReq.transferredAt))}
                   </p>
                   {inspectingReq.transferNote && (
@@ -998,7 +1002,7 @@ export function OwnerRefundApprovalManager() {
 
               {inspectingReq.rejectionReason && (
                 <div style={{ background: '#fef2f2', padding: '0.85rem', borderRadius: '8px', border: '1px solid #fecaca', color: '#991b1b' }}>
-                  <p style={{ margin: 0, fontWeight: 700 }}>
+                  <p style={{ margin: 0, fontWeight: 400 }}>
                     เหตุผลการปฏิเสธ: {inspectingReq.rejectionReason}
                   </p>
                 </div>

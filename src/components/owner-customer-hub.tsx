@@ -1,12 +1,13 @@
 'use client';
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
+import Link from 'next/link';
 import type { PaidOrderForCorrection, OrderContactAuditRecord, OrderContactAuditWithDetails } from '@/server/contact-correction';
 import type { TicketEmailDeliveryRecord } from '@/server/ticket-delivery';
 import type { OrderTransactionMemo, OrderItemDetail, TransactionVerificationStatus } from '@/server/transaction-memo';
 import { formatBaht, formatDate, formatTime } from '@/lib/locale';
 import { SearchIcon, RefreshIcon, XIcon, CheckCircleIcon, MailIcon, UsersIcon, ReceiptIcon, ShieldCheckIcon, DownloadIcon, CalendarIcon } from './icons';
-import { triggerToast } from './toast-notification';
+import { triggerToast, triggerRefreshToast } from './toast-notification';
 
 type CustomerHubTab = 'orders' | 'audits' | 'emails';
 type EditStatusFilter = 'all' | 'edited' | 'unmodified';
@@ -626,11 +627,7 @@ export function OwnerCustomerHub() {
     setIsLoading(true);
     await Promise.all([fetchOrders(searchQuery), fetchAudits(), fetchDeliveries()]);
     setIsLoading(false);
-    triggerToast({
-      type: 'info',
-      message: 'อัปเดตข้อมูลลูกค้าและคำสั่งซื้อล่าสุดเรียบร้อยแล้ว',
-      duration: 3000,
-    });
+    triggerRefreshToast('ลูกค้าและคำสั่งซื้อ');
   };
 
   return (
@@ -1117,6 +1114,16 @@ export function OwnerCustomerHub() {
       {/* Tab 3: Emails Tab */}
       {activeTab === 'emails' && (
         <section className="customer-emails-tab-content" id="owner-email-deliveries-manager" data-testid="owner-email-deliveries-manager">
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '1rem' }}>
+            <Link
+              href="/back-office/email-designer"
+              className="primary-button"
+              style={{ fontSize: '0.88rem', textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: '0.5rem' }}
+            >
+              <MailIcon style={{ width: '16px', height: '16px' }} />
+              ออกแบบและเขียนเทมเพลตอีเมล
+            </Link>
+          </div>
           {filteredDeliveries.length === 0 ? (
             <div className="hub-empty-state-card clean-success-empty">
               <CheckCircleIcon className="empty-success-icon" />
@@ -1553,16 +1560,16 @@ export function OwnerCustomerHub() {
                   </tbody>
                   <tfoot>
                     <tr>
-                      <td colSpan={3} style={{ textAlign: 'right', fontWeight: 500, color: '#64748b' }}>
+                      <td colSpan={3} style={{ textAlign: 'right', fontWeight: 400, color: '#64748b' }}>
                         ค่าบริการระบบ (3%):
                       </td>
-                      <td style={{ textAlign: 'right', fontWeight: 600 }}>{formatBaht(memoOrder.customerFee)} บาท</td>
+                      <td style={{ textAlign: 'right', fontWeight: 400 }}>{formatBaht(memoOrder.customerFee)} บาท</td>
                     </tr>
                     <tr>
-                      <td colSpan={3} style={{ textAlign: 'right', fontWeight: 700, color: '#0f172a' }}>
+                      <td colSpan={3} style={{ textAlign: 'right', fontWeight: 400, color: '#0f172a' }}>
                         ยอดชำระสุทธิ:
                       </td>
-                      <td style={{ textAlign: 'right', fontWeight: 700, color: '#0f172a', fontSize: '1rem' }}>
+                      <td style={{ textAlign: 'right', fontWeight: 400, color: '#0f172a', fontSize: '1rem' }}>
                         {formatBaht(memoOrder.total)} บาท
                       </td>
                     </tr>

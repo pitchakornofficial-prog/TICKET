@@ -268,7 +268,7 @@ export function QueueWaitingRoom({
             <div className="queue-metric-box">
               <span className="queue-metric-label">คิวก่อนหน้า</span>
               <strong className="queue-metric-value" id="queue-ahead-count">
-                {peopleAhead} <small style={{ fontSize: '0.9rem', fontWeight: 500 }}>คิว</small>
+                {peopleAhead} <small style={{ fontSize: '0.9rem', fontWeight: 400 }}>คิว</small>
               </strong>
             </div>
 
@@ -352,7 +352,7 @@ export function QueueWaitingRoom({
                 type="button"
                 onClick={handleProceedNow}
                 className="primary-button"
-                style={{ width: '100%', fontSize: '1.05rem', fontWeight: 600 }}
+                style={{ width: '100%', fontSize: '1.05rem', fontWeight: 400 }}
               >
                 เข้าสู่หน้าเลือกบัตรและกรอกข้อมูลทันที
               </button>
@@ -365,7 +365,7 @@ export function QueueWaitingRoom({
                 style={{
                   width: '100%',
                   fontSize: '1rem',
-                  fontWeight: 600,
+                  fontWeight: 400,
                   opacity: 0.65,
                   cursor: 'not-allowed',
                   background: 'var(--card-bg, #f8fafc)',
