@@ -5149,6 +5149,8 @@ textarea.text-input {
 .payment-qr-frame {
   color-scheme: light;
   background: var(--white);
+  background-color: #ffffff;
+  color-scheme: light;
   padding: 1.25rem;
   border-radius: 20px;
   border: 2px solid #e2e8f0;
@@ -5785,6 +5787,7 @@ textarea.text-input {
 .stub-qr-frame {
   color-scheme: light;
   background: transparent;
+  color-scheme: light;
   padding: 0;
   border-radius: 0;
   border: none;
