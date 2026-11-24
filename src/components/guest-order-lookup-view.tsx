@@ -1256,16 +1256,22 @@ export function GuestOrderLookupView({ initialOrderId }: GuestOrderLookupViewPro
 
                                               {/* Right: Scan Stub Area */}
                                               <div className="stub-scan-side">
-                                                <div className="stub-qr-frame">
-                                                  {/* biome-ignore lint/performance/noImgElement: Data URL SVG QR representation */}
+                                                <div className="stub-qr-frame" style={{ backgroundColor: '#ffffff', colorScheme: 'light' }}>
+                                                  {/* biome-ignore lint/performance/noImgElement: Opaque PNG ticket QR representation */}
                                                   <img
                                                     id={`ticket-qr-${tkt.id}`}
-                                                    src={tkt.qrCodeUrl}
+                                                    src={`/api/public/tickets/${tkt.id}/qr`}
                                                     alt={`QR Code บัตร ${tkt.ticketCode}`}
                                                     data-qr-payload={tkt.qrPayload}
                                                     width={160}
                                                     height={160}
-                                                    style={{ display: 'block', margin: '0 auto', borderRadius: '12px', border: '1px solid #e2e8f0', padding: '8px', background: '#ffffff' }}
+                                                    style={{ display: 'block', margin: '0 auto', borderRadius: '10px', backgroundColor: '#ffffff', padding: 0, border: 'none' }}
+                                                    onError={(e) => {
+                                                      const img = e.currentTarget;
+                                                      if (img.dataset.fallbackApplied || !tkt.qrCodeUrl) return;
+                                                      img.dataset.fallbackApplied = '1';
+                                                      img.src = tkt.qrCodeUrl;
+                                                    }}
                                                   />
                                                 </div>
 

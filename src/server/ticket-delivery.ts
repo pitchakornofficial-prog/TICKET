@@ -138,14 +138,26 @@ export function buildTicketEmailContent(
   const safeSubject = escapeHtml(subject);
   const safeOrderUrl = escapeHtml(sanitizeEmailUrl(orderUrl) || '#');
 
+  let baseUrl = '';
+  try {
+    const safeOrderOrigin = sanitizeEmailUrl(orderUrl);
+    if (safeOrderOrigin && (safeOrderOrigin.startsWith('https://') || safeOrderOrigin.startsWith('http://'))) {
+      baseUrl = new URL(safeOrderOrigin).origin;
+    }
+  } catch {
+    baseUrl = '';
+  }
+
   const ticketsHtml = tickets
     .map((t, idx) => {
       const safeTicketTypeName = escapeHtml(t.ticketTypeName);
       const safeTicketCode = escapeHtml(t.ticketCode);
-      const safeQrUrl = escapeHtml(sanitizeEmailUrl(t.qrCodeUrl, { allowDataImage: true }));
+      const safeQrUrl = baseUrl
+        ? `${escapeHtml(baseUrl)}/api/public/tickets/${encodeURIComponent(t.id)}/qr`
+        : escapeHtml(sanitizeEmailUrl(t.qrCodeUrl, { allowDataImage: true }));
       const qrBlock = safeQrUrl
         ? `<div style="text-align: center; margin: 12px 0;">
-          <img src="${safeQrUrl}" alt="Ticket QR ${safeTicketCode}" width="160" height="160" style="display: inline-block; border-radius: 4px; border: 1px solid #cbd5e1;" />
+          <img src="${safeQrUrl}" alt="Ticket QR ${safeTicketCode}" width="160" height="160" style="display: inline-block; border-radius: 8px; background-color: #ffffff; padding: 0; border: none;" />
         </div>`
         : '';
 
@@ -168,6 +180,8 @@ export function buildTicketEmailContent(
     <html lang="th">
     <head>
       <meta charset="utf-8">
+      <meta name="color-scheme" content="light" />
+      <meta name="supported-color-schemes" content="light" />
       <title>${safeSubject}</title>
     </head>
     <body style="font-family: sans-serif; background-color: #f8fafc; color: #0f172a; margin: 0; padding: 24px;">

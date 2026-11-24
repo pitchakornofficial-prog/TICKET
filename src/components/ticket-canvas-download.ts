@@ -481,9 +481,9 @@ export async function generateTicketCanvas(
     const boxW = qrSize + qrPad * 2;
     const boxH = qrSize + qrPad * 2;
 
-    // Draw rounded QR container card (matches .surface-qr-btn in studio)
+    // Always draw pure white #ffffff QR container box (never invert to dark on dark ticket themes)
     ctx.save();
-    ctx.fillStyle = template.qrBgColor && template.qrBgColor !== 'transparent' ? template.qrBgColor : '#ffffff';
+    ctx.fillStyle = '#ffffff';
     if (typeof ctx.beginPath === 'function') {
       ctx.beginPath();
       drawRoundedRect(ctx, boxX, boxY, boxW, boxH, qrRadius);
@@ -500,13 +500,26 @@ export async function generateTicketCanvas(
     }
     ctx.restore();
 
-    if (ticket.qrCodeUrl) {
+    let pureBwQrSrc = ticket.qrCodeUrl;
+    try {
+      const qrInput = ticket.qrPayload || ticket.ticketCode;
+      if (qrInput) {
+        pureBwQrSrc = generateCustomQrSvg(qrInput, {
+          fgColor: '#000000',
+          bgColor: '#ffffff',
+        });
+      }
+    } catch {
+      pureBwQrSrc = ticket.qrCodeUrl;
+    }
+
+    if (pureBwQrSrc) {
       try {
         const qrImg = new Image();
         await new Promise<void>((resolve, reject) => {
           qrImg.onload = () => resolve();
           qrImg.onerror = () => reject();
-          qrImg.src = ticket.qrCodeUrl;
+          qrImg.src = pureBwQrSrc;
         });
         ctx.save();
         if (typeof ctx.beginPath === 'function' && typeof ctx.clip === 'function') {
@@ -518,15 +531,18 @@ export async function generateTicketCanvas(
         ctx.restore();
       } catch {
         try {
-          const svgUrl = generateCustomQrSvg(ticket.ticketCode, {
-            fgColor: template.qrFgColor || '#000000',
-            bgColor: template.qrBgColor || '#ffffff',
-          });
+          const fallbackSrc =
+            ticket.qrCodeUrl && ticket.qrCodeUrl !== pureBwQrSrc
+              ? ticket.qrCodeUrl
+              : generateCustomQrSvg(ticket.ticketCode, {
+                  fgColor: '#000000',
+                  bgColor: '#ffffff',
+                });
           const qrSvgImg = new Image();
           await new Promise<void>((resolve, reject) => {
             qrSvgImg.onload = () => resolve();
             qrSvgImg.onerror = () => reject();
-            qrSvgImg.src = svgUrl;
+            qrSvgImg.src = fallbackSrc;
           });
           ctx.save();
           if (typeof ctx.beginPath === 'function' && typeof ctx.clip === 'function') {

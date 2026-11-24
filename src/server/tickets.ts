@@ -81,7 +81,7 @@ export function generateTicketQrSvg(ticketCode: string, qrPayload: string): stri
     .replaceAll('"', '&quot;')
     .replaceAll("'", '&apos;');
   const rx = Math.round(moduleSize * 1.5);
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${totalSize} ${totalSize}" width="${totalSize}" height="${totalSize}" role="img" aria-label="Ticket QR code"><desc>${escapeXml(qrPayload)}</desc><rect width="${totalSize}" height="${totalSize}" rx="${rx}" ry="${rx}" fill="#ffffff"/><path fill="#0f172a" d="${pathD}"/><text x="${totalSize / 2}" y="${totalSize - 4}" font-family="monospace" font-size="7" fill="#64748b" text-anchor="middle" style="display:none">${escapeXml(ticketCode || 'TK-000000-0000-00')}</text></svg>`;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${totalSize} ${totalSize}" width="${totalSize}" height="${totalSize}" role="img" aria-label="Ticket QR code"><desc>${escapeXml(qrPayload)}</desc><rect width="${totalSize}" height="${totalSize}" rx="${rx}" ry="${rx}" fill="#ffffff"/><path fill="#000000" d="${pathD}"/><text x="${totalSize / 2}" y="${totalSize - 4}" font-family="monospace" font-size="7" fill="#64748b" text-anchor="middle" style="display:none">${escapeXml(ticketCode || 'TK-000000-0000-00')}</text></svg>`;
 
   return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
 }
@@ -355,4 +355,57 @@ export async function getOrderTickets(pool: Pool, orderId: string): Promise<Tick
     eventPosterUrl: r.eventPosterUrl || null,
     createdAt: new Date(r.createdAt).toISOString(),
   }));
+}
+
+/**
+ * Gets a single issued ticket by ID or ticket code.
+ */
+export async function getTicketById(pool: Pool, ticketIdOrCode: string): Promise<TicketDetail | null> {
+  await ensureTicketSchema(pool);
+  const res = await pool.query(
+    `SELECT t.id, t."orderId", t."orderItemId", t."eventId", t."sessionId",
+            t."ticketTypeId", t."ticketCode", t."qrPayload", t.status, t."admissionStatus",
+            t."createdAt", tt.name as "ticketTypeName", COALESCE(t.price, oi."unitPrice") as "ticketPrice",
+            o."buyerName", o."buyerEmail", o."buyerPhone",
+            es."startTime" as "sessionStartTime", es."endTime" as "sessionEndTime",
+            e.location, e.title as "eventTitle", e."ticketTemplateUrl", e."posterUrl" as "eventPosterUrl"
+     FROM tickets t
+     JOIN ticket_types tt ON t."ticketTypeId" = tt.id
+     JOIN order_items oi ON oi.id = t."orderItemId"
+     JOIN orders o ON t."orderId" = o.id
+     JOIN event_sessions es ON t."sessionId" = es.id
+     JOIN events e ON t."eventId" = e.id
+     WHERE t.id = $1 OR t."ticketCode" = $1
+     LIMIT 1`,
+    [ticketIdOrCode],
+  );
+
+  if (res.rowCount === 0) return null;
+  const r = res.rows[0];
+
+  return {
+    id: r.id,
+    orderId: r.orderId,
+    orderItemId: r.orderItemId,
+    eventId: r.eventId,
+    sessionId: r.sessionId,
+    ticketTypeId: r.ticketTypeId,
+    ticketTypeName: r.ticketTypeName,
+    ticketPrice: Number(r.ticketPrice),
+    ticketCode: r.ticketCode,
+    qrPayload: r.qrPayload,
+    qrCodeUrl: generateTicketQrSvg(r.ticketCode, r.qrPayload),
+    status: r.status as 'valid',
+    admissionStatus: r.admissionStatus as 'outside',
+    buyerName: r.buyerName,
+    buyerEmail: r.buyerEmail,
+    buyerPhone: r.buyerPhone,
+    sessionStartTime: new Date(r.sessionStartTime).toISOString(),
+    sessionEndTime: new Date(r.sessionEndTime).toISOString(),
+    location: r.location,
+    eventTitle: r.eventTitle,
+    ticketTemplateUrl: r.ticketTemplateUrl || null,
+    eventPosterUrl: r.eventPosterUrl || null,
+    createdAt: new Date(r.createdAt).toISOString(),
+  };
 }

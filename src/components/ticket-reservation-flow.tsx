@@ -126,6 +126,16 @@ export function TicketReservationFlow({
   const isPaid = reservation?.status === 'paid';
   const isPaymentException = reservation?.status === 'payment_exception';
 
+  const paymentToken =
+    buyer?.token ||
+    (typeof window !== 'undefined' ? sessionStorage.getItem('ticket_guest_otp_token') || '' : '');
+  const rawQrUrl = charge?.qrCodeUrl || '';
+  const isRemoteQrUrl = rawQrUrl.startsWith('http://') || rawQrUrl.startsWith('https://');
+  const displayQrSrc =
+    charge && reservation && isRemoteQrUrl && paymentToken
+      ? `/api/public/checkout/orders/${reservation.id}/payment-qr/download?token=${encodeURIComponent(paymentToken)}&inline=1`
+      : rawQrUrl;
+
   async function handleGeneratePaymentQr() {
     if (!reservation) return;
     const token = buyer?.token || (typeof window !== 'undefined' ? sessionStorage.getItem('ticket_guest_otp_token') : '');
@@ -853,24 +863,33 @@ export function TicketReservationFlow({
                         {formatBaht(tkt.ticketPrice)}
                       </div>
 
-                      {/* Ticket QR SVG */}
+                      {/* Ticket QR PNG (opaque white background for dark-mode safety) */}
                       <div
                         style={{
-                          background: '#fafafb',
-                          padding: '0.8rem',
-                          borderRadius: '6px',
-                          border: '1px solid var(--line)',
+                          background: '#ffffff',
+                          colorScheme: 'light',
+                          padding: 0,
+                          borderRadius: '8px',
+                          border: 'none',
                           marginBottom: '1rem',
+                          display: 'inline-block',
                         }}
                       >
-                        {/* biome-ignore lint/performance/noImgElement: Data URL SVG QR representation */}
+                        {/* biome-ignore lint/performance/noImgElement: Opaque PNG ticket QR representation */}
                         <img
                           id={`ticket-qr-${idx}`}
-                          src={tkt.qrCodeUrl}
+                          src={`/api/public/tickets/${tkt.id}/qr`}
                           alt={`QR Code ${tkt.ticketCode}`}
+                          data-qr-payload={tkt.qrPayload}
                           width={180}
                           height={180}
-                          style={{ display: 'block', margin: '0 auto' }}
+                          style={{ display: 'block', margin: '0 auto', borderRadius: '8px', backgroundColor: '#ffffff' }}
+                          onError={(e) => {
+                            const img = e.currentTarget;
+                            if (img.dataset.fallbackApplied || !tkt.qrCodeUrl) return;
+                            img.dataset.fallbackApplied = '1';
+                            img.src = tkt.qrCodeUrl;
+                          }}
                         />
                       </div>
 
@@ -966,15 +985,21 @@ export function TicketReservationFlow({
                 </button>
               ) : (
                 <div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center' }}>
-                  <div style={{ background: 'var(--white)', padding: '1rem', borderRadius: '8px', border: '1px solid var(--line)', marginBottom: '1rem' }}>
-                    {/* biome-ignore lint/performance/noImgElement: Data URL SVG QR representation */}
+                  <div style={{ background: '#ffffff', colorScheme: 'light', padding: '1rem', borderRadius: '8px', border: '1px solid var(--line)', marginBottom: '1rem' }}>
+                    {/* biome-ignore lint/performance/noImgElement: Data URL SVG or flattened PNG QR representation */}
                     <img
                       id="promptpay-qr-image"
-                      src={charge.qrCodeUrl}
+                      src={displayQrSrc}
                       alt="PromptPay QR Code"
                       width={220}
                       height={220}
-                      style={{ display: 'block', margin: '0 auto' }}
+                      style={{ display: 'block', margin: '0 auto', backgroundColor: '#ffffff', borderRadius: '8px' }}
+                      onError={(e) => {
+                        const img = e.currentTarget;
+                        if (img.dataset.fallbackApplied || !charge?.qrCodeUrl || img.src === charge.qrCodeUrl) return;
+                        img.dataset.fallbackApplied = '1';
+                        img.src = charge.qrCodeUrl;
+                      }}
                     />
                   </div>
                   <div style={{ fontSize: '1rem', marginBottom: '0.4rem' }}>

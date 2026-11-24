@@ -271,6 +271,17 @@ export function OrderPaymentView({ orderId }: OrderPaymentViewProps) {
   const timerMinutes = Math.floor(remainingSeconds / 60);
   const timerSeconds = remainingSeconds % 60;
 
+  const paymentToken =
+    typeof window !== 'undefined'
+      ? sessionStorage.getItem('ticket_guest_otp_token') || ''
+      : '';
+  const rawQrUrl = charge?.qrCodeUrl || '';
+  const isRemoteQrUrl = rawQrUrl.startsWith('http://') || rawQrUrl.startsWith('https://');
+  const displayQrSrc =
+    charge && reservation && isRemoteQrUrl && paymentToken
+      ? `/api/public/checkout/orders/${reservation.id}/payment-qr/download?token=${encodeURIComponent(paymentToken)}&inline=1`
+      : rawQrUrl;
+
   async function handleSimulatePaymentSuccess() {
     if (!reservation) return;
     setIsVerifyingPayment(true);
@@ -491,15 +502,21 @@ export function OrderPaymentView({ orderId }: OrderPaymentViewProps) {
                 </div>
               ) : (
                 <>
-                  <div className="payment-qr-frame">
+                  <div className="payment-qr-frame" style={{ backgroundColor: '#ffffff', colorScheme: 'light' }}>
                     {/* biome-ignore lint/performance/noImgElement: Data URL SVG QR representation */}
                     <img
                       id="promptpay-qr-image"
-                      src={charge.qrCodeUrl}
+                      src={displayQrSrc}
                       alt="PromptPay QR Code"
                       width={220}
                       height={220}
-                      style={{ display: 'block', margin: '0 auto' }}
+                      style={{ display: 'block', margin: '0 auto', backgroundColor: '#ffffff', borderRadius: '8px' }}
+                      onError={(e) => {
+                        const img = e.currentTarget;
+                        if (img.dataset.fallbackApplied || !charge?.qrCodeUrl || img.src === charge.qrCodeUrl) return;
+                        img.dataset.fallbackApplied = '1';
+                        img.src = charge.qrCodeUrl;
+                      }}
                     />
                   </div>
 
