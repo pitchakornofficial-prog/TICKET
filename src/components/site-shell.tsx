@@ -1,11 +1,12 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { Suspense, useState, useEffect, type ReactNode } from 'react';
 import { TicketIcon } from './ticket-icon';
 import { NavbarSearch } from './navbar-search';
-import { BookOpenIcon, LockIcon, PhoneIcon, SearchIcon, UsersIcon } from './icons';
+import { AlertIcon } from './alert-icon';
+import { BookOpenIcon, PhoneIcon, SearchIcon, UsersIcon } from './icons';
 
 function HomeIcon(props: React.SVGProps<SVGSVGElement>) {
   return (
@@ -17,9 +18,12 @@ function HomeIcon(props: React.SVGProps<SVGSVGElement>) {
 }
 
 export function SiteShell({ children }: { children: ReactNode }) {
+  const router = useRouter();
   const pathname = usePathname();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isMobileSearchOpen, setIsMobileSearchOpen] = useState(false);
+  const [isExitModalOpen, setIsExitModalOpen] = useState(false);
+  const [pendingExitUrl, setPendingExitUrl] = useState<string | null>(null);
   const isBackOffice = pathname?.startsWith('/back-office');
 
   const isFocusedCheckout = Boolean(
@@ -35,14 +39,28 @@ export function SiteShell({ children }: { children: ReactNode }) {
     }
   }, [pathname]);
 
-  const handleBrandExitClick = (e: React.MouseEvent) => {
-    if (typeof window === 'undefined') return;
-    const confirmed = window.confirm(
-      'คุณแน่ใจหรือไม่ที่จะออกจากหน้านี้? หากกำลังรอคิวหรืออยู่ในขั้นตอนการซื้อบัตร ข้อมูลการกันบัตรของคุณจะถูกยกเลิก',
-    );
-    if (!confirmed) {
+  const handleNavClick = (e: React.MouseEvent, href: string) => {
+    if (isFocusedCheckout) {
       e.preventDefault();
+      setPendingExitUrl(href);
+      setIsExitModalOpen(true);
+      setIsMobileMenuOpen(false);
+      setIsMobileSearchOpen(false);
     }
+  };
+
+  const handleConfirmExit = () => {
+    setIsExitModalOpen(false);
+    if (pendingExitUrl) {
+      const url = pendingExitUrl;
+      setPendingExitUrl(null);
+      router.push(url);
+    }
+  };
+
+  const handleCancelExit = () => {
+    setIsExitModalOpen(false);
+    setPendingExitUrl(null);
   };
 
   if (isBackOffice) {
@@ -71,89 +89,71 @@ export function SiteShell({ children }: { children: ReactNode }) {
               href="/"
               className="brand"
               aria-label="TICKET หน้าแรก"
-              onClick={isFocusedCheckout ? handleBrandExitClick : undefined}
+              onClick={e => handleNavClick(e, '/')}
             >
               <TicketIcon />
               TICKET
             </Link>
           </div>
 
-          {isFocusedCheckout ? (
-            <div className="focused-checkout-badge-wrap">
-              <div className="focused-checkout-security-text">
-                <LockIcon style={{ width: '14px', height: '14px', color: '#64748b' }} />
-                <span>ระบบชำระเงินปลอดภัย 256-bit SSL</span>
-              </div>
-            </div>
-          ) : (
-            <>
-              {/* Center Navbar Instant Search */}
-              <div className="header-search-center">
-                <Suspense fallback={<div className="navbar-search-wrapper" />}>
-                  <NavbarSearch />
-                </Suspense>
-              </div>
+          {/* Center Navbar Instant Search */}
+          <div className="header-search-center">
+            <Suspense fallback={<div className="navbar-search-wrapper" />}>
+              <NavbarSearch />
+            </Suspense>
+          </div>
 
-              <nav className="header-nav" aria-label="เมนูหลัก">
-                <Link className="header-nav-link" href="/">หน้าแรก</Link>
-                <Link className="header-nav-link" href="/my-tickets">ค้นหาบัตรของฉัน</Link>
-                <Link className="header-nav-link" href="/news">ข่าวสาร</Link>
-                <Link className="header-nav-link" href="/about">เกี่ยวกับเรา</Link>
-                <Link className="header-nav-link" href="/contact">ติดต่อเรา</Link>
-              </nav>
+          <nav className="header-nav" aria-label="เมนูหลัก">
+            <Link className="header-nav-link" href="/" onClick={e => handleNavClick(e, '/')}>หน้าแรก</Link>
+            <Link className="header-nav-link" href="/my-tickets" onClick={e => handleNavClick(e, '/my-tickets')}>ค้นหาบัตรของฉัน</Link>
+            <Link className="header-nav-link" href="/news" onClick={e => handleNavClick(e, '/news')}>ข่าวสาร</Link>
+            <Link className="header-nav-link" href="/about" onClick={e => handleNavClick(e, '/about')}>เกี่ยวกับเรา</Link>
+            <Link className="header-nav-link" href="/contact" onClick={e => handleNavClick(e, '/contact')}>ติดต่อเรา</Link>
+          </nav>
 
-              {/* Mobile Header Actions (D-189: Search & Hamburger with Mutually Exclusive Toggle) */}
-              <div className="mobile-header-actions">
-                <button
-                  type="button"
-                  className="mobile-search-btn"
-                  aria-label={isMobileSearchOpen ? 'ปิดช่องค้นหา' : 'เปิดช่องค้นหา'}
-                  aria-expanded={isMobileSearchOpen}
-                  onClick={() => {
-                    setIsMobileSearchOpen(prev => !prev);
-                    setIsMobileMenuOpen(false);
-                  }}
-                >
-                  {isMobileSearchOpen ? (
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                      <line x1="18" y1="6" x2="6" y2="18" />
-                      <line x1="6" y1="6" x2="18" y2="18" />
-                    </svg>
-                  ) : (
-                    <SearchIcon style={{ width: '20px', height: '20px' }} />
-                  )}
-                </button>
+          {/* Mobile Header Actions (D-189: Search & Hamburger with Mutually Exclusive Toggle) */}
+          <div className="mobile-header-actions">
+            <button
+              type="button"
+              className="mobile-search-btn"
+              aria-label={isMobileSearchOpen ? 'ปิดช่องค้นหา' : 'เปิดช่องค้นหา'}
+              aria-expanded={isMobileSearchOpen}
+              onClick={() => {
+                setIsMobileSearchOpen(prev => !prev);
+                setIsMobileMenuOpen(false);
+              }}
+            >
+              <SearchIcon style={{ width: '20px', height: '20px' }} />
+            </button>
 
-                <button
-                  type="button"
-                  className="mobile-hamburger-btn"
-                  aria-label={isMobileMenuOpen ? 'ปิดเมนูนำทาง' : 'เปิดเมนูนำทาง'}
-                  aria-expanded={isMobileMenuOpen}
-                  onClick={() => {
-                    setIsMobileMenuOpen(prev => !prev);
-                    setIsMobileSearchOpen(false);
-                  }}
-                >
-                  {isMobileMenuOpen ? (
-                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                      <line x1="18" y1="6" x2="6" y2="18" />
-                      <line x1="6" y1="6" x2="18" y2="18" />
-                    </svg>
-                  ) : (
-                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                      <line x1="4" y1="6" x2="20" y2="6" />
-                      <line x1="4" y1="12" x2="20" y2="12" />
-                      <line x1="4" y1="18" x2="20" y2="18" />
-                    </svg>
-                  )}
-                </button>
-              </div>
-            </>
-          )}
+            <button
+              type="button"
+              className="mobile-hamburger-btn"
+              aria-label={isMobileMenuOpen ? 'ปิดเมนูนำทาง' : 'เปิดเมนูนำทาง'}
+              aria-expanded={isMobileMenuOpen}
+              onClick={() => {
+                setIsMobileMenuOpen(prev => !prev);
+                setIsMobileSearchOpen(false);
+              }}
+            >
+              {isMobileMenuOpen ? (
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                  <line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              ) : (
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                  <line x1="4" y1="6" x2="20" y2="6" />
+                  <line x1="4" y1="12" x2="20" y2="12" />
+                  <line x1="4" y1="18" x2="20" y2="18" />
+                </svg>
+              )}
+            </button>
+          </div>
         </div>
 
         {/* Mobile Floating Search Overlay (D-189) */}
-        {isMobileSearchOpen && !isFocusedCheckout && (
+        {isMobileSearchOpen && (
           <section className="mobile-search-overlay" aria-label="ช่องค้นหาคอนเสิร์ต">
             <Suspense fallback={<div className="navbar-search-wrapper" />}>
               <NavbarSearch />
@@ -162,31 +162,137 @@ export function SiteShell({ children }: { children: ReactNode }) {
         )}
 
         {/* Mobile Floating Navigation Dropdown (D-188, D-189: Floating overlay with icons) */}
-        {isMobileMenuOpen && !isFocusedCheckout && (
+        {isMobileMenuOpen && (
           <nav className="mobile-nav-dropdown" aria-label="เมนูหลักสำหรับมือถือ">
-            <Link className="mobile-nav-link" href="/" onClick={() => setIsMobileMenuOpen(false)}>
+            <Link className="mobile-nav-link" href="/" onClick={e => { setIsMobileMenuOpen(false); handleNavClick(e, '/'); }}>
               <HomeIcon className="mobile-nav-icon" />
               <span>หน้าแรก</span>
             </Link>
-            <Link className="mobile-nav-link" href="/my-tickets" onClick={() => setIsMobileMenuOpen(false)}>
+            <Link className="mobile-nav-link" href="/my-tickets" onClick={e => { setIsMobileMenuOpen(false); handleNavClick(e, '/my-tickets'); }}>
               <TicketIcon className="mobile-nav-icon" />
               <span>ค้นหาบัตรของฉัน</span>
             </Link>
-            <Link className="mobile-nav-link" href="/news" onClick={() => setIsMobileMenuOpen(false)}>
+            <Link className="mobile-nav-link" href="/news" onClick={e => { setIsMobileMenuOpen(false); handleNavClick(e, '/news'); }}>
               <BookOpenIcon className="mobile-nav-icon" />
               <span>ข่าวสาร</span>
             </Link>
-            <Link className="mobile-nav-link" href="/about" onClick={() => setIsMobileMenuOpen(false)}>
+            <Link className="mobile-nav-link" href="/about" onClick={e => { setIsMobileMenuOpen(false); handleNavClick(e, '/about'); }}>
               <UsersIcon className="mobile-nav-icon" />
               <span>เกี่ยวกับเรา</span>
             </Link>
-            <Link className="mobile-nav-link" href="/contact" onClick={() => setIsMobileMenuOpen(false)}>
+            <Link className="mobile-nav-link" href="/contact" onClick={e => { setIsMobileMenuOpen(false); handleNavClick(e, '/contact'); }}>
               <PhoneIcon className="mobile-nav-icon" />
               <span>ติดต่อเรา</span>
             </Link>
           </nav>
         )}
       </header>
+
+      {/* Push content downward on mobile when search overlay is open so it does not obscure topmost content */}
+      {isMobileSearchOpen && (
+        <div className="mobile-search-flow-spacer" aria-hidden="true" />
+      )}
+
+      {/* Styled Checkout Exit Confirmation Modal */}
+      {isExitModalOpen && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="checkout-exit-title"
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(15, 23, 42, 0.65)',
+            backdropFilter: 'blur(4px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1100,
+            padding: '1rem',
+          }}
+        >
+          <div
+            style={{
+              background: 'var(--white)',
+              borderRadius: '20px',
+              maxWidth: '420px',
+              width: '100%',
+              padding: '2rem 1.75rem',
+              boxShadow: '0 20px 40px rgba(0, 0, 0, 0.2)',
+              border: '1px solid #fed7aa',
+              textAlign: 'center',
+            }}
+          >
+            <div
+              style={{
+                width: '56px',
+                height: '56px',
+                borderRadius: '50%',
+                background: '#fff7ed',
+                color: '#ea580c',
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                marginBottom: '1.25rem',
+              }}
+            >
+              <AlertIcon style={{ width: '32px', height: '32px' }} />
+            </div>
+
+            <h2
+              id="checkout-exit-title"
+              style={{
+                fontSize: '1.25rem',
+                fontWeight: 500,
+                color: 'var(--black)',
+                margin: '0 0 0.75rem',
+              }}
+            >
+              ยืนยันการออกจากหน้านี้?
+            </h2>
+
+            <p style={{ fontSize: '0.92rem', color: 'var(--muted)', lineHeight: 1.6, margin: '0 0 1.5rem' }}>
+              ท่านกำลังอยู่ในขั้นตอนการทำรายการซื้อบัตร หากออกจากหน้านี้ การกันสิทธิ์บัตรหรือลำดับคิวของท่านอาจถูกยกเลิก
+            </p>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
+              <button
+                type="button"
+                onClick={handleCancelExit}
+                className="primary-button"
+                style={{
+                  width: '100%',
+                  padding: '0.8rem 1.5rem',
+                  borderRadius: '9999px',
+                  fontSize: '0.95rem',
+                  fontWeight: 400,
+                  cursor: 'pointer',
+                }}
+              >
+                ทำรายการต่อ
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmExit}
+                style={{
+                  width: '100%',
+                  padding: '0.75rem 1.5rem',
+                  borderRadius: '9999px',
+                  fontSize: '0.92rem',
+                  color: '#dc2626',
+                  background: 'transparent',
+                  border: '1px solid #fecaca',
+                  cursor: 'pointer',
+                  fontWeight: 400,
+                  transition: 'background 0.15s ease',
+                }}
+              >
+                ออกจากหน้านี้
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <main id="main" tabIndex={-1}>{children}</main>
 

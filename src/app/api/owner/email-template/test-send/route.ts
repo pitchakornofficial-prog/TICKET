@@ -223,7 +223,8 @@ export async function POST(request: Request) {
         sessionStartTime: new Date(Date.now() + 86400000 * 14).toISOString(),
         sessionEndTime: new Date(Date.now() + 86400000 * 14 + 10800000).toISOString(),
         location: 'อิมแพ็ค อารีน่า เมืองทองธานี',
-        eventTitle: 'TICKET FESTIVAL 2026',
+        eventTitle: 'TICKET FESTIVAL 2026: LIVE IN BANGKOK',
+        eventPosterUrl: template.posterUrl || 'https://images.unsplash.com/photo-1540039155733-5bb30b53aa14?auto=format&fit=crop&w=1200&q=80',
         createdAt: new Date().toISOString(),
       },
     ];
@@ -233,7 +234,7 @@ export async function POST(request: Request) {
     const ticketDeliveryContent = buildTicketEmailContent(
       'ORD-SAMPLE-9999',
       session.user.name || 'ผู้ทดสอบระบบ',
-      'TICKET FESTIVAL 2026',
+      'TICKET FESTIVAL 2026: LIVE IN BANGKOK',
       'อิมแพ็ค อารีน่า เมืองทองธานี',
       mockTickets[0].sessionStartTime,
       mockTickets,

@@ -3,6 +3,7 @@ import type { Pool } from 'pg';
 import { hashPassword, verifyPassword } from 'better-auth/crypto';
 import { inTransaction } from './database.ts';
 import { emailTransport } from './email.ts';
+import { readScenarioEmailTemplate, interpolateEmailVariables } from './email-master-template.ts';
 import { minimumPasswordLength, maximumPasswordLength } from '../lib/bootstrap-input.ts';
 
 // ADR-0004:
@@ -218,11 +219,72 @@ export async function createOrganizerInvitation(
 
     const inviteUrl = `${new URL(baseURL).origin}/accept-invitation?token=${token}`;
     const roleThai = invitedRole === 'owner' ? 'ผู้ดูแลระบบ (Admin)' : 'ผู้จัดงาน (Organizer)';
+
+    let subject = `คำเชิญเข้าร่วมเป็น${roleThai} TICKET`;
+    let html = `
+      <div style="font-family: sans-serif; padding: 24px; color: #0f172a; max-width: 560px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 8px;">
+        <h2 style="margin-top: 0; color: #0f172a;">คำเชิญเข้าร่วมเป็น ${roleThai}</h2>
+        <p>คุณได้รับคำเชิญเข้าร่วมเป็น ${roleThai} ในระบบ TICKET</p>
+        <div style="margin: 24px 0;">
+          <a href="${inviteUrl}" style="background-color: #0f172a; color: #ffffff; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: 500; display: inline-block;">
+            ยอมรับคำเชิญและตั้งรหัสผ่าน
+          </a>
+        </div>
+        <p style="color: #64748b; font-size: 13px;">ลิงก์นี้มีอายุการใช้งาน 48 ชั่วโมง และใช้งานได้เพียงครั้งเดียว</p>
+      </div>
+    `;
+
+    try {
+      const template = await readScenarioEmailTemplate(pool, 'staff_invitation');
+      const vars = {
+        user_name: issuer.name || 'ทีมงาน',
+        staff_role: roleThai,
+        invite_link: inviteUrl,
+        expire_hours: '48',
+        invited_email: normalizedEmail,
+      };
+      if (template.subject) {
+        subject = interpolateEmailVariables(template.subject, vars);
+      }
+      const greeting = template.greetingText
+        ? interpolateEmailVariables(template.greetingText, vars)
+        : `เรียนคุณ ${normalizedEmail},`;
+      const bodyText = template.bodyText
+        ? interpolateEmailVariables(template.bodyText, vars).replace(/\n/g, '<br/>')
+        : `คุณได้รับคำเชิญเข้าร่วมเป็น ${roleThai} ในระบบ TICKET กรุณาคลิกลิงก์ด้านล่างเพื่อตั้งรหัสผ่านภายใน 48 ชั่วโมง`;
+      const footerNotes = template.footerNotes
+        ? interpolateEmailVariables(template.footerNotes, vars).replace(/\n/g, '<br/>')
+        : 'ลิงก์นี้มีอายุการใช้งาน 48 ชั่วโมง หากมีข้อสงสัยโปรดติดต่อผู้ดูแลระบบ';
+
+      html = `
+        <div style="font-family: sans-serif; background-color: #f8fafc; color: #0f172a; margin: 0; padding: 24px;">
+          <div style="max-width: 560px; margin: 0 auto; background-color: #ffffff; border-radius: 8px; border: 1px solid #e2e8f0; overflow: hidden; padding: 24px;">
+            <h2 style="margin-top: 0; font-size: 18px; font-weight: 600; color: #0f172a;">${template.headerTitle || `คำเชิญเข้าร่วมเป็น ${roleThai}`}</h2>
+            <p style="font-size: 15px; margin-bottom: 12px; font-weight: 600;">${greeting}</p>
+            <div style="font-size: 14px; color: #334155; line-height: 1.6; margin-bottom: 24px;">
+              ${bodyText}
+            </div>
+            <div style="text-align: center; margin: 28px 0;">
+              <a href="${inviteUrl}" style="background-color: ${template.primaryButtonColor || '#0f172a'}; color: ${template.primaryButtonTextColor || '#ffffff'}; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: 500; font-size: 14px; display: inline-block;">
+                ${template.primaryButtonText || 'ยอมรับคำเชิญและตั้งรหัสผ่าน'}
+              </a>
+            </div>
+            <div style="font-size: 12px; color: #64748b; border-top: 1px solid #e2e8f0; padding-top: 14px; margin-top: 24px; line-height: 1.6;">
+              ${footerNotes}
+            </div>
+          </div>
+        </div>
+      `;
+    } catch {
+      // Fallback to default html
+    }
+
     await emailTransport.send({
       from: 'noreply@ticket.invalid',
       to: normalizedEmail,
-      subject: `คำเชิญเข้าร่วมเป็น${roleThai} TICKET`,
+      subject,
       text: `คุณได้รับคำเชิญเข้าร่วมเป็น${roleThai}ในระบบ TICKET กรุณาคลิกลิงก์ด้านล่างเพื่อตั้งรหัสผ่านภายใน 48 ชั่วโมง:\n${inviteUrl}`,
+      html,
     });
 
     return { id, token, email: normalizedEmail, role: invitedRole };

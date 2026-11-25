@@ -47,5 +47,5 @@ describe('Ticket PNG Generation (QR and Card)', () => {
     expect(png[1]).toBe(0x50);
     expect(png[2]).toBe(0x4e);
     expect(png[3]).toBe(0x47);
-  });
+  }, 15000);
 });

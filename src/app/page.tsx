@@ -68,9 +68,20 @@ async function AsyncHomeCatalog({ q }: { q?: string }) {
     // handled gracefully
   }
 
+  let recommendedEvents = initialCatalog.events.slice(0, 4);
+  if (q?.trim() && recommendedEvents.length === 0) {
+    try {
+      const defaultCatalog = await getCachedDefaultCatalog();
+      recommendedEvents = defaultCatalog.events.slice(0, 4);
+    } catch {
+      // fallback handled gracefully
+    }
+  }
+
   return (
     <HomeConcertCatalog
       allEvents={initialCatalog.events}
+      recommendedEvents={recommendedEvents}
       initialTotalCount={initialCatalog.totalCount}
       initialHasMore={initialCatalog.hasMore}
       initialLocations={initialCatalog.locations}

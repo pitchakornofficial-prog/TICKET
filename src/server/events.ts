@@ -6,6 +6,7 @@ import { lockEventFinancial } from './event-lock.ts';
 import { ensureFeeSchema } from './fees.ts';
 import { ensureReservationSchema } from './reservation.ts';
 import { ensureRefundSchema, processSessionCancellationRefunds } from './refunds.ts';
+import { createNotification } from './notifications.ts';
 import { ensureNewsSchema } from './news.ts';
 import { ensureTicketSchema } from './tickets.ts';
 import { parseSafeGoogleMapsUrl } from '../lib/google-maps-url.ts';
@@ -748,7 +749,7 @@ export async function listPublicEvents(pool: Pool, search?: string): Promise<Pub
       JOIN event_sessions s ON s."eventId" = e.id AND s.status = 'approved'
       LEFT JOIN ticket_types tt ON tt."sessionId" = s.id
       WHERE e.status = 'approved'
-        AND ($1::text IS NULL OR e.title ILIKE '%' || $1 || '%' OR e.location ILIKE '%' || $1 || '%' OR COALESCE(e.description, '') ILIKE '%' || $1 || '%')
+        AND ($1::text IS NULL OR e.title ILIKE '%' || $1 || '%' OR e.location ILIKE '%' || $1 || '%' OR COALESCE(e.artists, '') ILIKE '%' || $1 || '%' OR COALESCE(e.description, '') ILIKE '%' || $1 || '%')
       GROUP BY e.id, e.title, e.description, e.artists, e.location, e."posterUrl", e."limitPerOrder", e.status, e."isSalesPaused", e."salesPausedReason"
       ORDER BY MIN(s."startTime") ASC
     `;
@@ -842,6 +843,7 @@ export async function queryPublicEventsCatalog(
            OR title ILIKE '%' || $1 || '%'
            OR location ILIKE '%' || $1 || '%'
            OR description_text ILIKE '%' || $1 || '%'
+           OR COALESCE(artists, '') ILIKE '%' || $1 || '%'
          )
            AND ($2::text IS NULL OR TRIM(location) = $2)
            AND (
@@ -2196,6 +2198,27 @@ export async function approveSessionAmendment(
        WHERE id = $1`,
       [amd.id, input.ownerId],
     );
+
+    // Notify organizer about session amendment approval
+    try {
+      const evRow = await client.query<{ title: string; organizerId: string }>(
+        'SELECT title, "organizerId" FROM events WHERE id = $1',
+        [amd.eventId],
+      );
+      if (evRow.rows[0]) {
+        await createNotification(client, {
+          userId: evRow.rows[0].organizerId,
+          role: 'organizer',
+          category: 'concert',
+          title: `อนุมัติคำขอแก้ไขรอบการแสดง: ${evRow.rows[0].title}`,
+          summary: `ผู้ดูแลระบบได้อนุมัติคำขอแก้ไขรอบการแสดง/ราคาบัตรของคอนเสิร์ต ${evRow.rows[0].title} เรียบร้อยแล้ว`,
+          content: `คำขอแก้ไขรอบการแสดง #${amd.id} ได้รับการอนุมัติแล้ว ข้อมูลรอบและโควตาใหม่มีผลในระบบทันที`,
+          referenceId: amd.sessionId,
+        });
+      }
+    } catch (err) {
+      console.warn('Failed to dispatch notification for amendment approval:', err);
+    }
 
     return {
       success: true,

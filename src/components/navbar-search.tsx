@@ -8,6 +8,7 @@ import { TicketIcon } from './ticket-icon';
 interface SearchEventItem {
   id: string;
   title: string;
+  artists?: string | null;
   location: string;
   startingPrice: number;
   status: string;
@@ -133,13 +134,41 @@ export function NavbarSearch() {
     setIsOpen(false);
   };
 
+  const handleSelectArtist = (artist: string) => {
+    handleInputChange(artist);
+    setIsOpen(false);
+  };
+
   // Suggestions filtering
   const trimmed = searchTerm.trim().toLowerCase();
   const matchedConcerts = useMemo(() => {
     if (!trimmed) return [];
     return events
-      .filter(ev => ev.title.toLowerCase().includes(trimmed))
+      .filter(
+        ev =>
+          ev.title.toLowerCase().includes(trimmed) ||
+          Boolean(ev.artists?.toLowerCase().includes(trimmed)),
+      )
       .slice(0, 5);
+  }, [events, trimmed]);
+
+  const matchedArtists = useMemo(() => {
+    if (!trimmed) return [];
+    const artistSet = new Set<string>();
+    for (const ev of events) {
+      if (ev.artists?.toLowerCase().includes(trimmed)) {
+        const parts = ev.artists.split(/[,/&]/).map(s => s.trim()).filter(Boolean);
+        for (const part of parts) {
+          if (part.toLowerCase().includes(trimmed)) {
+            artistSet.add(part);
+          }
+        }
+        if (artistSet.size === 0) {
+          artistSet.add(ev.artists.trim());
+        }
+      }
+    }
+    return Array.from(artistSet).slice(0, 3);
   }, [events, trimmed]);
 
   const matchedLocations = useMemo(() => {
@@ -153,7 +182,8 @@ export function NavbarSearch() {
     return Array.from(locSet).slice(0, 3);
   }, [events, trimmed]);
 
-  const hasSuggestions = matchedConcerts.length > 0 || matchedLocations.length > 0;
+  const hasSuggestions =
+    matchedConcerts.length > 0 || matchedArtists.length > 0 || matchedLocations.length > 0;
 
   return (
     <search ref={wrapperRef} className="navbar-search-wrapper" onKeyDown={handleKeyDown}>
@@ -219,6 +249,11 @@ export function NavbarSearch() {
                         <div className="suggestion-primary-text">
                           {highlightMatch(ev.title, trimmed)}
                         </div>
+                        {ev.artists && (
+                          <div className="suggestion-artist-line">
+                            <span>ศิลปิน: {highlightMatch(ev.artists, trimmed)}</span>
+                          </div>
+                        )}
                         <div className="suggestion-secondary-text">
                           {ev.location}
                         </div>
@@ -227,6 +262,37 @@ export function NavbarSearch() {
                         <span className="suggestion-price">
                           เริ่มต้น ฿{ev.startingPrice.toLocaleString('th-TH')}
                         </span>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {matchedArtists.length > 0 && (
+                <div className="suggestion-group">
+                  <div className="suggestion-group-header">
+                    <span>ศิลปิน</span>
+                  </div>
+                  {matchedArtists.map(artist => (
+                    <button
+                      key={artist}
+                      type="button"
+                      className="suggestion-item suggestion-artist-item"
+                      onClick={() => handleSelectArtist(artist)}
+                    >
+                      <div className="suggestion-icon-wrap artist-icon-wrap" aria-hidden="true">
+                        <SearchIcon className="suggestion-icon" />
+                      </div>
+                      <div className="suggestion-info">
+                        <div className="suggestion-primary-text">
+                          {highlightMatch(artist, trimmed)}
+                        </div>
+                        <div className="suggestion-secondary-text">
+                          ค้นหาคอนเสิร์ตของศิลปินนี้
+                        </div>
+                      </div>
+                      <div className="suggestion-action-meta">
+                        <span className="suggestion-tag suggestion-tag-artist">ศิลปิน</span>
                       </div>
                     </button>
                   ))}

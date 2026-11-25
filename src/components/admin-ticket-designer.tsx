@@ -1686,34 +1686,41 @@ export function AdminTicketDesigner() {
           continue;
         }
 
-        // Standard Text Elements (aligned left/center/right, zero border/bg)
+        // Standard Text Elements (Header as fixed anchor, detail value aligned relative to header)
         const secFont = `${titleWeight} ${Math.round(secSizePx * scaleFactor)}px ${fontStack}`;
         const bodyFont = `${bodyWeight} ${Math.round(bodySizePx * scaleFactor)}px ${fontStack}`;
-        ctx.font = secFont;
-        const sW = showSec && el.secondaryText ? ctx.measureText(el.secondaryText).width : 0;
-        ctx.font = bodyFont;
-        const tW = el.text ? ctx.measureText(el.text).width : 0;
-        const blockWidth = Math.max(sW, tW);
-
         const align = el.align || 'left';
         const isCenter = align === 'center';
-        const anchorX = isCenter ? posX + blockWidth / 2 : align === 'right' ? posX + blockWidth : posX;
+        const isRight = align === 'right';
 
-        ctx.save();
-        ctx.textAlign = align;
+        let headerWidth = 0;
         let currentY = posY;
+
         if (showSec && el.secondaryText) {
-          ctx.fillStyle = el.secondaryColor || '#64748b';
+          ctx.save();
           ctx.font = secFont;
-          ctx.fillText(el.secondaryText, anchorX, currentY);
+          headerWidth = ctx.measureText(el.secondaryText).width;
+          ctx.fillStyle = el.secondaryColor || '#64748b';
+          ctx.textAlign = 'left';
+          ctx.fillText(el.secondaryText, posX, currentY);
+          ctx.restore();
           currentY += Math.round((secSizePx + 4) * scaleFactor);
         }
+
         if (el.text) {
+          ctx.save();
           ctx.fillStyle = el.color || '#0f172a';
           ctx.font = bodyFont;
-          ctx.fillText(el.text, anchorX, currentY);
+          if (showSec && headerWidth > 0) {
+            const anchorX = isCenter ? posX + headerWidth / 2 : isRight ? posX + headerWidth : posX;
+            ctx.textAlign = isCenter ? 'center' : isRight ? 'right' : 'left';
+            ctx.fillText(el.text, anchorX, currentY);
+          } else {
+            ctx.textAlign = isCenter ? 'center' : isRight ? 'right' : 'left';
+            ctx.fillText(el.text, posX, currentY);
+          }
+          ctx.restore();
         }
-        ctx.restore();
       }
 
       // Trigger Download
@@ -1892,6 +1899,9 @@ export function AdminTicketDesigner() {
           ? 'stub-code-block'
           : 'meta-block';
 
+    const isCenter = align === 'center';
+    const isRight = align === 'right';
+
     return (
       <div
         key={id}
@@ -1902,7 +1912,14 @@ export function AdminTicketDesigner() {
         }}
         onPointerDown={(e) => handlePointerDown(id, e)}
       >
-        <div className={wrapperClass} style={{ ...getElementBoxStyle(el) }}>
+        <div
+          className={wrapperClass}
+          style={{
+            position: 'relative',
+            display: 'inline-block',
+            textAlign: 'left',
+          }}
+        >
           {showSec && (
             <span
               className="meta-label"
@@ -1910,6 +1927,11 @@ export function AdminTicketDesigner() {
                 color: el.secondaryColor || '#64748b',
                 fontSize: `${secSize}px`,
                 fontWeight: titleWeight,
+                whiteSpace: 'nowrap',
+                display: 'block',
+                textAlign: 'left',
+                lineHeight: 1.2,
+                marginBottom: 2,
               }}
             >
               {el.secondaryText}
@@ -1923,7 +1945,16 @@ export function AdminTicketDesigner() {
               fontSize: `${el.fontSize || defaultBodySize}px`,
               fontWeight: bodyWeight,
               lineHeight: id === 'eventTitle' ? 1.15 : 1.3,
-              textAlign: align,
+              whiteSpace: id === 'eventTitle' ? 'normal' : 'nowrap',
+              display: 'block',
+              ...(showSec
+                ? isCenter
+                  ? { position: 'absolute', top: '100%', left: '50%', transform: 'translateX(-50%)' }
+                  : isRight
+                  ? { position: 'absolute', top: '100%', right: 0 }
+                  : { position: 'relative', left: 0 }
+                : { textAlign: align }
+              ),
             }}
           >
             {el.text}

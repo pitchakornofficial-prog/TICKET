@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import Image from 'next/image';
 import {
   CalendarIcon,
@@ -86,11 +86,6 @@ const CATEGORIES = [
   'อัปเดตและแจ้งเตือน',
 ];
 
-const CONCERTS = [
-  'UBU Freshy Music Fest 2026',
-  'ไม่ระบุคอนเสิร์ตเฉพาะ',
-];
-
 const STATUS_LABELS: Record<OrganizerNewsItem['status'], { label: string; class: string }> = {
   draft: { label: 'ฉบับร่าง', class: 'status-draft' },
   pending: { label: 'รอเจ้าของอนุมัติ', class: 'status-pending' },
@@ -100,12 +95,48 @@ const STATUS_LABELS: Record<OrganizerNewsItem['status'], { label: string; class:
 
 export function OrganizerNewsView() {
   const [refreshing, setRefreshing] = useState(false);
-
-  const handleRefresh = () => {
-    setRefreshing(true);
-    setTimeout(() => setRefreshing(false), 400);
-  };
   const [newsList, setNewsList] = useState<OrganizerNewsItem[]>(INITIAL_NEWS);
+  const [concertList, setConcertList] = useState<string[]>(['ไม่ระบุคอนเสิร์ตเฉพาะ']);
+  const [_loading, setLoading] = useState(true);
+  const [_saving, setSaving] = useState(false);
+
+  const loadData = useCallback(async () => {
+    try {
+      const [newsRes, eventsRes] = await Promise.all([
+        fetch('/api/organizer/news', { cache: 'no-store' }),
+        fetch('/api/events', { cache: 'no-store' }),
+      ]);
+
+      if (newsRes.ok) {
+        const data = await newsRes.json();
+        if (Array.isArray(data.news)) {
+          setNewsList(data.news);
+        }
+      }
+
+      if (eventsRes.ok) {
+        const data = await eventsRes.json();
+        const evList: Array<{ id: string; title: string }> = Array.isArray(data) ? data : data.events || [];
+        const titles = evList.map(e => e.title).filter(Boolean);
+        const uniqueTitles = Array.from(new Set(titles));
+        setConcertList(['ไม่ระบุคอนเสิร์ตเฉพาะ', ...uniqueTitles]);
+      }
+    } catch (err) {
+      console.error('Failed to load organizer news or events:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await loadData();
+    setRefreshing(false);
+  };
   const [activeTab, setActiveTab] = useState<
     'all' | 'draft' | 'pending' | 'published' | 'rejected'
   >('all');
@@ -119,7 +150,7 @@ export function OrganizerNewsView() {
   // Form State
   const [formTitle, setFormTitle] = useState('');
   const [formCategory, setFormCategory] = useState(CATEGORIES[0]);
-  const [formConcert, setFormConcert] = useState(CONCERTS[0]);
+  const [formConcert, setFormConcert] = useState('ไม่ระบุคอนเสิร์ตเฉพาะ');
   const [formContent, setFormContent] = useState('');
   const [formCoverPreview, setFormCoverPreview] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
@@ -176,7 +207,7 @@ export function OrganizerNewsView() {
     setEditingId(null);
     setFormTitle('');
     setFormCategory(CATEGORIES[0]);
-    setFormConcert(CONCERTS[0]);
+    setFormConcert('ไม่ระบุคอนเสิร์ตเฉพาะ');
     setFormContent('');
     setFormCoverPreview(null);
     setFormError(null);
@@ -188,7 +219,7 @@ export function OrganizerNewsView() {
     setEditingId(item.id);
     setFormTitle(item.title);
     setFormCategory(item.category);
-    setFormConcert(item.relatedConcert || CONCERTS[0]);
+    setFormConcert(item.relatedConcert || 'ไม่ระบุคอนเสิร์ตเฉพาะ');
     setFormContent(item.content);
     setFormCoverPreview(item.coverUrl || null);
     setFormError(null);
@@ -224,7 +255,7 @@ export function OrganizerNewsView() {
     }
   };
 
-  const handleSave = (targetStatus: 'draft' | 'pending') => {
+  const handleSave = async (targetStatus: 'draft' | 'pending') => {
     if (!formTitle.trim()) {
       setFormError('กรุณากรอกหัวข้อข่าวสาร');
       return;
@@ -234,86 +265,117 @@ export function OrganizerNewsView() {
       return;
     }
 
-    const nowStr = '28 ต.ค. 2569 : 02:20 น.';
     const snippet =
       formContent.trim().length > 120
         ? `${formContent.trim().substring(0, 120)}...`
         : formContent.trim();
 
-    if (editorMode === 'create') {
-      const newItem: OrganizerNewsItem = {
-        id: `news-${Date.now()}`,
-        title: formTitle.trim(),
-        category: formCategory,
-        relatedConcert: formConcert === 'ไม่ระบุคอนเสิร์ตเฉพาะ' ? undefined : formConcert,
-        content: formContent.trim(),
-        summary: snippet,
-        status: targetStatus,
-        coverUrl: formCoverPreview || undefined,
-        createdAt: nowStr,
-        updatedAt: nowStr,
-      };
-      setNewsList((prev) => [newItem, ...prev]);
-      showToast(
-        targetStatus === 'pending'
-          ? 'ส่งข่าวสารไปยังเจ้าของระบบเพื่อขออนุมัติเรียบร้อยแล้ว'
-          : 'บันทึกข่าวสารเป็นฉบับร่างเรียบร้อยแล้ว',
-      );
-    } else if (editorMode === 'edit' && editingId) {
-      setNewsList((prev) =>
-        prev.map((item) =>
-          item.id === editingId
-            ? {
-                ...item,
-                title: formTitle.trim(),
-                category: formCategory,
-                relatedConcert:
-                  formConcert === 'ไม่ระบุคอนเสิร์ตเฉพาะ' ? undefined : formConcert,
-                content: formContent.trim(),
-                summary: snippet,
-                status: targetStatus,
-                coverUrl: formCoverPreview || undefined,
-                rejectionReason:
-                  targetStatus === 'pending' ? undefined : item.rejectionReason,
-                updatedAt: nowStr,
-              }
-            : item,
-        ),
-      );
-      showToast(
-        targetStatus === 'pending'
-          ? 'ส่งข่าวสารที่แก้ไขไปยังเจ้าของระบบเพื่อขออนุมัติเรียบร้อยแล้ว'
-          : 'บันทึกการแก้ไขฉบับร่างเรียบร้อยแล้ว',
-      );
-    }
+    setSaving(true);
+    setFormError(null);
 
-    setIsEditorOpen(false);
-  };
+    try {
+      if (editorMode === 'create') {
+        const res = await fetch('/api/organizer/news', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            title: formTitle.trim(),
+            content: formContent.trim(),
+            summary: snippet,
+            category: formCategory,
+            relatedConcert: formConcert === 'ไม่ระบุคอนเสิร์ตเฉพาะ' ? undefined : formConcert,
+            coverUrl: formCoverPreview || undefined,
+            status: targetStatus,
+          }),
+        });
 
-  const handleSubmitForApproval = (id: string) => {
-    const nowStr = '28 ต.ค. 2569 : 02:20 น.';
-    setNewsList((prev) =>
-      prev.map((item) =>
-        item.id === id
-          ? {
-              ...item,
-              status: 'pending',
-              rejectionReason: undefined,
-              updatedAt: nowStr,
-            }
-          : item,
-      ),
-    );
-    showToast('ส่งคำขออนุมัติไปยังเจ้าของระบบเรียบร้อยแล้ว');
-  };
+        const data = await res.json();
+        if (!res.ok) {
+          setFormError(data.message || 'บันทึกข่าวสารไม่สำเร็จ');
+          return;
+        }
 
-  const handleDelete = (id: string) => {
-    if (confirm('คุณต้องการลบข่าวสารนี้ใช่หรือไม่? การกระทำนี้ไม่สามารถย้อนกลับได้')) {
-      setNewsList((prev) => prev.filter((item) => item.id !== id));
-      if (previewItem?.id === id) {
-        setPreviewItem(null);
+        await loadData();
+        showToast(
+          targetStatus === 'pending'
+            ? 'ส่งข่าวสารไปยังเจ้าของระบบเพื่อขออนุมัติเรียบร้อยแล้ว'
+            : 'บันทึกข่าวสารเป็นฉบับร่างเรียบร้อยแล้ว',
+        );
+      } else if (editorMode === 'edit' && editingId) {
+        const res = await fetch(`/api/organizer/news/${editingId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            title: formTitle.trim(),
+            content: formContent.trim(),
+            summary: snippet,
+            category: formCategory,
+            relatedConcert: formConcert === 'ไม่ระบุคอนเสิร์ตเฉพาะ' ? undefined : formConcert,
+            coverUrl: formCoverPreview || undefined,
+            status: targetStatus,
+          }),
+        });
+
+        const data = await res.json();
+        if (!res.ok) {
+          setFormError(data.message || 'บันทึกการแก้ไขไม่สำเร็จ');
+          return;
+        }
+
+        await loadData();
+        showToast(
+          targetStatus === 'pending'
+            ? 'ส่งข่าวสารที่แก้ไขไปยังเจ้าของระบบเพื่อขออนุมัติเรียบร้อยแล้ว'
+            : 'บันทึกการแก้ไขฉบับร่างเรียบร้อยแล้ว',
+        );
       }
-      showToast('ลบข่าวสารเรียบร้อยแล้ว');
+
+      setIsEditorOpen(false);
+    } catch {
+      setFormError('เกิดข้อผิดพลาดในการเชื่อมต่อเซิร์ฟเวอร์');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleSubmitForApproval = async (id: string) => {
+    try {
+      const res = await fetch(`/api/organizer/news/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'pending' }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        showToast(data.message || 'ส่งขออนุมัติไม่สำเร็จ');
+        return;
+      }
+      await loadData();
+      showToast('ส่งคำขออนุมัติไปยังเจ้าของระบบเรียบร้อยแล้ว');
+    } catch {
+      showToast('เกิดข้อผิดพลาดในการเชื่อมต่อเซิร์ฟเวอร์');
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    if (confirm('คุณต้องการลบข่าวสารนี้ใช่หรือไม่? การกระทำนี้ไม่สามารถย้อนกลับได้')) {
+      try {
+        const res = await fetch(`/api/organizer/news/${id}`, {
+          method: 'DELETE',
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          showToast(data.message || 'ลบข่าวสารไม่สำเร็จ');
+          return;
+        }
+        if (previewItem?.id === id) {
+          setPreviewItem(null);
+        }
+        await loadData();
+        showToast('ลบข่าวสารเรียบร้อยแล้ว');
+      } catch {
+        showToast('เกิดข้อผิดพลาดในการลบข่าวสาร');
+      }
     }
   };
 
@@ -724,7 +786,7 @@ export function OrganizerNewsView() {
                     value={formConcert}
                     onChange={(e) => setFormConcert(e.target.value)}
                   >
-                    {CONCERTS.map((c) => (
+                    {concertList.map((c) => (
                       <option key={c} value={c}>
                         {c}
                       </option>

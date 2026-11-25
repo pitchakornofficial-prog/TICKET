@@ -170,7 +170,7 @@ export function OrganizerEventsManager({
 
   // Search & Status filter state (D-108, D-197, D-198)
   const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState<'all' | 'available' | 'pending_approval' | 'draft'>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'available' | 'pending_approval' | 'draft' | 'cancelled'>('all');
 
   // Form state (D-128, D-198, D-199)
   const [title, setTitle] = useState('');
@@ -1096,7 +1096,8 @@ export function OrganizerEventsManager({
       statusFilter === 'all' ||
       (statusFilter === 'available' && ev.status === 'approved') ||
       (statusFilter === 'pending_approval' && (ev.status === 'pending_approval' || ev.status === 'submitted')) ||
-      (statusFilter === 'draft' && ev.status === 'draft');
+      (statusFilter === 'draft' && ev.status === 'draft') ||
+      (statusFilter === 'cancelled' && ev.status === 'cancelled');
 
     return matchesSearch && matchesStatus;
   });
@@ -1170,6 +1171,15 @@ export function OrganizerEventsManager({
             onClick={() => setStatusFilter('draft')}
           >
             ฉบับร่าง
+          </button>
+          <button
+            type="button"
+            role="tab"
+            aria-selected={statusFilter === 'cancelled'}
+            className={`catalog-tab-btn ${statusFilter === 'cancelled' ? 'active' : ''}`}
+            onClick={() => setStatusFilter('cancelled')}
+          >
+            ยกเลิกแล้ว
           </button>
         </div>
 

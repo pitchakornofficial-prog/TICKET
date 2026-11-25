@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import {
   BellIcon,
   TrashIcon,
@@ -19,28 +19,13 @@ export interface AdminNotification {
   summary: string;
   content: string;
   category: 'finance' | 'concert' | 'staff' | 'system';
-  timestamp: string;
+  timestamp?: string;
+  formattedDate?: string;
   timeAgo: string;
   isRead: boolean;
   isSaved?: boolean;
   referenceId?: string;
 }
-
-const INITIAL_NOTIFICATIONS: AdminNotification[] = [
-  {
-    id: 'notif-ubu-freshy-session-approved',
-    title: 'อนุมัติเปิดจำหน่ายคอนเสิร์ต UBU Freshy Music Fest 2026 เรียบร้อยแล้ว',
-    summary: 'เจ้าของระบบอนุมัติรอบการแสดง UBU Freshy Music Fest 2026 พร้อมเปิดจำหน่ายบัตร',
-    content:
-      'คำขอเปิดจำหน่ายคอนเสิร์ต UBU Freshy Music Fest 2026 รอบการแสดงที่ 1 ได้รับการตรวจสอบและอนุมัติจากผู้ดูแลระบบเรียบร้อยแล้ว สถานะปัจจุบัน: เปิดจำหน่ายบัตรตามกำหนดการ',
-    category: 'concert',
-    timestamp: '2026-11-04 10:00 น.',
-    timeAgo: 'เมื่อวานนี้',
-    isRead: false,
-    isSaved: false,
-    referenceId: 'event-ubu-freshy-2026',
-  },
-];
 
 const categoryLabels: Record<AdminNotification['category'], string> = {
   finance: 'การเงิน',
@@ -52,19 +37,44 @@ const categoryLabels: Record<AdminNotification['category'], string> = {
 export function AdminNotificationsMenu() {
   const [isOpen, setIsOpen] = useState(false);
   const [activeTab, setActiveTab] = useState<'all' | 'unread' | 'saved'>('all');
-  const [notifications, setNotifications] = useState<AdminNotification[]>(INITIAL_NOTIFICATIONS);
+  const [notifications, setNotifications] = useState<AdminNotification[]>([]);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [savedCount, setSavedCount] = useState(0);
+  const [totalCount, setTotalCount] = useState(0);
+  const [isLoading, setIsLoading] = useState(false);
   const [activeModalNotif, setActiveModalNotif] = useState<AdminNotification | null>(null);
 
   const menuRef = useRef<HTMLDivElement>(null);
 
-  const unreadCount = notifications.filter((n) => !n.isRead).length;
-  const savedCount = notifications.filter((n) => n.isSaved).length;
+  const fetchNotifications = useCallback(async (tab: 'all' | 'unread' | 'saved') => {
+    try {
+      setIsLoading(true);
+      const res = await fetch(`/api/back-office/notifications?tab=${tab}`);
+      if (res.ok) {
+        const data = await res.json();
+        setNotifications(data.notifications || []);
+        setUnreadCount(Number(data.unreadCount || 0));
+        setSavedCount(Number(data.savedCount || 0));
+        setTotalCount(Number(data.totalCount || 0));
+      }
+    } catch {
+      // Keep existing state on error
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
 
-  const filteredNotifications = notifications.filter((n) => {
-    if (activeTab === 'unread') return !n.isRead;
-    if (activeTab === 'saved') return !!n.isSaved;
-    return true;
-  });
+  // Initial fetch for count
+  useEffect(() => {
+    fetchNotifications(activeTab);
+  }, [fetchNotifications, activeTab]);
+
+  // Re-fetch when opening dropdown
+  useEffect(() => {
+    if (isOpen) {
+      fetchNotifications(activeTab);
+    }
+  }, [isOpen, activeTab, fetchNotifications]);
 
   // Handle click outside to close dropdown
   useEffect(() => {
@@ -98,48 +108,109 @@ export function AdminNotificationsMenu() {
     };
   }, [isOpen, activeModalNotif]);
 
-  const handleMarkAllAsRead = () => {
-    setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
-  };
-
-  const handleToggleRead = (id: string, e?: React.MouseEvent) => {
-    if (e) e.stopPropagation();
-    setNotifications((prev) =>
-      prev.map((n) => (n.id === id ? { ...n, isRead: !n.isRead } : n)),
-    );
-    if (activeModalNotif && activeModalNotif.id === id) {
-      setActiveModalNotif((prev) => (prev ? { ...prev, isRead: !prev.isRead } : null));
+  const handleMarkAllAsRead = async () => {
+    try {
+      const res = await fetch('/api/back-office/notifications', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'mark-all-read' }),
+      });
+      if (res.ok) {
+        setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
+        setUnreadCount(0);
+      }
+    } catch {
+      // ignore
     }
   };
 
-  const handleToggleSave = (id: string, e?: React.MouseEvent) => {
+  const handleToggleRead = async (id: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
+    const target = notifications.find((n) => n.id === id);
+    if (!target) return;
+    const nextRead = !target.isRead;
+
+    // Optimistic update
     setNotifications((prev) =>
-      prev.map((n) => (n.id === id ? { ...n, isSaved: !n.isSaved } : n)),
+      prev.map((n) => (n.id === id ? { ...n, isRead: nextRead } : n)),
     );
+    setUnreadCount((prev) => Math.max(0, prev + (nextRead ? -1 : 1)));
     if (activeModalNotif && activeModalNotif.id === id) {
-      setActiveModalNotif((prev) => (prev ? { ...prev, isSaved: !prev.isSaved } : null));
+      setActiveModalNotif((prev) => (prev ? { ...prev, isRead: nextRead } : null));
+    }
+
+    try {
+      await fetch('/api/back-office/notifications', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'mark-read', id, isRead: nextRead }),
+      });
+    } catch {
+      // Revert if failed
+      fetchNotifications(activeTab);
     }
   };
 
-  const handleDelete = (id: string, e?: React.MouseEvent) => {
+  const handleToggleSave = async (id: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
+    const target = notifications.find((n) => n.id === id);
+    if (!target) return;
+    const nextSaved = !target.isSaved;
+
+    // Optimistic update
+    setNotifications((prev) =>
+      prev.map((n) => (n.id === id ? { ...n, isSaved: nextSaved } : n)),
+    );
+    setSavedCount((prev) => Math.max(0, prev + (nextSaved ? 1 : -1)));
+    if (activeModalNotif && activeModalNotif.id === id) {
+      setActiveModalNotif((prev) => (prev ? { ...prev, isSaved: nextSaved } : null));
+    }
+
+    try {
+      await fetch('/api/back-office/notifications', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'toggle-save', id, isSaved: nextSaved }),
+      });
+    } catch {
+      fetchNotifications(activeTab);
+    }
+  };
+
+  const handleDelete = async (id: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    const target = notifications.find((n) => n.id === id);
+    if (!target) return;
+
+    // Optimistic delete
     setNotifications((prev) => prev.filter((n) => n.id !== id));
+    if (!target.isRead) {
+      setUnreadCount((prev) => Math.max(0, prev - 1));
+    }
+    if (target.isSaved) {
+      setSavedCount((prev) => Math.max(0, prev - 1));
+    }
+    setTotalCount((prev) => Math.max(0, prev - 1));
+
     if (activeModalNotif && activeModalNotif.id === id) {
       setActiveModalNotif(null);
+    }
+
+    try {
+      await fetch(`/api/back-office/notifications?id=${encodeURIComponent(id)}`, {
+        method: 'DELETE',
+      });
+    } catch {
+      fetchNotifications(activeTab);
     }
   };
 
   const handleOpenDetail = (notif: AdminNotification) => {
     // Automatically mark as read when opening full detail
     if (!notif.isRead) {
-      setNotifications((prev) =>
-        prev.map((n) => (n.id === notif.id ? { ...n, isRead: true } : n)),
-      );
-      setActiveModalNotif({ ...notif, isRead: true });
-    } else {
-      setActiveModalNotif(notif);
+      handleToggleRead(notif.id);
     }
+    setActiveModalNotif({ ...notif, isRead: true });
   };
 
   const getCategoryIcon = (category: AdminNotification['category']) => {
@@ -229,7 +300,7 @@ export function AdminNotificationsMenu() {
                 className={`notifications-tab-btn ${activeTab === 'all' ? 'is-active' : ''}`}
                 onClick={() => setActiveTab('all')}
               >
-                ทั้งหมด ({notifications.length})
+                ทั้งหมด ({totalCount})
               </button>
               <button
                 type="button"
@@ -255,7 +326,11 @@ export function AdminNotificationsMenu() {
 
           {/* Notifications Card List */}
           <div className="notifications-dropdown-list">
-            {filteredNotifications.length === 0 ? (
+            {isLoading && notifications.length === 0 ? (
+              <div style={{ padding: '2rem 1rem', textAlign: 'center', color: '#64748b', fontSize: '13px' }}>
+                กำลังโหลดการแจ้งเตือน...
+              </div>
+            ) : notifications.length === 0 ? (
               <div className="notifications-empty-state">
                 <div className="notifications-empty-icon">
                   <BellIcon width={32} height={32} />
@@ -270,7 +345,7 @@ export function AdminNotificationsMenu() {
                 </p>
               </div>
             ) : (
-              filteredNotifications.map((notif) => (
+              notifications.map((notif) => (
                 <article
                   key={notif.id}
                   className={`notification-summary-card ${!notif.isRead ? 'is-unread' : 'is-read'}`}
@@ -354,7 +429,7 @@ export function AdminNotificationsMenu() {
           {notifications.length > 0 && (
             <div className="notifications-dropdown-footer">
               <span className="notifications-footer-count">
-                แสดง {filteredNotifications.length} จาก {notifications.length} รายการ
+                แสดง {notifications.length} จาก {totalCount} รายการ
               </span>
             </div>
           )}
@@ -392,7 +467,7 @@ export function AdminNotificationsMenu() {
                   </span>
                 )}
                 <span className="notification-modal-time">
-                  {activeModalNotif.timeAgo} ({activeModalNotif.timestamp} น.)
+                  {activeModalNotif.timeAgo} ({activeModalNotif.formattedDate || activeModalNotif.timestamp || ''})
                 </span>
               </div>
               <button

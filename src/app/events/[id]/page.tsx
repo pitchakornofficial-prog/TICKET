@@ -14,14 +14,12 @@ import {
 } from '@/components/icons';
 import { getDatabasePool } from '@/server/database';
 import { getPublicEventWithApprovedSessions } from '@/server/events';
-import { readProhibitedItems, type ProhibitedItemData } from '@/server/prohibited-items';
 import { formatDate, formatTime, formatBaht } from '@/lib/locale';
 import { getEventSalesStatus } from '@/lib/sales-window';
 import { PurchaseStepIndicator } from '@/components/purchase-step-indicator';
 import { EventSessionsAccordion, type EventSession } from '@/components/event-sessions-accordion';
 import { PurchaseTermsFaqList } from '@/components/purchase-terms-faq-list';
 import { ExpandableEventDescription } from '@/components/expandable-event-description';
-import { EventProhibitedItemsCarousel } from '@/components/event-prohibited-items-carousel';
 import { EventInteractivePoster } from '@/components/event-interactive-poster';
 import { FloatingBackToTop } from '@/components/floating-back-to-top';
 
@@ -42,16 +40,9 @@ export default async function EventDetailPage({ params, searchParams }: EventDet
   const orderId = resolvedSearchParams.orderId;
   const isExpired = resolvedSearchParams.expired === 'true';
   let event = null;
-  let prohibitedItems: ProhibitedItemData[] | undefined;
 
   try {
-    const pool = getDatabasePool();
-    const [ev, pItems] = await Promise.all([
-      getCachedPublicEvent(id),
-      readProhibitedItems(pool, id).catch(() => undefined),
-    ]);
-    event = ev;
-    prohibitedItems = pItems;
+    event = await getCachedPublicEvent(id);
   } catch (error) {
     const err = error as { code?: string; message?: string };
     if (err?.code !== 'ECONNREFUSED') {
@@ -65,6 +56,7 @@ export default async function EventDetailPage({ params, searchParams }: EventDet
 
   const sessions: EventSession[] = event.sessions || [];
   const salesStatus = getEventSalesStatus({
+    status: event.status,
     salesStartTime: event.salesStartTime,
     salesEndTime: event.salesEndTime,
     sessions,
@@ -209,13 +201,13 @@ export default async function EventDetailPage({ params, searchParams }: EventDet
           </div>
         </div>
 
-        {/* Horizontal Meta Cards Track (D-148) */}
+        {/* Hero Overview Details List (D-148) */}
         <div className="hero-meta-cards-track">
           <div className="hero-meta-card">
             <div className="meta-icon-box"><MapPinIcon /></div>
             <div className="hero-meta-card-content">
-              <strong className="meta-item-label">สถานที่จัดงาน</strong>
-              <p className="meta-item-value">{event.location}</p>
+              <strong className="meta-item-label">สถานที่จัดงาน:</strong>
+              <span className="meta-item-value">{event.location}</span>
             </div>
           </div>
 
@@ -223,8 +215,8 @@ export default async function EventDetailPage({ params, searchParams }: EventDet
             <div className="hero-meta-card">
               <div className="meta-icon-box"><CalendarIcon /></div>
               <div className="hero-meta-card-content">
-                <strong className="meta-item-label">กำหนดการแสดง</strong>
-                <p className="meta-item-value">
+                <strong className="meta-item-label">กำหนดการแสดง:</strong>
+                <span className="meta-item-value">
                   <span className="text-nowrap">{formatDate(new Date(sessions[0].startTime))}</span>
                   {sessions.length > 1 && (
                     <>
@@ -233,7 +225,7 @@ export default async function EventDetailPage({ params, searchParams }: EventDet
                     </>
                   )}
                   {' '}<span className="text-nowrap">(ทั้งหมด {sessions.length} รอบการแสดง)</span>
-                </p>
+                </span>
               </div>
             </div>
           )}
@@ -241,8 +233,8 @@ export default async function EventDetailPage({ params, searchParams }: EventDet
           <div className="hero-meta-card">
             <div className="meta-icon-box"><ClockIcon /></div>
             <div className="hero-meta-card-content">
-              <strong className="meta-item-label">เวลาแสดงและประตูเปิด</strong>
-              <p className="meta-item-value">
+              <strong className="meta-item-label">เวลาแสดงและประตูเปิด:</strong>
+              <span className="meta-item-value">
                 {sessions.length > 0 ? (
                   <>
                     <span className="text-nowrap">
@@ -260,19 +252,19 @@ export default async function EventDetailPage({ params, searchParams }: EventDet
                 ) : (
                   'แจ้งให้ทราบล่วงหน้าก่อนวันงาน'
                 )}
-              </p>
+              </span>
             </div>
           </div>
 
           <div className="hero-meta-card">
             <div className="meta-icon-box"><ShieldCheckIcon /></div>
             <div className="hero-meta-card-content">
-              <strong className="meta-item-label">สิทธิ์และเงื่อนไขการจอง</strong>
-              <p className="meta-item-value">
+              <strong className="meta-item-label">สิทธิ์และเงื่อนไขการจอง:</strong>
+              <span className="meta-item-value">
                 <span className="text-nowrap">จำกัดสูงสุดไม่เกิน {event.limitPerOrder} ใบ / คำสั่งซื้อ</span>
                 {' · '}
                 <span className="text-nowrap">ไม่ต้องสมัครสมาชิก</span>
-              </p>
+              </span>
             </div>
           </div>
         </div>
@@ -284,7 +276,7 @@ export default async function EventDetailPage({ params, searchParams }: EventDet
         <section className="event-category-card" aria-labelledby="cat-lineup-title">
           <div className="category-header-wrap">
             <h2 id="cat-lineup-title" className="category-heading">
-              <SparklesIcon style={{ width: '22px', height: '22px', color: 'var(--blue)' }} />
+              <SparklesIcon className="category-heading-icon" />
               รายละเอียดคอนเสิร์ตและไลน์อัปศิลปิน (Lineup & Details)
             </h2>
           </div>
@@ -352,7 +344,7 @@ export default async function EventDetailPage({ params, searchParams }: EventDet
         <section className="event-category-card" aria-labelledby="cat-sessions-title">
           <div className="category-header-wrap">
             <h2 id="cat-sessions-title" className="category-heading">
-              <CalendarIcon style={{ width: '22px', height: '22px', color: 'var(--blue)' }} />
+              <CalendarIcon className="category-heading-icon" />
               รอบการแสดงและประเภทบัตร (Sessions & Ticket Categories)
             </h2>
           </div>
@@ -372,7 +364,7 @@ export default async function EventDetailPage({ params, searchParams }: EventDet
           <div className="category-header-wrap">
             <div className="venue-heading-split">
               <h2 id="cat-venue-title" className="category-heading">
-                <MapPinIcon style={{ width: '22px', height: '22px', color: 'var(--blue)' }} />
+                <MapPinIcon className="category-heading-icon" />
                 สถานที่จัดงานและแผนที่การเดินทาง (Venue & Map)
               </h2>
               <a
@@ -405,10 +397,7 @@ export default async function EventDetailPage({ params, searchParams }: EventDet
 
         <hr className="detail-section-divider" />
 
-        {/* Category 5: กฎระเบียบและสิ่งของต้องห้ามนำเข้างาน (Regulations & Prohibited Items Carousel) (D-146) */}
-        <EventProhibitedItemsCarousel items={prohibitedItems} />
-
-        <hr className="detail-section-divider" />
+        {/* Category 5: กฎระเบียบและสิ่งของต้องห้ามนำเข้างาน (EventProhibitedItemsCarousel ซ่อนการ์ดนี้ไว้ชั่วคราวตามคำขอของผู้ใช้) */}
 
         {/* Category 6: ข้อกำหนดและข้อชี้แจงในการซื้อบัตร (D-42: Independent FAQ item cards) */}
         <PurchaseTermsFaqList />

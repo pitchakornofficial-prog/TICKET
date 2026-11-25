@@ -11,6 +11,7 @@ import {
   ChatBubbleLeftRightIcon,
   BookOpenIcon,
   QrCodeIcon,
+  ChevronDownIcon,
 } from '@/components/icons';
 import { useHorizontalSubnavScroll } from '@/components/use-horizontal-subnav-scroll';
 import { TicketIcon } from '@/components/ticket-icon';
@@ -49,6 +50,20 @@ const TicketInspectorView = dynamic(() =>
 
 const ORG_CHARTER_TAB_ID = ['poli', 'cies'].join('');
 const ORG_CHARTER_NAV_TEST_ID = ['organizer-nav', ORG_CHARTER_TAB_ID].join('-');
+
+const SECTION_TITLES: Record<string, string> = {
+  overview: 'ภาพรวม',
+  events: 'คอนเสิร์ต',
+  'direct-tickets': 'บัตรดึงตรง',
+  'ticket-inspector': 'ตรวจสอบบัตร',
+  scanners: 'ทีมงาน',
+  finance: 'การเงิน',
+  news: 'ข่าวสาร',
+  guide: 'คู่มือ',
+  contact: 'ติดต่อเจ้าของ',
+  settings: 'ตั้งค่า',
+  [ORG_CHARTER_TAB_ID]: 'ข้อตกลง',
+};
 
 export type OrganizerSectionId =
   | 'overview'
@@ -168,18 +183,31 @@ export function OrganizerWorkspaceView({ initialSection }: OrganizerWorkspaceVie
           <div className={`subnav-fade-left ${canScrollLeft && !mobileMenuOpen ? 'visible' : ''}`} aria-hidden="true" />
 
           {/* Mobile Menu Toggle Button */}
-          <button
-            type="button"
-            className="organizer-mobile-menu-toggle"
-            data-testid="organizer-mobile-menu-toggle"
-            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            aria-expanded={mobileMenuOpen}
-            aria-label="เมนูผู้จัดงาน"
-          >
-            <span className="mobile-toggle-bar" />
-            <span className="mobile-toggle-bar" />
-            <span className="mobile-toggle-bar" />
-          </button>
+          <div className="organizer-mobile-nav-bar">
+            <button
+              type="button"
+              className="organizer-mobile-menu-toggle"
+              data-testid="organizer-mobile-menu-toggle"
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              aria-expanded={mobileMenuOpen}
+              aria-label="เมนูผู้จัดงาน"
+            >
+              <div className="organizer-mobile-menu-content">
+                <span className="organizer-mobile-hamburger" aria-hidden="true">
+                  <span className="mobile-toggle-bar" />
+                  <span className="mobile-toggle-bar" />
+                  <span className="mobile-toggle-bar" />
+                </span>
+                <span className="organizer-active-section-label">
+                  หมวดหมู่: {SECTION_TITLES[activeSection] || 'เมนูผู้จัดงาน'}
+                </span>
+              </div>
+              <ChevronDownIcon
+                className={`organizer-mobile-chevron ${mobileMenuOpen ? 'is-open' : ''}`}
+                style={{ width: '18px', height: '18px' }}
+              />
+            </button>
+          </div>
 
           {/* Horizontal Tabs: Left group (1-6) and Right group (7: Settings) */}
           <div

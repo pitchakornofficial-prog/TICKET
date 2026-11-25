@@ -148,6 +148,9 @@ export async function inspectTicketPayload(
     orderPaymentMethod: string | null;
     orderCreatedAt: Date | string | null;
     isDirectTicket: boolean | null;
+    directReferenceNote?: string | null;
+    directPriceDisplayMode?: string | null;
+    directIssuedByName?: string | null;
     totalTicketsInOrder: number | null;
   }>(
     `SELECT 
@@ -187,10 +190,13 @@ export async function inspectTicketPayload(
        o."buyerEmail",
        o."buyerPhone",
        o.status AS "orderStatus",
-       o."paidAt" AS "orderPaidAt",
-       o."paymentMethod" AS "orderPaymentMethod",
+       CASE WHEN o.status = 'paid' THEN o."updatedAt" ELSE NULL END AS "orderPaidAt",
+       CASE WHEN o."orderSource" = 'direct_issue' THEN 'direct_quota' ELSE 'promptpay' END AS "orderPaymentMethod",
        o."createdAt" AS "orderCreatedAt",
-       o."isDirectTicket",
+       (o."orderSource" = 'direct_issue') AS "isDirectTicket",
+       o."referenceNote" AS "directReferenceNote",
+       o."priceDisplayMode" AS "directPriceDisplayMode",
+       (SELECT name FROM auth_user WHERE id = o."issuedByUserId") AS "directIssuedByName",
        (SELECT COUNT(*)::int FROM tickets ot WHERE ot."orderId" = o.id) AS "totalTicketsInOrder"
      FROM tickets t
      JOIN ticket_types tt ON tt.id = t."ticketTypeId"
@@ -198,7 +204,14 @@ export async function inspectTicketPayload(
      JOIN events e ON e.id = t."eventId"
      LEFT JOIN auth_user u ON u.id = e."organizerId"
      LEFT JOIN orders o ON o.id = t."orderId"
-     WHERE (t."qrPayload" = $1 OR t."ticketCode" = $1 OR t."ticketCode" = UPPER($1) OR t."orderId" = $1 OR t."orderId" = UPPER($1))
+     WHERE (
+       t."qrPayload" = $1
+       OR LOWER(t."qrPayload") = LOWER($1)
+       OR t."ticketCode" = $1
+       OR UPPER(t."ticketCode") = UPPER($1)
+       OR t."orderId" = $1
+       OR UPPER(t."orderId") = UPPER($1)
+     )
      LIMIT 1`,
     [cleanInput],
   );
@@ -246,24 +259,11 @@ export async function inspectTicketPayload(
   // Check direct ticket metadata if applicable
   let directTicketInfo = null;
   if (row.isDirectTicket && row.orderId) {
-    try {
-      const dtRes = await pool.query<{
-        referenceNote: string | null;
-        priceDisplayMode: string | null;
-        issuedByName: string | null;
-      }>(
-        `SELECT "referenceNote", "priceDisplayMode", "issuedByName"
-         FROM direct_ticket_batches
-         WHERE "orderId" = $1
-         LIMIT 1`,
-        [row.orderId],
-      );
-      if (dtRes.rowCount && dtRes.rowCount > 0) {
-        directTicketInfo = dtRes.rows[0];
-      }
-    } catch {
-      // Non-blocking
-    }
+    directTicketInfo = {
+      referenceNote: row.directReferenceNote || null,
+      priceDisplayMode: row.directPriceDisplayMode || null,
+      issuedByName: row.directIssuedByName || null,
+    };
   }
 
   // Calculate timing & admission window

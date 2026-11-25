@@ -15,7 +15,7 @@ import {
   ShieldCheckIcon,
 } from '@/components/icons';
 import { TicketIcon } from '@/components/ticket-icon';
-import type { TicketInspectionResult, SampleTicketOption } from '@/server/ticket-inspector';
+import type { TicketInspectionResult } from '@/server/ticket-inspector';
 
 function playScanBeep(success: boolean): void {
   if (typeof window === 'undefined') return;
@@ -45,8 +45,6 @@ export function TicketInspectorView() {
   const [manualCode, setManualCode] = useState('');
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<TicketInspectionResult | null>(null);
-  const [samples, setSamples] = useState<SampleTicketOption[]>([]);
-  const [_loadingSamples, setLoadingSamples] = useState(false);
   const [copyFeedback, setCopyFeedback] = useState<string | null>(null);
 
   // Camera scanner states
@@ -59,26 +57,6 @@ export function TicketInspectorView() {
   const decodeCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const lastScannedRef = useRef<{ code: string; at: number } | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
-
-  // Fetch sample tickets for quick 1-click test
-  const fetchSamples = useCallback(async () => {
-    try {
-      setLoadingSamples(true);
-      const res = await fetch('/api/back-office/tickets/inspect?action=recent-samples');
-      if (res.ok) {
-        const data = await res.json();
-        setSamples(data.samples || []);
-      }
-    } catch {
-      // Non-blocking
-    } finally {
-      setLoadingSamples(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    void fetchSamples();
-  }, [fetchSamples]);
 
   // Main Inspect Handler
   const handleInspect = useCallback(async (codeToInspect: string) => {
@@ -93,8 +71,18 @@ export function TicketInspectorView() {
         body: JSON.stringify({ qrPayloadOrCode: clean }),
       });
 
-      const data: TicketInspectionResult = await res.json();
-      setResult(data);
+      const data = await res.json();
+      if (!res.ok) {
+        setResult({
+          found: false,
+          rawInput: clean,
+          message: data.message || 'เกิดข้อผิดพลาดในการตรวจสอบบัตรจากเซิร์ฟเวอร์',
+        });
+        playScanBeep(false);
+        return;
+      }
+
+      setResult(data as TicketInspectionResult);
       playScanBeep(data.found && data.ticket?.status === 'valid');
     } catch {
       setResult({
@@ -638,55 +626,6 @@ export function TicketInspectorView() {
                   )}
                 </div>
               </form>
-
-              {/* Sample Tickets Quick Selector */}
-              {samples.length > 0 && (
-                <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: '0.75rem' }}>
-                  <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#64748b', display: 'block', marginBottom: '0.5rem' }}>
-                    ดึงบัตรตัวอย่างในระบบมาทดสอบทันที:
-                  </span>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
-                    {samples.map((s) => (
-                      <button
-                        key={s.ticketCode}
-                        type="button"
-                        onClick={() => {
-                          setManualCode(s.ticketCode);
-                          void handleInspect(s.ticketCode);
-                        }}
-                        style={{
-                          textAlign: 'left',
-                          padding: '0.45rem 0.6rem',
-                          background: '#f8fafc',
-                          border: '1px solid #e2e8f0',
-                          borderRadius: '6px',
-                          cursor: 'pointer',
-                          display: 'flex',
-                          justifyContent: 'space-between',
-                          alignItems: 'center',
-                          fontSize: '0.75rem',
-                        }}
-                      >
-                        <div>
-                          <strong style={{ color: '#1e293b', display: 'block' }}>{s.ticketCode}</strong>
-                          <span style={{ color: '#64748b' }}>{s.eventTitle} ({s.ticketTypeName})</span>
-                        </div>
-                        <span
-                          style={{
-                            fontSize: '0.7rem',
-                            padding: '0.15rem 0.4rem',
-                            borderRadius: '4px',
-                            background: s.admissionStatus === 'inside' ? '#fef3c7' : '#dcfce7',
-                            color: s.admissionStatus === 'inside' ? '#92400e' : '#166534',
-                          }}
-                        >
-                          {s.admissionStatus === 'inside' ? 'เข้างานแล้ว' : 'พร้อมใช้'}
-                        </span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
             </div>
           )}
 

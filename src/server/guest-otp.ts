@@ -2,6 +2,7 @@ import { createHmac, randomInt, randomUUID, timingSafeEqual } from 'node:crypto'
 import { isIP } from 'node:net';
 import type { Pool } from 'pg';
 import { emailTransport, isNonRoutableEmailAddress } from './email.ts';
+import { readScenarioEmailTemplate, interpolateEmailVariables } from './email-master-template.ts';
 import { inTransaction } from './database.ts';
 import { isRealPgPool } from './pg-pool-utils.ts';
 
@@ -867,34 +868,82 @@ export async function requestGuestOtp(
 
   // Send email outside database transaction so external transport latency never holds a DB connection
   const isLookup = purpose === 'order_lookup';
-  const emailSubject = isLookup
+  const scenarioKey = isLookup ? 'lookup_otp' : 'checkout_otp';
+  let emailSubject = isLookup
     ? `รหัส OTP สำหรับค้นหาบัตร TICKET: ${otpCode}`
     : `รหัส OTP สำหรับการซื้อบัตร TICKET: ${otpCode}`;
   const actionTitle = isLookup ? 'ค้นหาและเปิดดูบัตร TICKET' : 'ยืนยันตัวตนสำหรับการซื้อบัตร TICKET';
   const actionDesc = isLookup ? 'ค้นหาบัตรคอนเสิร์ต' : 'ยืนยันการซื้อบัตร';
 
+  let emailHtml = '';
+  try {
+    const template = await readScenarioEmailTemplate(pool, scenarioKey);
+    const vars = {
+      buyer_name: name || 'ลูกค้า',
+      user_name: name || 'ลูกค้า',
+      buyer_email: email,
+      otp_code: otpCode,
+      expire_minutes: '5',
+    };
+    if (template.subject) {
+      emailSubject = interpolateEmailVariables(template.subject, vars);
+    }
+    const greeting = template.greetingText
+      ? escapeHtml(interpolateEmailVariables(template.greetingText, vars))
+      : `เรียนคุณ <strong>${escapeHtml(name)}</strong>,`;
+    const bodyText = template.bodyText
+      ? escapeHtml(interpolateEmailVariables(template.bodyText, vars)).replace(/\n/g, '<br/>')
+      : `รหัส OTP สำหรับ${actionDesc}ของคุณคือ:`;
+    const footerNotes = template.footerNotes
+      ? escapeHtml(interpolateEmailVariables(template.footerNotes, vars)).replace(/\n/g, '<br/>')
+      : 'รหัสนี้มีอายุการใช้งาน 5 นาที และใช้ได้เพียงครั้งเดียว';
+
+    emailHtml = `
+      <div style="font-family: sans-serif; background-color: #f8fafc; color: #0f172a; margin: 0; padding: 24px;">
+        <div style="max-width: 540px; margin: 0 auto; background-color: #ffffff; border-radius: 8px; border: 1px solid #e2e8f0; overflow: hidden; padding: 24px;">
+          <h2 style="margin-top: 0; font-size: 18px; font-weight: 600; color: #0f172a;">${escapeHtml(template.headerTitle || actionTitle)}</h2>
+          <p style="font-size: 15px; margin-bottom: 12px;">${greeting}</p>
+          <div style="font-size: 14px; color: #334155; line-height: 1.6; margin-bottom: 16px;">
+            ${bodyText}
+          </div>
+          <div style="background-color: #f1f5f9; border-radius: 8px; padding: 18px; text-align: center; margin: 20px 0;">
+            <div style="font-size: 32px; font-weight: 700; letter-spacing: 6px; color: #0f172a; font-family: monospace;">
+              ${otpCode}
+            </div>
+            <div style="font-size: 12px; color: #64748b; margin-top: 6px;">
+              รหัส OTP หมดอายุภายใน 5 นาที
+            </div>
+          </div>
+          <div style="font-size: 12px; color: #64748b; border-top: 1px solid #e2e8f0; padding-top: 14px; margin-top: 20px; line-height: 1.6;">
+            ${footerNotes}
+          </div>
+        </div>
+      </div>
+    `;
+  } catch {
+    emailHtml = `
+      <div style="font-family: sans-serif; padding: 20px; color: #111214;">
+        <h2>${actionTitle}</h2>
+        <p>สวัสดีคุณ <strong>${escapeHtml(name)}</strong>,</p>
+        <p>รหัส OTP เพื่อยืนยันอีเมลของคุณคือ:</p>
+        <div style="font-size: 32px; font-weight: 400; letter-spacing: 6px; color: #1848ed; margin: 20px 0;">
+          ${otpCode}
+        </div>
+        <p style="color: #6b7280; font-size: 14px;">รหัสนี้มีอายุการใช้งาน 5 นาที และใช้ได้เพียงครั้งเดียว</p>
+      </div>
+    `;
+  }
+
   if (process.env.NODE_ENV !== 'production') {
     console.log(`[LOCAL DEV OTP] Email: ${email} | Code: ${otpCode} | Purpose: ${purpose}`);
   }
-
-  const safeHtmlName = escapeHtml(name);
 
   await emailTransport.send({
     from: 'TICKET <no-reply@ticket.local>',
     to: email,
     subject: emailSubject,
     text: `สวัสดีคุณ ${name},\n\nรหัส OTP สำหรับ${actionDesc}ของคุณคือ: ${otpCode}\nรหัสนี้มีอายุการใช้งาน 5 นาที\n\nหากคุณไม่ได้ทำรายการนี้ กรุณาเพิกเฉยต่ออีเมลนี้`,
-    html: `
-        <div style="font-family: sans-serif; padding: 20px; color: #111214;">
-          <h2>${actionTitle}</h2>
-          <p>สวัสดีคุณ <strong>${safeHtmlName}</strong>,</p>
-          <p>รหัส OTP เพื่อยืนยันอีเมลของคุณคือ:</p>
-          <div style="font-size: 32px; font-weight: 400; letter-spacing: 6px; color: #1848ed; margin: 20px 0;">
-            ${otpCode}
-          </div>
-          <p style="color: #6b7280; font-size: 14px;">รหัสนี้มีอายุการใช้งาน 5 นาที และใช้ได้เพียงครั้งเดียว</p>
-        </div>
-      `,
+    html: emailHtml,
   });
 
   return {

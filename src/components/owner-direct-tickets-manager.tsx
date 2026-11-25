@@ -344,6 +344,8 @@ export function OwnerDirectTicketsManager() {
           sessionId: currentSession.sessionId,
           items,
           recipientMode,
+          recipientName: recipientMode === 'custom' ? customRecipientName.trim() : undefined,
+          recipientEmail: recipientMode === 'custom' ? customRecipientEmail.trim() : undefined,
           customRecipientName: recipientMode === 'custom' ? customRecipientName.trim() : undefined,
           customRecipientEmail: recipientMode === 'custom' ? customRecipientEmail.trim() : undefined,
           priceDisplayMode,

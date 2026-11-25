@@ -89,7 +89,7 @@ export function OwnerSystemHub() {
   // Modal 2: Review Organizer News
   const [reviewingNewsItem, setReviewingNewsItem] = useState<SystemNewsItem | null>(null);
   const [rejectionNotes, setRejectionNotes] = useState('');
-  const isProcessingReview = false;
+  const [isProcessingReview, setIsProcessingReview] = useState(false);
 
   // Tab 2: Contact Info
   const [contactInfo, setContactInfo] = useState<OwnerContactInfo>(EMPTY_OWNER_CONTACT_INFO);
@@ -223,12 +223,53 @@ export function OwnerSystemHub() {
     }
   };
 
-  // Organizer news review is unavailable until a server-backed workflow exists.
-  const handleApproveNews = (_newsId: string) => {
-    triggerToast('error', 'ยังไม่รองรับการอนุมัติข่าวจากผู้จัดงาน');
+  const handleApproveNews = async (newsId: string) => {
+    setIsProcessingReview(true);
+    try {
+      const res = await fetch(`/api/owner/news/${newsId}/approve`, {
+        method: 'POST',
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        triggerToast('error', data.message || 'อนุมัติข่าวสารไม่สำเร็จ');
+        return;
+      }
+      triggerToast('success', 'อนุมัติและเผยแพร่ข่าวสารเรียบร้อยแล้ว');
+      setReviewingNewsItem(null);
+      await fetchNews();
+    } catch {
+      triggerToast('error', 'เกิดข้อผิดพลาดในการเชื่อมต่อเพื่ออนุมัติข่าว');
+    } finally {
+      setIsProcessingReview(false);
+    }
   };
-  const handleRejectNews = (_newsId: string) => {
-    triggerToast('error', 'ยังไม่รองรับการส่งข่าวกลับให้ผู้จัดงาน');
+
+  const handleRejectNews = async (newsId: string) => {
+    if (!rejectionNotes.trim()) {
+      triggerToast('error', 'กรุณาระบุข้อความส่งกลับแก้ไขก่อนปฏิเสธ');
+      return;
+    }
+    setIsProcessingReview(true);
+    try {
+      const res = await fetch(`/api/owner/news/${newsId}/reject`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason: rejectionNotes.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        triggerToast('error', data.message || 'ส่งกลับแก้ไขไม่สำเร็จ');
+        return;
+      }
+      triggerToast('success', 'ส่งกลับแก้ไขข่าวสารเรียบร้อยแล้ว');
+      setReviewingNewsItem(null);
+      setRejectionNotes('');
+      await fetchNews();
+    } catch {
+      triggerToast('error', 'เกิดข้อผิดพลาดในการเชื่อมต่อเพื่อส่งกลับแก้ไข');
+    } finally {
+      setIsProcessingReview(false);
+    }
   };
   const handleTogglePublish = async (newsId: string, currentStatus: string) => {
     if (currentStatus === 'published') {

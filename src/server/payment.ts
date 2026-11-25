@@ -8,6 +8,7 @@ import { ensureRefundSchema } from './refunds.ts';
 import { roundHalfUp } from './fees.ts';
 import { lockEventFinancial } from './event-lock.ts';
 import { sendOrderTicketsEmail } from './ticket-delivery.ts';
+import { createNotification } from './notifications.ts';
 import {
   generatePromptPaySvg,
   getStripeClient,
@@ -1384,6 +1385,22 @@ export async function processStripeSuccessEvent(
       });
     } catch {
       // Delivery errors are tracked in ticket_email_deliveries and do not fail payment
+    }
+
+    // Post-transaction notification (Finance / Order confirmation)
+    try {
+      const firstTicket = result.tickets[0];
+      await createNotification(pool, {
+        role: 'owner',
+        category: 'finance',
+        title: `คำสั่งซื้อชำระเงินสำเร็จ: #${result.orderId}`,
+        summary: `ได้รับชำระเงินค่าบัตรคอนเสิร์ต ${firstTicket?.eventTitle || ''} จำนวน ${result.tickets.length} ใบ (ผู้ซื้อ: ${firstTicket?.buyerName || '-'})`,
+        content: `คำสั่งซื้อ #${result.orderId} ชำระเงินเสร็จสมบูรณ์ ออกบัตรจำนวน ${result.tickets.length} ใบ เรียบร้อยแล้ว`,
+        referenceId: result.orderId,
+        createdAt: now,
+      });
+    } catch (err) {
+      console.warn('Failed to dispatch notification for payment:', err);
     }
   }
 

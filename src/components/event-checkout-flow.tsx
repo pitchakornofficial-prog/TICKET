@@ -246,6 +246,14 @@ export function EventCheckoutFlow({
     eventId?.includes('freshy') ||
     eventId === 'event-ubu-freshy-2026';
 
+  const hasEventUbuPrivilege =
+    isUbuFreshyEvent ||
+    Boolean(feeSettings?.ubuPrivilegeMode) ||
+    Boolean(eventTitle?.toLowerCase().includes('ubu')) ||
+    sessions.some(s => s.ticketTypes?.some(tt => tt.isStudentPrivilege));
+
+  const [showUbuModal, setShowUbuModal] = useState<boolean>(() => hasEventUbuPrivilege);
+
   let ubuDiscountAmount = 0;
   if (hasUbuPrivilege) {
     for (const tt of ticketTypes) {
@@ -479,7 +487,7 @@ export function EventCheckoutFlow({
                 <CalendarIcon style={{ width: '14px', height: '14px' }} /> {selectedSession ? formatDate(new Date(selectedSession.startTime)) : ''}
               </span>
               <span className="checkout-status-meta-item">
-                จำกัดสูงสุด {limitPerOrder} ใบ/คำสั่งซื้อ
+                <TicketIcon style={{ width: '14px', height: '14px' }} /> จำกัดสูงสุด {limitPerOrder} ใบ/คำสั่งซื้อ
               </span>
             </div>
           </div>
@@ -651,8 +659,17 @@ export function EventCheckoutFlow({
                     </div>
                   </div>
 
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '1.2rem' }}>
-                    <div style={{ textAlign: 'right' }}>
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      gap: '1.2rem',
+                      flex: '1 1 auto',
+                      width: '100%',
+                    }}
+                  >
+                    <div style={{ textAlign: 'left' }}>
                       {hasUbuPrivilege && (Boolean(tt.isStudentPrivilege) || isUbuFreshyEvent) ? (
                         <>
                           <div style={{ fontSize: '0.8rem', textDecoration: 'line-through', color: 'var(--muted)' }}>
@@ -1051,6 +1068,113 @@ export function EventCheckoutFlow({
         remainingQuota={quotaModalData?.remainingQuota ?? 0}
         requestedQuantity={totalTickets}
       />
+
+      {/* UBU Privilege Informational Modal */}
+      {showUbuModal && (
+        <div
+          className="ubu-modal-overlay"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="ubu-modal-title"
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(15, 23, 42, 0.65)',
+            backdropFilter: 'blur(4px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1000,
+            padding: '1rem',
+          }}
+        >
+          <div
+            className="ubu-modal-card"
+            style={{
+              background: 'var(--white)',
+              borderRadius: '20px',
+              maxWidth: '440px',
+              width: '100%',
+              padding: '2rem 1.75rem',
+              boxShadow: '0 20px 40px rgba(0, 0, 0, 0.2)',
+              border: '1px solid #bfdbfe',
+              textAlign: 'center',
+            }}
+          >
+            <div
+              style={{
+                width: '56px',
+                height: '56px',
+                borderRadius: '50%',
+                background: '#eff6ff',
+                color: 'var(--blue)',
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                marginBottom: '1.25rem',
+              }}
+            >
+              <AcademicCapIcon style={{ width: '32px', height: '32px' }} />
+            </div>
+
+            <h2
+              id="ubu-modal-title"
+              style={{
+                fontSize: '1.25rem',
+                fontWeight: 500,
+                color: 'var(--black)',
+                margin: '0 0 0.75rem',
+              }}
+            >
+              สิทธิพิเศษสำหรับชาว ม.อุบลฯ
+            </h2>
+
+            <p style={{ fontSize: '0.92rem', color: 'var(--muted)', lineHeight: 1.6, margin: '0 0 1.25rem' }}>
+              คอนเสิร์ตนี้เข้าร่วมโครงการสิทธิพิเศษสำหรับนักศึกษาและบุคลากร มหาวิทยาลัยอุบลราชธานี
+              กรุณาใช้อีเมลสถาบัน <strong>@ubu.ac.th</strong> ในขั้นตอนยืนยันตัวตนเพื่อรับสิทธิ์ราคาพิเศษหรือส่วนลดทันที
+            </p>
+
+            <div
+              style={{
+                background: '#f8fafc',
+                border: '1px solid #e2e8f0',
+                borderRadius: '12px',
+                padding: '0.85rem 1rem',
+                marginBottom: '1.5rem',
+                textAlign: 'left',
+                fontSize: '0.85rem',
+                color: '#334155',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.65rem',
+              }}
+            >
+              <InfoIcon style={{ width: '18px', height: '18px', color: 'var(--blue)', flexShrink: 0 }} />
+              <span>
+                {isUbuFreshyEvent
+                  ? 'รับสิทธิ์ราคาพิเศษเริ่มต้น 99 บาท/ใบ สำหรับบัตรประเภท Student'
+                  : `รับส่วนลด ${UBU_DISCOUNT_PERCENT}% ทันทีเมื่อระบุอีเมล @ubu.ac.th`}
+              </span>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setShowUbuModal(false)}
+              className="primary-button"
+              style={{
+                width: '100%',
+                padding: '0.8rem 1.5rem',
+                borderRadius: '9999px',
+                fontSize: '0.95rem',
+                fontWeight: 400,
+                cursor: 'pointer',
+              }}
+            >
+              รับทราบและเลือกบัตร
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Universal Floating Back-to-Top Button (D-172) */}
       <FloatingBackToTop hasStickyBar testId="checkout-back-to-top-btn" />

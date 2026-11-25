@@ -11,6 +11,7 @@ import {
   type TicketIssuanceItemRow,
 } from './tickets.ts';
 import { sendDirectIssuedTicketsEmail } from './ticket-delivery.ts';
+import { createNotification } from './notifications.ts';
 
 export interface IssueDirectTicketsInput {
   eventId: string;
@@ -377,6 +378,33 @@ export async function issueDirectTickets(
       totalTickets: built.issuedTickets.length,
     };
   });
+
+  // Record notification for direct ticket issuance
+  try {
+    await createNotification(pool, {
+      role: 'owner',
+      category: 'concert',
+      title: `ออกบัตรโควตาตรงสำเร็จ: ${event.title}`,
+      summary: `จัดสรรบัตรโควตาตรงจำนวน ${result.totalTickets} ใบ ให้แก่ ${input.recipientName || 'ผู้รับมอบ'} (คำสั่งซื้อ #${result.orderId})`,
+      content: `รายการออกบัตรตรง #${result.orderId} สำเร็จเรียบร้อย บัตรจำนวน ${result.totalTickets} ใบ ถูกบันทึกและส่งมอบให้แก่ ${input.recipientName || '-'} (${input.recipientEmail || '-'}) เรียบร้อยแล้ว`,
+      referenceId: result.orderId,
+      createdAt: now,
+    });
+    if (event.organizerId) {
+      await createNotification(pool, {
+        userId: event.organizerId,
+        role: 'organizer',
+        category: 'concert',
+        title: `มีการออกบัตรโควตาตรงในงานของคุณ: ${event.title}`,
+        summary: `จัดสรรบัตรตรงจำนวน ${result.totalTickets} ใบ ให้แก่ ${input.recipientName || 'ผู้รับมอบ'}`,
+        content: `งาน ${event.title} มีการออกบัตรตรงจำนวน ${result.totalTickets} ใบ (คำสั่งซื้อ #${result.orderId})`,
+        referenceId: result.orderId,
+        createdAt: now,
+      });
+    }
+  } catch (err) {
+    console.warn('Failed to dispatch notification for direct ticket:', err);
+  }
 
   // Handle email delivery outside transaction
   let emailSent = false;

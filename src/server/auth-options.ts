@@ -39,11 +39,78 @@ export function authOptions(pool: Pool, settings: { baseURL: string; secret: str
       sendResetPassword: async ({ user, url, token }) => {
         await recordPasswordResetTokenIdentifier(pool, user.id, `reset-password:${token}`);
         const { emailTransport } = await import('./email.ts');
+        const { readScenarioEmailTemplate, interpolateEmailVariables } = await import('./email-master-template.ts');
+
+        let subject = 'ตั้งรหัสผ่านใหม่สำหรับระบบ TICKET';
+        let html = `
+          <div style="font-family: sans-serif; background-color: #f8fafc; color: #0f172a; margin: 0; padding: 24px;">
+            <div style="max-width: 560px; margin: 0 auto; background-color: #ffffff; border-radius: 8px; border: 1px solid #e2e8f0; overflow: hidden; padding: 24px;">
+              <h2 style="margin-top: 0; font-size: 18px; font-weight: 600; color: #0f172a;">TICKET - ตั้งรหัสผ่านใหม่</h2>
+              <p style="font-size: 15px; margin-bottom: 12px; font-weight: 600;">เรียนคุณ ${user.name || user.email},</p>
+              <div style="font-size: 14px; color: #334155; line-height: 1.6; margin-bottom: 24px;">
+                ระบบได้รับคำขอตั้งรหัสผ่านใหม่สำหรับบัญชีผู้ใช้งานระบบหลังบ้านของท่าน กรุณากดปุ่มด้านล่างนี้เพื่อดำเนินการตั้งรหัสผ่านใหม่:
+              </div>
+              <div style="text-align: center; margin: 28px 0;">
+                <a href="${url}" style="background-color: #0f172a; color: #ffffff; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: 500; font-size: 14px; display: inline-block;">
+                  ตั้งรหัสผ่านใหม่
+                </a>
+              </div>
+              <div style="font-size: 12px; color: #64748b; border-top: 1px solid #e2e8f0; padding-top: 14px; margin-top: 24px; line-height: 1.6;">
+                ลิงก์นี้มีอายุการใช้งาน 30 นาทีและใช้ได้เพียงครั้งเดียว หากท่านไม่ได้เป็นผู้ทำรายการ โปรดแจ้งผู้ดูแลระบบทันที
+              </div>
+            </div>
+          </div>
+        `;
+
+        try {
+          const template = await readScenarioEmailTemplate(pool, 'password_reset');
+          const vars = {
+            user_name: user.name || user.email,
+            request_time: new Date().toLocaleDateString('th-TH'),
+            expire_minutes: '30',
+          };
+          if (template.subject) {
+            subject = interpolateEmailVariables(template.subject, vars);
+          }
+          const greeting = template.greetingText
+            ? interpolateEmailVariables(template.greetingText, vars)
+            : `เรียนคุณ ${user.name || user.email},`;
+          const bodyText = template.bodyText
+            ? interpolateEmailVariables(template.bodyText, vars).replace(/\n/g, '<br/>')
+            : 'ระบบได้รับคำขอตั้งรหัสผ่านใหม่สำหรับบัญชีผู้ใช้งานระบบหลังบ้านของท่าน กรุณากดปุ่มด้านล่างนี้เพื่อดำเนินการตั้งรหัสผ่านใหม่:';
+          const footerNotes = template.footerNotes
+            ? interpolateEmailVariables(template.footerNotes, vars).replace(/\n/g, '<br/>')
+            : 'ลิงก์นี้มีอายุการใช้งาน 30 นาทีและใช้ได้เพียงครั้งเดียว หากท่านไม่ได้เป็นผู้ทำรายการ โปรดแจ้งผู้ดูแลระบบทันที';
+
+          html = `
+            <div style="font-family: sans-serif; background-color: #f8fafc; color: #0f172a; margin: 0; padding: 24px;">
+              <div style="max-width: 560px; margin: 0 auto; background-color: #ffffff; border-radius: 8px; border: 1px solid #e2e8f0; overflow: hidden; padding: 24px;">
+                <h2 style="margin-top: 0; font-size: 18px; font-weight: 600; color: #0f172a;">${template.headerTitle || 'TICKET - ตั้งรหัสผ่านใหม่'}</h2>
+                <p style="font-size: 15px; margin-bottom: 12px; font-weight: 600;">${greeting}</p>
+                <div style="font-size: 14px; color: #334155; line-height: 1.6; margin-bottom: 24px;">
+                  ${bodyText}
+                </div>
+                <div style="text-align: center; margin: 28px 0;">
+                  <a href="${url}" style="background-color: ${template.primaryButtonColor || '#0f172a'}; color: ${template.primaryButtonTextColor || '#ffffff'}; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: 500; font-size: 14px; display: inline-block;">
+                    ${template.primaryButtonText || 'ตั้งรหัสผ่านใหม่'}
+                  </a>
+                </div>
+                <div style="font-size: 12px; color: #64748b; border-top: 1px solid #e2e8f0; padding-top: 14px; margin-top: 24px; line-height: 1.6;">
+                  ${footerNotes}
+                </div>
+              </div>
+            </div>
+          `;
+        } catch {
+          // Fallback
+        }
+
         await emailTransport.send({
           from: 'noreply@ticket.invalid',
           to: user.email,
-          subject: 'ตั้งรหัสผ่านใหม่สำหรับระบบ TICKET',
+          subject,
           text: `คุณได้ขอตั้งรหัสผ่านใหม่ กรุณาคลิกลิงก์ด้านล่างภายใน 30 นาที:\n${url}`,
+          html,
         });
       },
     },

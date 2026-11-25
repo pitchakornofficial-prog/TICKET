@@ -12,7 +12,7 @@ describe('D-264: Concert Detail Dividers & Queue Waiting Room Decluttering', () 
     );
     expect(detailPage).toContain('className="detail-section-divider"');
     const dividerMatches = detailPage.match(/className="detail-section-divider"/g) || [];
-    expect(dividerMatches.length).toBeGreaterThanOrEqual(4);
+    expect(dividerMatches.length).toBeGreaterThanOrEqual(3);
 
     const globalsCss = readFileSync(
       resolve(rootDir, 'src/app/globals.css'),

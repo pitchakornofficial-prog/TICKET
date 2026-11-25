@@ -3,6 +3,7 @@ export interface SalesWindowSessionInput {
 }
 
 export interface EventSalesWindowInput {
+  status?: string | null;
   salesStartTime?: Date | string | null;
   salesEndTime?: Date | string | null;
   sessions?: SalesWindowSessionInput[];
@@ -10,7 +11,7 @@ export interface EventSalesWindowInput {
   salesPausedReason?: string | null;
 }
 
-export type EventSalesWindowReason = 'open' | 'not_started' | 'ended' | 'sessions_ended' | 'paused';
+export type EventSalesWindowReason = 'open' | 'not_started' | 'ended' | 'sessions_ended' | 'paused' | 'cancelled';
 
 export interface EventSalesWindowStatus {
   isOpen: boolean;
@@ -47,6 +48,16 @@ export function getEventSalesStatus(
 ): EventSalesWindowStatus {
   const opensAt = toValidDate(event.salesStartTime);
   const closesAt = toValidDate(event.salesEndTime);
+
+  if (event.status === 'cancelled') {
+    return {
+      isOpen: false,
+      reason: 'cancelled',
+      message: 'คอนเสิร์ตนี้ถูกยกเลิกการแสดงแล้ว',
+      opensAt,
+      closesAt,
+    };
+  }
 
   if (event.isSalesPaused) {
     return {

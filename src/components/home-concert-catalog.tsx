@@ -2,12 +2,14 @@
 
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
 import { TicketIcon } from './ticket-icon';
 import {
   ChevronLeftIcon,
   ChevronRightIcon,
   MapPinIcon,
+  ChevronDownIcon,
+  SparklesIcon,
+  SlidersIcon,
 } from './icons';
 // Note: ChevronUpIcon previously used for Back-to-Top (D-143), unified with organizer arrow (D-172)
 import { formatBahtCompact } from '@/lib/locale';
@@ -23,6 +25,7 @@ import { ResponsiveImage } from './responsive-image';
 
 interface HomeConcertCatalogProps {
   allEvents: PublicEventSummary[];
+  recommendedEvents?: PublicEventSummary[];
   initialQuery?: string;
   initialTotalCount?: number;
   initialHasMore?: boolean;
@@ -44,6 +47,7 @@ const POSTER_SIZES = '(max-width: 640px) 46vw, (max-width: 1024px) 30vw, 280px';
 
 export function HomeConcertCatalog({
   allEvents,
+  recommendedEvents = [],
   initialQuery = '',
   initialTotalCount,
   initialHasMore = false,
@@ -51,8 +55,26 @@ export function HomeConcertCatalog({
   serverCatalogEnabled = false,
   initialBanners,
 }: HomeConcertCatalogProps) {
-  const router = useRouter();
   const [query, setQuery] = useState(initialQuery);
+  const [clientRecommended, setClientRecommended] = useState<PublicEventSummary[]>(() => {
+    if (recommendedEvents && recommendedEvents.length > 0) return recommendedEvents.slice(0, 4);
+    if (allEvents && allEvents.length > 0) return allEvents.slice(0, 4);
+    return [];
+  });
+
+  useEffect(() => {
+    if (clientRecommended.length === 0) {
+      fetch('/api/public/events?limit=4')
+        .then(res => (res.ok ? res.json() : null))
+        .then(data => {
+          if (data && Array.isArray(data.events) && data.events.length > 0) {
+            setClientRecommended(data.events.slice(0, 4));
+          }
+        })
+        .catch(() => {});
+    }
+  }, [clientRecommended.length]);
+
   useEffect(() => {
     setQuery(initialQuery);
   }, [initialQuery]);
@@ -66,6 +88,16 @@ export function HomeConcertCatalog({
   const [priceRange, setPriceRange] = useState<PriceRange>('all');
   const [availability, setAvailability] = useState<SearchAvailability>('all');
   const [sortBy, setSortBy] = useState<SortOrder>('date_asc');
+  const [isMobileFilterOpen, setIsMobileFilterOpen] = useState(false);
+
+  const activeFilterCount = useMemo(() => {
+    let count = 0;
+    if (selectedLocation !== 'all') count++;
+    if (priceRange !== 'all') count++;
+    if (availability !== 'all') count++;
+    if (sortBy !== 'date_asc') count++;
+    return count;
+  }, [selectedLocation, priceRange, availability, sortBy]);
 
   // Server-backed catalog state (#5) and batched infinite scroll / back-to-top state (D-143)
   const [serverEvents, setServerEvents] = useState<PublicEventSummary[]>(allEvents);
@@ -261,6 +293,7 @@ export function HomeConcertCatalog({
       ev =>
         ev.title.toLowerCase().includes(trimmedQuery) ||
         ev.location.toLowerCase().includes(trimmedQuery) ||
+        Boolean(ev.artists?.toLowerCase().includes(trimmedQuery)) ||
         Boolean(ev.description?.toLowerCase().includes(trimmedQuery)),
     );
   }, [allEvents, isSearching, trimmedQuery]);
@@ -333,15 +366,6 @@ export function HomeConcertCatalog({
     setPriceRange('all');
     setAvailability('all');
     setSortBy('date_asc');
-  };
-
-  const handleClearSearch = () => {
-    setQuery('');
-    handleResetFilters();
-    if (typeof window !== 'undefined') {
-      window.dispatchEvent(new CustomEvent('ticket:search', { detail: '' }));
-    }
-    router.replace('/', { scroll: false });
   };
 
   const isFilterActive =
@@ -730,6 +754,11 @@ export function HomeConcertCatalog({
 
                         <div className="card-split-info-box">
                           <h3 className="card-split-title">{event.title}</h3>
+                          {event.artists && (
+                            <div className="card-split-artist-line">
+                              <span>{event.artists}</span>
+                            </div>
+                          )}
                           <div className="card-split-location-line">
                             <MapPinIcon className="card-location-icon" />
                             <span>{event.location}</span>
@@ -803,18 +832,38 @@ export function HomeConcertCatalog({
                   รีเซ็ตตัวกรอง
                 </button>
               )}
-              <button
-                type="button"
-                onClick={handleClearSearch}
-                className="secondary-button button-link clear-search-button"
-              >
-                ล้างคำค้นหา
-              </button>
             </div>
           </div>
 
+          {/* Mobile Filter Toggle Bar */}
+          <button
+            type="button"
+            className="mobile-filter-toggle-btn"
+            onClick={() => setIsMobileFilterOpen(prev => !prev)}
+            aria-expanded={isMobileFilterOpen}
+            aria-controls="search-filters-toolbar"
+          >
+            <div className="toggle-icon-wrap">
+              <SlidersIcon style={{ width: '16px', height: '16px', color: 'var(--blue)' }} />
+              <strong>ตัวกรองและการจัดเรียง</strong>
+              {activeFilterCount > 0 && (
+                <span className="search-count-badge" style={{ color: 'var(--blue)', fontWeight: 500 }}>
+                  ({activeFilterCount})
+                </span>
+              )}
+            </div>
+            <ChevronDownIcon
+              style={{ width: '18px', height: '18px' }}
+              className={`mobile-filter-chevron ${isMobileFilterOpen ? 'is-open' : ''}`}
+            />
+          </button>
+
           {/* Comprehensive Filter Toolbar (Location, Price, Status, Sort) */}
-          <section className="search-filters-toolbar" aria-label="ตัวกรองและเรียงลำดับการค้นหา">
+          <section
+            id="search-filters-toolbar"
+            className={`search-filters-toolbar ${!isMobileFilterOpen ? 'mobile-collapsed' : ''}`}
+            aria-label="ตัวกรองและเรียงลำดับการค้นหา"
+          >
             {/* Location Filter */}
             <div className="filter-group-item">
               <label htmlFor="search-location-select" className="filter-label">
@@ -905,6 +954,24 @@ export function HomeConcertCatalog({
                       aria-label={`คอนเสิร์ต ${event.title}`}
                     >
                       <div className="card-split-poster-frame">
+                        {event.status === 'cancelled' && (
+                          <span
+                            style={{
+                              position: 'absolute',
+                              top: '8px',
+                              left: '8px',
+                              backgroundColor: '#ef4444',
+                              color: '#ffffff',
+                              fontSize: '0.75rem',
+                              fontWeight: 500,
+                              padding: '2px 8px',
+                              borderRadius: '4px',
+                              zIndex: 2,
+                            }}
+                          >
+                            ยกเลิกการแสดง
+                          </span>
+                        )}
                         {event.posterUrl ? (
                           <ResponsiveImage
                             src={event.posterUrl}
@@ -924,6 +991,11 @@ export function HomeConcertCatalog({
 
                       <div className="card-split-info-box">
                         <h3 className="card-split-title">{event.title}</h3>
+                        {event.artists && (
+                          <div className="card-split-artist-line">
+                            <span>{event.artists}</span>
+                          </div>
+                        )}
                         <div className="card-split-location-line">
                           <MapPinIcon className="card-location-icon" />
                           <span>{event.location}</span>
@@ -937,8 +1009,11 @@ export function HomeConcertCatalog({
                                 : 'ฟรี'}
                             </span>
                           </div>
-                          <span className="card-split-buy-btn">
-                            ซื้อบัตร
+                          <span
+                            className="card-split-buy-btn"
+                            style={event.status === 'cancelled' ? { backgroundColor: '#94a3b8', color: '#ffffff' } : undefined}
+                          >
+                            {event.status === 'cancelled' ? 'ยกเลิกแล้ว' : 'ซื้อบัตร'}
                           </span>
                         </div>
                       </div>
@@ -962,20 +1037,70 @@ export function HomeConcertCatalog({
               )}
             </div>
           ) : (
-            <section className="empty-catalog-section" aria-label="ไม่พบรายการคอนเสิร์ต">
-              <div className="empty-catalog-card">
-                <TicketIcon className="empty-icon" />
-                <h2>ไม่พบคอนเสิร์ตที่ตรงกับเงื่อนไขการค้นหา</h2>
-                <p>ลองปรับเปลี่ยนคำค้นหา หรือเลือกตัวกรองสถานที่และช่วงราคาใหม่</p>
-                <button
-                  type="button"
-                  onClick={handleResetFilters}
-                  className="primary-button button-link"
-                  style={{ marginTop: '1rem' }}
-                >
-                  ล้างตัวกรองทั้งหมด
-                </button>
-              </div>
+            <section className="empty-catalog-section" aria-label="คอนเสิร์ตแนะนำ">
+              {clientRecommended.length > 0 && (
+                <div className="search-recommended-section">
+                  <div className="search-recommended-header">
+                    <SparklesIcon style={{ width: '20px', height: '20px', color: 'var(--blue)', flexShrink: 0 }} />
+                    <h3 className="search-recommended-title">คอนเสิร์ตแนะนำที่คุณอาจสนใจ</h3>
+                  </div>
+                  <div className="catalog-events-grid">
+                    {clientRecommended.map(event => (
+                      <article key={`rec-${event.id}`} className="concert-card-split search-card-item">
+                        <Link
+                          href={`/events/${event.id}`}
+                          className="card-split-link"
+                          aria-label={`คอนเสิร์ต ${event.title}`}
+                        >
+                          <div className="card-split-poster-frame">
+                            {event.posterUrl ? (
+                              <ResponsiveImage
+                                src={event.posterUrl}
+                                alt={`โปสเตอร์ ${event.title}`}
+                                className="card-split-img"
+                                loading="lazy"
+                                widths={POSTER_WIDTHS}
+                                sizes={POSTER_SIZES}
+                              />
+                            ) : (
+                              <div className="card-split-placeholder">
+                                <TicketIcon />
+                                <span>LIVE CONCERT</span>
+                              </div>
+                            )}
+                          </div>
+
+                          <div className="card-split-info-box">
+                            <h3 className="card-split-title">{event.title}</h3>
+                            {event.artists && (
+                              <div className="card-split-artist-line">
+                                <span>{event.artists}</span>
+                              </div>
+                            )}
+                            <div className="card-split-location-line">
+                              <MapPinIcon className="card-location-icon" />
+                              <span>{event.location}</span>
+                            </div>
+
+                            <div className="card-split-footer">
+                              <div className="card-split-price">
+                                <span className="price-amount">
+                                  {event.startingPrice > 0
+                                    ? `ราคาเริ่มต้น ${formatBahtCompact(event.startingPrice)}`
+                                    : 'ฟรี'}
+                                </span>
+                              </div>
+                              <span className="card-split-buy-btn">
+                                ซื้อบัตร
+                              </span>
+                            </div>
+                          </div>
+                        </Link>
+                      </article>
+                    ))}
+                  </div>
+                </div>
+              )}
             </section>
           )}
         </section>
