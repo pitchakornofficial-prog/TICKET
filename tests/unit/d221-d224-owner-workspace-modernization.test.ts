@@ -74,20 +74,16 @@ describe('D-221 to D-224: Admin/Owner Workspace Modernization & Dual-Mode Analyt
     expect(dashboardContent).toContain('7 วันล่าสุด');
     expect(dashboardContent).toContain('30 วันล่าสุด');
 
-    // Preserved 5 Action items
+    // Unified Action items
     expect(dashboardContent).toContain('data-testid="owner-overview-dashboard"');
-    expect(dashboardContent).toContain('data-testid="overview-total-badge"');
+    expect(dashboardContent).toContain('data-testid="overview-total-status"');
     expect(dashboardContent).toMatch(/overview-card-\$\{card\.id\}/);
     expect(dashboardContent).toContain("'pending-sessions'");
     expect(dashboardContent).toContain("'pending-refunds'");
+    expect(dashboardContent).toContain("'pending-news'");
+    expect(dashboardContent).toContain("'pending-payouts'");
     expect(dashboardContent).toContain("'payment-exceptions'");
     expect(dashboardContent).toContain("'failed-emails'");
     expect(dashboardContent).toContain("'sync-conflicts'");
-
-    // Launchpads backward compatibility
-    expect(dashboardContent).toContain('launchpad-owner-approval');
-    expect(dashboardContent).toContain('launchpad-owner-finance');
-    expect(dashboardContent).toContain('launchpad-owner-customer');
-    expect(dashboardContent).toContain('launchpad-owner-system');
   });
 });

@@ -325,6 +325,14 @@ describe('Ticket QR Inspector & Tester (Unit Tests)', () => {
     expect(viewContent).toContain('data-testid="inspector-switch-camera-btn"');
     expect(viewContent).toContain('data-testid="inspector-rescan-btn"');
 
+    // Clean header without heading icon, non-bold Kanit 400 headings, and outline submit button
+    expect(viewContent).not.toContain('ShieldCheckIcon');
+    expect(viewContent).not.toContain('fontWeight: 600');
+    expect(viewContent).not.toContain('<strong>');
+    expect(viewContent).not.toContain('className="primary-button"');
+    expect(viewContent).toContain("fontSize: '1.5rem'");
+    expect(viewContent).toContain('fontWeight: 400');
+
     const cssPath = path.resolve(rootDir, 'src/app/back-office/back-office.css');
     const cssContent = fs.readFileSync(cssPath, 'utf8');
     expect(cssContent).toMatch(/\.ticket-inspector-layout\s*\{[^}]*grid-template-columns:\s*400px minmax\(0, 1fr\)/);

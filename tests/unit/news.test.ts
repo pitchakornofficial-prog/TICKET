@@ -157,4 +157,31 @@ describe('News domain unit tests (TASK-008, AC-04)', () => {
     expect(detailPage).not.toContain('news-card-category-badge');
     expect(detailPage).not.toMatch(/\p{Extended_Pictographic}/u);
   });
+
+  it('removes TICKET / eyebrow labels across /news and static pages and uses outline CTA on hero news', () => {
+    const rootDir = process.cwd();
+    const pages = [
+      'src/app/news/page.tsx',
+      'src/app/about/page.tsx',
+      'src/app/accept-invitation/page.tsx',
+      'src/app/contact/page.tsx',
+      'src/app/forgot-password/page.tsx',
+      'src/app/login/page.tsx',
+      'src/app/privacy/page.tsx',
+      'src/app/refund-policy/page.tsx',
+      'src/app/reset-password/page.tsx',
+      'src/app/terms/page.tsx',
+    ];
+    for (const rel of pages) {
+      const content = readFileSync(join(rootDir, rel), 'utf8');
+      expect(content).not.toContain('TICKET /');
+    }
+
+    const clientComp = readFileSync(
+      join(rootDir, 'src/components/news-list-client.tsx'),
+      'utf8',
+    );
+    expect(clientComp).toContain('secondary-button button-link news-hero-cta-btn');
+    expect(clientComp).not.toContain('primary-button button-link news-hero-cta-btn');
+  });
 });

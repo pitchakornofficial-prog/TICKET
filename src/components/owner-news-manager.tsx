@@ -9,18 +9,37 @@ interface NewsItem {
   id: string;
   title: string;
   content: string;
-  status: 'draft' | 'published';
+  summary?: string | null;
+  category?: string | null;
+  relatedConcert?: string | null;
+  status: 'draft' | 'pending' | 'published' | 'rejected';
   coverUrl: string | null;
+  rejectionReason?: string | null;
   publishedAt: string | null;
   createdAt: string;
   updatedAt: string;
   authorName: string;
+  authorRole?: string | null;
 }
+
+const OWNER_NEWS_STATUS_META: Record<
+  NewsItem['status'],
+  { label: string; badgeClass: string }
+> = {
+  pending: { label: 'รออนุมัติ', badgeClass: 'pending' },
+  published: { label: 'เผยแพร่แล้ว', badgeClass: 'open' },
+  draft: { label: 'ฉบับร่าง', badgeClass: 'pending' },
+  rejected: { label: 'ส่งกลับแก้ไข', badgeClass: 'rejected' },
+};
 
 export function OwnerNewsManager() {
   const [news, setNews] = useState<NewsItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [processingId, setProcessingId] = useState<string | null>(null);
+  const [statusFilter, setStatusFilter] = useState<'all' | NewsItem['status']>('all');
+  const [rejectingId, setRejectingId] = useState<string | null>(null);
+  const [rejectionReason, setRejectionReason] = useState('');
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [status, setStatus] = useState<'draft' | 'published'>('published');
@@ -29,7 +48,7 @@ export function OwnerNewsManager() {
 
   const loadNews = useCallback(async () => {
     try {
-      const res = await fetch('/api/owner/news');
+      const res = await fetch('/api/owner/news', { cache: 'no-store' });
       if (res.ok) {
         const data = await res.json();
         setNews(data.news || []);
@@ -75,6 +94,58 @@ export function OwnerNewsManager() {
       setError('เกิดข้อผิดพลาดในการเชื่อมต่อเซิร์ฟเวอร์');
     } finally {
       setSubmitting(false);
+    }
+  }
+
+  async function handleApprove(id: string) {
+    setError('');
+    setMessage('');
+    setProcessingId(id);
+    try {
+      const res = await fetch(`/api/owner/news/${id}/approve`, {
+        method: 'POST',
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.message || 'อนุมัติข่าวไม่สำเร็จ');
+      } else {
+        setMessage('อนุมัติและเผยแพร่ข่าวสารเรียบร้อยแล้ว');
+        await loadNews();
+      }
+    } catch {
+      setError('เกิดข้อผิดพลาดในการเชื่อมต่อเพื่ออนุมัติข่าว');
+    } finally {
+      setProcessingId(null);
+    }
+  }
+
+  async function handleReject(id: string) {
+    if (!rejectionReason.trim()) {
+      setError('กรุณาระบุเหตุผลการส่งกลับแก้ไข');
+      return;
+    }
+    setError('');
+    setMessage('');
+    setProcessingId(id);
+    try {
+      const res = await fetch(`/api/owner/news/${id}/reject`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason: rejectionReason.trim() }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.message || 'ส่งกลับแก้ไขไม่สำเร็จ');
+      } else {
+        setMessage('ส่งกลับแก้ไขข่าวสารเรียบร้อยแล้ว');
+        setRejectingId(null);
+        setRejectionReason('');
+        await loadNews();
+      }
+    } catch {
+      setError('เกิดข้อผิดพลาดในการเชื่อมต่อเพื่อส่งกลับแก้ไข');
+    } finally {
+      setProcessingId(null);
     }
   }
 
@@ -203,35 +274,98 @@ export function OwnerNewsManager() {
 
       {/* News list */}
       <div className="owner-news-list-wrap">
-        <h3>รายการข่าวสารทั้งหมด ({news.length})</h3>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem', marginBottom: '0.85rem' }}>
+          <h3 style={{ margin: 0 }}>รายการข่าวสารทั้งหมด ({news.length})</h3>
+          <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
+            {(
+              [
+                { key: 'all', label: `ทั้งหมด (${news.length})` },
+                { key: 'pending', label: `รออนุมัติ (${news.filter((n) => n.status === 'pending').length})` },
+                { key: 'published', label: `เผยแพร่แล้ว (${news.filter((n) => n.status === 'published').length})` },
+                { key: 'draft', label: `ฉบับร่าง (${news.filter((n) => n.status === 'draft').length})` },
+                { key: 'rejected', label: `ส่งกลับแก้ไข (${news.filter((n) => n.status === 'rejected').length})` },
+              ] as const
+            ).map((tab) => (
+              <button
+                key={tab.key}
+                type="button"
+                className={statusFilter === tab.key ? 'primary-button small' : 'secondary-button small'}
+                onClick={() => setStatusFilter(tab.key)}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+        </div>
 
         {loading ? (
           <p className="loading-text">กำลังโหลดรายการข่าว...</p>
-        ) : news.length === 0 ? (
+        ) : news.filter((item) => statusFilter === 'all' || item.status === statusFilter).length === 0 ? (
           <div className="empty-sub-card">
             <TicketIcon />
-            <p>ยังไม่มีข่าวสารในระบบ</p>
+            <p>ยังไม่มีข่าวสารในสถานะนี้</p>
           </div>
         ) : (
           <div className="owner-news-table-wrap">
             <table className="data-table">
               <thead>
                 <tr>
-                  <th>หัวข้อ</th>
+                  <th>หัวข้อ / ผู้ส่ง</th>
                   <th>สถานะ</th>
                   <th>วันที่สร้าง / เผยแพร่</th>
                   <th>การดำเนินการ</th>
                 </tr>
               </thead>
               <tbody>
-                {news.map(item => (
+                {news
+                  .filter((item) => statusFilter === 'all' || item.status === statusFilter)
+                  .map(item => (
                   <tr key={item.id}>
                     <td>
                       <strong>{item.title}</strong>
+                      <div style={{ fontSize: '0.8rem', color: '#64748b', marginTop: '0.2rem' }}>
+                        ผู้ส่ง: {item.authorName}
+                        {item.relatedConcert ? ` • ${item.relatedConcert}` : ''}
+                      </div>
+                      {item.status === 'rejected' && item.rejectionReason && (
+                        <div style={{ fontSize: '0.78rem', color: '#b91c1c', marginTop: '0.25rem' }}>
+                          เหตุผล: {item.rejectionReason}
+                        </div>
+                      )}
+                      {rejectingId === item.id && (
+                        <div style={{ display: 'flex', gap: '0.4rem', marginTop: '0.5rem', flexWrap: 'wrap' }}>
+                          <input
+                            type="text"
+                            className="text-input"
+                            placeholder="ระบุเหตุผลที่ส่งกลับแก้ไข..."
+                            value={rejectionReason}
+                            onChange={(e) => setRejectionReason(e.target.value)}
+                            style={{ minWidth: '220px', flex: 1 }}
+                          />
+                          <button
+                            type="button"
+                            className="danger-button small"
+                            onClick={() => handleReject(item.id)}
+                            disabled={processingId === item.id}
+                          >
+                            ยืนยันส่งกลับ
+                          </button>
+                          <button
+                            type="button"
+                            className="secondary-button small"
+                            onClick={() => {
+                              setRejectingId(null);
+                              setRejectionReason('');
+                            }}
+                          >
+                            ยกเลิก
+                          </button>
+                        </div>
+                      )}
                     </td>
                     <td>
-                      <span className={`status-badge ${item.status === 'published' ? 'open' : 'pending'}`}>
-                        {item.status === 'published' ? 'เผยแพร่แล้ว' : 'ฉบับร่าง'}
+                      <span className={`status-badge ${OWNER_NEWS_STATUS_META[item.status].badgeClass}`}>
+                        {OWNER_NEWS_STATUS_META[item.status].label}
                       </span>
                     </td>
                     <td>
@@ -242,6 +376,29 @@ export function OwnerNewsManager() {
                     </td>
                     <td>
                       <div className="table-actions">
+                        {item.status === 'pending' && (
+                          <>
+                            <button
+                              type="button"
+                              className="primary-button small"
+                              onClick={() => handleApprove(item.id)}
+                              disabled={processingId === item.id}
+                            >
+                              อนุมัติ
+                            </button>
+                            <button
+                              type="button"
+                              className="secondary-button small"
+                              onClick={() => {
+                                setRejectingId(item.id);
+                                setRejectionReason('');
+                              }}
+                              disabled={processingId === item.id}
+                            >
+                              ส่งกลับแก้ไข
+                            </button>
+                          </>
+                        )}
                         {item.status === 'draft' && (
                           <button
                             type="button"

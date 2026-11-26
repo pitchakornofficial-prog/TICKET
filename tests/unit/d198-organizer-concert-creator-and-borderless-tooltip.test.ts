@@ -28,10 +28,9 @@ describe('D-198: Organizer Concert Creator Modernization, Borderless Tooltip, an
     expect(globalsCssContent).toMatch(/\.header-info-tooltip-btn\s*\{[^}]*border:\s*none/);
   });
 
-  it('3. Item 3: Create concert modal title includes tooltip "i" and in-modal error/success banners', () => {
-    // Tooltip next to modal title
+  it('3. Item 3: Create concert modal title uses unified sticky topbar and in-modal error/success banners', () => {
     expect(eventsManagerContent).toContain('id="create-concert-title"');
-    expect(eventsManagerContent).toContain('<HeaderInfoTooltip text="สร้างคอนเสิร์ตใหม่');
+    expect(eventsManagerContent).toContain('organizer-modal-topbar-title');
 
     // In-modal alert banners
     expect(eventsManagerContent).toContain('modalError &&');
@@ -87,7 +86,7 @@ describe('D-198: Organizer Concert Creator Modernization, Borderless Tooltip, an
     expect(globalsCssContent).toContain('.editor-modal-body-scrollable');
 
     expect(globalsCssContent).toMatch(/\.editor-modal-sticky-header\s*\{[^}]*position:\s*sticky/);
-    expect(globalsCssContent).toMatch(/\.events-editor-modal-card\s*\{[^}]*width:\s*880px/);
+    expect(globalsCssContent).toMatch(/\.events-editor-modal-card\s*\{[^}]*max-width:\s*960px/);
   });
 
   it('9. Item 9: Session cards have Move Up and Move Down reorder buttons', () => {
@@ -99,17 +98,17 @@ describe('D-198: Organizer Concert Creator Modernization, Borderless Tooltip, an
     expect(eventsManagerContent).toContain('ChevronDownIcon');
   });
 
-  it('10. Item 10: Order limit provides 1-10 plus unlimited option (evolved in D-200 to volume bar)', () => {
-    expect(eventsManagerContent).toContain('volume-bar-stepper');
-    expect(eventsManagerContent).toContain('volume-bar-track');
+  it('10. Item 10: Order limit provides 1-10 stepper + preset chips plus unlimited option', () => {
+    expect(eventsManagerContent).toContain('limit-stepper-row');
+    expect(eventsManagerContent).toContain('limit-preset-chip');
     expect(eventsManagerContent).toContain('data-testid="limit-pill-unlimited"');
     expect(eventsManagerContent).toContain('ไม่จำกัดจำนวน');
     expect(eventsManagerContent).toContain('setLimitPerOrder(99)');
   });
 
-  it('11. Item 12: Cancel button styling is harmonized with other action buttons', () => {
-    expect(eventsManagerContent).toContain('className="btn-form-cancel"');
-    expect(globalsCssContent).toContain('.events-editor-modal-card .btn-form-cancel');
+  it('11. Item 12: Cancel button styling is harmonized with unified modal topbar buttons', () => {
+    expect(eventsManagerContent).toContain('organizer-modal-topbar-btn');
+    expect(globalsCssContent).toContain('.organizer-modal-topbar-btn');
     expect(globalsCssContent).toContain('.btn-form-cancel');
   });
 

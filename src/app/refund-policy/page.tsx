@@ -1,16 +1,26 @@
+import type { Metadata } from 'next';
 import Link from 'next/link';
 import { ClockIcon } from '@/components/icons';
+import { FloatingBackToTop } from '@/components/floating-back-to-top';
 
-export const metadata = {
+export const metadata: Metadata = {
   title: 'นโยบายคืนเงิน ยกเลิก และเลื่อนงาน — TICKET',
   description: 'นโยบายและเงื่อนไขการขอคืนเงิน การยกเลิกคอนเสิร์ต และการเลื่อนรอบการแสดงของ TICKET',
+  alternates: {
+    canonical: '/refund-policy',
+  },
+  openGraph: {
+    title: 'นโยบายคืนเงิน ยกเลิก และเลื่อนงาน — TICKET',
+    description: 'นโยบายและเงื่อนไขการขอคืนเงิน การยกเลิกคอนเสิร์ต และการเลื่อนรอบการแสดงของ TICKET',
+    url: '/refund-policy',
+    type: 'website',
+  },
 };
 
 export default function RefundPolicyPage() {
   return (
     <article className="static-page" aria-labelledby="refund-title">
       <header className="static-header">
-        <p className="eyebrow">TICKET / นโยบายการคืนเงิน</p>
         <h1 id="refund-title">นโยบายคืนเงิน ยกเลิก และเลื่อนงาน</h1>
         <p className="intro">
           TICKET กำหนดนโยบายและแนวปฏิบัติในการคืนเงินอย่างโปร่งใสและเป็นธรรม
@@ -85,6 +95,8 @@ export default function RefundPolicyPage() {
         <p>มีคำถามหรือต้องการสอบถามสถานะคำร้องขอคืนเงิน?</p>
         <Link href="/contact" className="secondary-button button-link">ติดต่อฝ่ายสนับสนุนลูกค้า</Link>
       </div>
+
+      <FloatingBackToTop testId="refund-policy-back-to-top-btn" />
     </article>
   );
 }

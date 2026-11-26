@@ -192,12 +192,16 @@ describe('Unified Atomic UI Design System (D-117)', () => {
     it('verifies stylesheet rules for standard and sticky-bar offset Back-to-Top button', () => {
       const rootDir = process.cwd();
       const globalsCss = readFileSync(join(rootDir, 'src/app/globals.css'), 'utf8');
+      const backOfficeCss = readFileSync(join(rootDir, 'src/app/back-office/back-office.css'), 'utf8');
 
       expect(globalsCss).toContain('.floating-back-to-top {');
       expect(globalsCss).toContain('.floating-back-to-top.has-sticky-bar {');
       expect(globalsCss).toContain('.floating-back-to-top-icon {');
-      expect(globalsCss).toMatch(/\.floating-back-to-top\.has-sticky-bar\s*\{[^}]*bottom:\s*6rem;/);
-      expect(globalsCss).toMatch(/@media\s*\(max-width:\s*768px\)\s*\{[\s\S]*\.floating-back-to-top\.has-sticky-bar\s*\{[^}]*bottom:\s*5\.25rem;/);
+      expect(globalsCss).toMatch(/\.floating-back-to-top\s*\{[^}]*top:\s*6\.25rem;/);
+      expect(globalsCss).toMatch(/@media\s*\(max-width:\s*900px\)\s*\{[\s\S]*\.floating-back-to-top\s*\{[^}]*top:\s*8\.75rem;/);
+      expect(globalsCss).toMatch(/@media\s*\(max-width:\s*768px\)\s*\{[\s\S]*\.floating-back-to-top\s*\{[^}]*top:\s*8\.75rem;/);
+      expect(backOfficeCss).toContain('top: 8.25rem;');
+      expect(backOfficeCss).toContain('top: 7.75rem;');
       expect(globalsCss).not.toMatch(/\p{Extended_Pictographic}/u);
     });
 
@@ -237,6 +241,14 @@ describe('Unified Atomic UI Design System (D-117)', () => {
         'utf8',
       );
       expect(lookupSource).toContain('FloatingBackToTop');
+      expect(lookupSource).not.toContain('lookup-card-top-icon');
+      expect(lookupSource).not.toContain('example@mail.com');
+      expect(lookupSource).not.toContain('0812345678');
+      expect(lookupSource).toContain('กรอกอีเมลที่ใช้สั่งซื้อบัตร');
+      expect(lookupSource).toContain('กรอกเบอร์โทรศัพท์ที่ใช้สั่งซื้อบัตร');
+
+      const globalsCss = readFileSync(join(rootDir, 'src/app/globals.css'), 'utf8');
+      expect(globalsCss).toMatch(/\.lookup-submit-btn\s*\{[^}]*background:\s*#ffffff/);
       expect(lookupSource).toContain('lookup-back-to-top-btn');
     });
   });

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import {
   BookOpenIcon,
   QrCodeIcon,
@@ -12,8 +12,9 @@ import {
   RefreshIcon,
 } from '@/components/icons';
 import { TicketIcon } from '@/components/ticket-icon';
-import { Button, Badge } from '@/components/ui';
+import { Badge } from '@/components/ui';
 import { HeaderInfoTooltip } from './header-info-tooltip';
+import { triggerRefreshToast } from './toast-notification';
 
 interface GuideStep {
   stepNum: number;
@@ -46,12 +47,12 @@ const GUIDE_MODULES: GuideModule[] = [
     steps: [
       {
         stepNum: 1,
-        title: 'การสร้างและแจกจ่ายบัญชีทีมสแกน',
-        summary: 'ผู้จัดงานสามารถสร้างบัญชีทีมงานเฉพาะกิจสำหรับแต่ละคอนเสิร์ตได้จากแท็บ "ทีมงาน"',
+        title: 'การเพิ่มทีมสแกนและออก QR / ลิงก์เข้าใช้งานแบบใช้ครั้งเดียว',
+        summary: 'ผู้จัดงานสามารถเพิ่มเจ้าหน้าที่สแกนเสริมได้สูงสุด 3 คนต่อคอนเสิร์ตที่ได้รับอนุมัติแล้ว จากแท็บ "ทีมสแกน"',
         details: [
-          'เข้าสู่แท็บ "ทีมงาน" แล้วเลือกแท็บ "สร้างบัญชีใหม่"',
-          'เลือกคอนเสิร์ตที่ต้องการ กำหนดชื่อผู้ใช้งาน อีเมล และรหัสผ่านความปลอดภัย (อย่างน้อย 15 ตัวอักษร)',
-          'ส่งมอบอีเมลและรหัสผ่านให้กับเจ้าหน้าที่ประจำประตูทางเข้า (ทีมสแกนจะมีสิทธิ์เข้าถึงเฉพาะงานที่ได้รับมอบหมายเท่านั้น)',
+          'เข้าสู่แท็บ "ทีมสแกน" แล้วเลือกคอนเสิร์ตที่ได้รับการอนุมัติแล้ว จากนั้นกด "+ เพิ่มเจ้าหน้าที่สแกนเสริม"',
+          'ระบุเพียงชื่อเจ้าหน้าที่หรือจุดตรวจ (เช่น ประตู A) ระบบจะสร้างลิงก์เข้าใช้งานและ QR Code แบบใช้ครั้งเดียวให้อัตโนมัติ',
+          'เมื่อเจ้าหน้าที่สแกน QR หรือเปิดลิงก์ครั้งแรก อุปกรณ์นั้นจะถูกผูกสิทธิ์ (1 ลิงก์ต่อ 1 อุปกรณ์) และเข้าใช้งานได้เฉพาะงานที่ได้รับมอบหมายเท่านั้น',
         ],
       },
       {
@@ -59,9 +60,9 @@ const GUIDE_MODULES: GuideModule[] = [
         title: 'โหมดสแกนออนไลน์และเครื่องหลักออฟไลน์ (Primary Machine)',
         summary: 'เพื่อป้องกันการสแกนซ้ำข้ามประตู ระบบอนุญาตให้มีเครื่องหลักออฟไลน์ได้เพียง 1 เครื่องต่อคอนเสิร์ต',
         details: [
-          'เครื่องสแกนทั่วไปทำงานในโหมดออนไลน์ เชื่อมต่อฐานข้อมูลกลางแบบเรียลไทม์เพื่อตรวจสอบสิทธิ์ทันที',
-          'กรณีสัญญาณอินเทอร์เน็ตหน้างานขัดข้อง เครื่องที่ได้รับสิทธิ์เป็น "เครื่องหลัก (Primary Scanner)" จะสามารถดาวน์โหลดชุดข้อมูลบัตรและสแกนตรวจบัตรออฟไลน์ได้อย่างถูกต้อง',
-          'เมื่ออินเทอร์เน็ตกลับมาใช้งานได้ เครื่องหลักจะทำการซิงก์ข้อมูลการเข้างาน (Admissions Sync) กลับสู่ระบบอัตโนมัติ',
+          'เครื่องสแกนเสริมทำงานในโหมดออนไลน์ เชื่อมต่อฐานข้อมูลกลางแบบเรียลไทม์เพื่อตรวจสอบสิทธิ์ทันที',
+          'เครื่องหลัก (Primary Scanner) ของผู้จัดงานสามารถกด "ดู QR / ลิงก์" หรือ "เปิด Terminal สแกน" เพื่อผูกอุปกรณ์และดาวน์โหลดชุดข้อมูลบัตรไว้ในเครื่องล่วงหน้า (รองรับบัตร 5,000+ ใบ)',
+          'เมื่อสัญญาณอินเทอร์เน็ตกลับมาใช้งานได้ กดซิงก์ข้อมูลค้าง (แบ่งส่งอัตโนมัติทีละ 250 รายการ) และสามารถกด "สำรองข้อมูล (.json)" เก็บไว้ได้ตลอดเวลา',
         ],
         notice: 'ห้ามเปิดใช้งานโหมดออฟไลน์บนหลายเครื่องพร้อมกันโดยไม่ผ่านการส่งมอบ เพื่อรักษาความถูกต้องของยอดผู้เข้าชม',
       },
@@ -247,7 +248,10 @@ export function OrganizerGuideView() {
 
   const handleRefresh = () => {
     setRefreshing(true);
-    setTimeout(() => setRefreshing(false), 400);
+    setTimeout(() => {
+      setRefreshing(false);
+      triggerRefreshToast('คู่มือการใช้งาน');
+    }, 300);
   };
   const [searchQuery, setSearchQuery] = useState('');
   const [expandedModules, setExpandedModules] = useState<Record<string, boolean>>({
@@ -256,15 +260,6 @@ export function OrganizerGuideView() {
     finance: false,
     news: false,
   });
-  const [showScrollTop, setShowScrollTop] = useState(false);
-
-  useEffect(() => {
-    function handleScroll() {
-      setShowScrollTop(window.scrollY > 300);
-    }
-    window.addEventListener('scroll', handleScroll, { passive: true });
-    return () => window.removeEventListener('scroll', handleScroll);
-  }, []);
 
   const toggleModule = (moduleId: string) => {
     setExpandedModules((prev) => ({
@@ -399,14 +394,13 @@ export function OrganizerGuideView() {
               <BookOpenIcon width={40} height={40} />
               <h2 className="guide-empty-title">ไม่พบหัวข้อคู่มือที่ตรงกับ &quot;{searchQuery}&quot;</h2>
               <p className="guide-empty-desc">ลองค้นหาด้วยคำสั้น ๆ หรือกดปุ่มด้านล่างเพื่อแสดงคู่มือทั้งหมด</p>
-              <Button
-                variant="primary"
-                size="sm"
-                className="guide-reset-btn"
+              <button
+                type="button"
+                className="settings-outline-btn-sm guide-reset-btn"
                 onClick={() => setSearchQuery('')}
               >
                 ดูคู่มือทั้งหมด
-              </Button>
+              </button>
             </div>
           ) : (
             filteredModules.map((module) => {
@@ -515,32 +509,6 @@ export function OrganizerGuideView() {
           )}
         </div>
       </div>
-
-      {/* Floating Back to Top Button (D-87 / Benchmark D-78) */}
-      {showScrollTop && (
-        <button
-          type="button"
-          className="floating-back-to-top"
-          onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
-          title="กลับสู่ด้านบนสุด"
-          aria-label="กลับสู่ด้านบนสุด"
-        >
-          <svg
-            viewBox="0 0 24 24"
-            width="20"
-            height="20"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2.5"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            aria-hidden="true"
-          >
-            <line x1="12" y1="19" x2="12" y2="5" />
-            <polyline points="5 12 12 5 19 12" />
-          </svg>
-        </button>
-      )}
     </div>
   );
 }

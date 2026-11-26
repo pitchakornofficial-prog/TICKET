@@ -198,6 +198,35 @@ export async function getOrganizerPayoutAccounts(
   return [initialAccount];
 }
 
+async function syncPayoutAccountChangesToEvents(
+  client: import('pg').PoolClient,
+  organizerId: string,
+  account: { id: string; accountName: string; accountNumber: string; bankName: string; isPrimary: boolean },
+): Promise<void> {
+  if (account.isPrimary) {
+    await client.query(
+      `UPDATE events
+       SET "payoutAccountId" = $2,
+           "payoutBankName" = $3,
+           "payoutAccountNumber" = $4,
+           "payoutAccountName" = $5,
+           "updatedAt" = now()
+       WHERE "organizerId" = $1`,
+      [organizerId, account.id, account.bankName, account.accountNumber, account.accountName],
+    );
+  } else {
+    await client.query(
+      `UPDATE events
+       SET "payoutBankName" = $3,
+           "payoutAccountNumber" = $4,
+           "payoutAccountName" = $5,
+           "updatedAt" = now()
+       WHERE "organizerId" = $1 AND "payoutAccountId" = $2`,
+      [organizerId, account.id, account.bankName, account.accountNumber, account.accountName],
+    );
+  }
+}
+
 export async function createOrganizerPayoutAccount(
   pool: Pool,
   organizerId: string,
@@ -250,9 +279,12 @@ export async function createOrganizerPayoutAccount(
       [newId, organizerId, accountName, accountNumber, bankName, isPrimary, input.qrCodeUrl || null],
     );
 
-    await client.query('COMMIT');
-
     const r = res.rows[0];
+    if (r.isPrimary) {
+      await syncPayoutAccountChangesToEvents(client, organizerId, r);
+    }
+
+    await client.query('COMMIT');
     return {
       id: r.id,
       accountName: r.accountName,
@@ -328,9 +360,12 @@ export async function updateOrganizerPayoutAccount(
       ],
     );
 
-    await client.query('COMMIT');
-
     const r = res.rows[0];
+    if (r.isPrimary) {
+      await syncPayoutAccountChangesToEvents(client, organizerId, r);
+    }
+
+    await client.query('COMMIT');
     return {
       id: r.id,
       accountName: r.accountName,
@@ -388,7 +423,13 @@ export async function deleteOrganizerPayoutAccount(
 
     let nextPrimaryId: string | undefined;
     if (wasPrimary) {
-      const nextRes = await client.query<{ id: string }>(
+      const nextRes = await client.query<{
+        id: string;
+        accountName: string;
+        accountNumber: string;
+        bankName: string;
+        isPrimary: boolean;
+      }>(
         `UPDATE organizer_payout_accounts
          SET "isPrimary" = true, "updatedAt" = now()
          WHERE id = (
@@ -397,10 +438,13 @@ export async function deleteOrganizerPayoutAccount(
            ORDER BY "createdAt" ASC
            LIMIT 1
          )
-         RETURNING id`,
+         RETURNING id, "accountName", "accountNumber", "bankName", "isPrimary"`,
         [organizerId],
       );
-      nextPrimaryId = nextRes.rows[0]?.id;
+      if (nextRes.rows[0]) {
+        nextPrimaryId = nextRes.rows[0].id;
+        await syncPayoutAccountChangesToEvents(client, organizerId, nextRes.rows[0]);
+      }
     }
 
     await client.query('COMMIT');

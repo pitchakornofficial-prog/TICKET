@@ -1,15 +1,25 @@
+import type { Metadata } from 'next';
 import Link from 'next/link';
+import { FloatingBackToTop } from '@/components/floating-back-to-top';
 
-export const metadata = {
+export const metadata: Metadata = {
   title: 'นโยบายความเป็นส่วนตัว — TICKET',
   description: 'นโยบายความเป็นส่วนตัวและการคุ้มครองข้อมูลส่วนบุคคลของผู้ใช้บริการบนระบบ TICKET',
+  alternates: {
+    canonical: '/privacy',
+  },
+  openGraph: {
+    title: 'นโยบายความเป็นส่วนตัว — TICKET',
+    description: 'นโยบายความเป็นส่วนตัวและการคุ้มครองข้อมูลส่วนบุคคลของผู้ใช้บริการบนระบบ TICKET',
+    url: '/privacy',
+    type: 'website',
+  },
 };
 
 export default function PrivacyPage() {
   return (
     <article className="static-page" aria-labelledby="privacy-title">
       <header className="static-header">
-        <p className="eyebrow">TICKET / การคุ้มครองข้อมูลส่วนบุคคล</p>
         <h1 id="privacy-title">นโยบายความเป็นส่วนตัว</h1>
         <p className="intro">
           TICKET ให้ความสำคัญอย่างยิ่งต่อการคุ้มครองข้อมูลส่วนบุคคลของผู้ซื้อและผู้ใช้บริการทุกท่าน
@@ -94,8 +104,10 @@ export default function PrivacyPage() {
 
       <div className="action-box">
         <p>หากมีข้อสงสัยหรือต้องการสอบถามเกี่ยวกับการคุ้มครองข้อมูลส่วนบุคคล:</p>
-        <Link href="/contact" className="primary-button button-link">ติดต่อฝ่ายดูแลข้อมูลส่วนบุคคล</Link>
+        <Link href="/contact" className="secondary-button button-link">ติดต่อฝ่ายดูแลข้อมูลส่วนบุคคล</Link>
       </div>
+
+      <FloatingBackToTop testId="privacy-back-to-top-btn" />
     </article>
   );
 }

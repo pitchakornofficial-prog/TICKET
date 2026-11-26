@@ -290,11 +290,10 @@ describe('Organizer Scanner Manager (D-89)', () => {
     expect(scannerManagerContent).toContain('scanner-control-select-native-sync');
     expect(scannerManagerContent).toContain('id="select-scanner-event"');
 
-    // Popover components
+    // Popover components (approved concerts only)
     expect(scannerManagerContent).toContain('scanner-event-popover');
     expect(scannerManagerContent).toContain('scanner-popover-search-input');
-    expect(scannerManagerContent).toContain('scanner-popover-status-nav');
-    expect(scannerManagerContent).toContain('popover-tab-count');
+    expect(scannerManagerContent).toContain("ev.status === 'approved'");
     expect(scannerManagerContent).toContain('scanner-popover-list');
 
     // Zero emojis check

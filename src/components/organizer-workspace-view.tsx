@@ -15,6 +15,7 @@ import {
 } from '@/components/icons';
 import { useHorizontalSubnavScroll } from '@/components/use-horizontal-subnav-scroll';
 import { TicketIcon } from '@/components/ticket-icon';
+import { FloatingBackToTop } from '@/components/floating-back-to-top';
 import { OrganizerOverviewView } from '@/components/organizer-overview-view';
 
 const OrganizerSettingsView = dynamic(() =>
@@ -379,6 +380,7 @@ export function OrganizerWorkspaceView({ initialSection }: OrganizerWorkspaceVie
           />
         )}
       </main>
+      <FloatingBackToTop testId="organizer-back-to-top-btn" />
     </div>
   );
 }

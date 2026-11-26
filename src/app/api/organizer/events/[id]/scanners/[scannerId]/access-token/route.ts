@@ -1,7 +1,7 @@
 import { createSafeErrorResponse } from '@/server/api-error';
 import { assertSameOrigin } from '@/server/origin';
 import { getAuth } from '@/server/auth';
-import { ensureEventSchema } from '@/server/events';
+import { ensureEventSchema, ensureOrganizerPrimaryScanner, ORGANIZER_PRIMARY_SCANNER_PREFIX } from '@/server/events';
 import {
   issueScannerAccessTokenForOrganizer,
   revokeScannerAccessTokens,
@@ -31,15 +31,22 @@ export async function POST(
 
   try {
     await ensureEventSchema(pool);
+    let resolvedScannerId = scannerId;
+    if (scannerId.startsWith(ORGANIZER_PRIMARY_SCANNER_PREFIX)) {
+      const primary = await ensureOrganizerPrimaryScanner(pool, session.user.id, eventId);
+      resolvedScannerId = primary.scannerId;
+    }
+
     const issued = await issueScannerAccessTokenForOrganizer(
       pool,
       session.user.id,
       eventId,
-      scannerId,
+      resolvedScannerId,
     );
     return Response.json(
       {
         message: 'ออกลิงก์เข้าใช้งานแบบใช้ครั้งเดียวเรียบร้อยแล้ว (ลิงก์เดิมถูกยกเลิกแล้ว)',
+        scannerId: resolvedScannerId,
         accessUrl: issued.accessUrl,
         expiresAt: issued.expiresAt,
       },

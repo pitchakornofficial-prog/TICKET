@@ -6,6 +6,7 @@ import { ensureRefundSchema } from './refunds.ts';
 import { ensureTicketDeliverySchema } from './ticket-delivery.ts';
 import { ensurePaymentSchema } from './payment.ts';
 import { ensureAdmissionSchema } from './admission.ts';
+import { ensureNewsSchema } from './news.ts';
 
 export interface OwnerOverviewCounts {
   pendingSessions: number;
@@ -13,6 +14,7 @@ export interface OwnerOverviewCounts {
   failedEmails: number;
   paymentExceptions: number;
   syncConflicts: number;
+  pendingNews?: number;
   totalPending: number;
 }
 
@@ -26,6 +28,7 @@ export async function getOwnerOverviewCounts(pool: Pool): Promise<OwnerOverviewC
   await ensureTicketDeliverySchema(pool);
   await ensurePaymentSchema(pool);
   await ensureAdmissionSchema(pool);
+  await ensureNewsSchema(pool);
 
   const countsRes = await pool.query<{
     sessionsCount: number;
@@ -35,6 +38,7 @@ export async function getOwnerOverviewCounts(pool: Pool): Promise<OwnerOverviewC
     failedEmails: number;
     paymentExceptions: number;
     syncConflicts: number;
+    pendingNews: number;
   }>(`
     SELECT
       (SELECT COUNT(*)::int FROM event_sessions WHERE status = 'pending_approval') AS "sessionsCount",
@@ -43,7 +47,8 @@ export async function getOwnerOverviewCounts(pool: Pool): Promise<OwnerOverviewC
       (SELECT COUNT(*)::int FROM refund_requests WHERE status = 'pending') AS "pendingRefunds",
       (SELECT COUNT(*)::int FROM ticket_email_deliveries WHERE status = 'failed') AS "failedEmails",
       (SELECT COUNT(*)::int FROM payment_recovery_cases WHERE status = 'pending_review') AS "paymentExceptions",
-      (SELECT COUNT(*)::int FROM admission_sync_conflicts WHERE status = 'pending_review') AS "syncConflicts"
+      (SELECT COUNT(*)::int FROM admission_sync_conflicts WHERE status = 'pending_review') AS "syncConflicts",
+      (SELECT COUNT(*)::int FROM news WHERE status = 'pending') AS "pendingNews"
   `);
 
   const row = countsRes.rows[0];
@@ -56,8 +61,15 @@ export async function getOwnerOverviewCounts(pool: Pool): Promise<OwnerOverviewC
   const failedEmails = Number(row?.failedEmails || 0);
   const paymentExceptions = Number(row?.paymentExceptions || 0);
   const syncConflicts = Number(row?.syncConflicts || 0);
+  const pendingNews = Number(row?.pendingNews || 0);
 
-  const totalPending = pendingSessions + pendingRefunds + failedEmails + paymentExceptions + syncConflicts;
+  const totalPending =
+    pendingSessions +
+    pendingRefunds +
+    failedEmails +
+    paymentExceptions +
+    syncConflicts +
+    pendingNews;
 
   return {
     pendingSessions,
@@ -65,6 +77,7 @@ export async function getOwnerOverviewCounts(pool: Pool): Promise<OwnerOverviewC
     failedEmails,
     paymentExceptions,
     syncConflicts,
+    pendingNews,
     totalPending,
   };
 }
@@ -74,6 +87,7 @@ export interface OwnerOverviewSales {
   openEvents: number;
   grossSales: number;
   platformFee: number;
+  pendingPayouts?: number;
   concerts: { id: string; title: string; status: string; open: boolean; quota: number; soldCount: number; sales: number }[];
   trend: Record<'today' | '7d' | '30d', { label: string; date: string; value: number }[]>;
 }
@@ -141,11 +155,16 @@ export async function getOwnerOverviewSales(pool: Pool, ownerId: string): Promis
   const sumMoney = (field: 'grossSales' | 'organizerFee') =>
     summaries.reduce((total, summary) => total + Math.round(summary[field] * 100), 0) / 100;
 
+  const pendingPayouts = summaries.filter(
+    summary => summary.payableAmount > 0 || summary.actualHeldReserve > 0,
+  ).length;
+
   return {
     totalEvents: events.rows.length,
     openEvents: events.rows.filter(isOpen).length,
     grossSales: sumMoney('grossSales'),
     platformFee: sumMoney('organizerFee'),
+    pendingPayouts,
     concerts,
     trend: {
       today: trend.rows.filter(point => point.range === 'today'),

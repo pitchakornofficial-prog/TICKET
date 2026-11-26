@@ -61,11 +61,14 @@ describe('Seven Issues Verification Suite', () => {
   });
 
   describe('Issue 5: 24-Hour Datetime Picker', () => {
-    it('verifies DateTimePicker24h component handles 24h format', () => {
+    it('verifies DateTimePicker24h component handles 24h format with unified calendar and clock dial popover', () => {
       const content = readFileSync('src/components/datetime-picker-24h.tsx', 'utf-8');
       expect(content).toContain('HOURS');
       expect(content).toContain('MINUTES');
       expect(content).toContain('length: 24');
+      expect(content).toContain('datetime-unified-trigger');
+      expect(content).toContain('datetime-unified-popover');
+      expect(content).not.toContain('type="date"');
       expect(content).not.toMatch(/\p{Extended_Pictographic}/u);
     });
   });

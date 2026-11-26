@@ -1141,6 +1141,7 @@ export interface ScannerAssignedEvent {
   isPrimary?: boolean;
   primaryScannerId?: string | null;
   primaryScannerName?: string | null;
+  totalQuota?: number;
   sessions: {
     id: string;
     startTime: string;
@@ -1364,6 +1365,149 @@ export async function removeScannerFromEvent(
   });
 }
 
+export const ORGANIZER_PRIMARY_SCANNER_PREFIX = 'organizer-primary-';
+export const DEFAULT_ORGANIZER_PRIMARY_SCANNER_NAME =
+  'เครื่องหลักของผู้จัด (Organizer Primary Device)';
+
+export async function ensureOrganizerPrimaryScanner(
+  pool: Pool,
+  organizerId: string,
+  eventId: string,
+  options?: { defaultName?: string },
+): Promise<{ scannerId: string; name: string; email: string }> {
+  await ensureEventSchema(pool);
+
+  return inTransaction(pool, async (client) => {
+    const evRes = await client.query<{ organizerId: string }>(
+      'SELECT "organizerId" FROM events WHERE id = $1 FOR UPDATE',
+      [eventId],
+    );
+    if ((evRes.rowCount ?? 0) === 0) {
+      throw new Error('ไม่พบงานคอนเสิร์ต');
+    }
+    if (evRes.rows[0].organizerId !== organizerId) {
+      throw new Error('คุณไม่มีสิทธิ์จัดการทีมสแกนของงานนี้');
+    }
+
+    const existingPrimary = await client.query<{
+      scannerId: string;
+      name: string;
+      email: string;
+    }>(
+      `SELECT ps."scannerId", u.name, u.email
+       FROM event_primary_scanners ps
+       JOIN auth_user u ON u.id = ps."scannerId"
+       WHERE ps."eventId" = $1`,
+      [eventId],
+    );
+    if ((existingPrimary.rowCount ?? 0) > 0) {
+      const row = existingPrimary.rows[0];
+      await client.query(
+        `INSERT INTO event_scanners (id, "eventId", "scannerId", "assignedAt")
+         VALUES ($1, $2, $3, now())
+         ON CONFLICT ("eventId", "scannerId") DO NOTHING`,
+        [randomUUID(), eventId, row.scannerId],
+      );
+      return row;
+    }
+
+    const primaryEmail = `primary+${eventId}@scanner.ticket.local`;
+    const primaryName =
+      options?.defaultName?.trim() || DEFAULT_ORGANIZER_PRIMARY_SCANNER_NAME;
+
+    const existingUser = await client.query<{
+      id: string;
+      name: string;
+      email: string;
+      role: string;
+    }>(
+      'SELECT id, name, email, role FROM auth_user WHERE LOWER(email) = LOWER($1)',
+      [primaryEmail],
+    );
+
+    let scannerId: string;
+    let resolvedName = primaryName;
+    let resolvedEmail = primaryEmail;
+
+    if ((existingUser.rowCount ?? 0) > 0) {
+      const user = existingUser.rows[0];
+      if (user.role !== 'scanner') {
+        await client.query(
+          'UPDATE auth_user SET role = $1, "updatedAt" = now() WHERE id = $2',
+          ['scanner', user.id],
+        );
+      }
+      scannerId = user.id;
+      resolvedName = user.name || primaryName;
+      resolvedEmail = user.email;
+    } else {
+      scannerId = randomUUID();
+      await client.query(
+        `INSERT INTO auth_user (id, name, email, "emailVerified", role, "createdAt", "updatedAt")
+         VALUES ($1, $2, $3, true, 'scanner', now(), now())`,
+        [scannerId, primaryName, primaryEmail],
+      );
+    }
+
+    await client.query(
+      `INSERT INTO event_scanners (id, "eventId", "scannerId", "assignedAt")
+       VALUES ($1, $2, $3, now())
+       ON CONFLICT ("eventId", "scannerId") DO NOTHING`,
+      [randomUUID(), eventId, scannerId],
+    );
+
+    await client.query(
+      `INSERT INTO event_primary_scanners (
+         "eventId", "scannerId", "scannerName", "scannerEmail", "assignedAt", "assignedBy"
+       ) VALUES ($1, $2, $3, $4, now(), $5)
+       ON CONFLICT ("eventId") DO NOTHING`,
+      [eventId, scannerId, resolvedName, resolvedEmail, organizerId],
+    );
+
+    return {
+      scannerId,
+      name: resolvedName,
+      email: resolvedEmail,
+    };
+  });
+}
+
+export async function bindOrganizerPrimaryDevice(
+  pool: Pool,
+  organizerId: string,
+  eventId: string,
+  deviceId: string,
+): Promise<{ status: 'ok' | 'bound_other_device'; scannerId: string }> {
+  const primary = await ensureOrganizerPrimaryScanner(pool, organizerId, eventId);
+
+  return inTransaction(pool, async (client) => {
+    const existing = await client.query<{ boundDeviceId: string | null }>(
+      `SELECT "boundDeviceId"
+       FROM event_scanners
+       WHERE "eventId" = $1 AND "scannerId" = $2
+       FOR UPDATE`,
+      [eventId, primary.scannerId],
+    );
+
+    const boundDeviceId = existing.rows[0]?.boundDeviceId ?? null;
+    if (!boundDeviceId) {
+      await client.query(
+        `UPDATE event_scanners
+         SET "boundDeviceId" = $1, "boundAt" = now()
+         WHERE "eventId" = $2 AND "scannerId" = $3 AND "boundDeviceId" IS NULL`,
+        [deviceId, eventId, primary.scannerId],
+      );
+      return { status: 'ok', scannerId: primary.scannerId };
+    }
+
+    if (boundDeviceId !== deviceId) {
+      return { status: 'bound_other_device', scannerId: primary.scannerId };
+    }
+
+    return { status: 'ok', scannerId: primary.scannerId };
+  });
+}
+
 export async function updateScannerName(
   pool: Pool,
   organizerId: string,
@@ -1384,17 +1528,25 @@ export async function updateScannerName(
     throw new Error('กรุณาระบุชื่อเจ้าหน้าที่หรือจุดตรวจ');
   }
 
-  const scRes = await pool.query('SELECT id FROM event_scanners WHERE "eventId" = $1 AND "scannerId" = $2', [eventId, scannerId]);
+  let resolvedScannerId = scannerId;
+  if (scannerId.startsWith(ORGANIZER_PRIMARY_SCANNER_PREFIX)) {
+    const ensured = await ensureOrganizerPrimaryScanner(pool, organizerId, eventId, {
+      defaultName: trimmedName,
+    });
+    resolvedScannerId = ensured.scannerId;
+  }
+
+  const scRes = await pool.query('SELECT id FROM event_scanners WHERE "eventId" = $1 AND "scannerId" = $2', [eventId, resolvedScannerId]);
   if ((scRes.rowCount ?? 0) === 0) {
     throw new Error('ไม่พบข้อมูลทีมสแกนในงานนี้');
   }
 
   await inTransaction(pool, async client => {
-    await client.query('UPDATE auth_user SET name = $1, "updatedAt" = now() WHERE id = $2', [trimmedName, scannerId]);
-    await client.query('UPDATE event_primary_scanners SET "scannerName" = $1 WHERE "eventId" = $2 AND "scannerId" = $3', [trimmedName, eventId, scannerId]);
+    await client.query('UPDATE auth_user SET name = $1, "updatedAt" = now() WHERE id = $2', [trimmedName, resolvedScannerId]);
+    await client.query('UPDATE event_primary_scanners SET "scannerName" = $1 WHERE "eventId" = $2 AND "scannerId" = $3', [trimmedName, eventId, resolvedScannerId]);
   });
 
-  return { id: scannerId, name: trimmedName };
+  return { id: resolvedScannerId, name: trimmedName };
 }
 
 export async function resetScannerDeviceBinding(
@@ -1402,7 +1554,7 @@ export async function resetScannerDeviceBinding(
   organizerId: string,
   eventId: string,
   scannerId: string,
-): Promise<{ success: boolean; message: string; accessUrl: string; expiresAt: string }> {
+): Promise<{ success: boolean; message: string; accessUrl: string; expiresAt: string; scannerId: string }> {
   await ensureEventSchema(pool);
   const evRes = await pool.query<{ organizerId: string }>(
     'SELECT "organizerId" FROM events WHERE id = $1',
@@ -1413,9 +1565,15 @@ export async function resetScannerDeviceBinding(
     throw new Error('คุณไม่มีสิทธิ์จัดการงานคอนเสิร์ตนี้');
   }
 
+  let resolvedScannerId = scannerId;
+  if (scannerId.startsWith(ORGANIZER_PRIMARY_SCANNER_PREFIX)) {
+    const ensured = await ensureOrganizerPrimaryScanner(pool, organizerId, eventId);
+    resolvedScannerId = ensured.scannerId;
+  }
+
   const scRes = await pool.query(
     'SELECT id FROM event_scanners WHERE "eventId" = $1 AND "scannerId" = $2',
-    [eventId, scannerId],
+    [eventId, resolvedScannerId],
   );
   if ((scRes.rowCount ?? 0) === 0) {
     throw new Error('ไม่พบทีมสแกนในงานนี้');
@@ -1427,23 +1585,23 @@ export async function resetScannerDeviceBinding(
       `UPDATE event_scanners
        SET "boundDeviceId" = NULL, "boundAt" = NULL
        WHERE "eventId" = $1 AND "scannerId" = $2`,
-      [eventId, scannerId],
+      [eventId, resolvedScannerId],
     );
 
     // 2. Invalidate all active sessions and event scopes for this scanner
     await client.query(
       `DELETE FROM auth_session WHERE "userId" = $1`,
-      [scannerId],
+      [resolvedScannerId],
     );
     await client.query(
       `DELETE FROM scanner_session_scopes WHERE "scannerId" = $1 AND "eventId" = $2`,
-      [scannerId, eventId],
+      [resolvedScannerId, eventId],
     );
 
     // 3. Revoke prior tokens and issue a fresh single-use access token
     return issueScannerAccessTokenWithClient(client, {
       eventId,
-      scannerId,
+      scannerId: resolvedScannerId,
       createdBy: organizerId,
     });
   });
@@ -1453,6 +1611,7 @@ export async function resetScannerDeviceBinding(
     message: 'รีเซ็ตอุปกรณ์เรียบร้อยแล้ว พร้อมออกลิงก์ใหม่สำหรับอุปกรณ์ใหม่ (ลิงก์เดิมถูกเพิกถอนแล้ว)',
     accessUrl: issued.accessUrl,
     expiresAt: issued.expiresAt,
+    scannerId: resolvedScannerId,
   };
 }
 
@@ -1517,6 +1676,23 @@ export async function listEventsForScanner(
     );
   }
 
+  const eventIds = evRes.rows.map((ev) => ev.id);
+  const quotaByEventId = new Map<string, number>();
+  if (eventIds.length > 0) {
+    const quotaRes = await pool.query<{ eventId: string; totalQuota: number }>(
+      `SELECT s."eventId", COALESCE(SUM(tt.quota), 0)::int AS "totalQuota"
+       FROM event_sessions s
+       LEFT JOIN ticket_types tt ON tt."sessionId" = s.id
+       WHERE s."eventId" = ANY($1::text[])
+         AND s.status <> 'cancelled'
+       GROUP BY s."eventId"`,
+      [eventIds],
+    );
+    for (const row of quotaRes.rows) {
+      quotaByEventId.set(row.eventId, Number(row.totalQuota || 0));
+    }
+  }
+
   const events: ScannerAssignedEvent[] = [];
   for (const ev of evRes.rows) {
     const sessRes = await pool.query<{
@@ -1548,6 +1724,7 @@ export async function listEventsForScanner(
       isPrimary: role === 'organizer' || role === 'owner' || ev.primaryScannerId === scannerId,
       primaryScannerId: ev.primaryScannerId,
       primaryScannerName: ev.primaryScannerName,
+      totalQuota: quotaByEventId.get(ev.id) ?? 0,
       sessions: sessRes.rows.map(s => ({
         id: s.id,
         startTime: s.startTime instanceof Date ? s.startTime.toISOString() : String(s.startTime),

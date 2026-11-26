@@ -15,11 +15,9 @@ import {
   EyeIcon,
   PlusIcon,
   TrashIcon,
-  ChevronRightIcon,
   ChevronLeftIcon,
   ChevronUpIcon,
   ChevronDownIcon,
-  XIcon,
   PencilSquareIcon,
   RefreshIcon,
 } from './icons';
@@ -29,6 +27,7 @@ import { Button } from '@/components/ui';
 import { HeaderInfoTooltip } from './header-info-tooltip';
 import { OrganizerMoneyReportView } from './organizer-money-report-view';
 import { DateTimePicker24h } from './datetime-picker-24h';
+import { UbuPrivilegeSwitchField } from './ubu-privilege-switch-field';
 import { triggerToast, triggerRefreshToast } from './toast-notification';
 import { loadPayoutAccounts, getPrimaryPayoutAccount, loadSharedPayoutAccounts, type PayoutBankAccount } from '@/lib/organizer-payout-sync';
 import { formatBaht, formatDate, formatTime, toLocalDatetimeInputString } from '@/lib/locale';
@@ -194,7 +193,11 @@ export function OrganizerEventsManager({
   const [refundPolicyCustom, setRefundPolicyCustom] = useState('');
   const [ageRestriction, setAgeRestriction] = useState<'all' | '18+' | '20+'>('all');
   const [entryGuidelines, setEntryGuidelines] = useState('');
-  const [ubuPrivilegeMode, setUbuPrivilegeMode] = useState<boolean>(false);
+  const [editingFeeSettings, setEditingFeeSettings] = useState<{
+    organizerFeeMode: string;
+    organizerFeeRate: number;
+    reservePercentage?: number;
+  } | null>(null);
 
   useEffect(() => {
     let isCancelled = false;
@@ -269,7 +272,7 @@ export function OrganizerEventsManager({
     setRefundPolicy('refundable_7d');
     setRefundPolicyCustom('');
     setEntryGuidelines('');
-    setUbuPrivilegeMode(false);
+    setEditingFeeSettings(null);
     const initialSessionId = `sess-${Date.now()}`;
     setSessions([
       {
@@ -321,7 +324,7 @@ export function OrganizerEventsManager({
       setRefundPolicyCustom(ev.refundPolicy || '');
       setEntryGuidelines(ev.entryGuidelines || '');
       setSelectedPayoutAccountId(ev.payoutAccountId || '');
-      setUbuPrivilegeMode(Boolean(ev.ubuPrivilegeMode));
+      setEditingFeeSettings(ev.feeSettings || null);
       if (ev.sessions && ev.sessions.length > 0) {
         setSessions(ev.sessions.map((s: { id: string; startTime?: string; endTime?: string; admissionStartTime?: string; admissionEndTime?: string; ticketTypes?: TicketTypeDraft[] }) => ({
           id: s.id,
@@ -670,8 +673,7 @@ export function OrganizerEventsManager({
 
     try {
       const selectedAcc = payoutAccounts.find(a => a.id === selectedPayoutAccountId);
-      const hasStudentPrivilegeTicket = sessions.some(s => s.ticketTypes.some(t => Boolean(t.isStudentPrivilege)));
-      const effectiveUbuPrivilegeMode = Boolean(ubuPrivilegeMode || hasStudentPrivilegeTicket);
+      const effectiveUbuPrivilegeMode = sessions.some(s => s.ticketTypes.some(t => Boolean(t.isStudentPrivilege)));
       const payload = {
         title,
         description,
@@ -1231,14 +1233,12 @@ export function OrganizerEventsManager({
           <div className="events-editor-modal-card">
             {/* Sticky Top Action Header (D-198, D-199) */}
             <div className="editor-modal-sticky-header">
-              {/* Row 1: Title, Tooltip & Close button */}
-              <div className="editor-modal-top-row">
-                <div className="editor-modal-title-wrap">
-                  <h2 id="create-concert-title" className="editor-modal-title" style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', margin: 0, fontSize: '1.18rem' }}>
-                    <span>{editingEventId ? 'แก้ไขข้อมูลคอนเสิร์ต' : 'สร้างงานคอนเสิร์ตใหม่'}</span>
-                    <HeaderInfoTooltip text="สร้างคอนเสิร์ตใหม่หรือแก้ไขงานเดิม พร้อมกำหนดรายละเอียด สถานที่ แผนที่ กติกา รอบการแสดง และรูปภาพ" />
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px', marginBottom: '0.85rem' }}>
+                <div>
+                  <h2 id="create-concert-title" className="organizer-modal-topbar-title">
+                    {editingEventId ? 'แก้ไขข้อมูลคอนเสิร์ต' : 'สร้างงานคอนเสิร์ตใหม่'}
                   </h2>
-                  <p className="editor-modal-subtitle" style={{ margin: '0.2rem 0 0', fontSize: '0.8rem', color: '#64748b' }}>
+                  <p className="organizer-modal-topbar-subtitle">
                     ขั้นตอนที่ {wizardStep} จาก 5:{' '}
                     {wizardStep === 1
                       ? 'ข้อมูลงาน & ศิลปิน'
@@ -1251,63 +1251,45 @@ export function OrganizerEventsManager({
                       : 'รูปภาพ & สื่อประชาสัมพันธ์'}
                   </p>
                 </div>
-                <button
-                  type="button"
-                  className="editor-modal-close-btn"
-                  onClick={handleCloseModal}
-                  aria-label="ปิดหน้าต่าง"
-                  title="ปิด"
-                >
-                  <XIcon width={18} height={18} />
-                </button>
-              </div>
 
-              {/* Row 2: Unified Action Buttons Toolbar (D-198, D-199: Removed preview & submit approval) */}
-              <div className="editor-modal-top-actions">
-                <div style={{ display: 'flex', gap: '0.45rem', alignItems: 'center' }}>
-                  <button
-                    type="button"
-                    className="btn-form-cancel"
-                    onClick={handleCloseModal}
-                    title="ยกเลิกและปิดหน้าต่าง (ข้อมูลที่ยังไม่บันทึกจะถูกล้างใหม่)"
-                  >
-                    ยกเลิก
-                  </button>
-                </div>
-
-                <div style={{ display: 'flex', gap: '0.45rem', alignItems: 'center' }}>
+                <div className="organizer-modal-topbar-actions">
                   {wizardStep > 1 && (
                     <button
                       type="button"
-                      className="btn-form-draft"
+                      className="organizer-modal-topbar-btn"
                       onClick={() => setWizardStep(prev => (prev - 1) as 1 | 2 | 3 | 4 | 5)}
-                      style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}
                     >
-                      <ChevronLeftIcon width={14} height={14} />
-                      <span>ย้อนกลับ</span>
+                      ย้อนกลับ
                     </button>
                   )}
 
                   {wizardStep < 5 && (
                     <button
                       type="button"
-                      className="btn-form-submit"
+                      className="organizer-modal-topbar-btn is-primary-outline"
                       onClick={() => setWizardStep(prev => (prev + 1) as 1 | 2 | 3 | 4 | 5)}
-                      style={{ display: 'inline-flex', alignItems: 'center', gap: '4px' }}
                     >
-                      <span>ถัดไป</span>
-                      <ChevronRightIcon width={14} height={14} />
+                      ถัดไป
                     </button>
                   )}
 
                   <button
                     type="button"
-                    className="btn-form-draft"
+                    className="organizer-modal-topbar-btn is-primary-outline"
                     disabled={submitting}
                     onClick={handleSaveDraft}
                     data-testid="save-draft-btn"
                   >
                     {submitting ? 'กำลังบันทึก...' : 'บันทึกแบบร่าง'}
+                  </button>
+
+                  <button
+                    type="button"
+                    className="organizer-modal-topbar-btn"
+                    onClick={handleCloseModal}
+                    aria-label="ปิดหน้าต่าง"
+                  >
+                    ปิดหน้าต่าง
                   </button>
                 </div>
               </div>
@@ -1636,74 +1618,79 @@ export function OrganizerEventsManager({
                     </div>
 
                     {limitMode === 'custom' ? (
-                      <div className="volume-bar-stepper" data-testid="volume-bar-stepper">
-                        <div className="volume-bar-row">
-                          {/* Minimal Line [-] Button */}
+                      <div className="limit-stepper-row" data-testid="limit-stepper-row">
+                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}>
                           <button
                             type="button"
-                            className="volume-bar-btn"
+                            className="organizer-modal-topbar-btn"
+                            style={{ width: '38px', height: '38px', padding: 0 }}
                             disabled={limitPerOrder <= 1}
                             onClick={() => {
                               setLimitPerOrder(prev => Math.max(1, prev - 1));
                               setDraftSaved(false);
                             }}
                             aria-label="ลดจำนวนบัตร"
-                            data-testid="volume-bar-decrement-btn"
+                            data-testid="limit-decrement-btn"
                           >
                             -
                           </button>
-
-                          {/* 10-Segment Volume Bar Track */}
-                          <div className="volume-bar-track">
-                            {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(n => {
-                              const isFilled = n <= limitPerOrder;
-                              return (
-                                <button
-                                  key={n}
-                                  type="button"
-                                  className={`volume-bar-segment ${isFilled ? 'filled' : ''}`}
-                                  onClick={() => {
-                                    setLimitPerOrder(n);
-                                    setDraftSaved(false);
-                                  }}
-                                  aria-label={`กำหนด ${n} ใบ`}
-                                  aria-pressed={limitPerOrder === n}
-                                  data-testid={`volume-bar-segment-${n}`}
-                                >
-                                  {n}
-                                </button>
-                              );
-                            })}
-                          </div>
-
-                          {/* Minimal Line [+] Button */}
+                          <input
+                            type="number"
+                            min={1}
+                            max={10}
+                            value={limitPerOrder}
+                            onChange={e => {
+                              const parsed = Number.parseInt(e.target.value, 10);
+                              if (!Number.isNaN(parsed)) {
+                                setLimitPerOrder(Math.max(1, Math.min(10, parsed)));
+                                setDraftSaved(false);
+                              }
+                            }}
+                            aria-label="จำนวนบัตรสูงสุดต่อคำสั่งซื้อ"
+                            data-testid="limit-number-input"
+                            className="form-input-text"
+                            style={{ width: '76px', height: '38px', textAlign: 'center', padding: '0 0.5rem', fontSize: '0.9rem' }}
+                          />
                           <button
                             type="button"
-                            className="volume-bar-btn"
+                            className="organizer-modal-topbar-btn"
+                            style={{ width: '38px', height: '38px', padding: 0 }}
                             disabled={limitPerOrder >= 10}
                             onClick={() => {
                               setLimitPerOrder(prev => Math.min(10, prev + 1));
                               setDraftSaved(false);
                             }}
                             aria-label="เพิ่มจำนวนบัตร"
-                            data-testid="volume-bar-increment-btn"
+                            data-testid="limit-increment-btn"
                           >
                             +
                           </button>
                         </div>
 
-                        <div className="volume-bar-info">
-                          <span>ระดับจำนวนซื้อที่เลือก:</span>
-                          <strong style={{ color: '#0f172a', fontSize: '0.88rem' }}>
-                            {limitPerOrder} ใบ / คำสั่งซื้อ
-                          </strong>
+                        <div style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', flexWrap: 'wrap' }}>
+                          {[1, 2, 4, 6, 10].map(n => (
+                            <button
+                              key={n}
+                              type="button"
+                              className={`limit-preset-chip ${limitPerOrder === n ? 'active' : ''}`}
+                              onClick={() => {
+                                setLimitPerOrder(n);
+                                setDraftSaved(false);
+                              }}
+                              aria-label={`กำหนด ${n} ใบ`}
+                              aria-pressed={limitPerOrder === n}
+                              data-testid={`limit-preset-chip-${n}`}
+                            >
+                              {n} ใบ
+                            </button>
+                          ))}
                         </div>
                       </div>
                     ) : (
-                      <div style={{ background: '#f8fafc', border: '1px solid #cbd5e1', borderRadius: '8px', padding: '0.75rem 1rem' }}>
-                        <strong style={{ color: '#0f172a', display: 'block', fontSize: '0.88rem', marginBottom: '0.2rem' }}>
+                      <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', padding: '0.75rem 1rem' }}>
+                        <div style={{ color: '#0f172a', fontSize: '0.88rem', fontWeight: 400, marginBottom: '0.2rem' }}>
                           เปิดให้ซื้อได้อย่างอิสระไม่จำกัดจำนวน
-                        </strong>
+                        </div>
                         <p style={{ margin: 0, fontSize: '0.82rem', color: '#475569' }}>
                           ผู้ซื้อสามารถทำรายการซื้อบัตรได้ไม่จำกัดจำนวนต่อ 1 คำสั่งซื้อ (สูงสุดตามโควตาคงเหลือของรอบการแสดง)
                         </p>
@@ -1712,11 +1699,11 @@ export function OrganizerEventsManager({
 
                     <div style={{ marginTop: '0.55rem', fontSize: '0.82rem', color: '#475569' }}>
                       สถานะปัจจุบัน:{' '}
-                      <strong style={{ color: 'var(--blue)' }}>
+                      <span style={{ color: '#0f172a', fontWeight: 400 }}>
                         {limitMode === 'unlimited'
                           ? 'ไม่จำกัดจำนวนการซื้อ (สั่งซื้อได้ไม่จำกัดสูงสุดตามโควตาคงเหลือ)'
                           : `จำกัด ${limitPerOrder} ใบ ต่อ 1 คำสั่งซื้อ`}
-                      </strong>
+                      </span>
                     </div>
                   </div>
 
@@ -2087,12 +2074,12 @@ export function OrganizerEventsManager({
                                   </span>
                                   <button
                                     type="button"
-                                    className="btn-form-preview"
+                                    className="organizer-modal-topbar-btn"
                                     onClick={() => {
                                       handleAddTicketType(sess.id);
                                       setDraftSaved(false);
                                     }}
-                                    style={{ padding: '0.25rem 0.55rem', fontSize: '0.75rem' }}
+                                    style={{ height: '32px', padding: '0 0.65rem', fontSize: '0.78rem' }}
                                   >
                                     + เพิ่มโซนบัตร
                                   </button>
@@ -2220,64 +2207,31 @@ export function OrganizerEventsManager({
                                           </button>
                                         )}
                                       </div>
-                                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', padding: '0.15rem 0.2rem 0', borderTop: '1px dashed #e2e8f0' }}>
-                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                                          <label style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.76rem', color: tt.isStudentPrivilege ? '#1848ed' : '#64748b', cursor: 'pointer', fontWeight: tt.isStudentPrivilege ? 400 : 200 }}>
-                                            <input
-                                              type="checkbox"
-                                              checked={Boolean(tt.isStudentPrivilege)}
-                                              onChange={e => {
-                                                handleUpdateTicketType(sess.id, tt.id, {
-                                                  isStudentPrivilege: e.target.checked,
-                                                  studentPrice: e.target.checked ? (tt.studentPrice ?? 99) : null,
-                                                });
-                                                if (e.target.checked) {
-                                                  setUbuPrivilegeMode(true);
-                                                }
-                                                setDraftSaved(false);
-                                              }}
-                                              data-testid={`ticket-student-checkbox-${tt.id}`}
-                                            />
-                                            <span>กำหนดเป็นบัตรสิทธิ์พิเศษนักศึกษา ม.อุบล (@ubu.ac.th)</span>
-                                          </label>
-                                          {tt.isStudentPrivilege && (
-                                            <span style={{ fontSize: '0.72rem', background: '#eff6ff', color: '#1848ed', padding: '2px 6px', borderRadius: '4px', fontWeight: 400 }}>
-                                              สิทธิ์ ม.อุบล
-                                            </span>
-                                          )}
-                                        </div>
-                                        {tt.isStudentPrivilege && (
-                                          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', marginTop: '0.2rem', paddingLeft: '1.25rem' }}>
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
-                                              <label htmlFor={`tt-student-price-${tt.id}`} style={{ fontSize: '0.78rem', color: '#1848ed', fontWeight: 400, whiteSpace: 'nowrap' }}>
-                                                ราคานักศึกษา (บาท):
-                                              </label>
-                                              <input
-                                                id={`tt-student-price-${tt.id}`}
-                                                data-testid={`ticket-student-price-${tt.id}`}
-                                                type="number"
-                                                min={0}
-                                                value={tt.studentPrice ?? ''}
-                                                onChange={e => {
-                                                  const raw = e.target.value;
-                                                  handleUpdateTicketType(sess.id, tt.id, {
-                                                    studentPrice: raw === '' ? null : Math.max(0, Number(raw)),
-                                                  });
-                                                  setDraftSaved(false);
-                                                }}
-                                                placeholder="99"
-                                                className="form-input-text"
-                                                style={{ width: '120px', padding: '0.35rem 0.55rem', fontSize: '0.8rem', borderColor: '#93c5fd' }}
-                                              />
-                                              <span style={{ fontSize: '0.74rem', color: '#64748b' }}>
-                                                (ผู้จัดกำหนดราคาเองได้ ไม่ใช่ราคาตายตัว เช่น 99 บาท)
-                                              </span>
-                                            </div>
-                                            <div style={{ fontSize: '0.74rem', color: '#1e40af', background: '#eff6ff', padding: '4px 8px', borderRadius: '4px' }}>
-                                              โควตารวม {tt.quota || 0} ใบ ใช้ร่วมกันทั้งราคาคนทั่วไป ({tt.price || 0} บาท) และราคานักศึกษา ({tt.studentPrice ?? 99} บาท) รวมโควต้าในบัตรประเภทเดียวกัน ไม่แยกโซน
-                                            </div>
-                                          </div>
-                                        )}
+                                      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem', padding: '0.35rem 0.2rem 0', borderTop: '1px dashed #e2e8f0' }}>
+                                        <UbuPrivilegeSwitchField
+                                          id={`tt-student-switch-${tt.id}`}
+                                          priceInputId={`tt-student-price-${tt.id}`}
+                                          testId={`ticket-student-checkbox-${tt.id}`}
+                                          priceTestId={`ticket-student-price-${tt.id}`}
+                                          checked={Boolean(tt.isStudentPrivilege)}
+                                          onToggle={nextChecked => {
+                                            handleUpdateTicketType(sess.id, tt.id, {
+                                              isStudentPrivilege: nextChecked,
+                                              studentPrice: nextChecked ? (tt.studentPrice ?? 99) : null,
+                                            });
+                                            setDraftSaved(false);
+                                          }}
+                                          studentPrice={tt.studentPrice}
+                                          onPriceChange={nextPrice => {
+                                            handleUpdateTicketType(sess.id, tt.id, {
+                                              studentPrice: nextPrice,
+                                            });
+                                            setDraftSaved(false);
+                                          }}
+                                          label="เปิดราคาพิเศษนักศึกษา ม.อุบล (@ubu.ac.th) เฉพาะโซนนี้"
+                                          helperText="(ผู้จัดกำหนดราคาเองได้ ไม่ใช่ราคาตายตัว เช่น 99 บาท)"
+                                          quotaSummary={`โควตารวม ${tt.quota || 0} ใบ ใช้ร่วมกันทั้งราคาคนทั่วไป (${tt.price || 0} บาท) และราคานักศึกษา (${tt.studentPrice ?? 99} บาท) รวมโควต้าในบัตรประเภทเดียวกัน ไม่แยกโซน`}
+                                        />
                                       </div>
                                     </div>
                                   ))}
@@ -2290,82 +2244,81 @@ export function OrganizerEventsManager({
                     })}
                   </div>
 
-                  {/* UBU Student Privilege Mode Box (D-217) */}
-                  <div className="ubu-privilege-setting-card" data-testid="ubu-privilege-setting-card">
-                    <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap' }}>
-                      <div style={{ flex: 1 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', marginBottom: '0.35rem' }}>
-                          <ShieldCheckIcon width={18} height={18} style={{ color: '#1848ed' }} />
-                          <strong style={{ fontSize: '0.92rem', color: '#0f172a' }}>
-                            สิทธิ์พิเศษนักศึกษาและบุคลากร ม.อุบลราชธานี (UBU Privilege Mode)
-                          </strong>
-                          <HeaderInfoTooltip text="เปิดใช้งานการตรวจสิทธิ์นักศึกษาผ่านอีเมล @ubu.ac.th เพื่อรับสิทธิ์ซื้อบัตรราคาพิเศษหรือโควตานักศึกษา" />
-                        </div>
-                        <p style={{ margin: 0, fontSize: '0.82rem', color: '#475569' }}>
-                          เปิดรับผู้ซื้อสิทธิ์ ม.อุบล โดยระบบจะตรวจสอบยืนยันตัวตนด้วยอีเมล @ubu.ac.th ผ่าน OTP ในขั้นตอนการสั่งซื้อบัตรโดยอัตโนมัติ
-                        </p>
-                      </div>
-
-                      <label className="ubu-privilege-switch" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
-                        <input
-                          type="checkbox"
-                          checked={ubuPrivilegeMode}
-                          onChange={e => {
-                            setUbuPrivilegeMode(e.target.checked);
-                            setDraftSaved(false);
-                          }}
-                          data-testid="ubu-privilege-toggle"
-                          style={{ width: '18px', height: '18px', cursor: 'pointer' }}
-                        />
-                        <span style={{ fontSize: '0.85rem', fontWeight: 400, color: ubuPrivilegeMode ? '#1848ed' : '#64748b' }}>
-                          {ubuPrivilegeMode ? 'เปิดใช้งานสิทธิ์ ม.อุบล' : 'ปิดใช้งาน'}
-                        </span>
-                      </label>
-                    </div>
-
-                    {ubuPrivilegeMode && (
-                      <div style={{ marginTop: '0.85rem', paddingTop: '0.75rem', borderTop: '1px dashed #cbd5e1', fontSize: '0.82rem', color: '#1e293b' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', marginBottom: '0.25rem', color: '#1848ed', fontWeight: 400 }}>
-                          <CheckCircleIcon width={14} height={14} />
-                          <span>เปิดรับสิทธิ์ ม.อุบล แล้ว</span>
-                        </div>
-                        <p style={{ margin: 0, color: '#475569' }}>
-                          ท่านสามารถทำเครื่องหมาย [สำหรับสิทธิ์นักศึกษา ม.อุบล (@ubu.ac.th)] ที่โซนบัตรด้านบน เพื่อกำหนดเป็นบัตรราคาพิเศษหรือโควตาเฉพาะกลุ่มนักศึกษา ม.อุบล
-                        </p>
-                      </div>
-                    )}
-                  </div>
-
                   {/* Standard Platform Fee Transparency Summary Card (D-217) */}
                   <div className="platform-fee-transparency-card" data-testid="platform-fee-transparency-card">
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem', flexWrap: 'wrap', gap: '0.5rem' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
-                        <BanknotesIcon width={18} height={18} style={{ color: '#0f172a' }} />
-                        <strong style={{ fontSize: '0.92rem', color: '#0f172a' }}>
+                        <span style={{ fontSize: '0.92rem', fontWeight: 400, color: '#0f172a' }}>
                           สรุปข้อตกลงค่าบริการแพลตฟอร์ม TICKET (Platform Fee Agreement)
-                        </strong>
-                        <HeaderInfoTooltip text="อัตราค่าบริการมาตรฐานที่ระบบจะหักจากยอดขายบัตรที่ชำระเงินสำเร็จ และข้อตกลงทางการเงิน" />
+                        </span>
+                        <HeaderInfoTooltip text="อัตราค่าบริการจริงของคอนเสิร์ตนี้จะถูกกำหนดและยืนยันโดยแอดมินในขั้นตอนอนุมัติเปิดขาย (ค่าเริ่มต้นระบบ 3.00%)" />
                       </div>
-                      <span className="fee-rate-pill">ค่าบริการมาตรฐาน: 3.00%</span>
+                      <span className="fee-rate-pill" style={{ fontWeight: 400 }}>
+                        {editingFeeSettings
+                          ? `อัตราที่แอดมินกำหนด: ${
+                              editingFeeSettings.organizerFeeMode === 'per_ticket'
+                                ? `฿${editingFeeSettings.organizerFeeRate}/ใบ`
+                                : editingFeeSettings.organizerFeeMode === 'flat_fee'
+                                  ? `฿${editingFeeSettings.organizerFeeRate} เหมาจ่าย`
+                                  : `${Number(editingFeeSettings.organizerFeeRate).toFixed(2)}%`
+                            }`
+                          : 'รอแอดมินกำหนด (ค่าเริ่มต้น: 3.00%)'}
+                      </span>
                     </div>
 
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.75rem', marginTop: '0.65rem' }}>
                       <div className="fee-calc-box">
-                        <span className="fee-calc-label">อัตราค่าบริการมาตรฐาน</span>
-                        <strong className="fee-calc-val">3.00%</strong>
-                        <small className="fee-calc-desc">คิดเฉพาะยอดคำสั่งซื้อที่ชำระเงินสำเร็จ</small>
+                        <span className="fee-calc-label">
+                          {editingFeeSettings ? 'อัตราค่าบริการที่อนุมัติ' : 'สถานะอัตราค่าบริการ'}
+                        </span>
+                        <span className="fee-calc-val" style={{ fontWeight: 400 }}>
+                          {editingFeeSettings
+                            ? editingFeeSettings.organizerFeeMode === 'per_ticket'
+                              ? `฿${editingFeeSettings.organizerFeeRate} / ใบ`
+                              : editingFeeSettings.organizerFeeMode === 'flat_fee'
+                                ? `฿${editingFeeSettings.organizerFeeRate} เหมาจ่าย`
+                                : `${Number(editingFeeSettings.organizerFeeRate).toFixed(2)}%`
+                            : 'รอแอดมินกำหนด'}
+                        </span>
+                        <small className="fee-calc-desc">
+                          {editingFeeSettings
+                            ? 'คิดเฉพาะยอดคำสั่งซื้อที่ชำระเงินสำเร็จ'
+                            : 'ค่าเริ่มต้นระบบ 3.00% (อาจปรับเปลี่ยนเมื่อแอดมินอนุมัติ)'}
+                        </small>
                       </div>
 
                       <div className="fee-calc-box">
                         <span className="fee-calc-label">สูตรการคำนวณหักยอดเงิน</span>
-                        <strong className="fee-calc-val">ยอดขายรวม − 3%</strong>
-                        <small className="fee-calc-desc">หักอัตโนมัติก่อนโอนเข้าบัญชีรับเงิน</small>
+                        <span className="fee-calc-val" style={{ fontWeight: 400 }}>
+                          {editingFeeSettings
+                            ? editingFeeSettings.organizerFeeMode === 'per_ticket'
+                              ? `ยอดขายรวม − ฿${editingFeeSettings.organizerFeeRate}/ใบ`
+                              : editingFeeSettings.organizerFeeMode === 'flat_fee'
+                                ? `ยอดขายรวม − ฿${editingFeeSettings.organizerFeeRate}`
+                                : `ยอดขายรวม − ${editingFeeSettings.organizerFeeRate}%`
+                            : 'ยอดขายรวม − อัตราที่อนุมัติ'}
+                        </span>
+                        <small className="fee-calc-desc">
+                          {editingFeeSettings
+                            ? 'หักอัตโนมัติก่อนโอนเข้าบัญชีรับเงิน'
+                            : 'เริ่มต้น 3.00% หากแอดมินไม่ได้ปรับอัตราเฉพาะงาน'}
+                        </small>
                       </div>
 
                       <div className="fee-calc-box">
-                        <span className="fee-calc-label">การพิจารณาอัตราพิเศษ</span>
-                        <strong className="fee-calc-val" style={{ color: '#1848ed' }}>โดยแอดมิน</strong>
-                        <small className="fee-calc-desc">แอดมินสามารถปรับอัตราพิเศษให้ในขั้นตอนอนุมัติ</small>
+                        <span className="fee-calc-label">
+                          {editingFeeSettings ? 'เงินสำรองที่กันไว้ (Reserve)' : 'การพิจารณาอัตราจริง'}
+                        </span>
+                        <span className="fee-calc-val" style={{ fontWeight: 400, color: '#0f172a' }}>
+                          {editingFeeSettings
+                            ? `${editingFeeSettings.reservePercentage ?? 10}%`
+                            : 'กำหนดโดยแอดมิน'}
+                        </span>
+                        <small className="fee-calc-desc">
+                          {editingFeeSettings
+                            ? 'กันสำรองตามข้อตกลงการอนุมัติ'
+                            : 'แอดมินจะระบุอัตราจริงในขั้นตอนอนุมัติเปิดขาย'}
+                        </small>
                       </div>
                     </div>
                   </div>
@@ -3054,42 +3007,42 @@ export function OrganizerEventsManager({
           aria-labelledby="delete-event-dialog-title"
         >
           <div className="delete-confirm-dialog">
-            <div className="delete-confirm-header">
-              <div className="delete-confirm-icon-wrap">
-                <TrashIcon width={20} height={20} />
-              </div>
+            <div className="organizer-modal-sticky-topbar">
               <div>
-                <h3 id="delete-event-dialog-title" className="delete-confirm-title">
+                <h3 id="delete-event-dialog-title" className="organizer-modal-topbar-title">
                   ยืนยันการลบงานคอนเสิร์ต
                 </h3>
-                <p className="delete-confirm-desc">
-                  คุณแน่ใจหรือไม่ว่าต้องการลบงานคอนเสิร์ตนี้? ข้อมูลรายละเอียด รอบการแสดง และประเภทบัตรทั้งหมดจะถูกลบถาวรและไม่สามารถกู้คืนได้
+                <p className="organizer-modal-topbar-subtitle">
+                  {deletingEvent.title}
                 </p>
               </div>
+              <div className="organizer-modal-topbar-actions">
+                <button
+                  type="button"
+                  className="btn-danger-modal"
+                  onClick={handleConfirmDeleteEvent}
+                  disabled={deleteSubmitting}
+                  data-testid="confirm-delete-event-btn"
+                >
+                  {deleteSubmitting ? 'กำลังลบ...' : 'ยืนยันลบงานคอนเสิร์ต'}
+                </button>
+                <button
+                  type="button"
+                  className="organizer-modal-topbar-btn"
+                  onClick={() => setDeletingEvent(null)}
+                  disabled={deleteSubmitting}
+                >
+                  ปิดหน้าต่าง
+                </button>
+              </div>
             </div>
+
+            <p className="delete-confirm-desc" style={{ margin: 0 }}>
+              คุณแน่ใจหรือไม่ว่าต้องการลบงานคอนเสิร์ตนี้? ข้อมูลรายละเอียด รอบการแสดง และประเภทบัตรทั้งหมดจะถูกลบถาวรและไม่สามารถกู้คืนได้
+            </p>
 
             <div className="delete-confirm-event-box">
               {deletingEvent.title}
-            </div>
-
-            <div className="delete-confirm-actions">
-              <button
-                type="button"
-                className="btn-form-cancel"
-                onClick={() => setDeletingEvent(null)}
-                disabled={deleteSubmitting}
-              >
-                ยกเลิก
-              </button>
-              <button
-                type="button"
-                className="btn-danger-modal"
-                onClick={handleConfirmDeleteEvent}
-                disabled={deleteSubmitting}
-                data-testid="confirm-delete-event-btn"
-              >
-                {deleteSubmitting ? 'กำลังลบ...' : 'ยืนยันลบงานคอนเสิร์ต'}
-              </button>
             </div>
           </div>
         </div>
@@ -3116,22 +3069,34 @@ export function OrganizerEventsManager({
       {activeEventDetails && (
         <div className="organizer-modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="amendment-modal-title">
           <div className="organizer-modal-dialog amendment-modal-dialog">
-            <div className="organizer-modal-header">
-              <div className="modal-title-group">
-                <ClockIcon width={20} height={20} style={{ color: 'var(--blue)' }} />
-                <h3 id="amendment-modal-title" className="modal-title">
-                  ขอแก้ไขข้อมูลคอนเสิร์ตและรอบการแสดง: {activeEventDetails.title}
+            <div className="organizer-modal-sticky-topbar">
+              <div>
+                <h3 id="amendment-modal-title" className="organizer-modal-topbar-title">
+                  ขอแก้ไขข้อมูลคอนเสิร์ตและรอบการแสดง
                 </h3>
+                <p className="organizer-modal-topbar-subtitle">
+                  {activeEventDetails.title}
+                </p>
               </div>
-              <button
-                type="button"
-                className="organizer-modal-close-btn"
-                onClick={() => setActiveEventDetails(null)}
-                aria-label="ปิดหน้าต่าง"
-                title="ปิด"
-              >
-                <XIcon width={16} height={16} />
-              </button>
+              <div className="organizer-modal-topbar-actions">
+                <button
+                  type="submit"
+                  form="amendment-modal-form"
+                  disabled={loadingDetails || amendmentSubmitting}
+                  data-testid="submit-amendment-btn"
+                  className="organizer-modal-topbar-btn is-primary-outline"
+                >
+                  {amendmentSubmitting ? 'กำลังส่งคำขอ...' : 'ส่งคำขอแก้ไขข้อมูลและรอบการแสดง'}
+                </button>
+                <button
+                  type="button"
+                  className="organizer-modal-topbar-btn"
+                  onClick={() => setActiveEventDetails(null)}
+                  aria-label="ปิดหน้าต่าง"
+                >
+                  ปิดหน้าต่าง
+                </button>
+              </div>
             </div>
 
             <div className="modal-info-banner">
@@ -3163,7 +3128,7 @@ export function OrganizerEventsManager({
             {loadingDetails ? (
               <p style={{ textAlign: 'center', padding: '1.5rem', color: '#64748b' }}>กำลังโหลดข้อมูล...</p>
             ) : (
-              <form onSubmit={handleSubmitAmendment}>
+              <form id="amendment-modal-form" onSubmit={handleSubmitAmendment}>
                 {/* SECTION 1: Concert Details Amendment (D-279) */}
                 <div className="modal-form-section-card" style={{ marginBottom: '1.25rem' }}>
                   <h4 className="modal-section-title" style={{ color: '#0f172a', fontWeight: 400, fontSize: '0.95rem', marginBottom: '0.75rem' }}>
@@ -3416,10 +3381,10 @@ export function OrganizerEventsManager({
                       type="button"
                       onClick={handleAddAmendmentTicketTier}
                       data-testid="amendment-add-tier-btn"
-                      className="primary-button outline"
-                      style={{ fontSize: '0.8rem', height: '32px', padding: '0 0.75rem', display: 'flex', alignItems: 'center', gap: '0.35rem' }}
+                      className="organizer-modal-topbar-btn"
+                      style={{ fontSize: '0.78rem', height: '32px', padding: '0 0.75rem' }}
                     >
-                      <span>+ เพิ่มประเภทบัตรใหม่</span>
+                      + เพิ่มประเภทบัตรใหม่
                     </button>
                   </div>
 
@@ -3473,11 +3438,11 @@ export function OrganizerEventsManager({
                               title={isSold ? 'ไม่สามารถลบประเภทบัตรที่มียอดจำหน่ายแล้วได้' : 'ลบประเภทบัตรนี้'}
                               data-testid={`amendment-delete-tier-btn-${tt.id}`}
                               onClick={() => handleRemoveAmendmentTicketTier(idx)}
-                              className="primary-button danger outline"
+                              className="btn-danger-modal"
                               style={{
                                 fontSize: '0.75rem',
                                 height: '32px',
-                                padding: '0 0.6rem',
+                                padding: '0 0.65rem',
                                 opacity: isSold ? 0.4 : 1,
                                 cursor: isSold ? 'not-allowed' : 'pointer',
                               }}
@@ -3529,47 +3494,33 @@ export function OrganizerEventsManager({
                                 required
                               />
                             </div>
-                            <div>
-                              <label htmlFor={`tt-student-toggle-${idx}`} style={{ display: 'block', fontSize: '0.72rem', color: '#64748b', marginBottom: '0.2rem' }}>
-                                สิทธิ์ ม.อุบลฯ (@ubu.ac.th)
-                              </label>
-                              <label style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', cursor: 'pointer', height: '32px' }}>
-                                <input
-                                  id={`tt-student-toggle-${idx}`}
-                                  type="checkbox"
-                                  checked={Boolean(tt.isStudentPrivilege)}
-                                  onChange={e => {
-                                    const checked = e.target.checked;
-                                    setAmendmentTicketTypes(prev =>
-                                      prev.map((item, i) => (i === idx ? { ...item, isStudentPrivilege: checked } : item)),
-                                    );
-                                  }}
-                                />
-                                <span style={{ fontSize: '0.8rem', color: '#0f172a' }}>เปิดสิทธิ์</span>
-                              </label>
-                            </div>
-                            {tt.isStudentPrivilege && (
-                              <div>
-                                <label htmlFor={`tt-student-price-${idx}`} style={{ display: 'block', fontSize: '0.72rem', color: '#64748b', marginBottom: '0.2rem' }}>
-                                  ราคานักศึกษา (บาท)
-                                </label>
-                                <input
-                                  id={`tt-student-price-${idx}`}
-                                  type="number"
-                                  min={0}
-                                  value={tt.studentPrice ?? ''}
-                                  onChange={e => {
-                                    const val = e.target.value === '' ? null : Number(e.target.value);
-                                    setAmendmentTicketTypes(prev =>
-                                      prev.map((item, i) => (i === idx ? { ...item, studentPrice: val } : item)),
-                                    );
-                                  }}
-                                  className="modal-textarea"
-                                  style={{ padding: '0.35rem 0.5rem', fontSize: '0.85rem' }}
-                                  placeholder="ระบุราคานักศึกษา"
-                                />
-                              </div>
-                            )}
+                          </div>
+                          <div style={{ paddingTop: '0.45rem', borderTop: '1px dashed #e2e8f0' }}>
+                            <UbuPrivilegeSwitchField
+                              id={`tt-student-toggle-${idx}`}
+                              priceInputId={`tt-student-price-${idx}`}
+                              checked={Boolean(tt.isStudentPrivilege)}
+                              onToggle={nextChecked => {
+                                setAmendmentTicketTypes(prev =>
+                                  prev.map((item, i) =>
+                                    i === idx
+                                      ? {
+                                          ...item,
+                                          isStudentPrivilege: nextChecked,
+                                          studentPrice: nextChecked ? (item.studentPrice ?? 99) : null,
+                                        }
+                                      : item,
+                                  ),
+                                );
+                              }}
+                              studentPrice={tt.studentPrice}
+                              onPriceChange={nextPrice => {
+                                setAmendmentTicketTypes(prev =>
+                                  prev.map((item, i) => (i === idx ? { ...item, studentPrice: nextPrice } : item)),
+                                );
+                              }}
+                              label="เปิดสิทธิ์ ม.อุบลฯ (@ubu.ac.th)"
+                            />
                           </div>
                         </div>
                       );
@@ -3577,26 +3528,6 @@ export function OrganizerEventsManager({
                   </div>
                 </div>
 
-                <div className="organizer-modal-actions" style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.75rem', marginTop: '1.25rem' }}>
-                  <button
-                    type="button"
-                    className="btn-cancel-modal"
-                    onClick={() => setActiveEventDetails(null)}
-                    style={{ height: '38px', padding: '0 1.25rem' }}
-                  >
-                    ยกเลิก
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={amendmentSubmitting}
-                    data-testid="submit-amendment-btn"
-                    className="btn-submit-modal"
-                    style={{ height: '38px', padding: '0 1.25rem' }}
-                  >
-                    <ClockIcon width={16} height={16} />
-                    <span>{amendmentSubmitting ? 'กำลังส่งคำขอ...' : 'ส่งคำขอแก้ไขข้อมูลและรอบการแสดง'}</span>
-                  </button>
-                </div>
               </form>
             )}
           </div>
@@ -3611,28 +3542,44 @@ export function OrganizerEventsManager({
             data-testid="cancellation-form-section"
             className="organizer-modal-dialog cancellation-modal-dialog"
           >
-            <div className="organizer-modal-header">
-              <div className="modal-title-group">
-                <AlertIcon />
-                <h3 id="cancellation-modal-title" className="modal-title modal-title-danger">
-                  ขอยกเลิกรอบการแสดง: {cancelEventDetails.title}
+            <div className="organizer-modal-sticky-topbar">
+              <div>
+                <h3 id="cancellation-modal-title" className="organizer-modal-topbar-title">
+                  ขอยกเลิกรอบการแสดง
                 </h3>
+                <p className="organizer-modal-topbar-subtitle">
+                  {cancelEventDetails.title}
+                </p>
               </div>
-              <button
-                type="button"
-                className="organizer-modal-close-btn"
-                onClick={() => setCancelEventDetails(null)}
-                aria-label="ปิดหน้าต่าง"
-                title="ปิด"
-              >
-                <XIcon width={16} height={16} />
-              </button>
+              <div className="organizer-modal-topbar-actions">
+                <button
+                  type="submit"
+                  form="cancellation-modal-form"
+                  disabled={
+                    loadingCancelDetails ||
+                    cancelSubmitting ||
+                    cancelEventDetails.sessions.every(s => s.status === 'cancelled') ||
+                    Boolean(cancelEventDetails.sessions.find(s => s.id === selectedCancelSessionId)?.status === 'cancelled')
+                  }
+                  data-testid="submit-cancel-session-btn"
+                  className="btn-danger-modal"
+                >
+                  {cancelSubmitting ? 'กำลังส่งคำขอ...' : 'ยืนยันส่งคำขอยกเลิกรอบการแสดง'}
+                </button>
+                <button
+                  type="button"
+                  className="organizer-modal-topbar-btn"
+                  onClick={() => setCancelEventDetails(null)}
+                  aria-label="ปิดหน้าต่าง"
+                >
+                  ปิดหน้าต่าง
+                </button>
+              </div>
             </div>
 
             {/* 4-Bullet Impact Card without technical jargon (D-199 Item 12) */}
             <div className="cancellation-impact-card">
               <h4 className="cancellation-impact-title">
-                <AlertIcon />
                 <span>ผลกระทบเมื่อคำขอยกเลิกรอบการแสดงได้รับการอนุมัติ:</span>
               </h4>
               <ul className="cancellation-impact-list">
@@ -3667,7 +3614,7 @@ export function OrganizerEventsManager({
             {loadingCancelDetails ? (
               <p style={{ textAlign: 'center', padding: '1.5rem', color: '#64748b' }}>กำลังโหลดข้อมูล...</p>
             ) : (
-              <form onSubmit={handleSubmitCancellation}>
+              <form id="cancellation-modal-form" onSubmit={handleSubmitCancellation}>
                 {cancelEventDetails.sessions.every(s => s.status === 'cancelled') && (
                   <div
                     style={{
@@ -3731,28 +3678,6 @@ export function OrganizerEventsManager({
                   />
                 </div>
 
-                <div className="organizer-modal-actions">
-                  <button
-                    type="button"
-                    className="btn-cancel-modal"
-                    onClick={() => setCancelEventDetails(null)}
-                  >
-                    ยกเลิก
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={
-                      cancelSubmitting ||
-                      cancelEventDetails.sessions.every(s => s.status === 'cancelled') ||
-                      Boolean(cancelEventDetails.sessions.find(s => s.id === selectedCancelSessionId)?.status === 'cancelled')
-                    }
-                    data-testid="submit-cancel-session-btn"
-                    className="btn-danger-modal"
-                  >
-                    <AlertIcon />
-                    <span>{cancelSubmitting ? 'กำลังส่งคำขอ...' : 'ยืนยันส่งคำขอยกเลิกรอบการแสดง'}</span>
-                  </button>
-                </div>
               </form>
             )}
           </div>

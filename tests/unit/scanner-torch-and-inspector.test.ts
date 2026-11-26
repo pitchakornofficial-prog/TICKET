@@ -14,7 +14,7 @@ describe('Scanner and Inspector Flashlight (Torch) Functionality', () => {
     expect(iconsFile).toContain('export function FlashlightIcon(');
   });
 
-  it('implements torch control in scanner admission terminal with toolbar and floating buttons', () => {
+  it('implements single unified torch control in scanner admission terminal toolbar', () => {
     // 1. Flashlight icon imported
     expect(terminalFile).toContain('FlashlightIcon');
 
@@ -23,13 +23,11 @@ describe('Scanner and Inspector Flashlight (Torch) Functionality', () => {
     expect(terminalFile).toContain('handleToggleTorch');
     expect(terminalFile).toContain("torch: nextTorch");
 
-    // 3. Toolbar toggle button
+    // 3. Single toolbar toggle button (always rendered next to camera button, disabled when camera inactive)
     expect(terminalFile).toContain('data-testid="toggle-torch-btn"');
     expect(terminalFile).toContain('torch-toggle-btn');
-
-    // 4. Floating viewfinder button
-    expect(terminalFile).toContain('data-testid="viewfinder-floating-torch-btn"');
-    expect(terminalFile).toContain('viewfinder-floating-torch-btn');
+    expect(terminalFile).toContain("disabled={!cameraActive || cameraStatus !== 'active'}");
+    expect(terminalFile).not.toContain('viewfinder-floating-torch-btn');
   });
 
   it('implements torch control in ticket inspector view with toolbar and floating buttons', () => {

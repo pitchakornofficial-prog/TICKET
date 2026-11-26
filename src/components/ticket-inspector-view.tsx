@@ -12,7 +12,6 @@ import {
   ClockIcon,
   RefreshIcon,
   SearchIcon,
-  ShieldCheckIcon,
   FlashlightIcon,
   SwitchCameraIcon,
 } from '@/components/icons';
@@ -354,30 +353,65 @@ export function TicketInspectorView() {
   };
 
   return (
-    <div className="ticket-inspector-container" style={{ padding: '1.25rem', maxWidth: '1200px', margin: '0 auto', width: '100%' }}>
+    <div
+      className="ticket-inspector-container"
+      style={{
+        padding: '1.5rem 1rem 3.5rem',
+        maxWidth: '1200px',
+        margin: '0 auto',
+        width: '100%',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '1.5rem',
+        boxSizing: 'border-box',
+      }}
+    >
       {/* Page Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem', marginBottom: '1.25rem', borderBottom: '1px solid #e2e8f0', paddingBottom: '1rem' }}>
-        <div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem' }}>
-            <span style={{ display: 'inline-flex', padding: '0.35rem', background: '#eff6ff', borderRadius: '8px', color: '#2563eb' }}>
-              <QrCodeIcon style={{ width: '22px', height: '22px' }} />
-            </span>
-            <h2 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 600, color: '#0f172a' }}>
-              ตรวจสอบและทดสอบคิวอาร์โค้ดจากบัตร (Ticket QR Inspector & Tester)
-            </h2>
-          </div>
-          <p style={{ margin: 0, fontSize: '0.8125rem', color: '#64748b' }}>
+      <header
+        style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'flex-start',
+          flexWrap: 'wrap',
+          gap: '1rem',
+        }}
+      >
+        <div style={{ maxWidth: '750px' }}>
+          <h1
+            style={{
+              margin: '0 0 0.35rem 0',
+              fontSize: '1.5rem',
+              fontWeight: 400,
+              color: '#0f172a',
+              letterSpacing: '-0.01em',
+              lineHeight: 1.35,
+            }}
+          >
+            ตรวจสอบและทดสอบคิวอาร์โค้ดจากบัตร (Ticket QR Inspector & Tester)
+          </h1>
+          <p style={{ margin: 0, fontSize: '0.9rem', color: '#64748b', lineHeight: 1.5 }}>
             สแกนคิวอาร์โค้ดหรือระบุรหัสบัตรเพื่อตรวจสอบความถูกต้อง สถานะการใช้งาน โควตา ข้อมูลผู้ซื้อ และประวัติการเข้างาน (โหมดตรวจสอบ/ทดสอบ ปลอดภัย ไม่ตัดสิทธิ์บัตร)
           </p>
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          <span style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.75rem', padding: '0.3rem 0.65rem', borderRadius: '9999px', background: '#f0fdf4', color: '#15803d', border: '1px solid #bbf7d0', fontWeight: 500 }}>
-            <ShieldCheckIcon style={{ width: '14px', height: '14px' }} />
-            <span>โหมดตรวจสอบปลอดภัย (Safe Inspection Mode)</span>
+          <span
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              fontSize: '0.75rem',
+              padding: '0.3rem 0.65rem',
+              borderRadius: '9999px',
+              background: '#f8fafc',
+              color: '#475569',
+              border: '1px solid #e2e8f0',
+              fontWeight: 400,
+            }}
+          >
+            โหมดตรวจสอบปลอดภัย (Safe Inspection Mode)
           </span>
         </div>
-      </div>
+      </header>
 
       {/* Main Grid: Fixed-Width Left Scanner / Input Column & Right Result Column */}
       <div className="ticket-inspector-layout">
@@ -395,7 +429,7 @@ export function TicketInspectorView() {
                 minWidth: activeTab === 'camera' ? 0 : '42px',
                 padding: '0.45rem 0.75rem',
                 fontSize: '0.8125rem',
-                fontWeight: activeTab === 'camera' ? 600 : 400,
+                fontWeight: 400,
                 color: activeTab === 'camera' ? '#0f172a' : '#64748b',
                 background: activeTab === 'camera' ? '#ffffff' : 'transparent',
                 borderRadius: '6px',
@@ -423,7 +457,7 @@ export function TicketInspectorView() {
                 minWidth: activeTab === 'upload' ? 0 : '42px',
                 padding: '0.45rem 0.75rem',
                 fontSize: '0.8125rem',
-                fontWeight: activeTab === 'upload' ? 600 : 400,
+                fontWeight: 400,
                 color: activeTab === 'upload' ? '#0f172a' : '#64748b',
                 background: activeTab === 'upload' ? '#ffffff' : 'transparent',
                 borderRadius: '6px',
@@ -451,7 +485,7 @@ export function TicketInspectorView() {
                 minWidth: activeTab === 'manual' ? 0 : '42px',
                 padding: '0.45rem 0.75rem',
                 fontSize: '0.8125rem',
-                fontWeight: activeTab === 'manual' ? 600 : 400,
+                fontWeight: 400,
                 color: activeTab === 'manual' ? '#0f172a' : '#64748b',
                 background: activeTab === 'manual' ? '#ffffff' : 'transparent',
                 borderRadius: '6px',
@@ -656,9 +690,9 @@ export function TicketInspectorView() {
                 aria-label="เลือกไฟล์รูปภาพ QR Code เพื่อสแกน"
               >
                 <QrCodeIcon style={{ width: '36px', height: '36px', color: '#64748b', margin: '0 auto 0.5rem' }} />
-                <strong style={{ display: 'block', fontSize: '0.875rem', color: '#334155', marginBottom: '0.25rem' }}>
+                <span style={{ display: 'block', fontSize: '0.875rem', fontWeight: 400, color: '#334155', marginBottom: '0.25rem' }}>
                   คลิกเพื่อเลือกรูปภาพ หรือลากไฟล์มาวางที่นี่
-                </strong>
+                </span>
                 <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>
                   รองรับไฟล์ภาพ .png, .jpg, .jpeg, .webp (ภาพถ่ายหน้าจอบัตรหรือไฟล์ QR Code)
                 </span>
@@ -704,8 +738,8 @@ export function TicketInspectorView() {
                 <div style={{ display: 'flex', gap: '0.5rem' }}>
                   <button
                     type="submit"
-                    className="primary-button"
-                    style={{ flex: 1, height: '38px', fontSize: '0.8125rem' }}
+                    className="secondary-button"
+                    style={{ flex: 1, height: '38px', fontSize: '0.8125rem', fontWeight: 400 }}
                     disabled={loading || !manualCode.trim()}
                   >
                     {loading ? (
@@ -770,13 +804,12 @@ export function TicketInspectorView() {
                 flexDirection: 'column',
                 alignItems: 'center',
                 justifyContent: 'center',
-                gap: '0.75rem',
+                gap: '0.5rem',
                 minHeight: '340px',
               }}
             >
-              <QrCodeIcon style={{ width: '40px', height: '40px', color: '#94a3b8' }} />
               <div style={{ maxWidth: '380px' }}>
-                <h3 style={{ margin: '0 0 0.35rem', fontSize: '1rem', fontWeight: 500, color: '#0f172a' }}>
+                <h3 style={{ margin: '0 0 0.35rem', fontSize: '1rem', fontWeight: 400, color: '#0f172a' }}>
                   พร้อมตรวจสอบข้อมูลบัตร
                 </h3>
                 <p style={{ margin: 0, fontSize: '0.8125rem', lineHeight: 1.5, color: '#64748b' }}>
@@ -819,7 +852,7 @@ export function TicketInspectorView() {
                   )}
 
                   <div>
-                    <h3 style={{ margin: 0, fontSize: '1.125rem', fontWeight: 600, color: '#0f172a' }}>
+                    <h3 style={{ margin: 0, fontSize: '1.125rem', fontWeight: 400, color: '#0f172a' }}>
                       {!result.found
                         ? 'ไม่พบข้อมูลบัตรในระบบ (Invalid Ticket)'
                         : result.ticket?.status === 'refunded'
@@ -849,7 +882,7 @@ export function TicketInspectorView() {
                         padding: '0.35rem 0.65rem',
                         borderRadius: '6px',
                         fontSize: '0.75rem',
-                        fontWeight: 600,
+                        fontWeight: 400,
                         background: result.ticket.status === 'valid' ? '#dcfce7' : '#fee2e2',
                         color: result.ticket.status === 'valid' ? '#15803d' : '#b91c1c',
                       }}
@@ -861,7 +894,7 @@ export function TicketInspectorView() {
                         padding: '0.35rem 0.65rem',
                         borderRadius: '6px',
                         fontSize: '0.75rem',
-                        fontWeight: 600,
+                        fontWeight: 400,
                         background: result.ticket.admissionStatus === 'inside' ? '#fef3c7' : '#e0f2fe',
                         color: result.ticket.admissionStatus === 'inside' ? '#92400e' : '#0369a1',
                       }}
@@ -874,7 +907,7 @@ export function TicketInspectorView() {
 
               {!result.found && (
                 <div style={{ marginTop: '0.75rem', padding: '0.65rem', background: '#ffffff', borderRadius: '6px', fontSize: '0.75rem', color: '#64748b' }}>
-                  <strong>รหัสดิบที่ถอดรหัสได้ (Raw Decoded):</strong> {result.rawInput}
+                  <span style={{ fontWeight: 400, color: '#334155' }}>รหัสดิบที่ถอดรหัสได้ (Raw Decoded):</span> {result.rawInput}
                 </div>
               )}
             </div>
@@ -901,9 +934,9 @@ export function TicketInspectorView() {
                     )}
 
                     <div style={{ flex: 1 }}>
-                      <strong style={{ display: 'block', fontSize: '0.95rem', color: '#0f172a', marginBottom: '0.2rem' }}>
+                      <h4 style={{ margin: '0 0 0.2rem', fontSize: '0.95rem', fontWeight: 400, color: '#0f172a' }}>
                         {result.ticket.event.title}
-                      </strong>
+                      </h4>
                       <span style={{ display: 'block', fontSize: '0.75rem', color: '#64748b', marginBottom: '0.2rem' }}>
                         สถานที่: {result.ticket.event.location}
                       </span>
@@ -914,9 +947,9 @@ export function TicketInspectorView() {
                   </div>
 
                   <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: '0.75rem' }}>
-                    <strong style={{ display: 'block', fontSize: '0.8125rem', color: '#334155', marginBottom: '0.35rem' }}>
+                    <h4 style={{ margin: '0 0 0.35rem', fontSize: '0.8125rem', fontWeight: 400, color: '#334155' }}>
                       รอบการแสดง:
-                    </strong>
+                    </h4>
                     <div style={{ fontSize: '0.75rem', color: '#475569', lineHeight: 1.6 }}>
                       <div>วันเวลาแสดง: {result.ticket.session.startTime} ถึง {result.ticket.session.endTime}</div>
                       {result.ticket.session.admissionStartTime && (
@@ -941,15 +974,15 @@ export function TicketInspectorView() {
 
                 {/* Zone & Ticket Type Card */}
                 <div style={{ background: '#ffffff', borderRadius: '12px', border: '1px solid #e2e8f0', padding: '1rem', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
-                  <strong style={{ display: 'block', fontSize: '0.875rem', color: '#0f172a', marginBottom: '0.5rem' }}>
+                  <h4 style={{ margin: '0 0 0.5rem', fontSize: '0.875rem', fontWeight: 400, color: '#0f172a' }}>
                     ข้อมูลบัตรและโซนที่นั่ง
-                  </strong>
+                  </h4>
 
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', fontSize: '0.8125rem' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                       <span style={{ color: '#64748b' }}>รหัสบัตร (Ticket Code):</span>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-                        <strong style={{ color: '#0f172a' }}>{result.ticket.ticketCode}</strong>
+                        <span style={{ color: '#0f172a', fontWeight: 400 }}>{result.ticket.ticketCode}</span>
                         <button
                           type="button"
                           onClick={() => copyToClipboard(result.ticket?.ticketCode || '', 'คัดลอกรหัสบัตรแล้ว')}
@@ -962,12 +995,12 @@ export function TicketInspectorView() {
 
                     <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                       <span style={{ color: '#64748b' }}>โซน / ประเภทบัตร:</span>
-                      <strong style={{ color: '#0f172a' }}>{result.ticket.zone.name}</strong>
+                      <span style={{ color: '#0f172a', fontWeight: 400 }}>{result.ticket.zone.name}</span>
                     </div>
 
                     <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                       <span style={{ color: '#64748b' }}>ราคาหน้าบัตร:</span>
-                      <strong style={{ color: '#0f172a' }}>{result.ticket.price.toLocaleString('th-TH')} บาท</strong>
+                      <span style={{ color: '#0f172a', fontWeight: 400 }}>{result.ticket.price.toLocaleString('th-TH')} บาท</span>
                     </div>
 
                     <div style={{ display: 'flex', justifyContent: 'space-between' }}>
@@ -996,19 +1029,19 @@ export function TicketInspectorView() {
 
                 {/* Order & Buyer Card */}
                 <div style={{ background: '#ffffff', borderRadius: '12px', border: '1px solid #e2e8f0', padding: '1rem', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
-                  <strong style={{ display: 'block', fontSize: '0.875rem', color: '#0f172a', marginBottom: '0.5rem' }}>
+                  <h4 style={{ margin: '0 0 0.5rem', fontSize: '0.875rem', fontWeight: 400, color: '#0f172a' }}>
                     ข้อมูลคำสั่งซื้อและผู้ถือบัตร
-                  </strong>
+                  </h4>
 
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', fontSize: '0.8125rem' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                       <span style={{ color: '#64748b' }}>รหัสคำสั่งซื้อ:</span>
-                      <strong style={{ color: '#0f172a' }}>{result.ticket.order.id}</strong>
+                      <span style={{ color: '#0f172a', fontWeight: 400 }}>{result.ticket.order.id}</span>
                     </div>
 
                     <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                       <span style={{ color: '#64748b' }}>ชื่อผู้ซื้อ/ผู้ถือบัตร:</span>
-                      <strong style={{ color: '#0f172a' }}>{result.ticket.order.buyerName}</strong>
+                      <span style={{ color: '#0f172a', fontWeight: 400 }}>{result.ticket.order.buyerName}</span>
                     </div>
 
                     <div style={{ display: 'flex', justifyContent: 'space-between' }}>
@@ -1040,9 +1073,9 @@ export function TicketInspectorView() {
                 {/* Admission Logs History */}
                 <div style={{ background: '#ffffff', borderRadius: '12px', border: '1px solid #e2e8f0', padding: '1rem', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-                    <strong style={{ fontSize: '0.875rem', color: '#0f172a' }}>
+                    <h4 style={{ margin: 0, fontSize: '0.875rem', fontWeight: 400, color: '#0f172a' }}>
                       ประวัติการสแกนบัตรใบนี้ ({result.ticket.admissionLogs.length} รายการ)
-                    </strong>
+                    </h4>
                   </div>
 
                   {result.ticket.admissionLogs.length > 0 ? (
@@ -1062,7 +1095,7 @@ export function TicketInspectorView() {
                           }}
                         >
                           <div>
-                            <span style={{ fontWeight: 600, color: log.action === 'entry' ? '#166534' : '#0369a1' }}>
+                            <span style={{ fontWeight: 400, color: log.action === 'entry' ? '#166534' : '#0369a1' }}>
                               {log.action === 'entry' ? 'เข้างาน (Entry)' : 'ออกจากงาน (Exit)'}
                             </span>
                             <span style={{ color: '#64748b', marginLeft: '0.5rem' }}>โดย {log.scannerName}</span>

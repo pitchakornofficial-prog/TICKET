@@ -1,16 +1,26 @@
+import type { Metadata } from 'next';
 import Link from 'next/link';
 import { InfoIcon } from '@/components/icons';
+import { FloatingBackToTop } from '@/components/floating-back-to-top';
 
-export const metadata = {
+export const metadata: Metadata = {
   title: 'เงื่อนไขการซื้อและรับบัตร — TICKET',
   description: 'ข้อกำหนดและเงื่อนไขการซื้อบัตรคอนเสิร์ต การกันบัตร และการรับบัตรบนแพลตฟอร์ม TICKET',
+  alternates: {
+    canonical: '/terms',
+  },
+  openGraph: {
+    title: 'เงื่อนไขการซื้อและรับบัตร — TICKET',
+    description: 'ข้อกำหนดและเงื่อนไขการซื้อบัตรคอนเสิร์ต การกันบัตร และการรับบัตรบนแพลตฟอร์ม TICKET',
+    url: '/terms',
+    type: 'website',
+  },
 };
 
 export default function TermsPage() {
   return (
     <article className="static-page" aria-labelledby="terms-title">
       <header className="static-header">
-        <p className="eyebrow">TICKET / ข้อตกลงการใช้งาน</p>
         <h1 id="terms-title">เงื่อนไขการซื้อและรับบัตร</h1>
         <p className="intro">
           ข้อกำหนดและขั้นตอนการให้บริการสำหรับการสั่งซื้อบัตรคอนเสิร์ตผ่านแพลตฟอร์ม TICKET
@@ -108,6 +118,8 @@ export default function TermsPage() {
           <Link href="/privacy" className="chip-link">นโยบายความเป็นส่วนตัว</Link>
         </div>
       </div>
+
+      <FloatingBackToTop testId="terms-back-to-top-btn" />
     </article>
   );
 }

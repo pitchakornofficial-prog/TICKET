@@ -35,6 +35,7 @@ export interface PayableConcertItem {
   payoutBankName: string;
   payoutAccountNumber: string;
   payoutAccountName: string;
+  payoutQrCodeUrl?: string | null;
   isBankVerified: boolean;
   grossSales: number;
   customerFee: number;
@@ -59,6 +60,7 @@ export interface PayoutRecordItem {
   payoutBankName: string;
   payoutAccountNumber: string;
   payoutAccountName: string;
+  payoutQrCodeUrl?: string | null;
   transferProofKey: string | null;
   transferProofUrl: string | null;
   transferNote: string | null;
@@ -161,6 +163,7 @@ export function OwnerFinanceHub() {
               payoutBankName: repData.payoutBankName || '',
               payoutAccountNumber: repData.payoutAccountNumber || '',
               payoutAccountName: repData.payoutAccountName || '',
+              payoutQrCodeUrl: repData.payoutQrCodeUrl || null,
               isBankVerified: false,
               grossSales: repData.grossSales || 0,
               customerFee: 0,
@@ -541,6 +544,21 @@ export function OwnerFinanceHub() {
                       {concert.payoutAccountNumber}
                     </span>
                     <span style={{ color: '#475569' }}>({concert.payoutAccountName})</span>
+                    {concert.payoutQrCodeUrl && (
+                      <a
+                        href={concert.payoutQrCodeUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{
+                          fontSize: '0.75rem',
+                          color: '#0f172a',
+                          textDecoration: 'underline',
+                          fontWeight: 400,
+                        }}
+                      >
+                        ดู QR รับเงิน
+                      </a>
+                    )}
                     <span
                       style={{
                         display: 'inline-flex',
@@ -556,7 +574,7 @@ export function OwnerFinanceHub() {
                       }}
                     >
                       <ShieldCheckIcon style={{ width: '13px', height: '13px' }} />
-                      ผ่านการยืนยันบัญชีแล้ว
+                      ผ่านการยืนยันบัญชีแล้ว · ซิงก์จากบัญชีผู้จัดงานแล้ว
                     </span>
                   </div>
 

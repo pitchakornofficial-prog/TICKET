@@ -10,7 +10,6 @@ import {
   MapPinIcon,
   ClockIcon,
   CheckCircleIcon,
-  ShieldCheckIcon,
   ArrowLeftIcon,
   InfoIcon,
   RefreshIcon,
@@ -581,10 +580,6 @@ export function GuestOrderLookupView({ initialOrderId }: GuestOrderLookupViewPro
       {/* Mode 1: Modern Clean Search Form */}
       {mode === 'search' && (
         <div className="lookup-center-card">
-          <div className="lookup-card-top-icon">
-            <SearchIcon style={{ width: '26px', height: '26px' }} />
-          </div>
-
           {orderId && (
             <div className="lookup-notice-box lookup-notice-info">
               <InfoIcon style={{ width: '18px', height: '18px', flexShrink: 0, marginTop: '2px' }} />
@@ -613,7 +608,7 @@ export function GuestOrderLookupView({ initialOrderId }: GuestOrderLookupViewPro
                 type="email"
                 value={email}
                 onChange={e => setEmail(e.target.value)}
-                placeholder="example@mail.com"
+                placeholder="กรอกอีเมลที่ใช้สั่งซื้อบัตร"
                 required
                 className="lookup-field-input"
               />
@@ -628,7 +623,7 @@ export function GuestOrderLookupView({ initialOrderId }: GuestOrderLookupViewPro
                 type="tel"
                 value={phone}
                 onChange={e => setPhone(e.target.value)}
-                placeholder="0812345678"
+                placeholder="กรอกเบอร์โทรศัพท์ที่ใช้สั่งซื้อบัตร"
                 required
                 className="lookup-field-input"
               />
@@ -639,7 +634,6 @@ export function GuestOrderLookupView({ initialOrderId }: GuestOrderLookupViewPro
               disabled={isLoading}
               className="lookup-submit-btn"
             >
-              <SearchIcon style={{ width: '18px', height: '18px' }} />
               <span>{isLoading ? 'กำลังตรวจสอบ...' : 'ขอรหัส OTP เพื่อเปิดดูบัตร'}</span>
             </button>
           </form>
@@ -653,10 +647,6 @@ export function GuestOrderLookupView({ initialOrderId }: GuestOrderLookupViewPro
       {/* Mode 2: Modern Centered 6-Box OTP Form */}
       {mode === 'otp' && (
         <div className="lookup-center-card">
-          <div className="lookup-card-top-icon">
-            <ShieldCheckIcon style={{ width: '28px', height: '28px' }} />
-          </div>
-
           <div style={{ textAlign: 'center', marginBottom: '1.5rem' }}>
             <h2 style={{ fontSize: '1.35rem', fontWeight: 400, color: '#0f172a', margin: '0 0 0.4rem 0' }}>
               ยืนยันรหัส OTP
@@ -897,9 +887,6 @@ export function GuestOrderLookupView({ initialOrderId }: GuestOrderLookupViewPro
           {/* Empty State */}
           {orders.length === 0 ? (
             <div className="lookup-center-card" style={{ textAlign: 'center', padding: '3.5rem 2rem' }}>
-              <div className="lookup-card-top-icon" style={{ background: '#f1f5f9', color: '#64748b' }}>
-                <TicketIcon style={{ width: '28px', height: '28px' }} />
-              </div>
               <h3 style={{ fontSize: '1.25rem', fontWeight: 400, color: '#0f172a', margin: '0 0 0.5rem 0' }}>
                 ไม่พบบัตรคอนเสิร์ตที่ชำระเงินสำเร็จ
               </h3>
@@ -909,9 +896,6 @@ export function GuestOrderLookupView({ initialOrderId }: GuestOrderLookupViewPro
             </div>
           ) : displayedOrders.length === 0 ? (
             <div className="lookup-center-card" style={{ textAlign: 'center', padding: '3rem 2rem' }}>
-              <div className="lookup-card-top-icon" style={{ background: '#f1f5f9', color: '#64748b' }}>
-                <SearchIcon style={{ width: '28px', height: '28px' }} />
-              </div>
               <h3 style={{ fontSize: '1.15rem', fontWeight: 400, color: '#0f172a', margin: '0 0 0.5rem 0' }}>
                 ไม่พบบัตรคอนเสิร์ตที่ตรงกับคำค้นหา
               </h3>

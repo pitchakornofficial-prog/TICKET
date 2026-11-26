@@ -88,7 +88,7 @@ describe('Production Readiness & Live Payment QR Download Suite', () => {
       expect(content).not.toContain('320000');
       expect(content).not.toContain('1150000');
       expect(content).not.toContain('1500');
-      expect(content).toContain('totalQuota += ev.totalQuota || 0;');
+      expect(content).toContain('sellingQuota += ev.totalQuota || 0;');
       expect(content).toContain('const quota = ev.totalQuota || 0;');
       expect(content).not.toMatch(/\p{Extended_Pictographic}/u);
     });

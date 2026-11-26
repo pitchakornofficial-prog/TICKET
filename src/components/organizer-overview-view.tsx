@@ -281,25 +281,32 @@ export function OrganizerOverviewView({
     return code === 'ended' || code === 'sales_ended' || code === 'sales_paused';
   }).length;
 
-  let totalSoldTickets = 0;
   let totalGrossRevenue = 0;
   let totalFee = 0;
   let totalNetSales = 0;
-  let totalQuota = 0;
+  let sellingSoldTickets = 0;
+  let sellingGrossRevenue = 0;
+  let sellingQuota = 0;
 
   for (const ev of events) {
-    totalQuota += ev.totalQuota || 0;
+    const isSelling = resolveEventRealStatus(ev).code === 'selling';
+    if (isSelling) {
+      sellingQuota += ev.totalQuota || 0;
+    }
     const stats = eventStats[ev.id];
     if (stats) {
-      totalSoldTickets += stats.soldTickets;
       totalGrossRevenue += stats.grossSales;
       totalFee += stats.fee;
       totalNetSales += stats.netSales;
+      if (isSelling) {
+        sellingSoldTickets += stats.soldTickets;
+        sellingGrossRevenue += stats.grossSales;
+      }
     }
   }
 
-  const avgTicketPrice = totalSoldTickets > 0 ? Math.round(totalGrossRevenue / totalSoldTickets) : 0;
-  const remainingQuota = Math.max(0, totalQuota - totalSoldTickets);
+  const avgTicketPrice = sellingSoldTickets > 0 ? Math.round(sellingGrossRevenue / sellingSoldTickets) : 0;
+  const remainingQuota = Math.max(0, sellingQuota - sellingSoldTickets);
 
   // Real Multi-Period Sales Breakdown from DB (Asia/Bangkok)
   const todaySales = periodSales.today;
@@ -310,7 +317,7 @@ export function OrganizerOverviewView({
   const monthTrend = formatPeriodTrend(periodSales.thisMonth, periodSales.lastMonth, 'จากเดือนก่อน');
 
   const soldPercentage =
-    totalQuota > 0 ? Math.min(100, Math.round((totalSoldTickets / totalQuota) * 100)) : 0;
+    sellingQuota > 0 ? Math.min(100, Math.round((sellingSoldTickets / sellingQuota) * 100)) : 0;
 
   // Filter, Search & Sort
   const filteredEvents = useMemo(() => {
@@ -462,13 +469,13 @@ export function OrganizerOverviewView({
           <div className="overview-kpi-header">
             <span className="overview-kpi-title">
               การจำหน่ายบัตร &amp; โควตา
-              <HeaderInfoTooltip text="สรุปจำนวนบัตรที่ออกสำเร็จเทียบกับความจุโควตารวมทุกคอนเสิร์ต" />
+              <HeaderInfoTooltip text="สรุปจำนวนบัตรที่ออกสำเร็จเทียบกับความจุโควตารวมเฉพาะคอนเสิร์ตที่กำลังเปิดขาย" />
             </span>
             <TicketIcon className="overview-borderless-icon text-slate-500" />
           </div>
           <div className="overview-kpi-value">
-            {totalSoldTickets.toLocaleString()}{' '}
-            <span className="overview-kpi-unit">/ {totalQuota.toLocaleString()} ใบ</span>
+            {sellingSoldTickets.toLocaleString()}{' '}
+            <span className="overview-kpi-unit">/ {sellingQuota.toLocaleString()} ใบ</span>
           </div>
           <div className="kpi-progress-wrap">
             <div className="kpi-progress-bar-track">
@@ -703,107 +710,110 @@ export function OrganizerOverviewView({
                     className="overview-concert-card horizontal-card"
                     data-testid={`overview-concert-card-${ev.id}`}
                   >
-                    {/* Zone 1: Event Details & Ticket Progress */}
-                    <div className="concert-card-zone-info">
-                      <div className="concert-status-badge-row">
-                        <Badge
-                          variant={statusInfo.variant}
-                          size="sm"
-                        >
-                          {statusInfo.label}
-                        </Badge>
-                        <span className="concert-meta-sessions">{ev.sessionCount || (ev.sessions?.length || 1)} รอบการแสดง</span>
+                    <div className="concert-card-main-row">
+                      {/* Zone 1: Event Details */}
+                      <div className="concert-card-zone-info">
+                        <div className="concert-status-badge-row">
+                          <span className="concert-status-prefix">สถานะ:</span>
+                          <Badge
+                            variant={statusInfo.variant}
+                            size="sm"
+                          >
+                            {statusInfo.label}
+                          </Badge>
+                          <span className="concert-meta-sessions">{ev.sessionCount || (ev.sessions?.length || 1)} รอบการแสดง</span>
+                        </div>
+
+                        <h3 className="concert-card-title" title={ev.title}>
+                          {ev.title}
+                          <HeaderInfoTooltip text={`ข้อมูลคอนเสิร์ต ${ev.title} ณ ${ev.location || 'สถานที่จัดงาน'}`} />
+                        </h3>
+
+                        <div className="concert-card-location">
+                          <MapPinIcon className="meta-icon" />
+                          <span>{ev.location || 'ไม่ระบุสถานที่'}</span>
+                        </div>
                       </div>
 
-                      <h3 className="concert-card-title" title={ev.title}>
-                        {ev.title}
-                        <HeaderInfoTooltip text={`ข้อมูลคอนเสิร์ต ${ev.title} ณ ${ev.location || 'สถานที่จัดงาน'}`} />
-                      </h3>
-
-                      <div className="concert-card-location">
-                        <MapPinIcon className="meta-icon" />
-                        <span>{ev.location || 'ไม่ระบุสถานที่'}</span>
-                      </div>
-
-                      {/* Ticket Progress Bar */}
-                      <div className="concert-progress-box">
-                        <div className="progress-header-row">
-                          <span className="progress-label">
-                            ขายแล้ว {sold.toLocaleString()} / {quota.toLocaleString()} ใบ
+                      {/* Zone 2: Financial Breakdown (Horizontal 3-Metric Summary, Clean Layout D-260, D-261) */}
+                      <div className="concert-card-zone-finance highlight-net">
+                        <div className="finance-metric-box">
+                          <span className="finance-metric-label">
+                            รายได้รวม
+                            <HeaderInfoTooltip text="ยอดขายบัตรรวมจากคำสั่งซื้อที่ชำระเงินสำเร็จของคอนเสิร์ตนี้" />
                           </span>
-                          <span className="progress-pct-badge">{pct}%</span>
+                          <span className="finance-metric-val">{formatBaht(gross)}</span>
                         </div>
-                        <div className="progress-bar-track">
-                          <div
-                            className="progress-bar-fill"
-                            style={{ width: `${pct}%` }}
-                            role="progressbar"
-                            aria-valuenow={pct}
-                            aria-valuemin={0}
-                            aria-valuemax={100}
-                          />
+
+                        <div className="finance-metric-box">
+                          <span className="finance-metric-label">
+                            หักค่าบริการ (3%)
+                            <HeaderInfoTooltip text="ค่าบริการแพลตฟอร์มระบบ TICKET ที่หักตามรอบการขาย" />
+                          </span>
+                          <span className="finance-metric-val fee-val">
+                            {fee > 0 ? `-${formatBaht(fee)}` : '฿0'}
+                          </span>
                         </div>
+
+                        <div className="finance-metric-box highlight-net">
+                          <span className="finance-metric-label">
+                            ยอดสุทธิคงเหลือ
+                            <HeaderInfoTooltip text="ยอดเงินสุทธิที่ผู้จัดงานจะได้รับหลังหักค่าบริการเรียบร้อยแล้ว" />
+                          </span>
+                          <span className="finance-metric-val net-val">{formatBaht(net)}</span>
+                        </div>
+                      </div>
+
+                      {/* Zone 3: 3 Action Buttons */}
+                      <div className="concert-card-zone-actions">
+                        <Link
+                          href={`/events/${ev.id}`}
+                          className="overview-concert-action-btn btn-store"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          title="เปิดดูหน้าร้านลูกค้าในแท็บใหม่"
+                        >
+                          ดูหน้าร้านลูกค้า
+                        </Link>
+
+                        <button
+                          type="button"
+                          className="overview-concert-action-btn btn-finance"
+                          onClick={() => onNavigateSection?.('finance', ev.id)}
+                          title="เปิดรายงานการเงินพร้อมไฮไลท์คอนเสิร์ตนี้"
+                        >
+                          รายงานการเงิน
+                        </button>
+
+                        <button
+                          type="button"
+                          className="overview-concert-action-btn btn-manage"
+                          onClick={() => onNavigateSection?.('events', ev.id)}
+                          title="ไปที่หน้าคอนเสิร์ตพร้อมไฮไลท์งานนี้"
+                        >
+                          จัดการงาน
+                        </button>
                       </div>
                     </div>
 
-                    {/* Zone 2: Financial Breakdown (Horizontal 3-Metric Summary, Clean Layout D-260, D-261) */}
-                    <div className="concert-card-zone-finance highlight-net">
-                      <div className="finance-metric-box">
-                        <span className="finance-metric-label">
-                          รายได้รวม
-                          <HeaderInfoTooltip text="ยอดขายบัตรรวมจากคำสั่งซื้อที่ชำระเงินสำเร็จของคอนเสิร์ตนี้" />
+                    {/* Full-Width Bottom Ticket Progress Bar */}
+                    <div className="concert-progress-box">
+                      <div className="progress-header-row">
+                        <span className="progress-label">
+                          ขายแล้ว {sold.toLocaleString()} / {quota.toLocaleString()} ใบ
                         </span>
-                        <span className="finance-metric-val">{formatBaht(gross)}</span>
+                        <span className="progress-pct-badge">{pct}%</span>
                       </div>
-
-                      <div className="finance-metric-box">
-                        <span className="finance-metric-label">
-                          หักค่าบริการ (3%)
-                          <HeaderInfoTooltip text="ค่าบริการแพลตฟอร์มระบบ TICKET ที่หักตามรอบการขาย" />
-                        </span>
-                        <span className="finance-metric-val fee-val">
-                          {fee > 0 ? `-${formatBaht(fee)}` : '฿0'}
-                        </span>
+                      <div className="progress-bar-track">
+                        <div
+                          className={`progress-bar-fill ${sold > 0 ? 'success' : ''}`}
+                          style={{ width: `${pct}%`, minWidth: sold > 0 ? '4px' : undefined }}
+                          role="progressbar"
+                          aria-valuenow={pct}
+                          aria-valuemin={0}
+                          aria-valuemax={100}
+                        />
                       </div>
-
-                      <div className="finance-metric-box highlight-net">
-                        <span className="finance-metric-label">
-                          ยอดสุทธิคงเหลือ
-                          <HeaderInfoTooltip text="ยอดเงินสุทธิที่ผู้จัดงานจะได้รับหลังหักค่าบริการเรียบร้อยแล้ว" />
-                        </span>
-                        <span className="finance-metric-val net-val">{formatBaht(net)}</span>
-                      </div>
-                    </div>
-
-                    {/* Zone 3: 3 Action Buttons */}
-                    <div className="concert-card-zone-actions">
-                      <Link
-                        href={`/events/${ev.id}`}
-                        className="overview-concert-action-btn btn-store"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        title="เปิดดูหน้าร้านลูกค้าในแท็บใหม่"
-                      >
-                        ดูหน้าร้านลูกค้า
-                      </Link>
-
-                      <button
-                        type="button"
-                        className="overview-concert-action-btn btn-finance"
-                        onClick={() => onNavigateSection?.('finance', ev.id)}
-                        title="เปิดรายงานการเงินพร้อมไฮไลท์คอนเสิร์ตนี้"
-                      >
-                        รายงานการเงิน
-                      </button>
-
-                      <button
-                        type="button"
-                        className="overview-concert-action-btn btn-manage"
-                        onClick={() => onNavigateSection?.('events', ev.id)}
-                        title="ไปที่หน้าคอนเสิร์ตพร้อมไฮไลท์งานนี้"
-                      >
-                        จัดการงาน
-                      </button>
                     </div>
                   </div>
                 );

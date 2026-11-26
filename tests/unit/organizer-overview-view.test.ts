@@ -143,4 +143,42 @@ describe('Organizer Workspace Overview View Redesign (D-114, D-210 to D-216)', (
     expect(apiContent).toContain('getOrganizerPeriodSales');
     expect(apiContent).toContain('periodSales');
   });
+
+  it('returns totalQuota from listEventsForScanner so organizer overview remainingQuota is not 0', () => {
+    const eventsServerContent = readFileSync(join(rootDir, 'src/server/events.ts'), 'utf8');
+    expect(eventsServerContent).toContain('totalQuota?: number;');
+    expect(eventsServerContent).toContain('COALESCE(SUM(tt.quota), 0)::int AS "totalQuota"');
+    expect(eventsServerContent).toContain("totalQuota: quotaByEventId.get(ev.id) ?? 0");
+  });
+
+  it('places full-width progress bar at bottom of concert cards with visible fill and colored status badges', () => {
+    const overviewContent = readFileSync(
+      join(rootDir, 'src/components/organizer-overview-view.tsx'),
+      'utf8',
+    );
+    const cssContent = readFileSync(
+      join(rootDir, 'src/app/back-office/back-office.css'),
+      'utf8',
+    );
+    expect(overviewContent).toContain('concert-card-main-row');
+    expect(overviewContent).toContain('concert-status-prefix');
+    expect(overviewContent).toContain('สถานะ:');
+    expect(overviewContent).toContain("sold > 0 ? 'success' : ''");
+    expect(cssContent).toContain('.concert-card-main-row');
+    expect(cssContent).toContain('.concert-status-badge-row .ui-badge');
+    expect(cssContent).toContain('.ui-badge-success');
+    expect(cssContent).toContain('.ui-badge-warning');
+    expect(cssContent).toContain('.ui-badge-danger');
+    expect(cssContent).toMatch(/\.progress-bar-fill\s*\{[^}]*background:\s*#0f172a/);
+  });
+
+  it('scopes Ticket Sales & Quota KPI card to selling concerts only', () => {
+    const overviewContent = readFileSync(
+      join(rootDir, 'src/components/organizer-overview-view.tsx'),
+      'utf8',
+    );
+    expect(overviewContent).toContain("resolveEventRealStatus(ev).code === 'selling'");
+    expect(overviewContent).toContain('sellingSoldTickets');
+    expect(overviewContent).toContain('sellingQuota');
+  });
 });

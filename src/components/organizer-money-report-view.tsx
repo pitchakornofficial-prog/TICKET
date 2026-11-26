@@ -144,29 +144,33 @@ export function OrganizerMoneyReportView({
       id="organizer-money-report-modal"
       className="money-report-card"
       style={{
-        backgroundColor: '#ffffff',
-        border: '1px solid #e2e8f0',
-        borderRadius: '8px',
-        padding: '24px',
-        marginTop: '1.5rem',
-        marginBottom: '2rem',
-        boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
+        backgroundColor: 'transparent',
+        border: 'none',
+        padding: 0,
+        margin: 0,
+        boxShadow: 'none',
       }}
     >
-      {/* Header bar */}
+      {/* Sticky Top Action Bar */}
       <div
+        data-testid="money-report-top-action-bar"
         style={{
+          position: 'sticky',
+          top: '-1.5rem',
+          zIndex: 20,
+          backgroundColor: '#ffffff',
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
           flexWrap: 'wrap',
           gap: '12px',
-          paddingBottom: '16px',
+          margin: '-1.5rem -1.5rem 16px -1.5rem',
+          padding: '1.5rem 1.5rem 12px 1.5rem',
           borderBottom: '1px solid #e2e8f0',
         }}
       >
         <div>
-          <h2 style={{ fontSize: '20px', fontWeight: 400, color: '#0f172a', margin: '0 0 4px 0' }}>
+          <h2 style={{ fontSize: '20px', fontWeight: 400, color: '#0f172a', margin: '0 0 2px 0' }}>
             รายงานการเงินและยอดพร้อมจ่าย (Organizer Financial Report)
           </h2>
           <p style={{ fontSize: '13px', color: '#64748b', margin: 0 }}>
@@ -174,7 +178,7 @@ export function OrganizerMoneyReportView({
           </p>
         </div>
 
-        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
           <button
             type="button"
             onClick={fetchReport}
@@ -183,12 +187,13 @@ export function OrganizerMoneyReportView({
               display: 'inline-flex',
               alignItems: 'center',
               gap: '6px',
-              padding: '8px 14px',
+              height: '34px',
+              padding: '0 12px',
               fontSize: '13px',
               fontWeight: 400,
               borderRadius: '6px',
               border: '1px solid #cbd5e1',
-              backgroundColor: '#f8fafc',
+              backgroundColor: '#ffffff',
               color: '#334155',
               cursor: loading ? 'not-allowed' : 'pointer',
             }}
@@ -205,7 +210,8 @@ export function OrganizerMoneyReportView({
               display: 'inline-flex',
               alignItems: 'center',
               gap: '6px',
-              padding: '8px 14px',
+              height: '34px',
+              padding: '0 12px',
               fontSize: '13px',
               fontWeight: 400,
               borderRadius: '6px',
@@ -224,7 +230,8 @@ export function OrganizerMoneyReportView({
               id="close-money-report-modal-btn"
               onClick={onClose}
               style={{
-                padding: '8px 14px',
+                height: '34px',
+                padding: '0 12px',
                 fontSize: '13px',
                 fontWeight: 400,
                 borderRadius: '6px',
@@ -268,25 +275,22 @@ export function OrganizerMoneyReportView({
 
       {!loading && report && (
         <div>
-          {/* Fee settings banner */}
+          {/* Fee settings inline meta row */}
           <div
             style={{
-              marginTop: '16px',
-              padding: '12px 16px',
-              backgroundColor: '#eff6ff',
-              border: '1px solid #bfdbfe',
-              borderRadius: '6px',
+              padding: '8px 0 12px',
+              borderBottom: '1px solid #f1f5f9',
               display: 'flex',
               justifyContent: 'space-between',
               alignItems: 'center',
               flexWrap: 'wrap',
               gap: '12px',
               fontSize: '13px',
-              color: '#1e3a8a',
+              color: '#475569',
             }}
           >
             <div>
-              <strong>โหมดค่าบริการผู้จัดงาน:</strong>{' '}
+              <span style={{ color: '#0f172a', fontWeight: 400 }}>โหมดค่าบริการผู้จัดงาน:</span>{' '}
               {report.organizerFeeMode === 'percentage'
                 ? `คิดตามเปอร์เซ็นต์ (${report.organizerFeeRate}%)`
                 : report.organizerFeeMode === 'per_ticket'
@@ -294,7 +298,7 @@ export function OrganizerMoneyReportView({
                   : `คิดแบบเหมาจ่ายต่อคอนเสิร์ต (฿${report.organizerFeeRate})`}
             </div>
             <div>
-              <strong>เงินสำรองที่ต้องกันไว้ (Reserve):</strong> {report.reservePercentage}% ของสิทธิ์สุทธิ
+              <span style={{ color: '#0f172a', fontWeight: 400 }}>เงินสำรองที่ต้องกันไว้ (Reserve):</span> {report.reservePercentage}% ของสิทธิ์สุทธิ
             </div>
           </div>
 
@@ -324,13 +328,18 @@ export function OrganizerMoneyReportView({
             </div>
           )}
 
-          {/* KPI Cards Grid */}
+          {/* Unified KPI Grid (single flat container with 1px dividers) */}
           <div
+            data-testid="money-report-unified-kpi-grid"
             style={{
               display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))',
-              gap: '14px',
-              marginTop: '20px',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+              gap: '1px',
+              backgroundColor: '#e2e8f0',
+              border: '1px solid #e2e8f0',
+              borderRadius: '8px',
+              overflow: 'hidden',
+              marginTop: '16px',
             }}
           >
             {/* Gross Sales */}
@@ -338,9 +347,7 @@ export function OrganizerMoneyReportView({
               className="kpi-card"
               style={{
                 backgroundColor: '#ffffff',
-                border: '1px solid #e2e8f0',
-                borderRadius: '8px',
-                padding: '16px',
+                padding: '14px 16px',
               }}
             >
               <div style={{ fontSize: '12px', color: '#64748b', marginBottom: '4px' }}>ยอดขายบัตรทั้งหมด (Gross)</div>
@@ -357,9 +364,7 @@ export function OrganizerMoneyReportView({
               className="kpi-card"
               style={{
                 backgroundColor: '#ffffff',
-                border: '1px solid #e2e8f0',
-                borderRadius: '8px',
-                padding: '16px',
+                padding: '14px 16px',
               }}
             >
               <div style={{ fontSize: '12px', color: '#64748b', marginBottom: '4px' }}>ยอดคืนเงินที่อนุมัติ (Refunds)</div>
@@ -376,9 +381,7 @@ export function OrganizerMoneyReportView({
               className="kpi-card"
               style={{
                 backgroundColor: '#ffffff',
-                border: '1px solid #e2e8f0',
-                borderRadius: '8px',
-                padding: '16px',
+                padding: '14px 16px',
               }}
             >
               <div style={{ fontSize: '12px', color: '#64748b', marginBottom: '4px' }}>ยอดขายสุทธิ (Net Sales)</div>
@@ -395,9 +398,7 @@ export function OrganizerMoneyReportView({
               className="kpi-card"
               style={{
                 backgroundColor: '#ffffff',
-                border: '1px solid #e2e8f0',
-                borderRadius: '8px',
-                padding: '16px',
+                padding: '14px 16px',
               }}
             >
               <div style={{ fontSize: '12px', color: '#64748b', marginBottom: '4px' }}>ค่าบริการระบบ (Organizer Fee)</div>
@@ -416,9 +417,7 @@ export function OrganizerMoneyReportView({
               className="kpi-card"
               style={{
                 backgroundColor: '#ffffff',
-                border: '1px solid #cbd5e1',
-                borderRadius: '8px',
-                padding: '16px',
+                padding: '14px 16px',
               }}
             >
               <div style={{ fontSize: '12px', color: '#64748b', marginBottom: '4px' }}>สิทธิ์สุทธิผู้จัดงาน (E)</div>
@@ -435,9 +434,7 @@ export function OrganizerMoneyReportView({
               className="kpi-card"
               style={{
                 backgroundColor: '#ffffff',
-                border: '1px solid #e2e8f0',
-                borderRadius: '8px',
-                padding: '16px',
+                padding: '14px 16px',
               }}
             >
               <div style={{ fontSize: '12px', color: '#64748b', marginBottom: '4px' }}>เงินสำรองที่กันไว้จริง (Held H)</div>
@@ -454,9 +451,7 @@ export function OrganizerMoneyReportView({
               className="kpi-card"
               style={{
                 backgroundColor: '#ffffff',
-                border: '1px solid #e2e8f0',
-                borderRadius: '8px',
-                padding: '16px',
+                padding: '14px 16px',
               }}
             >
               <div style={{ fontSize: '12px', color: '#64748b', marginBottom: '4px' }}>ยอดที่โอนจ่ายแล้ว (Paid P)</div>
@@ -473,9 +468,7 @@ export function OrganizerMoneyReportView({
               className="kpi-card"
               style={{
                 backgroundColor: report.isDebt ? '#fef2f2' : '#f0fdf4',
-                border: `2px solid ${report.isDebt ? '#ef4444' : '#16a34a'}`,
-                borderRadius: '8px',
-                padding: '16px',
+                padding: '14px 16px',
               }}
             >
               <div style={{ fontSize: '12px', color: report.isDebt ? '#991b1b' : '#166534', fontWeight: 400, marginBottom: '4px' }}>
@@ -494,7 +487,7 @@ export function OrganizerMoneyReportView({
 
           {/* Session breakdown table (D-197 Collapsible Accordion) */}
           {report.sessions.length > 0 && (
-            <details open className="report-collapsible-section" style={{ marginTop: '24px' }}>
+            <details open className="report-collapsible-section" style={{ marginTop: '20px', border: 'none', borderTop: '1px solid #e2e8f0', borderRadius: 0, padding: '16px 0 0', background: 'transparent' }}>
               <summary className="report-collapsible-summary">
                 <span style={{ fontSize: '15px', fontWeight: 400, color: '#0f172a' }}>
                   สรุปยอดตามรอบการแสดง ({report.sessions.length} รอบ)
@@ -557,7 +550,7 @@ export function OrganizerMoneyReportView({
           )}
 
           {/* Line items orders table (AC-64, AC-110, D-197 Collapsible Accordion) */}
-          <details open className="report-collapsible-section" style={{ marginTop: '20px' }}>
+          <details open className="report-collapsible-section" style={{ marginTop: '20px', border: 'none', borderTop: '1px solid #e2e8f0', borderRadius: 0, padding: '16px 0 0', background: 'transparent' }}>
             <summary className="report-collapsible-summary">
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', flexWrap: 'wrap', gap: '8px' }}>
                 <span style={{ fontSize: '15px', fontWeight: 400, color: '#0f172a' }}>
@@ -673,7 +666,7 @@ export function OrganizerMoneyReportView({
           </details>
 
           {/* Payout History Section (AC-31, AC-92, D-197 Collapsible Accordion) */}
-          <details open className="report-collapsible-section" style={{ marginTop: '20px' }}>
+          <details open className="report-collapsible-section" style={{ marginTop: '20px', border: 'none', borderTop: '1px solid #e2e8f0', borderRadius: 0, padding: '16px 0 0', background: 'transparent' }}>
             <summary className="report-collapsible-summary">
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', flexWrap: 'wrap', gap: '8px' }}>
                 <span style={{ fontSize: '15px', fontWeight: 400, color: '#0f172a' }}>
@@ -773,7 +766,7 @@ export function OrganizerMoneyReportView({
           </details>
 
           {/* Debt Repayment History Section (AC-86, D-197 Collapsible Accordion) */}
-          <details open className="report-collapsible-section" style={{ marginTop: '20px' }}>
+          <details open className="report-collapsible-section" style={{ marginTop: '20px', border: 'none', borderTop: '1px solid #e2e8f0', borderRadius: 0, padding: '16px 0 0', background: 'transparent' }}>
             <summary className="report-collapsible-summary">
               <span style={{ fontSize: '15px', fontWeight: 400, color: '#0f172a' }}>
                 ประวัติการรับชำระคืนหนี้จากผู้จัดงาน ({report.repayments.length} รายการ)

@@ -70,10 +70,11 @@ describe('D-197: Organizer Concerts Redesign, Financial Report Pop-up, and Unive
   it('6. Amendment and Cancellation modals are modernized floating card dialogs', () => {
     expect(eventsManagerContent).toContain('amendment-modal-dialog');
     expect(eventsManagerContent).toContain('cancellation-modal-dialog');
+    expect(eventsManagerContent).toContain('organizer-modal-sticky-topbar');
     expect(eventsManagerContent).toContain('modal-info-banner');
-    expect(eventsManagerContent).toContain('modal-danger-banner');
     expect(eventsManagerContent).toContain('data-testid="submit-amendment-btn"');
     expect(eventsManagerContent).toContain('data-testid="submit-cancel-session-btn"');
+    expect(eventsManagerContent).not.toContain('delete-confirm-icon-wrap');
   });
 
   it('7. Circular "i" tooltip (HeaderInfoTooltip) is installed across all 8 organizer views', () => {

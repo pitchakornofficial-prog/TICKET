@@ -1131,6 +1131,7 @@ export function HomeConcertCatalog({
             <line x1="12" y1="19" x2="12" y2="5" />
             <polyline points="5 12 12 5 19 12" />
           </svg>
+          <span className="floating-back-to-top-label">กลับสู่ด้านบน</span>
         </button>
       )}
     </div>

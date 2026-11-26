@@ -9,9 +9,13 @@ import {
   CheckCircleIcon,
   ShieldCheckIcon,
   CrossCircleIcon,
+  RefreshIcon,
+  EyeIcon,
+  EyeOffIcon,
+  CheckIcon,
 } from '@/components/icons';
-import { Button } from '@/components/ui';
 import { HeaderInfoTooltip } from './header-info-tooltip';
+import { triggerRefreshToast } from './toast-notification';
 import {
   loadPayoutAccounts,
   savePayoutAccounts,
@@ -48,19 +52,25 @@ export function OrganizerSettingsView() {
   const qrInputId = useId();
 
   // Profile & Emergency Contacts State (D-79)
-  const [organizerName, setOrganizerName] = useState('สมชาย ผู้จัดงาน');
-  const [organizerEmail, setOrganizerEmail] = useState('organizer@ticket.local');
-  const [primaryPhone, setPrimaryPhone] = useState('081-234-5678');
-  const [backupContactName, setBackupContactName] = useState('วิภาดา การเงิน');
-  const [backupPhone, setBackupPhone] = useState('089-876-5432');
+  const [organizerName, setOrganizerName] = useState('');
+  const [organizerEmail, setOrganizerEmail] = useState('');
+  const [primaryPhone, setPrimaryPhone] = useState('');
+  const [backupContactName, setBackupContactName] = useState('');
+  const [backupPhone, setBackupPhone] = useState('');
   const [profileSuccess, setProfileSuccess] = useState(false);
   const [savingProfile, setSavingProfile] = useState(false);
   const [profileError, setProfileError] = useState('');
+  const [refreshing, setRefreshing] = useState(false);
 
   // Password & Password Strength Meter State (D-79)
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [revokeOtherSessions, setRevokeOtherSessions] = useState(true);
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [savingPassword, setSavingPassword] = useState(false);
   const [passwordSuccess, setPasswordSuccess] = useState(false);
   const [passwordError, setPasswordError] = useState('');
 
@@ -139,12 +149,35 @@ export function OrganizerSettingsView() {
   const [customBankName, setCustomBankName] = useState('');
   const [qrFile, setQrFile] = useState<File | null>(null);
   const [qrPreviewUrl, setQrPreviewUrl] = useState<string | null>(null);
+  const [uploadingQr, setUploadingQr] = useState(false);
   const [uploadError, setUploadError] = useState('');
   const [savingAccount, setSavingAccount] = useState(false);
+  const [bankSuccess, setBankSuccess] = useState('');
+  const [bankError, setBankError] = useState('');
+  const [copiedAccountId, setCopiedAccountId] = useState<string | null>(null);
 
-  // Back to top
-  const handleScrollToTop = () => {
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+  const handleRefreshAll = async () => {
+    setRefreshing(true);
+    try {
+      const [accs, profRes] = await Promise.all([
+        loadSharedPayoutAccounts().catch(() => [] as BankAccount[]),
+        fetch('/api/organizer/profile', { cache: 'no-store' }).catch(() => null),
+      ]);
+      if (accs.length > 0) setBankAccounts(accs);
+      if (profRes?.ok) {
+        const data = await profRes.json().catch(() => null);
+        if (data?.profile) {
+          setOrganizerName(data.profile.organizerName || '');
+          setOrganizerEmail(data.profile.organizerEmail || '');
+          setPrimaryPhone(data.profile.primaryPhone || '');
+          setBackupContactName(data.profile.backupContactName || '');
+          setBackupPhone(data.profile.backupPhone || '');
+        }
+      }
+      triggerRefreshToast('ตั้งค่าผู้จัดงาน');
+    } finally {
+      setRefreshing(false);
+    }
   };
 
   const handleSaveProfile = async (e: React.FormEvent) => {
@@ -176,9 +209,14 @@ export function OrganizerSettingsView() {
     }
   };
 
-  const handleUpdatePassword = (e: React.FormEvent) => {
+  const handleUpdatePassword = async (e: React.FormEvent) => {
     e.preventDefault();
     setPasswordError('');
+    setPasswordSuccess(false);
+    if (!currentPassword) {
+      setPasswordError('กรุณากรอกรหัสผ่านปัจจุบัน');
+      return;
+    }
     if (!passwordCriteria.minLength) {
       setPasswordError('รหัสผ่านใหม่ต้องมีความยาวอย่างน้อย 8 ตัวอักษร');
       return;
@@ -187,14 +225,44 @@ export function OrganizerSettingsView() {
       setPasswordError('รหัสผ่านใหม่และยืนยันรหัสผ่านไม่ตรงกัน');
       return;
     }
-    setPasswordSuccess(true);
-    setCurrentPassword('');
-    setNewPassword('');
-    setConfirmPassword('');
-    setTimeout(() => setPasswordSuccess(false), 3000);
+
+    setSavingPassword(true);
+    try {
+      const res = await fetch('/api/auth/change-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          currentPassword,
+          newPassword,
+          revokeOtherSessions,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const rawMsg = typeof data?.message === 'string' ? data.message : '';
+        if (rawMsg.toLowerCase().includes('invalid password')) {
+          setPasswordError('รหัสผ่านปัจจุบันไม่ถูกต้อง');
+        } else {
+          setPasswordError(rawMsg || 'ไม่สามารถเปลี่ยนรหัสผ่านได้ กรุณาลองใหม่');
+        }
+        return;
+      }
+
+      setPasswordSuccess(true);
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+      setTimeout(() => setPasswordSuccess(false), 4000);
+    } catch {
+      setPasswordError('เกิดข้อผิดพลาดในการเชื่อมต่อเซิร์ฟเวอร์');
+    } finally {
+      setSavingPassword(false);
+    }
   };
 
   const handleSetPrimaryAccount = async (id: string) => {
+    setBankError('');
+    setBankSuccess('');
     try {
       const updated = await setPrimarySharedPayoutAccount(id);
       setBankAccounts((prev) => {
@@ -205,14 +273,18 @@ export function OrganizerSettingsView() {
         savePayoutAccounts(next);
         return next;
       });
+      setBankSuccess('ตั้งเป็นบัญชีหลักและซิงก์ไปยังหน้าการเงินแอดมินเรียบร้อยแล้ว');
+      setTimeout(() => setBankSuccess(''), 4000);
     } catch (err: unknown) {
-      alert(err instanceof Error ? err.message : 'ไม่สามารถตั้งเป็นบัญชีหลักได้');
+      setBankError(err instanceof Error ? err.message : 'ไม่สามารถตั้งเป็นบัญชีหลักได้');
     }
   };
 
   const handleDeleteAccount = async (id: string) => {
+    setBankError('');
+    setBankSuccess('');
     if (bankAccounts.length <= 1) {
-      alert('ต้องมีบัญชีรับเงินอย่างน้อย 1 บัญชีในระบบสำหรับรับเงินยอดขาย');
+      setBankError('ต้องมีบัญชีรับเงินอย่างน้อย 1 บัญชีในระบบสำหรับรับเงินยอดขาย');
       return;
     }
     const confirmed = window.confirm('คุณแน่ใจหรือไม่ที่จะลบบัญชีรับเงินนี้?');
@@ -223,8 +295,10 @@ export function OrganizerSettingsView() {
       const latest = await loadSharedPayoutAccounts();
       setBankAccounts(latest);
       savePayoutAccounts(latest);
+      setBankSuccess('ลบบัญชีรับเงินเรียบร้อยแล้ว');
+      setTimeout(() => setBankSuccess(''), 3500);
     } catch (err: unknown) {
-      alert(err instanceof Error ? err.message : 'ไม่สามารถลบบัญชีรับเงินได้');
+      setBankError(err instanceof Error ? err.message : 'ไม่สามารถลบบัญชีรับเงินได้');
     }
   };
 
@@ -257,44 +331,66 @@ export function OrganizerSettingsView() {
     setShowModal(true);
   };
 
-  const handleQrFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleQrFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     setUploadError('');
     if (!file) return;
 
-    // Validate type: png, jpg, jpeg
-    if (!['image/png', 'image/jpeg', 'image/jpg'].includes(file.type)) {
-      setUploadError('กรุณาเลือกไฟล์ภาพประเภท PNG, JPG หรือ JPEG เท่านั้น');
+    if (!['image/png', 'image/jpeg', 'image/jpg', 'image/webp'].includes(file.type)) {
+      setUploadError('กรุณาเลือกไฟล์ภาพประเภท PNG, JPG, JPEG หรือ WebP เท่านั้น');
       return;
     }
 
-    // Validate size: max 5MB
     if (file.size > 5 * 1024 * 1024) {
       setUploadError('ขนาดไฟล์ภาพต้องไม่เกิน 5 MB');
       return;
     }
 
-    setQrFile(file);
-    setQrPreviewUrl(URL.createObjectURL(file));
+    setUploadingQr(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('visibility', 'public');
+      const res = await fetch('/api/upload', {
+        method: 'POST',
+        body: formData,
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.url) {
+        setUploadError(data.message || 'อัปโหลดรูปภาพ QR Code ไม่สำเร็จ');
+        return;
+      }
+      setQrFile(file);
+      setQrPreviewUrl(data.url);
+    } catch {
+      setUploadError('เกิดข้อผิดพลาดในการเชื่อมต่อเพื่ออัปโหลด QR Code');
+    } finally {
+      setUploadingQr(false);
+    }
   };
 
   const handleSaveAccountModal = async (e: React.FormEvent) => {
     e.preventDefault();
+    setBankError('');
+    setBankSuccess('');
+    if (uploadingQr) {
+      setUploadError('กรุณารอให้อัปโหลดรูป QR Code เสร็จสิ้นก่อนบันทึก');
+      return;
+    }
     if (!editingAccountId && bankAccounts.length >= 3) {
-      alert('สามารถเพิ่มบัญชีรับเงินได้สูงสุด 3 บัญชีเท่านั้น');
+      setUploadError('สามารถเพิ่มบัญชีรับเงินได้สูงสุด 3 บัญชีเท่านั้น');
       return;
     }
 
     const finalBankName = bankName === 'other' ? customBankName.trim() : bankName;
     if (!finalBankName) {
-      alert('กรุณาระบุชื่อธนาคาร');
+      setUploadError('กรุณาระบุชื่อธนาคาร');
       return;
     }
 
     setSavingAccount(true);
     try {
       if (editingAccountId) {
-        // Edit existing account in database
         await updateSharedPayoutAccount({
           id: editingAccountId,
           accountName: accName,
@@ -303,7 +399,6 @@ export function OrganizerSettingsView() {
           qrCodeUrl: qrPreviewUrl || undefined,
         });
       } else {
-        // Add new account in database
         await createSharedPayoutAccount({
           accountName: accName,
           accountNumber: accNumber,
@@ -317,8 +412,10 @@ export function OrganizerSettingsView() {
       setBankAccounts(latest);
       savePayoutAccounts(latest);
       setShowModal(false);
+      setBankSuccess('บันทึกบัญชีธนาคารและซิงก์ไปยังหน้าการเงินแอดมินเรียบร้อยแล้ว');
+      setTimeout(() => setBankSuccess(''), 4000);
     } catch (err: unknown) {
-      alert(err instanceof Error ? err.message : 'ไม่สามารถบันทึกบัญชีรับเงินได้');
+      setUploadError(err instanceof Error ? err.message : 'ไม่สามารถบันทึกบัญชีรับเงินได้');
     } finally {
       setSavingAccount(false);
     }
@@ -329,14 +426,37 @@ export function OrganizerSettingsView() {
       {/* Standardized Header Toolbar (D-119) */}
       <header className="settings-page-header">
         <div className="settings-header-text">
-          <h1 className="settings-page-title">
-            การตั้งค่าโปรไฟล์และบัญชีผู้จัดงาน
-            <HeaderInfoTooltip text="จัดการข้อมูลผู้จัดงาน ข้อมูลติดต่อฉุกเฉิน ความปลอดภัยรหัสผ่าน และบัญชีธนาคารสำหรับรับเงิน" />
-          </h1>
+          <div className="organizer-header-title-row">
+            <h1 className="settings-page-title">
+              การตั้งค่าโปรไฟล์และบัญชีผู้จัดงาน
+              <HeaderInfoTooltip text="จัดการข้อมูลผู้จัดงาน ข้อมูลติดต่อฉุกเฉิน ความปลอดภัยรหัสผ่าน และบัญชีธนาคารสำหรับรับเงิน" />
+            </h1>
+            <button
+              type="button"
+              className="organizer-inline-refresh-btn"
+              onClick={handleRefreshAll}
+              disabled={refreshing}
+              title="รีเฟรชข้อมูลตั้งค่า"
+              aria-label="รีเฟรชข้อมูลตั้งค่า"
+            >
+              <RefreshIcon className={`inline-refresh-icon ${refreshing ? 'animate-spin' : ''}`} />
+            </button>
+          </div>
           <p className="settings-page-desc">
             จัดการข้อมูลผู้จัดงาน ข้อมูลติดต่อฉุกเฉิน ความปลอดภัยรหัสผ่าน และบัญชีธนาคารสำหรับรับเงิน
           </p>
         </div>
+        <nav aria-label="ทางลัดหมวดการตั้งค่า" style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', marginTop: '0.75rem' }}>
+          <a href="#section-profile" className="settings-outline-btn-sm" style={{ textDecoration: 'none' }}>
+            โปรไฟล์และการติดต่อ
+          </a>
+          <a href="#section-security" className="settings-outline-btn-sm" style={{ textDecoration: 'none' }}>
+            ความปลอดภัยรหัสผ่าน
+          </a>
+          <a href="#section-payout" className="settings-outline-btn-sm" style={{ textDecoration: 'none' }}>
+            บัญชีธนาคารรับเงิน ({bankAccounts.length}/3)
+          </a>
+        </nav>
       </header>
 
       
@@ -456,9 +576,13 @@ export function OrganizerSettingsView() {
             </div>
 
             <div className="settings-form-actions">
-              <Button type="submit" variant="primary" size="md" loading={savingProfile} disabled={savingProfile}>
-                บันทึกข้อมูลโปรไฟล์
-              </Button>
+              <button
+                type="submit"
+                className="settings-outline-btn-primary"
+                disabled={savingProfile}
+              >
+                {savingProfile ? 'กำลังบันทึก...' : 'บันทึกข้อมูลโปรไฟล์'}
+              </button>
             </div>
           </form>
         </section>
@@ -493,29 +617,69 @@ export function OrganizerSettingsView() {
               <label htmlFor="current-password" className="settings-label">
                 รหัสผ่านปัจจุบัน <span className="text-required">*</span>
               </label>
-              <input
-                id="current-password"
-                type="password"
-                className="settings-input"
-                value={currentPassword}
-                onChange={e => setCurrentPassword(e.target.value)}
-                required
-              />
+              <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                <input
+                  id="current-password"
+                  type={showCurrentPassword ? 'text' : 'password'}
+                  className="settings-input"
+                  style={{ width: '100%', paddingRight: '2.5rem' }}
+                  value={currentPassword}
+                  onChange={e => setCurrentPassword(e.target.value)}
+                  required
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowCurrentPassword((v) => !v)}
+                  aria-label={showCurrentPassword ? 'ซ่อนรหัสผ่านปัจจุบัน' : 'แสดงรหัสผ่านปัจจุบัน'}
+                  style={{
+                    position: 'absolute',
+                    right: '0.65rem',
+                    background: 'transparent',
+                    border: 'none',
+                    color: '#64748b',
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    padding: '4px',
+                  }}
+                >
+                  {showCurrentPassword ? <EyeOffIcon width={18} height={18} /> : <EyeIcon width={18} height={18} />}
+                </button>
+              </div>
             </div>
 
             <div className="settings-field-group">
               <label htmlFor="new-password" className="settings-label">
                 รหัสผ่านใหม่ <span className="text-required">*</span>
               </label>
-              <input
-                id="new-password"
-                type="password"
-                className="settings-input"
-                value={newPassword}
-                onChange={e => setNewPassword(e.target.value)}
-                placeholder="กรอกรหัสผ่านใหม่"
-                required
-              />
+              <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                <input
+                  id="new-password"
+                  type={showNewPassword ? 'text' : 'password'}
+                  className="settings-input"
+                  style={{ width: '100%', paddingRight: '2.5rem' }}
+                  value={newPassword}
+                  onChange={e => setNewPassword(e.target.value)}
+                  placeholder="กรอกรหัสผ่านใหม่"
+                  required
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowNewPassword((v) => !v)}
+                  aria-label={showNewPassword ? 'ซ่อนรหัสผ่านใหม่' : 'แสดงรหัสผ่านใหม่'}
+                  style={{
+                    position: 'absolute',
+                    right: '0.65rem',
+                    background: 'transparent',
+                    border: 'none',
+                    color: '#64748b',
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    padding: '4px',
+                  }}
+                >
+                  {showNewPassword ? <EyeOffIcon width={18} height={18} /> : <EyeIcon width={18} height={18} />}
+                </button>
+              </div>
 
               {/* Password Strength Meter (D-79) */}
               {newPassword.length > 0 && (
@@ -576,19 +740,48 @@ export function OrganizerSettingsView() {
               <label htmlFor="confirm-password" className="settings-label">
                 ยืนยันรหัสผ่านใหม่ <span className="text-required">*</span>
               </label>
-              <input
-                id="confirm-password"
-                type="password"
-                className="settings-input"
-                value={confirmPassword}
-                onChange={e => setConfirmPassword(e.target.value)}
-                required
-              />
+              <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                <input
+                  id="confirm-password"
+                  type={showConfirmPassword ? 'text' : 'password'}
+                  className="settings-input"
+                  style={{ width: '100%', paddingRight: '2.5rem' }}
+                  value={confirmPassword}
+                  onChange={e => setConfirmPassword(e.target.value)}
+                  required
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmPassword((v) => !v)}
+                  aria-label={showConfirmPassword ? 'ซ่อนยืนยันรหัสผ่านใหม่' : 'แสดงยืนยันรหัสผ่านใหม่'}
+                  style={{
+                    position: 'absolute',
+                    right: '0.65rem',
+                    background: 'transparent',
+                    border: 'none',
+                    color: '#64748b',
+                    cursor: 'pointer',
+                    display: 'inline-flex',
+                    padding: '4px',
+                  }}
+                >
+                  {showConfirmPassword ? <EyeOffIcon width={18} height={18} /> : <EyeIcon width={18} height={18} />}
+                </button>
+              </div>
             </div>
 
+            <label style={{ display: 'inline-flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.86rem', color: '#334155', cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={revokeOtherSessions}
+                onChange={(e) => setRevokeOtherSessions(e.target.checked)}
+              />
+              <span>ออกจากระบบในอุปกรณ์อื่นทั้งหมดหลังเปลี่ยนรหัสผ่าน</span>
+            </label>
+
             <div className="settings-form-actions">
-              <button type="submit" className="primary-button">
-                อัปเดตรหัสผ่าน
+              <button type="submit" className="settings-outline-btn-primary" disabled={savingPassword}>
+                {savingPassword ? 'กำลังอัปเดตรหัสผ่าน...' : 'อัปเดตรหัสผ่าน'}
               </button>
             </div>
           </form>
@@ -614,13 +807,26 @@ export function OrganizerSettingsView() {
             {bankAccounts.length < 3 && (
               <button
                 type="button"
-                className="primary-button small"
+                className="settings-outline-btn-sm"
                 onClick={handleOpenAddModal}
               >
                 + เพิ่มบัญชีรับเงิน ({bankAccounts.length}/3)
               </button>
             )}
           </div>
+
+          {bankSuccess && (
+            <div className="settings-alert-success" role="status" style={{ marginBottom: '1rem' }}>
+              <CheckCircleIcon style={{ width: '18px', height: '18px' }} />
+              <span>{bankSuccess}</span>
+            </div>
+          )}
+
+          {bankError && (
+            <div className="settings-alert-error" role="alert" style={{ marginBottom: '1rem' }}>
+              <span>{bankError}</span>
+            </div>
+          )}
 
           <div className="payout-accounts-grid">
             {bankAccounts.map((account) => (
@@ -652,11 +858,37 @@ export function OrganizerSettingsView() {
                   <div className="payout-number-row">
                     <span className="payout-number-label">เลขที่บัญชี:</span>
                     <span className="payout-number-val">{account.accountNumber}</span>
+                    <button
+                      type="button"
+                      className="settings-outline-btn-sm"
+                      style={{ marginLeft: 'auto' }}
+                      onClick={() => {
+                        if (navigator?.clipboard) {
+                          void navigator.clipboard.writeText(account.accountNumber);
+                          setCopiedAccountId(account.id);
+                          setTimeout(() => setCopiedAccountId(null), 2000);
+                        }
+                      }}
+                    >
+                      {copiedAccountId === account.id ? (
+                        <>
+                          <CheckIcon width={12} height={12} />
+                          <span>คัดลอกแล้ว</span>
+                        </>
+                      ) : (
+                        <span>คัดลอกเลขบัญชี</span>
+                      )}
+                    </button>
                   </div>
                   <div className="payout-name-row">
                     <span className="payout-name-label">ชื่อบัญชี:</span>
                     <span className="payout-name-val">{account.accountName}</span>
                   </div>
+                  {account.isPrimary && (
+                    <div style={{ fontSize: '0.78rem', color: '#166534', marginTop: '0.35rem' }}>
+                      ซิงก์เป็นบัญชีรับเงินปลายทางในหน้าการเงินแอดมินแล้ว
+                    </div>
+                  )}
 
                   {account.qrCodeUrl && (
                     <div className="payout-qr-preview">
@@ -697,30 +929,6 @@ export function OrganizerSettingsView() {
           </div>
         </section>
       </div>
-
-      {/* 3. Floating Back-to-Top Button (D-78) */}
-      <button
-        type="button"
-        className="floating-back-to-top"
-        onClick={handleScrollToTop}
-        title="กลับสู่ด้านบนสุด"
-        aria-label="กลับสู่ด้านบนสุด"
-      >
-        <svg
-          viewBox="0 0 24 24"
-          width="20"
-          height="20"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2.5"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          aria-hidden="true"
-        >
-          <line x1="12" y1="19" x2="12" y2="5" />
-          <polyline points="5 12 12 5 19 12" />
-        </svg>
-      </button>
 
       {/* 4. Modal for Add / Edit Payout Bank Account with Dashed Dropzone (D-79) */}
       {showModal && (
@@ -823,7 +1031,11 @@ export function OrganizerSettingsView() {
                     onChange={handleQrFileChange}
                   />
 
-                  {qrPreviewUrl ? (
+                  {uploadingQr ? (
+                    <div className="dropzone-placeholder">
+                      <span style={{ fontSize: '0.88rem', color: '#475569' }}>กำลังอัปโหลดภาพ QR Code...</span>
+                    </div>
+                  ) : qrPreviewUrl ? (
                     <div className="dropzone-preview-box">
                       <Image
                         src={qrPreviewUrl}
@@ -886,12 +1098,12 @@ export function OrganizerSettingsView() {
               <div className="modal-actions">
                 <button
                   type="button"
-                  className="secondary-button"
+                  className="settings-outline-btn-secondary"
                   onClick={() => setShowModal(false)}
                 >
                   ยกเลิก
                 </button>
-                <button type="submit" className="primary-button" disabled={savingAccount}>
+                <button type="submit" className="settings-outline-btn-primary" disabled={savingAccount}>
                   {savingAccount ? 'กำลังบันทึก...' : (editingAccountId ? 'บันทึกการแก้ไข' : 'บันทึกบัญชีรับเงิน')}
                 </button>
               </div>

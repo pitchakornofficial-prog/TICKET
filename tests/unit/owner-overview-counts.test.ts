@@ -8,21 +8,23 @@ describe('TASK-039: Owner Overview Counts Unit Tests (AC-115, D-17)', () => {
       counts.pendingRefunds +
       counts.failedEmails +
       counts.paymentExceptions +
-      counts.syncConflicts
+      counts.syncConflicts +
+      (counts.pendingNews ?? 0)
     );
   }
 
-  it('aggregates totalPending correctly from all 5 action queues', () => {
+  it('aggregates totalPending correctly across all action queues including pendingNews', () => {
     const rawCounts = {
       pendingSessions: 3,
       pendingRefunds: 2,
       failedEmails: 1,
       paymentExceptions: 4,
       syncConflicts: 0,
+      pendingNews: 2,
     };
 
     const total = computeTotalPending(rawCounts);
-    expect(total).toBe(10);
+    expect(total).toBe(12);
   });
 
   it('handles zero pending items gracefully with all-clear status', () => {

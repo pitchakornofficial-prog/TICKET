@@ -1,5 +1,6 @@
 import type { OfflineDataset, OfflineTicketItem } from '../server/primary-scanner';
 import { hashOfflineQrPayload } from './offline-qr-hash';
+import { isTicketSuffixShortcut, parseOrderAndSuffixPattern } from './ticket-code-input';
 
 export interface OfflinePendingScanItem {
   id: string;
@@ -68,6 +69,50 @@ export function getOfflinePendingScansKey(eventId: string): string {
 }
 
 /**
+ * Get the localStorage key for persisted offline mode flag of an event.
+ */
+export function getOfflineModeKey(eventId: string): string {
+  return `ticket_scanner_offline_mode_${eventId}`;
+}
+
+/**
+ * Read persisted offline mode flag for an event.
+ */
+export function readPersistedOfflineMode(
+  eventId: string,
+  storage?: Pick<Storage, 'getItem'>,
+): boolean {
+  const store = storage || (typeof window !== 'undefined' ? window.localStorage : undefined);
+  if (!store) return false;
+  try {
+    return store.getItem(getOfflineModeKey(eventId)) === '1';
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Persist offline mode flag for an event across accidental page reloads.
+ */
+export function writePersistedOfflineMode(
+  eventId: string,
+  enabled: boolean,
+  storage?: Pick<Storage, 'setItem' | 'removeItem'>,
+): void {
+  const store = storage || (typeof window !== 'undefined' ? window.localStorage : undefined);
+  if (!store) return;
+  try {
+    if (enabled) {
+      store.setItem(getOfflineModeKey(eventId), '1');
+    } else {
+      store.removeItem(getOfflineModeKey(eventId));
+    }
+  } catch {
+    // ignore storage quota / privacy mode restrictions
+  }
+}
+
+/**
  * Retrieve all pending offline scan logs for an event from local storage.
  */
 export function getOfflinePendingScans(
@@ -119,12 +164,14 @@ interface StoredOfflineTicketRecord extends OfflineTicketItem {
 }
 
 const OFFLINE_IDB_NAME = 'ticket_offline_admission_db';
-const OFFLINE_IDB_VERSION = 1;
+const OFFLINE_IDB_VERSION = 2;
 const STORE_DATASETS = 'datasets';
 const STORE_TICKETS = 'tickets';
 const STORE_PENDING_SCANS = 'pending_scans';
 const INDEX_TICKETS_BY_EVENT_QR = 'by_event_qrHash';
+const INDEX_TICKETS_BY_EVENT_CODE = 'by_event_ticketCode';
 const INDEX_BY_EVENT = 'by_event';
+export const OFFLINE_SYNC_CHUNK_SIZE = 250;
 
 function resolveIndexedDb(idb?: IDBFactory): IDBFactory | undefined {
   if (idb) return idb;
@@ -162,17 +209,32 @@ function openOfflineAdmissionDb(idb?: IDBFactory): Promise<IDBDatabase> {
     const req = factory.open(OFFLINE_IDB_NAME, OFFLINE_IDB_VERSION);
     req.onupgradeneeded = () => {
       const db = req.result;
+      const upgradeTx = req.transaction;
       if (!db.objectStoreNames.contains(STORE_DATASETS)) {
         db.createObjectStore(STORE_DATASETS, { keyPath: 'eventId' });
       }
+      let ticketsStore: IDBObjectStore | null = null;
       if (!db.objectStoreNames.contains(STORE_TICKETS)) {
-        const ticketsStore = db.createObjectStore(STORE_TICKETS, {
+        ticketsStore = db.createObjectStore(STORE_TICKETS, {
           keyPath: ['eventId', 'id'],
         });
-        ticketsStore.createIndex(INDEX_TICKETS_BY_EVENT_QR, ['eventId', 'qrHash'], {
-          unique: false,
-        });
-        ticketsStore.createIndex(INDEX_BY_EVENT, 'eventId', { unique: false });
+      } else if (upgradeTx) {
+        ticketsStore = upgradeTx.objectStore(STORE_TICKETS);
+      }
+      if (ticketsStore) {
+        if (!ticketsStore.indexNames.contains(INDEX_TICKETS_BY_EVENT_QR)) {
+          ticketsStore.createIndex(INDEX_TICKETS_BY_EVENT_QR, ['eventId', 'qrHash'], {
+            unique: false,
+          });
+        }
+        if (!ticketsStore.indexNames.contains(INDEX_TICKETS_BY_EVENT_CODE)) {
+          ticketsStore.createIndex(INDEX_TICKETS_BY_EVENT_CODE, ['eventId', 'ticketCode'], {
+            unique: false,
+          });
+        }
+        if (!ticketsStore.indexNames.contains(INDEX_BY_EVENT)) {
+          ticketsStore.createIndex(INDEX_BY_EVENT, 'eventId', { unique: false });
+        }
       }
       if (!db.objectStoreNames.contains(STORE_PENDING_SCANS)) {
         const pendingStore = db.createObjectStore(STORE_PENDING_SCANS, {
@@ -513,12 +575,69 @@ export function performOfflineAdmissionScan(
       message: 'ชุดข้อมูลออฟไลน์ไม่มีหลักฐานการมอบหมายเครื่องหลักปัจจุบัน กรุณาดาวน์โหลดชุดข้อมูลใหม่',
     };
   }
-  const ticketIndex = dataset.tickets.findIndex(
+  let ticketIndex = dataset.tickets.findIndex(
     (t: OfflineTicketItem) =>
       (typeof t.qrHash === 'string' && t.qrHash === inputHash) ||
       (typeof t.ticketCode === 'string' &&
         (t.ticketCode === cleanInput || t.ticketCode.toUpperCase() === cleanInput.toUpperCase())),
   );
+
+  const orderSuffix = ticketIndex === -1 ? parseOrderAndSuffixPattern(cleanInput) : null;
+  if (ticketIndex === -1 && orderSuffix) {
+    const prefix = `TK-${orderSuffix.orderPart}-`;
+    const suffix = `-${orderSuffix.suffixPart}`;
+    const sessionMatches: number[] = [];
+    const eventMatches: number[] = [];
+    dataset.tickets.forEach((t: OfflineTicketItem, idx: number) => {
+      const code = typeof t.ticketCode === 'string' ? t.ticketCode.toUpperCase() : '';
+      if (code.startsWith(prefix) && code.endsWith(suffix)) {
+        eventMatches.push(idx);
+        if (t.sessionId === input.sessionId) {
+          sessionMatches.push(idx);
+        }
+      }
+    });
+    const candidates = sessionMatches.length > 0 ? sessionMatches : eventMatches;
+    if (candidates.length > 1) {
+      return {
+        success: false,
+        status: 'rejected',
+        action: input.action,
+        reason: 'AMBIGUOUS_TICKET_ORDER_SUFFIX',
+        message: 'ยังพบบัตรซ้ำในคำสั่งซื้อเดียวกัน กรุณากรอกเลขลำดับใบ (NN) เพิ่มเติม',
+      };
+    }
+    if (candidates.length === 1) {
+      ticketIndex = candidates[0];
+    }
+  }
+
+  if (ticketIndex === -1 && isTicketSuffixShortcut(cleanInput)) {
+    const suffix = `-${cleanInput.toUpperCase()}`;
+    const sessionMatches: number[] = [];
+    const eventMatches: number[] = [];
+    dataset.tickets.forEach((t: OfflineTicketItem, idx: number) => {
+      if (typeof t.ticketCode === 'string' && t.ticketCode.toUpperCase().endsWith(suffix)) {
+        eventMatches.push(idx);
+        if (t.sessionId === input.sessionId) {
+          sessionMatches.push(idx);
+        }
+      }
+    });
+    const candidates = sessionMatches.length > 0 ? sessionMatches : eventMatches;
+    if (candidates.length > 1) {
+      return {
+        success: false,
+        status: 'rejected',
+        action: input.action,
+        reason: 'AMBIGUOUS_TICKET_SUFFIX',
+        message: 'พบรหัสท้ายซ้ำกันมากกว่า 1 ใบในรอบนี้ กรุณากรอกรหัสบัตรเต็ม (TK-...)',
+      };
+    }
+    if (candidates.length === 1) {
+      ticketIndex = candidates[0];
+    }
+  }
 
   if (ticketIndex === -1) {
     return {
@@ -633,6 +752,13 @@ export async function saveOfflineDatasetAsync(
     };
 
     await idbTxComplete(tx);
+    if (
+      typeof navigator !== 'undefined' &&
+      navigator.storage &&
+      typeof navigator.storage.persist === 'function'
+    ) {
+      void navigator.storage.persist().catch(() => undefined);
+    }
   } finally {
     db.close();
   }
@@ -798,6 +924,26 @@ export async function performOfflineAdmissionScanAsync(
       ticketsStore.index(INDEX_TICKETS_BY_EVENT_QR).get([input.eventId, inputHash]),
     );
 
+    if (!ticket && ticketsStore.indexNames.contains(INDEX_TICKETS_BY_EVENT_CODE)) {
+      ticket = await idbReq<StoredOfflineTicketRecord | undefined>(
+        ticketsStore.index(INDEX_TICKETS_BY_EVENT_CODE).get([input.eventId, cleanInput]),
+      );
+      if (!ticket && cleanInput !== cleanInput.toUpperCase()) {
+        ticket = await idbReq<StoredOfflineTicketRecord | undefined>(
+          ticketsStore.index(INDEX_TICKETS_BY_EVENT_CODE).get([
+            input.eventId,
+            cleanInput.toUpperCase(),
+          ]),
+        );
+      }
+    }
+
+    const orderSuffix = parseOrderAndSuffixPattern(cleanInput);
+    const isSuffix = !orderSuffix && isTicketSuffixShortcut(cleanInput);
+    const suffixTarget = isSuffix ? `-${cleanInput.toUpperCase()}` : '';
+    const suffixMatches: StoredOfflineTicketRecord[] = [];
+    let ambiguousReason: 'AMBIGUOUS_TICKET_SUFFIX' | 'AMBIGUOUS_TICKET_ORDER_SUFFIX' | null = null;
+
     if (!ticket) {
       await new Promise<void>((resolve, reject) => {
         const req = ticketsStore.index(INDEX_BY_EVENT).openCursor(IDBKeyRange.only(input.eventId));
@@ -816,10 +962,43 @@ export async function performOfflineAdmissionScanAsync(
             resolve();
             return;
           }
+          const upperCode = typeof rec.ticketCode === 'string' ? rec.ticketCode.toUpperCase() : '';
+          if (
+            orderSuffix &&
+            upperCode.startsWith(`TK-${orderSuffix.orderPart}-`) &&
+            upperCode.endsWith(`-${orderSuffix.suffixPart}`)
+          ) {
+            suffixMatches.push(rec);
+          } else if (isSuffix && upperCode.endsWith(suffixTarget)) {
+            suffixMatches.push(rec);
+          }
           cursor.continue();
         };
         req.onerror = () => reject(req.error || new Error('Cursor search failed'));
       });
+
+      if (!ticket && (isSuffix || orderSuffix) && suffixMatches.length > 0) {
+        const sessionMatches = suffixMatches.filter(r => r.sessionId === input.sessionId);
+        const candidates = sessionMatches.length > 0 ? sessionMatches : suffixMatches;
+        if (candidates.length > 1) {
+          ambiguousReason = orderSuffix ? 'AMBIGUOUS_TICKET_ORDER_SUFFIX' : 'AMBIGUOUS_TICKET_SUFFIX';
+        } else if (candidates.length === 1) {
+          ticket = candidates[0];
+        }
+      }
+    }
+
+    if (ambiguousReason) {
+      return {
+        success: false,
+        status: 'rejected',
+        action: input.action,
+        reason: ambiguousReason,
+        message:
+          ambiguousReason === 'AMBIGUOUS_TICKET_ORDER_SUFFIX'
+            ? 'ยังพบบัตรซ้ำในคำสั่งซื้อเดียวกัน กรุณากรอกเลขลำดับใบ (NN) เพิ่มเติม'
+            : 'พบรหัสท้ายซ้ำกันมากกว่า 1 ใบในรอบนี้ กรุณากรอกช่อง 4 ตัวหน้า (XXXX) เพิ่มเติม',
+      };
     }
 
     if (!ticket) {
@@ -897,12 +1076,43 @@ export interface SyncOfflineScansResult {
   message?: string;
 }
 
+export function sortPendingScansInOrder(
+  scans: OfflinePendingScanItem[],
+): OfflinePendingScanItem[] {
+  return [...scans].sort((a, b) => {
+    const seqA = typeof a.localSequence === 'number' ? a.localSequence : Number.MAX_SAFE_INTEGER;
+    const seqB = typeof b.localSequence === 'number' ? b.localSequence : Number.MAX_SAFE_INTEGER;
+    if (seqA !== seqB) return seqA - seqB;
+    return a.scannedAt.localeCompare(b.scannedAt);
+  });
+}
+
+export interface SyncProgressInfo {
+  syncedSoFar: number;
+  total: number;
+}
+
 async function postOfflineSyncBatch(
   eventId: string,
   pendingScans: OfflinePendingScanItem[],
 ): Promise<
-  | { ok: true; acknowledgedIds: string[]; conflictsCount: number; securityRejectionsCount: number; lastSuccessfulSync?: string }
-  | { ok: false; acknowledgedIds: string[]; conflictsCount: number; securityRejectionsCount: number; lastSuccessfulSync?: string; message: string }
+  | {
+      ok: true;
+      acknowledgedIds: string[];
+      conflictsCount: number;
+      securityRejectionsCount: number;
+      lastSuccessfulSync?: string;
+      authorizationLost?: boolean;
+    }
+  | {
+      ok: false;
+      acknowledgedIds: string[];
+      conflictsCount: number;
+      securityRejectionsCount: number;
+      lastSuccessfulSync?: string;
+      authorizationLost?: boolean;
+      message: string;
+    }
 > {
   try {
     const res = await fetch(`/api/scanner/events/${eventId}/offline-sync`, {
@@ -915,6 +1125,7 @@ async function postOfflineSyncBatch(
     const conflictsCount = Number(data.conflictsCount) || 0;
     const securityRejectionsCount = Number(data.securityRejectionsCount) || 0;
     const lastSuccessfulSync = typeof data.lastSuccessfulSync === 'string' ? data.lastSuccessfulSync : undefined;
+    const authorizationLost = Boolean(data.authorizationLost);
     if (!res.ok) {
       return {
         ok: false,
@@ -922,6 +1133,7 @@ async function postOfflineSyncBatch(
         conflictsCount,
         securityRejectionsCount,
         lastSuccessfulSync,
+        authorizationLost,
         message: data.message || 'การซิงก์ข้อมูลล้มเหลว',
       };
     }
@@ -931,6 +1143,7 @@ async function postOfflineSyncBatch(
       conflictsCount,
       securityRejectionsCount,
       lastSuccessfulSync,
+      authorizationLost,
     };
   } catch (err: unknown) {
     return {
@@ -950,6 +1163,7 @@ async function postOfflineSyncBatch(
 export async function syncPendingOfflineScans(
   eventId: string,
   storage?: Pick<Storage, 'getItem' | 'setItem' | 'removeItem'>,
+  options?: { onProgress?: (progress: SyncProgressInfo) => void; chunkSize?: number },
 ): Promise<SyncOfflineScansResult> {
   const store = storage || (typeof window !== 'undefined' ? window.localStorage : undefined);
   if (!store) {
@@ -962,8 +1176,8 @@ export async function syncPendingOfflineScans(
     };
   }
 
-  const pendingScans = getOfflinePendingScans(eventId, store);
-  if (pendingScans.length === 0) {
+  const sortedPending = sortPendingScansInOrder(getOfflinePendingScans(eventId, store));
+  if (sortedPending.length === 0) {
     return {
       success: true,
       acknowledgedCount: 0,
@@ -973,20 +1187,47 @@ export async function syncPendingOfflineScans(
     };
   }
 
-  const postRes = await postOfflineSyncBatch(eventId, pendingScans);
-  const remaining = pendingScans.filter(p => !postRes.acknowledgedIds.includes(p.id));
-  if (remaining.length === 0) {
-    clearOfflinePendingScans(eventId, store);
-  } else {
-    store.setItem(getOfflinePendingScansKey(eventId), JSON.stringify(remaining));
+  const chunkSize = Math.max(1, Math.min(500, options?.chunkSize ?? OFFLINE_SYNC_CHUNK_SIZE));
+  let remaining = sortedPending;
+  let totalAcknowledged = 0;
+  let totalConflicts = 0;
+  let totalSecurityRejections = 0;
+  let lastSuccessfulSync: string | undefined;
+  let failedMessage: string | null = null;
+
+  for (let i = 0; i < sortedPending.length; i += chunkSize) {
+    const chunk = sortedPending.slice(i, i + chunkSize);
+    const postRes = await postOfflineSyncBatch(eventId, chunk);
+    const ackSet = new Set(postRes.acknowledgedIds);
+    remaining = remaining.filter((p) => !ackSet.has(p.id));
+
+    if (remaining.length === 0) {
+      clearOfflinePendingScans(eventId, store);
+    } else {
+      store.setItem(getOfflinePendingScansKey(eventId), JSON.stringify(remaining));
+    }
+
+    totalAcknowledged += postRes.acknowledgedIds.length;
+    totalConflicts += postRes.conflictsCount;
+    totalSecurityRejections += postRes.securityRejectionsCount;
+    if (postRes.lastSuccessfulSync) {
+      lastSuccessfulSync = postRes.lastSuccessfulSync;
+    }
+
+    options?.onProgress?.({ syncedSoFar: totalAcknowledged, total: sortedPending.length });
+
+    if (!postRes.ok || postRes.authorizationLost) {
+      failedMessage = postRes.ok ? 'สิทธิ์เครื่องหลักถูกเปลี่ยนระหว่างการซิงก์' : postRes.message;
+      break;
+    }
   }
 
-  if (postRes.lastSuccessfulSync) {
+  if (lastSuccessfulSync) {
     try {
       const raw = store.getItem(getOfflineDatasetKey(eventId));
       if (raw) {
         const ds = JSON.parse(raw);
-        ds.lastSuccessfulSync = postRes.lastSuccessfulSync;
+        ds.lastSuccessfulSync = lastSuccessfulSync;
         store.setItem(getOfflineDatasetKey(eventId), JSON.stringify(ds));
       }
     } catch {
@@ -995,33 +1236,36 @@ export async function syncPendingOfflineScans(
   }
 
   return {
-    success: postRes.ok,
-    acknowledgedCount: postRes.acknowledgedIds.length,
+    success: failedMessage === null,
+    acknowledgedCount: totalAcknowledged,
     remainingCount: remaining.length,
-    conflictsCount: postRes.conflictsCount,
-    securityRejectionsCount: postRes.securityRejectionsCount,
-    lastSuccessfulSync: postRes.lastSuccessfulSync,
-    message: postRes.ok
-      ? `ซิงก์สำเร็จ ${postRes.acknowledgedIds.length} รายการ${postRes.conflictsCount > 0 ? ` (พบข้อขัดแย้ง ${postRes.conflictsCount} รายการ)` : ''}${postRes.securityRejectionsCount > 0 ? ` (ส่ง ${postRes.securityRejectionsCount} รายการให้เจ้าของเว็บตรวจสอบ)` : ''}`
-      : postRes.message,
+    conflictsCount: totalConflicts,
+    securityRejectionsCount: totalSecurityRejections,
+    lastSuccessfulSync,
+    message:
+      failedMessage ??
+      `ซิงก์สำเร็จ ${totalAcknowledged} รายการ${totalConflicts > 0 ? ` (พบข้อขัดแย้ง ${totalConflicts} รายการ)` : ''}${totalSecurityRejections > 0 ? ` (ส่ง ${totalSecurityRejections} รายการให้เจ้าของเว็บตรวจสอบ)` : ''}`,
   };
 }
 
 /**
- * Synchronize pending offline scans stored in IndexedDB inside an atomic readwrite transaction.
- * Falls back cleanly to localStorage sync when IndexedDB is unavailable.
+ * Synchronize pending offline scans stored in IndexedDB in ordered chunks,
+ * committing acknowledged deletions atomically after each chunk.
  */
 export async function syncPendingOfflineScansAsync(
   eventId: string,
   idb?: IDBFactory,
+  options?: { onProgress?: (progress: SyncProgressInfo) => void; chunkSize?: number },
 ): Promise<SyncOfflineScansResult> {
   const factory = resolveIndexedDb(idb);
   if (!factory) {
-    return syncPendingOfflineScans(eventId);
+    return syncPendingOfflineScans(eventId, undefined, options);
   }
 
-  const pendingScans = await getOfflinePendingScansAsync(eventId, factory);
-  if (pendingScans.length === 0) {
+  const sortedPending = sortPendingScansInOrder(
+    await getOfflinePendingScansAsync(eventId, factory),
+  );
+  if (sortedPending.length === 0) {
     return {
       success: true,
       acknowledgedCount: 0,
@@ -1031,49 +1275,194 @@ export async function syncPendingOfflineScansAsync(
     };
   }
 
-  const postRes = await postOfflineSyncBatch(eventId, pendingScans);
-  const db = await openOfflineAdmissionDb(factory);
+  const chunkSize = Math.max(1, Math.min(500, options?.chunkSize ?? OFFLINE_SYNC_CHUNK_SIZE));
+  let totalAcknowledged = 0;
+  let totalConflicts = 0;
+  let totalSecurityRejections = 0;
+  let lastSuccessfulSync: string | undefined;
+  let failedMessage: string | null = null;
+  let remainingCount = sortedPending.length;
+
   try {
-    const tx = db.transaction([STORE_PENDING_SCANS, STORE_DATASETS], 'readwrite');
-    const pendingStore = tx.objectStore(STORE_PENDING_SCANS);
-    const datasetsStore = tx.objectStore(STORE_DATASETS);
+    for (let i = 0; i < sortedPending.length; i += chunkSize) {
+      const chunk = sortedPending.slice(i, i + chunkSize);
+      const postRes = await postOfflineSyncBatch(eventId, chunk);
 
-    for (const ackId of postRes.acknowledgedIds) {
-      pendingStore.delete(ackId);
-    }
+      const db = await openOfflineAdmissionDb(factory);
+      try {
+        const tx = db.transaction([STORE_PENDING_SCANS, STORE_DATASETS], 'readwrite');
+        const pendingStore = tx.objectStore(STORE_PENDING_SCANS);
+        const datasetsStore = tx.objectStore(STORE_DATASETS);
 
-    if (postRes.lastSuccessfulSync) {
-      const meta = await idbReq<OfflineDatasetMeta | undefined>(datasetsStore.get(eventId));
-      if (meta) {
-        datasetsStore.put({ ...meta, lastSuccessfulSync: postRes.lastSuccessfulSync });
+        for (const ackId of postRes.acknowledgedIds) {
+          pendingStore.delete(ackId);
+        }
+
+        if (postRes.lastSuccessfulSync) {
+          lastSuccessfulSync = postRes.lastSuccessfulSync;
+          const meta = await idbReq<OfflineDatasetMeta | undefined>(datasetsStore.get(eventId));
+          if (meta) {
+            datasetsStore.put({ ...meta, lastSuccessfulSync: postRes.lastSuccessfulSync });
+          }
+        }
+
+        remainingCount = await idbReq<number>(
+          pendingStore.index(INDEX_BY_EVENT).count(IDBKeyRange.only(eventId)),
+        );
+
+        await idbTxComplete(tx);
+      } finally {
+        db.close();
+      }
+
+      totalAcknowledged += postRes.acknowledgedIds.length;
+      totalConflicts += postRes.conflictsCount;
+      totalSecurityRejections += postRes.securityRejectionsCount;
+      options?.onProgress?.({ syncedSoFar: totalAcknowledged, total: sortedPending.length });
+
+      if (!postRes.ok || postRes.authorizationLost) {
+        failedMessage = postRes.ok ? 'สิทธิ์เครื่องหลักถูกเปลี่ยนระหว่างการซิงก์' : postRes.message;
+        break;
       }
     }
 
-    const remainingCount = await idbReq<number>(
-      pendingStore.index(INDEX_BY_EVENT).count(IDBKeyRange.only(eventId)),
-    );
-
-    await idbTxComplete(tx);
-
     return {
-      success: postRes.ok,
-      acknowledgedCount: postRes.acknowledgedIds.length,
+      success: failedMessage === null,
+      acknowledgedCount: totalAcknowledged,
       remainingCount,
-      conflictsCount: postRes.conflictsCount,
-      securityRejectionsCount: postRes.securityRejectionsCount,
-      lastSuccessfulSync: postRes.lastSuccessfulSync,
-      message: postRes.ok
-        ? `ซิงก์สำเร็จ ${postRes.acknowledgedIds.length} รายการ${postRes.conflictsCount > 0 ? ` (พบข้อขัดแย้ง ${postRes.conflictsCount} รายการ)` : ''}${postRes.securityRejectionsCount > 0 ? ` (ส่ง ${postRes.securityRejectionsCount} รายการให้เจ้าของเว็บตรวจสอบ)` : ''}`
-        : postRes.message,
+      conflictsCount: totalConflicts,
+      securityRejectionsCount: totalSecurityRejections,
+      lastSuccessfulSync,
+      message:
+        failedMessage ??
+        `ซิงก์สำเร็จ ${totalAcknowledged} รายการ${totalConflicts > 0 ? ` (พบข้อขัดแย้ง ${totalConflicts} รายการ)` : ''}${totalSecurityRejections > 0 ? ` (ส่ง ${totalSecurityRejections} รายการให้เจ้าของเว็บตรวจสอบ)` : ''}`,
     };
   } catch (err: unknown) {
     return {
       success: false,
-      acknowledgedCount: 0,
-      remainingCount: pendingScans.length,
-      conflictsCount: 0,
+      acknowledgedCount: totalAcknowledged,
+      remainingCount,
+      conflictsCount: totalConflicts,
       message: err instanceof Error ? err.message : 'เกิดข้อผิดพลาดในการซิงก์ข้อมูลออฟไลน์',
     };
+  }
+}
+
+export interface OfflineBackupPayload {
+  version: 1;
+  eventId: string;
+  exportedAt: string;
+  datasetMeta: OfflineDatasetMeta | null;
+  pendingScansCount: number;
+  pendingScans: OfflinePendingScanItem[];
+  checksum: string;
+}
+
+function computeBackupChecksum(eventId: string, scans: OfflinePendingScanItem[]): string {
+  const canonical = `${eventId}:${scans.length}:${scans
+    .map((s) => `${s.id}|${s.ticketId}|${s.action}|${s.scannedAt}|${s.localSequence ?? ''}`)
+    .join(';')}`;
+  return hashOfflineQrPayload(eventId, canonical);
+}
+
+/**
+ * Export offline metadata and ordered pending entry/exit scans as a verifiable JSON backup.
+ */
+export async function exportOfflineBackupAsync(
+  eventId: string,
+  idb?: IDBFactory,
+): Promise<OfflineBackupPayload> {
+  const datasetMeta = await getOfflineDatasetMetaAsync(eventId, idb);
+  const pendingScans = sortPendingScansInOrder(
+    await getOfflinePendingScansAsync(eventId, idb),
+  );
+  return {
+    version: 1,
+    eventId,
+    exportedAt: new Date().toISOString(),
+    datasetMeta,
+    pendingScansCount: pendingScans.length,
+    pendingScans,
+    checksum: computeBackupChecksum(eventId, pendingScans),
+  };
+}
+
+/**
+ * Validate and merge pending entry/exit scans from an offline JSON backup without duplicating existing IDs.
+ */
+export async function importOfflineBackupAsync(
+  eventId: string,
+  rawJson: string,
+  idb?: IDBFactory,
+): Promise<{ importedCount: number; skippedDuplicates: number; totalPendingCount: number }> {
+  let parsed: OfflineBackupPayload;
+  try {
+    parsed = JSON.parse(rawJson) as OfflineBackupPayload;
+  } catch {
+    throw new Error('ไฟล์สำรองข้อมูลไม่ใช่รูปแบบ JSON ที่ถูกต้อง');
+  }
+
+  if (parsed?.version !== 1 || parsed.eventId !== eventId || !Array.isArray(parsed.pendingScans)) {
+    throw new Error('ไฟล์สำรองข้อมูลไม่ตรงกับงานคอนเสิร์ตนี้หรือรูปแบบไม่ถูกต้อง');
+  }
+
+  const expectedChecksum = computeBackupChecksum(eventId, parsed.pendingScans);
+  if (parsed.checksum !== expectedChecksum) {
+    throw new Error('ไฟล์สำรองข้อมูลไม่สมบูรณ์หรือถูกแก้ไข (Checksum ไม่ตรงกัน)');
+  }
+
+  const orderedScans = sortPendingScansInOrder(parsed.pendingScans);
+  const factory = resolveIndexedDb(idb);
+
+  if (!factory) {
+    if (typeof window === 'undefined' || !window.localStorage) {
+      throw new Error('อุปกรณ์ไม่รองรับการจัดเก็บข้อมูล');
+    }
+    const existing = getOfflinePendingScans(eventId);
+    const existingIds = new Set(existing.map((s) => s.id));
+    let importedCount = 0;
+    let skippedDuplicates = 0;
+    const merged = [...existing];
+    for (const scan of orderedScans) {
+      if (existingIds.has(scan.id)) {
+        skippedDuplicates++;
+        continue;
+      }
+      existingIds.add(scan.id);
+      merged.push(scan);
+      importedCount++;
+    }
+    window.localStorage.setItem(getOfflinePendingScansKey(eventId), JSON.stringify(merged));
+    return { importedCount, skippedDuplicates, totalPendingCount: merged.length };
+  }
+
+  const db = await openOfflineAdmissionDb(factory);
+  try {
+    const tx = db.transaction([STORE_PENDING_SCANS], 'readwrite');
+    const pendingStore = tx.objectStore(STORE_PENDING_SCANS);
+    const existing = await idbReq<OfflinePendingScanItem[]>(
+      pendingStore.index(INDEX_BY_EVENT).getAll(IDBKeyRange.only(eventId)),
+    );
+    const existingIds = new Set(existing.map((s) => s.id));
+
+    let importedCount = 0;
+    let skippedDuplicates = 0;
+
+    for (const scan of orderedScans) {
+      if (!scan.id || existingIds.has(scan.id)) {
+        skippedDuplicates++;
+        continue;
+      }
+      existingIds.add(scan.id);
+      pendingStore.add({ ...scan, eventId });
+      importedCount++;
+    }
+
+    const totalPendingCount = await idbReq<number>(
+      pendingStore.index(INDEX_BY_EVENT).count(IDBKeyRange.only(eventId)),
+    );
+    await idbTxComplete(tx);
+    return { importedCount, skippedDuplicates, totalPendingCount };
   } finally {
     db.close();
   }

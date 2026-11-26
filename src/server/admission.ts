@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { Pool } from 'pg';
 import { ensureTicketSchema } from './tickets.ts';
 import { hashOfflineQrPayload, sha256Hex } from '../lib/offline-qr-hash.ts';
+import { isTicketSuffixShortcut, parseOrderAndSuffixPattern } from '../lib/ticket-code-input.ts';
 import { verifyOfflineAssignmentToken } from './offline-assignment-token.ts';
 
 export interface ScannedTicketSummary {
@@ -341,7 +342,7 @@ export async function recordAdmissionScan(
     await client.query('BEGIN');
 
     const cleanInput = input.qrPayloadOrCode.trim();
-    const tRes = await client.query<{
+    let tRes = await client.query<{
       id: string;
       orderId: string;
       eventId: string;
@@ -369,6 +370,63 @@ export async function recordAdmissionScan(
        FOR UPDATE OF t`,
       [cleanInput],
     );
+
+    const orderSuffix = tRes.rowCount === 0 ? parseOrderAndSuffixPattern(cleanInput) : null;
+    if (tRes.rowCount === 0 && orderSuffix) {
+      const orderSuffixRes = await client.query<typeof tRes.rows[number]>(
+        `SELECT t.id, t."orderId", t."eventId", t."sessionId", t."ticketTypeId",
+                t."ticketCode", t."qrPayload", t.status, t."admissionStatus",
+                tt.name as "ticketTypeName", tt.price as "ticketPrice",
+                e.title as "eventTitle", s."startTime" as "sessionStartTime", s."endTime" as "sessionEndTime"
+         FROM tickets t
+         JOIN ticket_types tt ON tt.id = t."ticketTypeId"
+         JOIN event_sessions s ON s.id = t."sessionId"
+         JOIN events e ON e.id = t."eventId"
+         WHERE t."sessionId" = $1
+           AND UPPER(t."ticketCode") LIKE $2
+         FOR UPDATE OF t`,
+        [input.sessionId, `TK-${orderSuffix.orderPart}-%-${orderSuffix.suffixPart}`],
+      );
+      if ((orderSuffixRes.rowCount ?? 0) > 1) {
+        await client.query('ROLLBACK');
+        return {
+          success: false,
+          status: 'rejected',
+          action: input.action,
+          reason: 'AMBIGUOUS_TICKET_ORDER_SUFFIX',
+          message: 'ยังพบบัตรซ้ำในคำสั่งซื้อเดียวกัน กรุณากรอกเลขลำดับใบ (NN) เพิ่มเติม',
+        };
+      }
+      tRes = orderSuffixRes;
+    }
+
+    if (tRes.rowCount === 0 && isTicketSuffixShortcut(cleanInput)) {
+      const suffixRes = await client.query<typeof tRes.rows[number]>(
+        `SELECT t.id, t."orderId", t."eventId", t."sessionId", t."ticketTypeId",
+                t."ticketCode", t."qrPayload", t.status, t."admissionStatus",
+                tt.name as "ticketTypeName", tt.price as "ticketPrice",
+                e.title as "eventTitle", s."startTime" as "sessionStartTime", s."endTime" as "sessionEndTime"
+         FROM tickets t
+         JOIN ticket_types tt ON tt.id = t."ticketTypeId"
+         JOIN event_sessions s ON s.id = t."sessionId"
+         JOIN events e ON e.id = t."eventId"
+         WHERE t."sessionId" = $1
+           AND UPPER(t."ticketCode") LIKE '%-' || UPPER($2)
+         FOR UPDATE OF t`,
+        [input.sessionId, cleanInput],
+      );
+      if ((suffixRes.rowCount ?? 0) > 1) {
+        await client.query('ROLLBACK');
+        return {
+          success: false,
+          status: 'rejected',
+          action: input.action,
+          reason: 'AMBIGUOUS_TICKET_SUFFIX',
+          message: 'พบรหัสท้ายซ้ำกันมากกว่า 1 ใบในรอบนี้ กรุณากรอกรหัสบัตรเต็ม (TK-...)',
+        };
+      }
+      tRes = suffixRes;
+    }
 
     if (tRes.rowCount === 0) {
       await client.query('ROLLBACK');

@@ -117,14 +117,28 @@ describe('Organizer News Management & Live Preview Modal (D-81)', () => {
     expect(cssContent).toContain('.placeholder-logo-text');
   });
 
-  it('seeds 3 published UBU club news articles for UBU Freshy Music Fest (D-187)', () => {
+  it('loads real news from /api/organizer/news without mock fallback and uploads cover images via /api/upload', () => {
     const compContent = readFileSync(
       join(rootDir, 'src/components/organizer-news-view.tsx'),
       'utf8',
     );
-    expect(compContent).toContain('news-ubu-freshy-ticket-open');
-    expect(compContent).toContain('news-ubu-freshy-lineup');
-    expect(compContent).toContain('news-ubu-freshy-entry-guidelines');
+    expect(compContent).not.toContain('INITIAL_NEWS');
+    expect(compContent).toContain("fetch('/api/upload'");
+    expect(compContent).not.toContain('readAsDataURL');
+    expect(compContent).toContain('relatedEventId');
     expect(compContent).not.toMatch(/\p{Extended_Pictographic}/u);
+  });
+
+  it('supports pending/rejected news approval and rejection in OwnerNewsManager', () => {
+    const ownerNewsContent = readFileSync(
+      join(rootDir, 'src/components/owner-news-manager.tsx'),
+      'utf8',
+    );
+    expect(ownerNewsContent).toContain('/api/owner/news/');
+    expect(ownerNewsContent).toContain('/approve');
+    expect(ownerNewsContent).toContain('/reject');
+    expect(ownerNewsContent).toContain('รออนุมัติ');
+    expect(ownerNewsContent).toContain('ส่งกลับแก้ไข');
+    expect(ownerNewsContent).not.toMatch(/\p{Extended_Pictographic}/u);
   });
 });

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo } from 'react';
 import {
   BanknotesIcon,
   CalendarIcon,
@@ -204,19 +204,6 @@ export function OrganizerPoliciesView() {
   const [selectedCategory, setSelectedCategory] = useState<PolicyCategory>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
-  const [showScrollTop, setShowScrollTop] = useState(false);
-
-  useEffect(() => {
-    function handleScroll() {
-      setShowScrollTop(window.scrollY > 300);
-    }
-    window.addEventListener('scroll', handleScroll, { passive: true });
-    return () => window.removeEventListener('scroll', handleScroll);
-  }, []);
-
-  const handleScrollToTop = () => {
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
 
   const toggleSection = (id: string) => {
     setExpandedSections((prev) => ({
@@ -538,33 +525,6 @@ export function OrganizerPoliciesView() {
           </div>
         )}
       </div>
-
-      {/* Floating Back-to-Top Button */}
-      {showScrollTop && (
-        <button
-          type="button"
-          className="floating-back-to-top"
-          onClick={handleScrollToTop}
-          title="กลับสู่ด้านบนสุด"
-          aria-label="กลับสู่ด้านบนสุด"
-          data-testid="policies-back-to-top-btn"
-        >
-          <svg
-            viewBox="0 0 24 24"
-            width="20"
-            height="20"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2.5"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            aria-hidden="true"
-          >
-            <line x1="12" y1="19" x2="12" y2="5" />
-            <polyline points="5 12 12 5 19 12" />
-          </svg>
-        </button>
-      )}
     </div>
   );
 }

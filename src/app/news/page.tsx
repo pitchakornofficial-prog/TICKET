@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import { unstable_cache } from 'next/cache';
 import { getDatabasePool } from '@/server/database';
 import { listPublishedNews, type PublicNewsSummary } from '@/server/news';
@@ -11,9 +12,18 @@ const getCachedPublishedNews = unstable_cache(
   { revalidate: 60, tags: ['public-news'] },
 );
 
-export const metadata = {
+export const metadata: Metadata = {
   title: 'ข่าวสารและประกาศ — TICKET',
   description: 'ติดตามข่าวสาร ประกาศสำคัญ และข้อมูลความเคลื่อนไหวคอนเสิร์ตจาก TICKET',
+  alternates: {
+    canonical: '/news',
+  },
+  openGraph: {
+    title: 'ข่าวสารและประกาศ — TICKET',
+    description: 'ติดตามข่าวสาร ประกาศสำคัญ และข้อมูลความเคลื่อนไหวคอนเสิร์ตจาก TICKET',
+    url: '/news',
+    type: 'website',
+  },
 };
 
 export default async function NewsListPage() {
@@ -42,7 +52,6 @@ export default async function NewsListPage() {
   return (
     <article className="static-page news-page" aria-labelledby="news-title">
       <header className="static-header">
-        <p className="eyebrow">TICKET / ข่าวสารและประกาศ</p>
         <h1 id="news-title">ข่าวสารและประกาศ</h1>
         <p className="intro">
           ติดตามข่าวสาร ความเคลื่อนไหว และประกาศสำคัญเกี่ยวกับงานคอนเสิร์ตบนระบบ TICKET

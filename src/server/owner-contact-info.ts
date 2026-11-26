@@ -1,5 +1,6 @@
 import type { Pool } from 'pg';
 import { inTransaction } from './database.ts';
+import { DEFAULT_OWNER_CONTACT_INFO } from '../lib/owner-contact-sync.ts';
 
 export const CONTACT_FIELDS = [
   'hotline', 'hotlineBadge', 'hotlineNote', 'email', 'emailBadge', 'emailNote',
@@ -30,4 +31,22 @@ export async function readOwnerContactInfo(pool: Pool): Promise<SharedContactInf
 export async function writeOwnerContactInfo(pool: Pool, data: SharedContactInfo): Promise<void> {
   await ensureOwnerContactInfoSchema(pool);
   await pool.query('INSERT INTO owner_contact_info (id, data) VALUES (TRUE, $1::jsonb) ON CONFLICT (id) DO UPDATE SET data = EXCLUDED.data, "updatedAt" = now()', [JSON.stringify(data)]);
+}
+
+/**
+ * Read owner contact info for public customer pages (/contact, /about),
+ * falling back cleanly to DEFAULT_OWNER_CONTACT_INFO when unset or offline.
+ */
+export async function readPublicOwnerContactInfo(pool: Pool): Promise<SharedContactInfo> {
+  try {
+    const saved = await readOwnerContactInfo(pool);
+    if (!saved) {
+      return DEFAULT_OWNER_CONTACT_INFO;
+    }
+    return Object.fromEntries(
+      CONTACT_FIELDS.map(key => [key, saved[key] || DEFAULT_OWNER_CONTACT_INFO[key]]),
+    ) as SharedContactInfo;
+  } catch {
+    return DEFAULT_OWNER_CONTACT_INFO;
+  }
 }

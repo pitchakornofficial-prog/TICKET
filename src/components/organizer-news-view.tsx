@@ -31,54 +31,6 @@ export interface OrganizerNewsItem {
   createdAt: string;
 }
 
-const INITIAL_NEWS: OrganizerNewsItem[] = [
-  {
-    id: 'news-ubu-freshy-ticket-open',
-    title: 'เปิดจำหน่ายบัตร UBU Freshy Music Fest 2026 ราคาพิเศษสำหรับนักศึกษา 99 บาท',
-    content:
-      'สโมสรนักศึกษา มหาวิทยาลัยอุบลราชธานี ขอเชิญชวนเพื่อนๆ นักศึกษาและบุคลากรทุกท่าน ร่วมเป็นส่วนหนึ่งของค่ำคืนสุดประทับใจในเทศกาลดนตรีต้อนรับเพื่อนใหม่ UBU Freshy Music Fest 2026 โดยสิทธิพิเศษสำหรับชาว ม.อุบลฯ เมื่อใช้อีเมล @ubu.ac.th รับสิทธิ์ซื้อบัตรในราคาพิเศษเพียง 99 บาท (จากราคาปกติ 150 บาท) บัตรมีจำนวนจำกัด รีบจับจองก่อนหมด!',
-    summary:
-      'สิทธิพิเศษสำหรับชาว ม.อุบลฯ ซื้อบัตรในราคา 99 บาท (ปกติ 150 บาท) ผ่านระบบจำหน่ายบัตรออนไลน์',
-    category: 'ประชาสัมพันธ์คอนเสิร์ต',
-    relatedConcert: 'UBU Freshy Music Fest 2026',
-    status: 'published',
-    coverUrl:
-      'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?auto=format&fit=crop&w=1200&q=80',
-    updatedAt: '2026-11-01T10:00:00.000Z',
-    createdAt: '2026-11-01T09:00:00.000Z',
-  },
-  {
-    id: 'news-ubu-freshy-lineup',
-    title: 'เปิดไลน์อัปศิลปินและวงดนตรีสุดมันส์ UBU Freshy Music Fest 2026',
-    content:
-      'เตรียมพบกับทัพศิลปินชื่อดังและวงดนตรีตัวแทนนักศึกษา ที่จะมาร่วมสร้างสีสันและความสนุกแบบจัดเต็มตลอด 6 ชั่วโมงเต็ม ณ อาคารศูนย์กีฬาและนันทนาการ มหาวิทยาลัยอุบลราชธานี ติดตามตารางการแสดงและรายละเอียดเพิ่มเติมได้เร็วๆ นี้',
-    summary:
-      'พบกับทัพศิลปินและวงดนตรีตัวแทนนักศึกษา จัดเต็มตลอด 6 ชั่วโมง ณ ศูนย์กีฬาและนันทนาการ ม.อุบลฯ',
-    category: 'ประชาสัมพันธ์คอนเสิร์ต',
-    relatedConcert: 'UBU Freshy Music Fest 2026',
-    status: 'published',
-    coverUrl:
-      'https://images.unsplash.com/photo-1501386761578-eac5c94b800a?auto=format&fit=crop&w=1600&q=80',
-    updatedAt: '2026-11-02T14:30:00.000Z',
-    createdAt: '2026-11-02T13:00:00.000Z',
-  },
-  {
-    id: 'news-ubu-freshy-entry-guidelines',
-    title: 'ข้อปฏิบัติและจุดตรวจเข้างาน UBU Freshy Music Fest 2026',
-    content:
-      'เพื่อความปลอดภัยและความสะดวกรวดเร็วในการเข้างาน ผู้เข้าร่วมงานทุกท่านกรุณาเตรียม E-Ticket พร้อมบัตรประจำตัวประชาชนหรือบัตรนักศึกษาเพื่อแสดงต่อทีมงานสแกนบัตร ณ จุดคัดกรองบริเวณประตูทางเข้าหลัก โดยประตูเปิดให้เข้าพื้นที่ตั้งแต่เวลา 16:00 น. เป็นต้นไป',
-    summary:
-      'ข้อปฏิบัติสำหรับการเข้างาน ประตูเปิด 16:00 น. กรุณาเตรียม E-Ticket และบัตรประจำตัวเพื่อตรวจสอบ',
-    category: 'ประกาศสำคัญ',
-    relatedConcert: 'UBU Freshy Music Fest 2026',
-    status: 'published',
-    coverUrl:
-      'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?auto=format&fit=crop&w=1200&q=80',
-    updatedAt: '2026-11-03T16:00:00.000Z',
-    createdAt: '2026-11-03T15:00:00.000Z',
-  },
-];
-
 const CATEGORIES = [
   'ประชาสัมพันธ์คอนเสิร์ต',
   'ประกาศสำคัญ',
@@ -95,10 +47,13 @@ const STATUS_LABELS: Record<OrganizerNewsItem['status'], { label: string; class:
 
 export function OrganizerNewsView() {
   const [refreshing, setRefreshing] = useState(false);
-  const [newsList, setNewsList] = useState<OrganizerNewsItem[]>(INITIAL_NEWS);
+  const [newsList, setNewsList] = useState<OrganizerNewsItem[]>([]);
   const [concertList, setConcertList] = useState<string[]>(['ไม่ระบุคอนเสิร์ตเฉพาะ']);
+  const [concertOptions, setConcertOptions] = useState<Array<{ id: string; title: string }>>([]);
   const [_loading, setLoading] = useState(true);
   const [_saving, setSaving] = useState(false);
+  const [uploadingCover, setUploadingCover] = useState(false);
+  const [submittingId, setSubmittingId] = useState<string | null>(null);
 
   const loadData = useCallback(async () => {
     try {
@@ -116,8 +71,12 @@ export function OrganizerNewsView() {
 
       if (eventsRes.ok) {
         const data = await eventsRes.json();
-        const evList: Array<{ id: string; title: string }> = Array.isArray(data) ? data : data.events || [];
-        const titles = evList.map(e => e.title).filter(Boolean);
+        const evList: Array<{ id: string; title: string; status?: string }> = Array.isArray(data)
+          ? data
+          : data.events || [];
+        const approvedEvents = evList.filter((e) => !e.status || e.status === 'approved');
+        setConcertOptions(approvedEvents.map((e) => ({ id: e.id, title: e.title })));
+        const titles = approvedEvents.map((e) => e.title).filter(Boolean);
         const uniqueTitles = Array.from(new Set(titles));
         setConcertList(['ไม่ระบุคอนเสิร์ตเฉพาะ', ...uniqueTitles]);
       }
@@ -156,16 +115,7 @@ export function OrganizerNewsView() {
   const [formError, setFormError] = useState<string | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
-  const [showScrollTop, setShowScrollTop] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    function handleScroll() {
-      setShowScrollTop(window.scrollY > 300);
-    }
-    window.addEventListener('scroll', handleScroll, { passive: true });
-    return () => window.removeEventListener('scroll', handleScroll);
-  }, []);
 
   // Handle escape key to close modals
   useEffect(() => {
@@ -227,12 +177,12 @@ export function OrganizerNewsView() {
     setIsEditorOpen(true);
   };
 
-  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (!['image/png', 'image/jpeg', 'image/jpg'].includes(file.type)) {
-      setFormError('รองรับเฉพาะไฟล์รูปภาพ PNG, JPG, JPEG เท่านั้น');
+    if (!['image/png', 'image/jpeg', 'image/jpg', 'image/webp'].includes(file.type)) {
+      setFormError('รองรับเฉพาะไฟล์รูปภาพ PNG, JPG, JPEG, WebP เท่านั้น');
       return;
     }
     if (file.size > 5 * 1024 * 1024) {
@@ -241,11 +191,27 @@ export function OrganizerNewsView() {
     }
 
     setFormError(null);
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      setFormCoverPreview(event.target?.result as string);
-    };
-    reader.readAsDataURL(file);
+    setUploadingCover(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('visibility', 'public');
+
+      const res = await fetch('/api/upload', {
+        method: 'POST',
+        body: formData,
+      });
+      const data = await res.json();
+      if (!res.ok || !data.url) {
+        setFormError(data.message || 'อัปโหลดรูปปกข่าวไม่สำเร็จ');
+        return;
+      }
+      setFormCoverPreview(data.url);
+    } catch {
+      setFormError('เกิดข้อผิดพลาดในการอัปโหลดรูปปกข่าว');
+    } finally {
+      setUploadingCover(false);
+    }
   };
 
   const handleRemoveImage = () => {
@@ -273,6 +239,11 @@ export function OrganizerNewsView() {
     setSaving(true);
     setFormError(null);
 
+    const matchedConcert =
+      formConcert !== 'ไม่ระบุคอนเสิร์ตเฉพาะ'
+        ? concertOptions.find((c) => c.title === formConcert)
+        : undefined;
+
     try {
       if (editorMode === 'create') {
         const res = await fetch('/api/organizer/news', {
@@ -284,6 +255,7 @@ export function OrganizerNewsView() {
             summary: snippet,
             category: formCategory,
             relatedConcert: formConcert === 'ไม่ระบุคอนเสิร์ตเฉพาะ' ? undefined : formConcert,
+            relatedEventId: matchedConcert?.id,
             coverUrl: formCoverPreview || undefined,
             status: targetStatus,
           }),
@@ -311,6 +283,7 @@ export function OrganizerNewsView() {
             summary: snippet,
             category: formCategory,
             relatedConcert: formConcert === 'ไม่ระบุคอนเสิร์ตเฉพาะ' ? undefined : formConcert,
+            relatedEventId: matchedConcert?.id,
             coverUrl: formCoverPreview || undefined,
             status: targetStatus,
           }),
@@ -339,6 +312,8 @@ export function OrganizerNewsView() {
   };
 
   const handleSubmitForApproval = async (id: string) => {
+    if (submittingId) return;
+    setSubmittingId(id);
     try {
       const res = await fetch(`/api/organizer/news/${id}`, {
         method: 'PATCH',
@@ -354,6 +329,8 @@ export function OrganizerNewsView() {
       showToast('ส่งคำขออนุมัติไปยังเจ้าของระบบเรียบร้อยแล้ว');
     } catch {
       showToast('เกิดข้อผิดพลาดในการเชื่อมต่อเซิร์ฟเวอร์');
+    } finally {
+      setSubmittingId(null);
     }
   };
 
@@ -589,10 +566,11 @@ export function OrganizerNewsView() {
                       type="button"
                       className="news-action-btn btn-submit"
                       onClick={() => handleSubmitForApproval(item.id)}
+                      disabled={submittingId === item.id}
                       title="ส่งคำขอให้เจ้าของระบบอนุมัติ"
                     >
                       <CheckCircleIcon width={15} height={15} />
-                      <span>ส่งขออนุมัติ</span>
+                      <span>{submittingId === item.id ? 'กำลังส่ง...' : 'ส่งขออนุมัติ'}</span>
                     </button>
                   )}
 
@@ -839,6 +817,7 @@ export function OrganizerNewsView() {
                   type="button"
                   className="btn-form-draft"
                   onClick={() => handleSave('draft')}
+                  disabled={_saving || uploadingCover}
                 >
                   บันทึกฉบับร่าง
                 </button>
@@ -846,9 +825,10 @@ export function OrganizerNewsView() {
                   type="button"
                   className="btn-form-submit"
                   onClick={() => handleSave('pending')}
+                  disabled={_saving || uploadingCover}
                 >
                   <CheckCircleIcon width={16} height={16} />
-                  <span>ส่งให้เจ้าของอนุมัติ</span>
+                  <span>{uploadingCover ? 'กำลังอัปโหลดรูป...' : _saving ? 'กำลังส่ง...' : 'ส่งให้เจ้าของอนุมัติ'}</span>
                 </button>
               </div>
             </div>
@@ -967,31 +947,6 @@ export function OrganizerNewsView() {
             </div>
           </div>
         </div>
-      )}
-
-      {/* Floating Back to Top Button */}
-      {showScrollTop && (
-        <button
-          type="button"
-          className="settings-floating-top-btn"
-          onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
-          aria-label="เลื่อนขึ้นบนสุด"
-          title="เลื่อนขึ้นบนสุด"
-        >
-          <svg
-            width="20"
-            height="20"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2.5"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            aria-hidden="true"
-          >
-            <polyline points="18 15 12 9 6 15" />
-          </svg>
-        </button>
       )}
     </div>
   );

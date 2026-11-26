@@ -43,11 +43,18 @@ export function loadPayoutAccounts(): PayoutBankAccount[] {
   }
 }
 
-export function savePayoutAccounts(accounts: PayoutBankAccount[]): void {
+export function savePayoutAccounts(
+  accounts: PayoutBankAccount[],
+  options?: { emitEvent?: boolean },
+): void {
   if (typeof window === 'undefined') return;
   try {
-    localStorage.setItem(STORAGE_KEY_PAYOUT_ACCOUNTS, JSON.stringify(accounts));
-    window.dispatchEvent(new CustomEvent(EVENT_PAYOUT_ACCOUNTS_CHANGED, { detail: accounts }));
+    const serialized = JSON.stringify(accounts);
+    const prev = localStorage.getItem(STORAGE_KEY_PAYOUT_ACCOUNTS);
+    localStorage.setItem(STORAGE_KEY_PAYOUT_ACCOUNTS, serialized);
+    if (options?.emitEvent !== false && prev !== serialized) {
+      window.dispatchEvent(new CustomEvent(EVENT_PAYOUT_ACCOUNTS_CHANGED, { detail: accounts }));
+    }
   } catch (error) {
     console.warn('Failed to save payout accounts to storage', error);
   }

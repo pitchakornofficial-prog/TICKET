@@ -32,7 +32,6 @@ export default async function AcceptInvitationPage({
   return (
     <section className="opening account-page" aria-labelledby="invitation-title">
       <div className="opening-copy account-copy">
-        <p className="eyebrow">TICKET / พื้นที่ทีมงาน</p>
         <h1 id="invitation-title">ตอบรับคำเชิญผู้จัดงาน</h1>
         {valid && token ? (
           <>

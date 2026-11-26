@@ -134,7 +134,6 @@ export function OrganizerScannerManager() {
   const [historyViewMode, setHistoryViewMode] = useState<'admissions' | 'handovers'>('admissions');
 
   // Search & Filter states (D-102: Scanner list search & status tabs removed)
-  const [customPrimaryName, setCustomPrimaryName] = useState<Record<string, string>>({});
   const [searchHistory, setSearchHistory] = useState('');
   const [historyActionFilter, setHistoryActionFilter] = useState<
     'all' | 'HANDOVER' | 'EMERGENCY_STOP' | 'RESUME_RECONCILIATION'
@@ -142,10 +141,9 @@ export function OrganizerScannerManager() {
   const [searchAdmission, setSearchAdmission] = useState('');
   const [admissionStatusFilter, setAdmissionStatusFilter] = useState<'all' | 'success' | 'rejected'>('all');
 
-  // D-99: Searchable & Filterable Event Selector Popover state
+  // D-99: Searchable Event Selector Popover state (approved concerts only)
   const [isEventDropdownOpen, setIsEventDropdownOpen] = useState(false);
   const [searchEventText, setSearchEventText] = useState('');
-  const [eventStatusFilter, setEventStatusFilter] = useState<'all' | 'approved' | 'draft' | 'ended'>('all');
 
   // Form state
   const [name, setName] = useState('');
@@ -194,13 +192,15 @@ export function OrganizerScannerManager() {
   const [emergencyDetails, setEmergencyDetails] = useState('');
   const [lostPendingCount, setLostPendingCount] = useState<number>(0);
 
-  // Load organizer's events
+  // Load organizer's approved events only
   const loadEvents = useCallback(async () => {
     try {
       const res = await fetch('/api/events');
       if (res.ok) {
         const data = await res.json();
-        const list: OrganizerEvent[] = data.events || [];
+        const list: OrganizerEvent[] = (data.events || []).filter(
+          (ev: OrganizerEvent) => ev.status === 'approved',
+        );
         setEvents(list);
         setSelectedEventId((prev) => (prev && list.some((e) => e.id === prev) ? prev : list[0]?.id || ''));
       }
@@ -307,9 +307,7 @@ export function OrganizerScannerManager() {
     const primary: ScannerItem = existingPrimary || {
       id: `organizer-primary-${selectedEventId || 'default'}`,
       scannerId: `organizer-primary-${selectedEventId || 'default'}`,
-      name:
-        (selectedEventId && customPrimaryName[selectedEventId]) ||
-        'เครื่องหลักของผู้จัด (Organizer Primary Device)',
+      name: 'เครื่องหลักของผู้จัด (Organizer Primary Device)',
       email: 'organizer-primary@ticket.local',
       assignedAt: new Date().toISOString(),
       isPrimary: true,
@@ -319,7 +317,7 @@ export function OrganizerScannerManager() {
     };
     const nonPrimary = scanners.filter((s) => !s.isPrimary);
     return [primary, ...nonPrimary];
-  }, [scanners, selectedEventId, customPrimaryName]);
+  }, [scanners, selectedEventId]);
 
   const currentPrimaryScanner = useMemo(
     () => displayScanners.find((s) => s.isPrimary) || null,
@@ -464,16 +462,6 @@ export function OrganizerScannerManager() {
     setSavingEditName(true);
     setError('');
     setMessage('');
-
-    if (editingScanner.scannerId.startsWith('organizer-primary-')) {
-      if (selectedEventId) {
-        setCustomPrimaryName((prev) => ({ ...prev, [selectedEventId]: editScannerName.trim() }));
-      }
-      setMessage('แก้ไขชื่อเรียบร้อยแล้ว');
-      setEditingScanner(null);
-      setSavingEditName(false);
-      return;
-    }
 
     try {
       const res = await fetch(`/api/organizer/events/${selectedEventId}/scanners/${editingScanner.scannerId}`, {
@@ -707,28 +695,12 @@ export function OrganizerScannerManager() {
     }
   };
 
-  // D-99: Filtered events and counts for popover
+  // D-99: Filtered approved events for popover
   const filteredEvents = useMemo(() => {
-    return events.filter((ev) => {
-      if (searchEventText.trim()) {
-        const q = searchEventText.toLowerCase();
-        if (!ev.title.toLowerCase().includes(q)) return false;
-      }
-      if (eventStatusFilter === 'approved') return ev.status === 'approved';
-      if (eventStatusFilter === 'draft') return ev.status === 'draft';
-      if (eventStatusFilter === 'ended') return ev.status === 'ended' || ev.status === 'completed';
-      return true;
-    });
-  }, [events, searchEventText, eventStatusFilter]);
-
-  const eventCounts = useMemo(() => {
-    return {
-      all: events.length,
-      approved: events.filter((e) => e.status === 'approved').length,
-      draft: events.filter((e) => e.status === 'draft').length,
-      ended: events.filter((e) => e.status === 'ended' || e.status === 'completed').length,
-    };
-  }, [events]);
+    const q = searchEventText.trim().toLowerCase();
+    if (!q) return events;
+    return events.filter((ev) => ev.title.toLowerCase().includes(q));
+  }, [events, searchEventText]);
 
   // One-time scanner access link helpers (uses random revocable token, never raw scannerId)
   const toAbsoluteScannerUrl = (relativeOrFullUrl: string) => {
@@ -746,7 +718,7 @@ export function OrganizerScannerManager() {
   };
 
   async function handleIssueAccessLink(scannerId: string) {
-    if (!selectedEventId || scannerId.startsWith('organizer-primary-')) return;
+    if (!selectedEventId) return;
     setIssuingAccessLink(true);
     setError('');
     try {
@@ -759,18 +731,21 @@ export function OrganizerScannerManager() {
         setError(data.message || 'ไม่สามารถออกลิงก์เข้าใช้งานได้');
         return;
       }
+      const resolvedId: string = data.scannerId || scannerId;
       setIssuedLinks((prev) => ({
         ...prev,
-        [scannerId]: {
+        [resolvedId]: {
           accessUrl: data.accessUrl,
           expiresAt: data.expiresAt || '',
         },
       }));
       setCopiedLink(false);
       setActiveQrScanner((prev) =>
-        prev && prev.scannerId === scannerId
+        prev && (prev.scannerId === scannerId || prev.scannerId === resolvedId)
           ? {
               ...prev,
+              id: resolvedId,
+              scannerId: resolvedId,
               hasActiveToken: true,
               tokenExpiresAt: data.expiresAt || null,
             }
@@ -788,7 +763,6 @@ export function OrganizerScannerManager() {
     setActiveQrScanner(scanner);
     setCopiedLink(false);
     if (
-      !scanner.scannerId.startsWith('organizer-primary-') &&
       !issuedLinks[scanner.scannerId]?.accessUrl &&
       !scanner.isBound &&
       !scanner.hasActiveToken
@@ -885,7 +859,12 @@ export function OrganizerScannerManager() {
       ) : events.length === 0 ? (
         <div className="empty-sub-card">
           <TicketIcon />
-          <p>ยังไม่มีงานคอนเสิร์ตในระบบ กรุณาสร้างงานคอนเสิร์ตด้านบนก่อนจัดทีมสแกน</p>
+          <p style={{ fontWeight: 400, color: '#0f172a', margin: '0.25rem 0 0' }}>
+            ยังไม่มีคอนเสิร์ตที่ได้รับอนุมัติ
+          </p>
+          <p className="card-caption" style={{ margin: 0 }}>
+            ระบบจะเปิดให้จัดการทีมสแกนและเครื่องสแกนหลักเฉพาะคอนเสิร์ตที่ผ่านการอนุมัติแล้วเท่านั้น
+          </p>
           <button type="button" className="secondary-button small" onClick={loadEvents}>
             รีเฟรชรายการงาน
           </button>
@@ -991,47 +970,11 @@ export function OrganizerScannerManager() {
                         )}
                       </div>
 
-                      {/* Status Filter Tabs */}
-                      <nav className="scanner-popover-status-nav" aria-label="กรองตามสถานะคอนเสิร์ต">
-                        <button
-                          type="button"
-                          className={`scanner-popover-tab ${eventStatusFilter === 'all' ? 'active' : ''}`}
-                          onClick={() => setEventStatusFilter('all')}
-                        >
-                          <span>ทั้งหมด</span>
-                          <span className="popover-tab-count">{eventCounts.all}</span>
-                        </button>
-                        <button
-                          type="button"
-                          className={`scanner-popover-tab ${eventStatusFilter === 'approved' ? 'active' : ''}`}
-                          onClick={() => setEventStatusFilter('approved')}
-                        >
-                          <span>อนุมัติแล้ว</span>
-                          <span className="popover-tab-count">{eventCounts.approved}</span>
-                        </button>
-                        <button
-                          type="button"
-                          className={`scanner-popover-tab ${eventStatusFilter === 'draft' ? 'active' : ''}`}
-                          onClick={() => setEventStatusFilter('draft')}
-                        >
-                          <span>ฉบับร่าง</span>
-                          <span className="popover-tab-count">{eventCounts.draft}</span>
-                        </button>
-                        <button
-                          type="button"
-                          className={`scanner-popover-tab ${eventStatusFilter === 'ended' ? 'active' : ''}`}
-                          onClick={() => setEventStatusFilter('ended')}
-                        >
-                          <span>จบลงแล้ว</span>
-                          <span className="popover-tab-count">{eventCounts.ended}</span>
-                        </button>
-                      </nav>
-
-                      {/* Filtered Concert List */}
+                      {/* Filtered Approved Concert List */}
                       <div className="scanner-popover-list-wrap">
                         {filteredEvents.length === 0 ? (
                           <div className="scanner-popover-empty">
-                            <p>ไม่พบคอนเสิร์ตที่ตรงกับเงื่อนไขการค้นหา</p>
+                            <p>ไม่พบคอนเสิร์ตที่อนุมัติแล้วที่ตรงกับคำค้นหา</p>
                           </div>
                         ) : (
                           <ul className="scanner-popover-list">
@@ -1051,8 +994,8 @@ export function OrganizerScannerManager() {
                                   >
                                     <div className="popover-item-details">
                                       <span className="popover-item-title">{ev.title}</span>
-                                      <span className={`status-badge small ${ev.status === 'approved' ? 'approved' : 'draft'}`}>
-                                        {ev.status === 'approved' ? 'อนุมัติแล้ว' : 'ฉบับร่าง'}
+                                      <span className="status-badge small approved">
+                                        อนุมัติแล้ว
                                       </span>
                                     </div>
                                     {isSelected && (
@@ -1178,32 +1121,25 @@ export function OrganizerScannerManager() {
 
                   <div className="primary-device-info-bar">
                     <div className="primary-device-meta">
-                      <table className="scanner-primary-name-table">
-                        <tbody>
-                          <tr>
-                            <td className="scanner-primary-name-cell">
-                              <span className="primary-device-name" title="ชื่อเครื่องสแกนหลัก">
-                                {currentPrimaryScanner.name}
-                              </span>
-                            </td>
-                          </tr>
-                        </tbody>
-                      </table>
-                      <span className="primary-device-separator">•</span>
-                      <span className="primary-device-email" title="บัญชีผู้จัดประจำเครื่อง">
-                        {currentPrimaryScanner.email}
+                      <span className="primary-device-name" title="ชื่อเครื่องสแกนหลัก">
+                        {currentPrimaryScanner.name}
                       </span>
-                      <span className="primary-device-separator">•</span>
-                      <span
-                        className={`scanner-device-pill ${currentPrimaryScanner.isBound ? 'bound' : 'unbound'}`}
-                        title={
-                          currentPrimaryScanner.isBound
-                            ? 'อุปกรณ์ผูกสิทธิ์เข้าใช้งานแล้ว'
-                            : 'ยังไม่มีอุปกรณ์ผูกใช้งาน'
-                        }
-                      >
-                        {currentPrimaryScanner.isBound ? 'ผูกเครื่องแล้ว' : 'ยังไม่ผูกเครื่อง'}
-                      </span>
+                      <div className="primary-device-submeta">
+                        <span className="primary-device-email" title="บัญชีผู้จัดประจำเครื่อง">
+                          {currentPrimaryScanner.email}
+                        </span>
+                        <span className="primary-device-separator">•</span>
+                        <span
+                          className={`scanner-device-pill ${currentPrimaryScanner.isBound ? 'bound' : 'unbound'}`}
+                          title={
+                            currentPrimaryScanner.isBound
+                              ? 'อุปกรณ์ผูกสิทธิ์เข้าใช้งานแล้ว'
+                              : 'ยังไม่มีอุปกรณ์ผูกใช้งาน'
+                          }
+                        >
+                          {currentPrimaryScanner.isBound ? 'ผูกเครื่องแล้ว' : 'ยังไม่ผูกเครื่อง'}
+                        </span>
+                      </div>
                     </div>
 
                     {/* 3 Dedicated Actions */}
@@ -1857,37 +1793,11 @@ export function OrganizerScannerManager() {
                 </div>
 
                 {(() => {
-                  const isSyntheticPrimary = activeQrScanner.scannerId.startsWith('organizer-primary-');
                   const activeAccessUrl = getScannerAccessUrl(activeQrScanner);
                   const activeExpiresAt =
                     issuedLinks[activeQrScanner.scannerId]?.expiresAt ||
                     activeQrScanner.tokenExpiresAt ||
                     null;
-
-                  if (isSyntheticPrimary) {
-                    return (
-                      <div
-                        style={{
-                          background: '#f8fafc',
-                          padding: '1rem',
-                          borderRadius: '10px',
-                          border: '1px solid #cbd5e1',
-                          fontSize: '0.84rem',
-                          color: '#334155',
-                          textAlign: 'left',
-                          marginBottom: '1.25rem',
-                          lineHeight: 1.5,
-                        }}
-                      >
-                        <strong style={{ color: '#0f172a', display: 'block', marginBottom: '0.35rem' }}>
-                          เครื่องสแกนหลักของผู้จัดงาน
-                        </strong>
-                        <span>
-                          เครื่องหลักนี้ผูกกับบัญชีผู้จัดงานโดยตรง สามารถกดปุ่ม <strong>[เปิด Terminal สแกน]</strong> เพื่อเข้าใช้งานได้ทันทีโดยไม่ต้องใช้ลิงก์คำเชิญ (หากต้องการเพิ่มเจ้าหน้าที่พร้อม QR/ลิงก์ กรุณาเพิ่มเจ้าหน้าที่สแกนเสริม)
-                        </span>
-                      </div>
-                    );
-                  }
 
                   if (activeAccessUrl) {
                     return (
@@ -1963,26 +1873,13 @@ export function OrganizerScannerManager() {
                   }
 
                   return (
-                    <div
-                      className="scanner-qr-frame"
-                      style={{
-                        background: '#f8fafc',
-                        padding: '1rem',
-                        border: '1px solid #cbd5e1',
-                        borderRadius: '10px',
-                        fontSize: '0.82rem',
-                        color: '#334155',
-                        textAlign: 'left',
-                        marginBottom: '1.25rem',
-                        lineHeight: 1.5,
-                      }}
-                    >
-                      <strong style={{ color: '#0f172a', display: 'block', marginBottom: '0.35rem' }}>
+                    <div className="scanner-qr-reissue-box">
+                      <strong className="scanner-qr-reissue-title">
                         {activeQrScanner.isBound
                           ? 'อุปกรณ์ถูกผูกสิทธิ์เรียบร้อยแล้ว'
                           : 'ต้องการลิงก์เข้าใช้งานแบบใช้ครั้งเดียวใหม่หรือไม่'}
                       </strong>
-                      <p style={{ margin: '0 0 0.75rem', color: '#475569' }}>
+                      <p className="scanner-qr-reissue-desc">
                         {activeQrScanner.isBound
                           ? 'ลิงก์เดิมถูกใช้งานไปแล้ว หากต้องการเปลี่ยนอุปกรณ์สแกน ให้กดปุ่ม [ปลดล็อก / รีเซ็ตอุปกรณ์] ด้านล่างเพื่อเพิกถอนสิทธิ์เดิมและรับลิงก์ใหม่'
                           : 'เพื่อความปลอดภัย ระบบเก็บรหัสโทเคนแบบเข้ารหัสทางเดียว (Hash) จึงไม่แสดงลิงก์เดิมซ้ำหลังรีเฟรชหน้า กดปุ่มด้านล่างเพื่อออกลิงก์ใหม่และเพิกถอนลิงก์เก่าทันที'}
@@ -1992,6 +1889,7 @@ export function OrganizerScannerManager() {
                           type="button"
                           data-testid="issue-scanner-link-btn"
                           className="primary-button small"
+                          style={{ whiteSpace: 'nowrap' }}
                           onClick={() => handleIssueAccessLink(activeQrScanner.scannerId)}
                           disabled={issuingAccessLink}
                         >

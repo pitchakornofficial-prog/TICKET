@@ -1,3 +1,4 @@
+import { revalidatePath } from 'next/cache';
 import { getAuth } from '@/server/auth';
 import { getDatabasePool } from '@/server/database';
 import { createSafeErrorResponse } from '@/server/api-error';
@@ -33,6 +34,12 @@ export async function PUT(request: Request) {
   if (!contact) return Response.json({ message: 'ข้อมูลติดต่อไม่ถูกต้อง' }, { status: 400 });
   try {
     await writeOwnerContactInfo(getDatabasePool(), contact);
+    try {
+      revalidatePath('/contact');
+      revalidatePath('/about');
+    } catch {
+      // Non-fatal outside Next.js runtime (e.g. unit tests)
+    }
     return Response.json({ contact }, { headers: { 'Cache-Control': 'private, no-store, no-cache, must-revalidate' } });
   } catch (error) {
     return createSafeErrorResponse(error, 'บันทึกข้อมูลติดต่อไม่สำเร็จ', { defaultStatus: 500 });

@@ -26,6 +26,7 @@ import {
 import { TicketIcon } from './ticket-icon';
 import { AlertIcon } from './alert-icon';
 import { DateTimePicker24h } from './datetime-picker-24h';
+import { UbuPrivilegeSwitchField } from './ubu-privilege-switch-field';
 import {
   generateConcertCsvSnapshot,
   triggerCsvDownload,
@@ -3199,36 +3200,16 @@ export function OwnerSessionApprovalManager() {
                                           />
                                         </td>
                                         <td className="zone-editor-td">
-                                          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
-                                            <label htmlFor={`sess-${sIdx}-tt-${tIdx}-priv`} style={{ fontSize: '0.75rem', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
-                                              <input
-                                                id={`sess-${sIdx}-tt-${tIdx}-priv`}
-                                                type="checkbox"
-                                                checked={Boolean(tt.isStudentPrivilege)}
-                                                onChange={(e) => handleUpdateTicketType(sIdx, tIdx, 'isStudentPrivilege', e.target.checked)}
-                                              />
-                                              <span>ให้สิทธิ์</span>
-                                            </label>
-                                            {tt.isStudentPrivilege && (
-                                              <input
-                                                type="number"
-                                                min="0"
-                                                placeholder="ราคา นศ."
-                                                aria-label="ราคาพิเศษสำหรับนักศึกษา"
-                                                value={tt.studentPrice ?? ''}
-                                                onChange={(e) =>
-                                                  handleUpdateTicketType(
-                                                    sIdx,
-                                                    tIdx,
-                                                    'studentPrice',
-                                                    e.target.value === '' ? null : Number(e.target.value),
-                                                  )
-                                                }
-                                                className="text-input"
-                                                style={{ padding: '0.25rem 0.4rem', fontSize: '0.75rem' }}
-                                              />
-                                            )}
-                                          </div>
+                                          <UbuPrivilegeSwitchField
+                                            id={`sess-${sIdx}-tt-${tIdx}-priv`}
+                                            priceInputId={`sess-${sIdx}-tt-${tIdx}-priv-price`}
+                                            checked={Boolean(tt.isStudentPrivilege)}
+                                            onToggle={(nextChecked) => handleUpdateTicketType(sIdx, tIdx, 'isStudentPrivilege', nextChecked)}
+                                            studentPrice={tt.studentPrice}
+                                            onPriceChange={(nextPrice) => handleUpdateTicketType(sIdx, tIdx, 'studentPrice', nextPrice)}
+                                            label="ให้สิทธิ์ ม.อุบล"
+                                            compact
+                                          />
                                         </td>
                                         <td className="zone-editor-td">
                                           {sess.ticketTypes.length > 1 && (

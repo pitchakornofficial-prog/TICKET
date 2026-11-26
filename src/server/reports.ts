@@ -266,6 +266,7 @@ export interface EventFinanceSummaryItem extends AccountingResult {
   payoutBankName: string;
   payoutAccountNumber: string;
   payoutAccountName: string;
+  payoutQrCodeUrl?: string | null;
   firstSessionStartTime: string | null;
   finalSessionEnd: string | null;
   isFinalSessionEnded: boolean;
@@ -888,6 +889,7 @@ async function getBatchFinanceSummaries(
     organizerId: string;
     organizerName: string;
     organizerEmail: string;
+    payoutAccountId?: string | null;
     payoutBankName: string | null;
     payoutAccountNumber: string | null;
     payoutAccountName: string | null;
@@ -897,7 +899,7 @@ async function getBatchFinanceSummaries(
   }>(
     `SELECT e.id, e.title, e.location, e.status, e."organizerId",
             u.name AS "organizerName", u.email AS "organizerEmail",
-            e."payoutBankName", e."payoutAccountNumber", e."payoutAccountName",
+            e."payoutAccountId", e."payoutBankName", e."payoutAccountNumber", e."payoutAccountName",
             f."organizerFeeMode", f."organizerFeeRate", f."reservePercentage"
      FROM events e
      JOIN auth_user u ON u.id = e."organizerId"
@@ -912,7 +914,43 @@ async function getBatchFinanceSummaries(
   }
 
   const eventIds = eventsRes.rows.map(r => r.id);
+  const organizerIds = Array.from(new Set(eventsRes.rows.map(r => r.organizerId)));
   const isOwner = actor.role === 'owner';
+
+  const payoutAccountsRes = await pool
+    .query<{
+      id: string;
+      organizerId: string;
+      accountName: string;
+      accountNumber: string;
+      bankName: string;
+      isPrimary: boolean;
+      qrCodeUrl: string | null;
+    }>(
+      `SELECT id, "organizerId", "accountName", "accountNumber", "bankName", "isPrimary", "qrCodeUrl"
+       FROM organizer_payout_accounts
+       WHERE "organizerId" = ANY($1::text[])
+       ORDER BY "isPrimary" DESC, "createdAt" ASC`,
+      [organizerIds],
+    )
+    .catch(() => ({
+      rows: [] as Array<{
+        id: string;
+        organizerId: string;
+        accountName: string;
+        accountNumber: string;
+        bankName: string;
+        isPrimary: boolean;
+        qrCodeUrl: string | null;
+      }>,
+    }));
+  const accountById = new Map(payoutAccountsRes.rows.map(a => [a.id, a]));
+  const primaryAccountByOrg = new Map<string, (typeof payoutAccountsRes.rows)[number]>();
+  for (const acc of payoutAccountsRes.rows) {
+    if (!primaryAccountByOrg.has(acc.organizerId) || acc.isPrimary) {
+      primaryAccountByOrg.set(acc.organizerId, acc);
+    }
+  }
 
   const [ordersAggRes, sessAggRes, payoutsRes, debtAggRes, reserveAggRes] = await Promise.all([
     pool.query<{
@@ -1042,6 +1080,13 @@ async function getBatchFinanceSummaries(
       ? (firstStartRaw instanceof Date ? firstStartRaw.toISOString() : String(firstStartRaw))
       : null;
 
+    const syncedAccount =
+      (ev.payoutAccountId ? accountById.get(ev.payoutAccountId) : undefined) ||
+      primaryAccountByOrg.get(ev.organizerId);
+    const resolvedBankName = syncedAccount?.bankName || ev.payoutBankName || '';
+    const resolvedAccountNumber = syncedAccount?.accountNumber || ev.payoutAccountNumber || '';
+    const resolvedAccountName = syncedAccount?.accountName || ev.payoutAccountName || '';
+
     return {
       ...accounting,
       eventId: ev.id,
@@ -1051,11 +1096,12 @@ async function getBatchFinanceSummaries(
       organizerId: ev.organizerId,
       organizerName: ev.organizerName || 'ผู้จัดงาน',
       organizerEmail: isOwner ? (ev.organizerEmail || '') : maskEmail(ev.organizerEmail || ''),
-      payoutBankName: ev.payoutBankName || '',
+      payoutBankName: resolvedBankName,
       payoutAccountNumber: isOwner
-        ? ev.payoutAccountNumber || ''
-        : maskPayoutAccountNumber(ev.payoutAccountNumber || ''),
-      payoutAccountName: ev.payoutAccountName || '',
+        ? resolvedAccountNumber
+        : maskPayoutAccountNumber(resolvedAccountNumber),
+      payoutAccountName: resolvedAccountName,
+      payoutQrCodeUrl: syncedAccount?.qrCodeUrl || null,
       firstSessionStartTime: firstStartIso,
       finalSessionEnd: finalEndDate ? finalEndDate.toISOString() : null,
       isFinalSessionEnded: finalEndDate ? nowMs >= finalEndDate.getTime() : false,

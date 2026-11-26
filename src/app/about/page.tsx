@@ -1,16 +1,32 @@
+import type { Metadata } from 'next';
 import Link from 'next/link';
 import { ShieldCheckIcon, CheckCircleIcon, InfoIcon } from '@/components/icons';
+import { FloatingBackToTop } from '@/components/floating-back-to-top';
+import { getDatabasePool } from '@/server/database';
+import { readPublicOwnerContactInfo } from '@/server/owner-contact-info';
 
-export const metadata = {
+export const revalidate = 60;
+
+export const metadata: Metadata = {
   title: 'เกี่ยวกับเรา — TICKET',
   description: 'TICKET แพลตฟอร์มจำหน่ายบัตรคอนเสิร์ตในประเทศไทย ซื้อบัตรได้โดยไม่สมัครสมาชิก',
+  alternates: {
+    canonical: '/about',
+  },
+  openGraph: {
+    title: 'เกี่ยวกับเรา — TICKET',
+    description: 'TICKET แพลตฟอร์มจำหน่ายบัตรคอนเสิร์ตในประเทศไทย ซื้อบัตรได้โดยไม่สมัครสมาชิก',
+    url: '/about',
+    type: 'website',
+  },
 };
 
-export default function AboutPage() {
+export default async function AboutPage() {
+  const contact = await readPublicOwnerContactInfo(getDatabasePool());
+
   return (
     <article className="static-page" aria-labelledby="about-title">
       <header className="static-header">
-        <p className="eyebrow">TICKET / เกี่ยวกับเรา</p>
         <h1 id="about-title">เวทีที่คุณรัก ดนตรีที่คุณรอคอย</h1>
         <p className="intro">
           TICKET คือแพลตฟอร์มจำหน่ายบัตรคอนเสิร์ตและงานแสดงดนตรีในประเทศไทย
@@ -65,7 +81,7 @@ export default function AboutPage() {
         </p>
         <div className="action-box">
           <p>สนใจนำคอนเสิร์ตมาเปิดจำหน่ายบนระบบ TICKET?</p>
-          <Link href="/contact" className="primary-button button-link">ติดต่อทีมงานเพื่อขอคำเชิญ</Link>
+          <Link href="/contact" className="secondary-button button-link">ติดต่อทีมงานเพื่อขอคำเชิญ</Link>
         </div>
       </section>
 
@@ -75,11 +91,15 @@ export default function AboutPage() {
           ทีมงาน TICKET พร้อมให้ความช่วยเหลือและตอบข้อซักถามเกี่ยวกับการซื้อบัตรและบริการ:
         </p>
         <ul className="info-list">
-          <li><strong>อีเมลสนับสนุน:</strong> support@phatysd.me</li>
-          <li><strong>เวลาทำการ:</strong> จันทร์ – ศุกร์ 09:00 – 18:00 น. (เวลาประเทศไทย Asia/Bangkok)</li>
+          <li><strong>สายด่วน:</strong> {contact.hotline}</li>
+          <li><strong>อีเมลสนับสนุน:</strong> {contact.email}</li>
+          <li><strong>LINE Official:</strong> {contact.lineId}</li>
+          <li><strong>เวลาทำการ:</strong> {contact.operatingHours} (เวลาประเทศไทย Asia/Bangkok)</li>
           <li><strong>รายละเอียดเพิ่มเติม:</strong> ดูได้ที่หน้า <Link href="/contact" className="text-link">ติดต่อเรา</Link></li>
         </ul>
       </section>
+
+      <FloatingBackToTop testId="about-back-to-top-btn" />
     </article>
   );
 }

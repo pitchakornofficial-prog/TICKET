@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { getAuth, readActor } from '@/server/auth';
 import { roleHome } from '@/lib/back-office-access';
 import { LoginForm } from '@/components/login-form';
-import { ArrowLeftIcon, ShieldCheckIcon } from '@/components/icons';
+import { ArrowLeftIcon } from '@/components/icons';
 
 export default async function LoginPage() {
   const requestHeaders = await headers();
@@ -15,10 +15,6 @@ export default async function LoginPage() {
       <div className="login-card-container">
         <div className="login-portal-card">
           <div className="login-card-header">
-            <div className="login-badge-pill">
-              <ShieldCheckIcon className="login-badge-icon" />
-              <p className="eyebrow login-eyebrow">TICKET / พื้นที่ทีมงาน</p>
-            </div>
             <h1 id="login-title" className="login-card-title">เข้าสู่ระบบหลังบ้าน</h1>
             <p className="login-card-subtitle">
               สำหรับผู้ดูแลระบบ ผู้จัดงาน และทีมงานสแกนบัตร<br />

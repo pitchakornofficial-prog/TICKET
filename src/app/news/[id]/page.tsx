@@ -1,3 +1,4 @@
+import type { Metadata } from 'next';
 import Link from 'next/link';
 import { unstable_cache } from 'next/cache';
 import { notFound } from 'next/navigation';
@@ -13,6 +14,11 @@ import { FloatingBackToTop } from '@/components/floating-back-to-top';
 import { getDatabasePool } from '@/server/database';
 import { getPublishedNewsById, listPublishedNews } from '@/server/news';
 import { formatDate, formatBaht } from '@/lib/locale';
+import {
+  buildNewsArticleJsonLd,
+  serializeJsonLd,
+  summarizeNewsDescription,
+} from '@/lib/seo';
 
 interface RelatedConcertInfo {
   id: string;
@@ -38,6 +44,50 @@ const getCachedNewsById = unstable_cache(
   ['public-news-detail'],
   { revalidate: 60, tags: ['public-news'] },
 );
+
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}): Promise<Metadata> {
+  const { id } = await params;
+  try {
+    const newsItem = await getCachedNewsById(id);
+    if (!newsItem) {
+      return {
+        title: 'ไม่พบข่าวสาร — TICKET',
+      };
+    }
+
+    const description = summarizeNewsDescription(newsItem.content);
+    const canonicalPath = `/news/${encodeURIComponent(id)}`;
+    return {
+      title: `${newsItem.title} — TICKET`,
+      description,
+      alternates: {
+        canonical: canonicalPath,
+      },
+      openGraph: {
+        title: newsItem.title,
+        description,
+        url: canonicalPath,
+        type: 'article',
+        publishedTime: newsItem.publishedAt,
+        ...(newsItem.coverUrl ? { images: [{ url: newsItem.coverUrl, alt: newsItem.title }] } : {}),
+      },
+      twitter: {
+        card: newsItem.coverUrl ? 'summary_large_image' : 'summary',
+        title: newsItem.title,
+        description,
+        ...(newsItem.coverUrl ? { images: [newsItem.coverUrl] } : {}),
+      },
+    };
+  } catch {
+    return {
+      title: 'ข่าวสารและประกาศ — TICKET',
+    };
+  }
+}
 
 export default async function NewsDetailPage({
   params,
@@ -137,9 +187,22 @@ export default async function NewsDetailPage({
   }
 
   const paragraphs = newsItem.content.split('\n\n').filter(p => p.trim());
+  const articleJsonLd = buildNewsArticleJsonLd({
+    id: newsItem.id,
+    title: newsItem.title,
+    description: summarizeNewsDescription(newsItem.content),
+    publishedAt: newsItem.publishedAt,
+    authorName: newsItem.authorName,
+    coverUrl: newsItem.coverUrl,
+  });
 
   return (
     <article className="static-page news-detail-page">
+      <script
+        type="application/ld+json"
+        // biome-ignore lint/security/noDangerouslySetInnerHtml: serialized JSON-LD with escaped '<'
+        dangerouslySetInnerHTML={{ __html: serializeJsonLd(articleJsonLd) }}
+      />
       <div className="news-back-nav">
         <Link href="/news" className="back-link">
           <ArrowLeftIcon />

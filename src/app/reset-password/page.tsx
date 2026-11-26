@@ -10,7 +10,6 @@ export default async function ResetPasswordPage({
   return (
     <section className="opening account-page" aria-labelledby="reset-title">
       <div className="opening-copy account-copy">
-        <p className="eyebrow">TICKET / พื้นที่ทีมงาน</p>
         <h1 id="reset-title">ตั้งรหัสผ่านใหม่</h1>
         {token ? (
           <>

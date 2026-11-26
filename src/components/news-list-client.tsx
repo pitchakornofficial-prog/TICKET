@@ -166,11 +166,10 @@ export function NewsListClient({ initialNews }: NewsListClientProps) {
                 <div className="news-hero-footer">
                   <Link
                     href={`/news/${heroArticle.id}`}
-                    className="primary-button button-link news-hero-cta-btn"
+                    className="secondary-button button-link news-hero-cta-btn"
                     aria-label={`อ่านรายละเอียดข่าวเด่น: ${heroArticle.title}`}
                   >
                     <span>อ่านรายละเอียดข่าวนี้</span>
-                    <ChevronRightIcon />
                   </Link>
                 </div>
               </div>

@@ -42,13 +42,13 @@ describe('Owner Back-Office Modernization & Unified Workspace Layout (D-115)', (
     expect(workspaceContent).toContain('#owner-sync-conflicts-manager');
   });
 
-  it('defines full OwnerOverviewDashboard with header toolbar, 4 platform KPIs, action banner, and launchpad', () => {
+  it('defines full OwnerOverviewDashboard with header toolbar, 4 platform KPIs, and unified queue', () => {
     const dashboardContent = readFileSync(
       join(rootDir, 'src/components/owner-overview-dashboard.tsx'),
       'utf8',
     );
     expect(dashboardContent).toContain('owner-overview-header-toolbar');
-    expect(dashboardContent).toContain('ภาพรวมระบบจัดการ (Owner Overview)');
+    expect(dashboardContent).toContain('ภาพรวมระบบจัดการ');
     expect(dashboardContent).toContain('owner-overview-invite-btn');
     expect(dashboardContent).toContain('owner-overview-refresh-btn');
     expect(dashboardContent).toContain('owner-kpi-grid');
@@ -56,25 +56,23 @@ describe('Owner Back-Office Modernization & Unified Workspace Layout (D-115)', (
     expect(dashboardContent).toContain('owner-kpi-pending');
     expect(dashboardContent).toContain('owner-kpi-revenue');
     expect(dashboardContent).toContain('owner-kpi-system');
-    expect(dashboardContent).toContain('owner-attention-warning');
-    expect(dashboardContent).toContain('owner-attention-success');
-    expect(dashboardContent).toContain('launchpad-owner-approval');
-    expect(dashboardContent).toContain('launchpad-owner-finance');
-    expect(dashboardContent).toContain('launchpad-owner-customer');
-    expect(dashboardContent).toContain('launchpad-owner-system');
+    expect(dashboardContent).not.toContain('owner-attention-warning');
+    expect(dashboardContent).not.toContain('launchpad-owner-approval');
     expect(dashboardContent).not.toMatch(/\p{Extended_Pictographic}/u);
   });
 
-  it('preserves all 5 existing pending action cards for TASK-039 backward compatibility', () => {
+  it('preserves unified pending action cards including news and payouts', () => {
     const dashboardContent = readFileSync(
       join(rootDir, 'src/components/owner-overview-dashboard.tsx'),
       'utf8',
     );
     expect(dashboardContent).toContain('owner-overview-dashboard');
     expect(dashboardContent).toContain('owner-overview-title');
-    expect(dashboardContent).toContain('overview-total-badge');
+    expect(dashboardContent).toContain('overview-total-status');
     expect(dashboardContent).toContain("'pending-sessions'");
     expect(dashboardContent).toContain("'pending-refunds'");
+    expect(dashboardContent).toContain("'pending-news'");
+    expect(dashboardContent).toContain("'pending-payouts'");
     expect(dashboardContent).toContain("'payment-exceptions'");
     expect(dashboardContent).toContain("'failed-emails'");
     expect(dashboardContent).toContain("'sync-conflicts'");

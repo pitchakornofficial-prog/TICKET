@@ -57,26 +57,21 @@ describe('D-200: Organizer Concert Cards Cleanup, Revert to Draft, Delete System
     expect(eventRouteContent).toContain('deleteEventDraft(pool, id, session.user.id)');
   });
 
-  it('6. Item 4: Custom limit uses Minimalist 10-Segment Volume Bar spanning full card width', () => {
-    expect(eventsManagerContent).toContain('volume-bar-stepper');
-    expect(eventsManagerContent).toContain('volume-bar-row');
-    expect(eventsManagerContent).toContain('volume-bar-btn');
-    expect(eventsManagerContent).toContain('volume-bar-track');
-    expect(eventsManagerContent).toContain('volume-bar-segment');
-    expect(eventsManagerContent).toContain('data-testid="volume-bar-decrement-btn"');
-    expect(eventsManagerContent).toContain('data-testid="volume-bar-increment-btn"');
-    expect(eventsManagerContent).toMatch(/data-testid=\{`volume-bar-segment-\$\{n\}`\}/);
+  it('6. Item 4: Custom limit uses clean monochrome stepper + preset chips', () => {
+    expect(eventsManagerContent).toContain('limit-stepper-row');
+    expect(eventsManagerContent).toContain('limit-preset-chip');
+    expect(eventsManagerContent).toContain('data-testid="limit-decrement-btn"');
+    expect(eventsManagerContent).toContain('data-testid="limit-increment-btn"');
+    expect(eventsManagerContent).toContain('data-testid="limit-number-input"');
+    expect(eventsManagerContent).toMatch(/data-testid=\{`limit-preset-chip-\$\{n\}`\}/);
   });
 
-  it('7. Item 4: CSS rules provide clean monochrome line styling for Volume Bar and Delete Modal', () => {
-    expect(globalsCssContent).toContain('.volume-bar-stepper');
-    expect(globalsCssContent).toContain('.volume-bar-row');
-    expect(globalsCssContent).toContain('.volume-bar-track');
-    expect(globalsCssContent).toContain('.volume-bar-segment');
-    expect(globalsCssContent).toContain('.volume-bar-segment.filled');
+  it('7. Item 4: CSS rules provide clean monochrome line styling for Limit Stepper and Delete Modal', () => {
+    expect(globalsCssContent).toContain('.limit-stepper-row');
+    expect(globalsCssContent).toContain('.limit-preset-chip');
+    expect(globalsCssContent).toContain('.limit-preset-chip.active');
     expect(globalsCssContent).toContain('.delete-confirm-dialog');
-    expect(globalsCssContent).toContain('.delete-confirm-header');
-    expect(globalsCssContent).toContain('.delete-confirm-actions');
+    expect(globalsCssContent).toContain('.organizer-modal-sticky-topbar');
   });
 
   it('8. D-200 decisions recorded in requirement.md', () => {

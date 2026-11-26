@@ -11,18 +11,30 @@ describe('D-217 to D-220: Organizer & Admin Concert Governance, UBU Privilege, a
       'utf8',
     );
 
-    // UBU Student Privilege Mode setting
-    expect(managerSrc).toContain('ubu-privilege-setting-card');
-    expect(managerSrc).toContain('สิทธิ์พิเศษนักศึกษาและบุคลากร ม.อุบลราชธานี');
-    expect(managerSrc).toContain('@ubu.ac.th');
-    expect(managerSrc).toContain('ubu-privilege-toggle');
-    expect(managerSrc).toContain('ticket-student-checkbox-');
+    const switchFieldSrc = readFileSync(
+      join(rootDir, 'src/components/ubu-privilege-switch-field.tsx'),
+      'utf8',
+    );
+    const ownerApprovalSrc = readFileSync(
+      join(rootDir, 'src/components/owner-session-approval-manager.tsx'),
+      'utf8',
+    );
 
-    // Platform Fee 3% Transparency Card
+    // UBU Student Privilege auto-enabled from ticket zones with unified switch + connector line
+    expect(managerSrc).toContain('@ubu.ac.th');
+    expect(managerSrc).toContain('ticket-student-checkbox-');
+    expect(managerSrc).toContain('effectiveUbuPrivilegeMode');
+    expect(managerSrc).toContain('UbuPrivilegeSwitchField');
+    expect(ownerApprovalSrc).toContain('UbuPrivilegeSwitchField');
+    expect(switchFieldSrc).toContain('role="switch"');
+    expect(switchFieldSrc).toContain('ubu-switch-connector');
+    expect(managerSrc).not.toContain('ubu-privilege-toggle');
+
+    // Platform Fee Transparency Card (Admin-configured or pending default 3.00%)
     expect(managerSrc).toContain('platform-fee-transparency-card');
     expect(managerSrc).toContain('สรุปข้อตกลงค่าบริการแพลตฟอร์ม TICKET');
-    expect(managerSrc).toContain('ค่าบริการมาตรฐาน: 3.00%');
-    expect(managerSrc).toContain('ยอดขายรวม − 3%');
+    expect(managerSrc).toContain('รอแอดมินกำหนด (ค่าเริ่มต้น: 3.00%)');
+    expect(managerSrc).toContain('editingFeeSettings');
   });
 
   it('verifies D-218: Comprehensive concert governance attributes in organizer events manager', () => {

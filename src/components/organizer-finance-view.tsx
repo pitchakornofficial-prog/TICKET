@@ -24,6 +24,7 @@ import { HeaderInfoTooltip } from './header-info-tooltip';
 import { generateBankSlipSvgDataUrl } from '@/lib/bank-slip';
 import {
   loadPayoutAccounts,
+  savePayoutAccounts,
   getPrimaryPayoutAccount,
   loadSharedPayoutAccounts,
   EVENT_PAYOUT_ACCOUNTS_CHANGED,
@@ -115,33 +116,24 @@ export function OrganizerFinanceView({
   >(null);
   const [payoutModalTab, setPayoutModalTab] = useState<'slip' | 'details'>('slip');
 
-  // Scroll to top button
-  const [showScrollTop, setShowScrollTop] = useState(false);
-
   // Payouts search, status, and concert filter state (D-180, D-184)
   // Synced Payout Accounts (D-206)
   const [payoutAccounts, setPayoutAccounts] = useState<PayoutBankAccount[]>(() => loadPayoutAccounts());
 
   useEffect(() => {
     let isCancelled = false;
-    const handleSync = () => {
-      setPayoutAccounts(loadPayoutAccounts());
-    };
-    window.addEventListener(EVENT_PAYOUT_ACCOUNTS_CHANGED, handleSync);
-    window.addEventListener('storage', handleSync);
 
     loadSharedPayoutAccounts()
       .then((accs) => {
-        if (!isCancelled && accs.length > 0) {
+        if (!isCancelled) {
           setPayoutAccounts(accs);
+          savePayoutAccounts(accs, { emitEvent: false });
         }
       })
       .catch(() => {});
 
     return () => {
       isCancelled = true;
-      window.removeEventListener(EVENT_PAYOUT_ACCOUNTS_CHANGED, handleSync);
-      window.removeEventListener('storage', handleSync);
     };
   }, []);
 
@@ -150,15 +142,6 @@ export function OrganizerFinanceView({
   const [payoutSearchQuery, setPayoutSearchQuery] = useState('');
   const [payoutStatusFilter, setPayoutStatusFilter] = useState<'all' | 'completed' | 'failed'>('all');
   const [payoutEventFilter, setPayoutEventFilter] = useState<string>('all');
-
-
-  useEffect(() => {
-    function handleScroll() {
-      setShowScrollTop(window.scrollY > 300);
-    }
-    window.addEventListener('scroll', handleScroll, { passive: true });
-    return () => window.removeEventListener('scroll', handleScroll);
-  }, []);
 
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
@@ -169,10 +152,6 @@ export function OrganizerFinanceView({
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [selectedPayout]);
-
-  const handleScrollToTop = () => {
-    window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
 
   // Export CSV Handler (D-180)
   const handleExportCsv = () => {
@@ -335,9 +314,30 @@ export function OrganizerFinanceView({
     return () => controller.abort();
   }, [events]);
 
+  useEffect(() => {
+    const handleSync = () => {
+      setPayoutAccounts(loadPayoutAccounts());
+      void loadEvents();
+    };
+    window.addEventListener(EVENT_PAYOUT_ACCOUNTS_CHANGED, handleSync);
+    window.addEventListener('storage', handleSync);
+    return () => {
+      window.removeEventListener(EVENT_PAYOUT_ACCOUNTS_CHANGED, handleSync);
+      window.removeEventListener('storage', handleSync);
+    };
+  }, [loadEvents]);
+
   // Refresh handler
   const handleRefresh = async () => {
-    await loadEvents();
+    await Promise.all([
+      loadEvents(),
+      loadSharedPayoutAccounts()
+        .then((accs) => {
+          setPayoutAccounts(accs);
+          savePayoutAccounts(accs, { emitEvent: false });
+        })
+        .catch(() => {}),
+    ]);
     if (selectedEventId) {
       await loadReport(selectedEventId);
     }
@@ -781,10 +781,11 @@ export function OrganizerFinanceView({
                   </div>
                   <div>
                     <div style={{ fontSize: '0.75rem', color: '#64748b' }}>บัญชีธนาคารสำหรับรับเงินของคอนเสิร์ตนี้:</div>
-                    <div style={{ fontSize: '0.88rem', fontWeight: 600, color: '#0f172a' }}>
+                    <div style={{ fontSize: '0.88rem', fontWeight: 400, color: '#0f172a' }}>
                       {selectedEvent?.payoutBankName ? (
                         <span>
-                          {selectedEvent.payoutBankName} ({selectedEvent.payoutAccountNumber}) - {selectedEvent.payoutAccountName}
+                          {selectedEvent.payoutBankName} ({selectedEvent.payoutAccountNumber}) - {selectedEvent.payoutAccountName}{' '}
+                          <small style={{ fontWeight: 400, color: '#64748b' }}>(ซิงก์กับบัญชีหลักแล้ว)</small>
                         </span>
                       ) : (
                         <span>
@@ -991,6 +992,19 @@ export function OrganizerFinanceView({
                     <span className="finance-payout-field-label">ชื่อบัญชี:</span>
                     <span className="finance-payout-field-val">{primaryPayoutAccount.accountName}</span>
                   </div>
+                  {primaryPayoutAccount.qrCodeUrl && (
+                    <div className="finance-payout-field">
+                      <span className="finance-payout-field-label">QR รับเงิน:</span>
+                      <a
+                        href={primaryPayoutAccount.qrCodeUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{ color: '#0f172a', textDecoration: 'underline', fontSize: '0.84rem' }}
+                      >
+                        ดู QR รับเงิน
+                      </a>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -1330,33 +1344,6 @@ export function OrganizerFinanceView({
             </div>
           </div>
         </div>
-      )}
-
-      {/* Floating Back-to-Top Button */}
-      {showScrollTop && (
-        <button
-          type="button"
-          className="floating-back-to-top"
-          onClick={handleScrollToTop}
-          title="กลับสู่ด้านบนสุด"
-          aria-label="กลับสู่ด้านบนสุด"
-          data-testid="finance-back-to-top-btn"
-        >
-          <svg
-            viewBox="0 0 24 24"
-            width="20"
-            height="20"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2.5"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            aria-hidden="true"
-          >
-            <line x1="12" y1="19" x2="12" y2="5" />
-            <polyline points="5 12 12 5 19 12" />
-          </svg>
-        </button>
       )}
     </div>
   );

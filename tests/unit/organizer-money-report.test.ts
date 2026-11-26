@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   calculateEventAccounting,
@@ -193,5 +195,17 @@ describe('TASK-028: Organizer Money Report Unit Tests (AC-28, AC-64, AC-77, AC-7
     expect(maskPhone('0899998888')).toBe('089***8888');
     expect(maskPhone('')).toBe('***');
     expect(maskPhone('1234')).toBe('***');
+  });
+
+  it('8. Flattens nested containers and places Refresh/CSV/Close buttons in flush sticky top bar', () => {
+    const src = readFileSync(
+      join(process.cwd(), 'src/components/organizer-money-report-view.tsx'),
+      'utf8',
+    );
+    expect(src).toContain('data-testid="money-report-top-action-bar"');
+    expect(src).toContain("position: 'sticky'");
+    expect(src).toContain("top: '-1.5rem'");
+    expect(src).toContain("boxShadow: 'none'");
+    expect(src).toContain('data-testid="money-report-unified-kpi-grid"');
   });
 });

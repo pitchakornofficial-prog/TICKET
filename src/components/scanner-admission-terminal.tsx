@@ -16,12 +16,29 @@ import {
 } from './icons';
 import { formatTime } from '@/lib/locale';
 import {
+  buildSegmentedTicketQuery,
+  parsePastedTicketSegments,
+} from '@/lib/ticket-code-input';
+import {
   saveOfflineDatasetAsync,
   getOfflineDatasetMetaAsync,
   getOfflinePendingScansAsync,
   performOfflineAdmissionScanAsync,
   syncPendingOfflineScansAsync,
+  exportOfflineBackupAsync,
+  importOfflineBackupAsync,
+  readPersistedOfflineMode,
+  writePersistedOfflineMode,
+  type SyncProgressInfo,
 } from '@/lib/offline-admission';
+
+/**
+ * Warn before refreshing or closing the scanner tab while offline mode is active
+ * or while offline scan records are waiting to be synced.
+ */
+export function shouldWarnBeforeUnload(isOfflineMode: boolean, pendingSyncCount: number): boolean {
+  return isOfflineMode || pendingSyncCount > 0;
+}
 
 interface ScannedTicketSummary {
   ticketId: string;
@@ -122,7 +139,11 @@ export function ScannerAdmissionTerminal({
   onClose,
 }: ScannerAdmissionTerminalProps) {
   const [action, setAction] = useState<'entry' | 'exit'>('entry');
-  const [ticketInput, setTicketInput] = useState('');
+  const [orderPart, setOrderPart] = useState('');
+  const [indexPart, setIndexPart] = useState('');
+  const [suffixPart, setSuffixPart] = useState('');
+  const [highlightedSegment, setHighlightedSegment] = useState<'none' | 'order' | 'index'>('none');
+  const [segmentHint, setSegmentHint] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [hydrated, setHydrated] = useState(false);
 
@@ -144,6 +165,10 @@ export function ScannerAdmissionTerminal({
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const decodeCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const orderInputRef = useRef<HTMLInputElement | null>(null);
+  const indexInputRef = useRef<HTMLInputElement | null>(null);
+  const ticketInputRef = useRef<HTMLInputElement | null>(null);
+  const wasScanResultOpenRef = useRef(false);
   const lastScannedRef = useRef<{ code: string; at: number } | null>(null);
   const scanPausedRef = useRef(false);
   scanPausedRef.current = loading || Boolean(scanResult);
@@ -158,35 +183,17 @@ export function ScannerAdmissionTerminal({
   const [offlineDataset, setOfflineDataset] = useState<{
     lastSuccessfulSync?: string;
     totalTickets?: number;
-    primaryScanner?: { scannerName: string } | null;
+    primaryScanner?: { scannerId?: string; scannerName: string } | null;
     isOfflineHalted?: boolean;
     offlineStatus?: 'active' | 'halted_reconciliation_required';
   } | null>(null);
   const [syncingDataset, setSyncingDataset] = useState(false);
+  const [syncProgress, setSyncProgress] = useState<SyncProgressInfo | null>(null);
   const [syncFeedback, setSyncFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const autoDownloadedEventRef = useRef<string | null>(null);
+  const backupFileInputRef = useRef<HTMLInputElement | null>(null);
 
-  useEffect(() => {
-    let active = true;
-    Promise.all([
-      getOfflineDatasetMetaAsync(eventId),
-      getOfflinePendingScansAsync(eventId),
-    ])
-      .then(([meta, pending]) => {
-        if (!active) return;
-        if (meta?.lastSuccessfulSync && typeof meta.totalTickets === 'number') {
-          setOfflineDataset(meta);
-        }
-        setPendingSyncCount(pending.length);
-      })
-      .catch(() => {
-        // Ignored
-      });
-    return () => {
-      active = false;
-    };
-  }, [eventId]);
-
-  async function handleDownloadOfflineDataset() {
+  const handleDownloadOfflineDataset = useCallback(async () => {
     setSyncingDataset(true);
     setSyncFeedback(null);
     try {
@@ -209,12 +216,71 @@ export function ScannerAdmissionTerminal({
     } finally {
       setSyncingDataset(false);
     }
-  }
+  }, [eventId]);
+
+  useEffect(() => {
+    let active = true;
+    Promise.all([
+      getOfflineDatasetMetaAsync(eventId),
+      getOfflinePendingScansAsync(eventId),
+    ])
+      .then(([meta, pending]) => {
+        if (!active) return;
+        if (meta?.lastSuccessfulSync && typeof meta.totalTickets === 'number') {
+          setOfflineDataset(meta);
+          if (
+            isPrimary &&
+            !meta.isOfflineHalted &&
+            meta.offlineStatus !== 'halted_reconciliation_required' &&
+            readPersistedOfflineMode(eventId)
+          ) {
+            setIsOfflineMode(true);
+          } else if (!isPrimary) {
+            writePersistedOfflineMode(eventId, false);
+          }
+        } else if (isPrimary && autoDownloadedEventRef.current !== eventId) {
+          autoDownloadedEventRef.current = eventId;
+          void handleDownloadOfflineDataset();
+        }
+        setPendingSyncCount(pending.length);
+      })
+      .catch(() => {
+        // Ignored
+      });
+    return () => {
+      active = false;
+    };
+  }, [eventId, isPrimary, handleDownloadOfflineDataset]);
+
+  useEffect(() => {
+    const isOpen = Boolean(scanResult);
+    if (wasScanResultOpenRef.current && !isOpen && activeTerminalTab === 'scan') {
+      ticketInputRef.current?.focus();
+    }
+    wasScanResultOpenRef.current = isOpen;
+  }, [scanResult, activeTerminalTab]);
+
+  useEffect(() => {
+    if (!shouldWarnBeforeUnload(isOfflineMode, pendingSyncCount)) {
+      return;
+    }
+
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = '';
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, [isOfflineMode, pendingSyncCount]);
 
   async function handleToggleOfflineMode() {
     if (isOfflineMode) {
       // Switch back to online
       setIsOfflineMode(false);
+      writePersistedOfflineMode(eventId, false);
       setNonPrimaryOfflineWarning(null);
       fetchStats();
     } else {
@@ -245,6 +311,7 @@ export function ScannerAdmissionTerminal({
 
       setOfflineDataset(meta);
       setIsOfflineMode(true);
+      writePersistedOfflineMode(eventId, true);
       setNonPrimaryOfflineWarning(null);
       setSyncFeedback(null);
     }
@@ -259,9 +326,12 @@ export function ScannerAdmissionTerminal({
       return;
     }
     setIsSyncingPending(true);
+    setSyncProgress(null);
     setSyncFeedback(null);
     try {
-      const res = await syncPendingOfflineScansAsync(eventId);
+      const res = await syncPendingOfflineScansAsync(eventId, undefined, {
+        onProgress: (progress) => setSyncProgress(progress),
+      });
       if (res.success) {
         setPendingSyncCount(res.remainingCount);
         if (res.lastSuccessfulSync) {
@@ -288,6 +358,52 @@ export function ScannerAdmissionTerminal({
       });
     } finally {
       setIsSyncingPending(false);
+      setSyncProgress(null);
+    }
+  }
+
+  async function handleExportOfflineBackup() {
+    try {
+      const payload = await exportOfflineBackupAsync(eventId);
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      const dateStamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-');
+      a.download = `ticket-offline-backup-${eventId}-${dateStamp}.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      setSyncFeedback({
+        type: 'success',
+        message: `สำรองข้อมูลออฟไลน์เรียบร้อยแล้ว (${payload.pendingScansCount} รายการเข้า-ออก)`,
+      });
+    } catch (error) {
+      setSyncFeedback({
+        type: 'error',
+        message: error instanceof Error ? error.message : 'ไม่สามารถสำรองข้อมูลออฟไลน์ได้',
+      });
+    }
+  }
+
+  async function handleImportOfflineBackup(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    try {
+      const rawText = await file.text();
+      const result = await importOfflineBackupAsync(eventId, rawText);
+      setPendingSyncCount(result.totalPendingCount);
+      setSyncFeedback({
+        type: 'success',
+        message: `กู้คืนไฟล์สำรองสำเร็จ: เพิ่ม ${result.importedCount} รายการ (ข้ามรายการซ้ำ ${result.skippedDuplicates} รายการ)`,
+      });
+    } catch (error) {
+      setSyncFeedback({
+        type: 'error',
+        message: error instanceof Error ? error.message : 'ไม่สามารถนำเข้าไฟล์สำรองได้',
+      });
     }
   }
 
@@ -312,6 +428,32 @@ export function ScannerAdmissionTerminal({
     fetchStats();
   }, [fetchStats]);
 
+  const resetSegmentedInputs = useCallback(() => {
+    setOrderPart('');
+    setIndexPart('');
+    setSuffixPart('');
+    setHighlightedSegment('none');
+    setSegmentHint(null);
+  }, []);
+
+  const handleSegmentedAmbiguity = useCallback((reason?: string, message?: string): boolean => {
+    if (reason === 'AMBIGUOUS_TICKET_SUFFIX') {
+      setHighlightedSegment('order');
+      setSegmentHint(message || 'พบรหัสท้ายซ้ำในรอบนี้ กรุณากรอกช่อง 4 ตัวหน้า (XXXX) เพิ่มเติม');
+      setScanResult(null);
+      setTimeout(() => orderInputRef.current?.focus(), 0);
+      return true;
+    }
+    if (reason === 'AMBIGUOUS_TICKET_ORDER_SUFFIX') {
+      setHighlightedSegment('index');
+      setSegmentHint(message || 'ยังพบบัตรซ้ำในคำสั่งซื้อเดียวกัน กรุณากรอกเลขลำดับใบ (NN) เพิ่มเติม');
+      setScanResult(null);
+      setTimeout(() => indexInputRef.current?.focus(), 0);
+      return true;
+    }
+    return false;
+  }, []);
+
   const submitScanCode = useCallback(async (rawCode: string) => {
     const cleanCode = rawCode.trim();
     if (!cleanCode || loading) return;
@@ -319,15 +461,28 @@ export function ScannerAdmissionTerminal({
     if (isOfflineMode) {
       setLoading(true);
       try {
+        const effectiveScannerId =
+          isPrimary && offlineDataset?.primaryScanner?.scannerId
+            ? offlineDataset.primaryScanner.scannerId
+            : scannerId || 'scanner';
+        const effectiveScannerName =
+          isPrimary && offlineDataset?.primaryScanner?.scannerName
+            ? offlineDataset.primaryScanner.scannerName
+            : scannerName || (isPrimary ? 'เครื่องหลัก' : 'เครื่องสแกน');
         const offResult = await performOfflineAdmissionScanAsync({
           eventId,
           sessionId,
-          scannerId: scannerId || 'scanner',
-          scannerName: scannerName || (isPrimary ? 'เครื่องหลัก' : 'เครื่องสแกน'),
+          scannerId: effectiveScannerId,
+          scannerName: effectiveScannerName,
           isPrimary,
           qrPayloadOrCode: cleanCode,
           action,
         });
+
+        if (handleSegmentedAmbiguity(offResult.reason, offResult.message)) {
+          playScanBeep(false);
+          return;
+        }
 
         setScanResult(offResult);
         playScanBeep(offResult.success);
@@ -376,7 +531,7 @@ export function ScannerAdmissionTerminal({
             }
           });
         }
-        setTicketInput('');
+        resetSegmentedInputs();
       } finally {
         setLoading(false);
       }
@@ -397,6 +552,10 @@ export function ScannerAdmissionTerminal({
 
       const data = await res.json();
       if (res.ok && data.result) {
+        if (handleSegmentedAmbiguity(data.result.reason, data.result.message)) {
+          playScanBeep(false);
+          return;
+        }
         setScanResult(data.result);
         playScanBeep(Boolean(data.result.success));
       } else {
@@ -409,7 +568,7 @@ export function ScannerAdmissionTerminal({
         });
         playScanBeep(false);
       }
-      setTicketInput('');
+      resetSegmentedInputs();
       fetchStats();
     } catch {
       setScanResult({
@@ -423,14 +582,49 @@ export function ScannerAdmissionTerminal({
     } finally {
       setLoading(false);
     }
-  }, [action, eventId, fetchStats, isOfflineMode, isPrimary, loading, offlineDataset?.totalTickets, scannerId, scannerName, sessionId]);
+  }, [
+    action,
+    eventId,
+    fetchStats,
+    handleSegmentedAmbiguity,
+    isOfflineMode,
+    isPrimary,
+    loading,
+    offlineDataset?.primaryScanner?.scannerId,
+    offlineDataset?.primaryScanner?.scannerName,
+    offlineDataset?.totalTickets,
+    resetSegmentedInputs,
+    scannerId,
+    scannerName,
+    sessionId,
+  ]);
 
   const submitScanCodeRef = useRef(submitScanCode);
   submitScanCodeRef.current = submitScanCode;
 
+  const manualQuery = buildSegmentedTicketQuery({ orderPart, indexPart, suffixPart });
+
   async function handleScanSubmit(e?: React.FormEvent) {
     if (e) e.preventDefault();
-    await submitScanCode(ticketInput);
+    if (!manualQuery) return;
+    await submitScanCode(manualQuery);
+  }
+
+  function handleSegmentPaste(e: React.ClipboardEvent<HTMLInputElement>) {
+    const pasted = e.clipboardData.getData('text');
+    const parsed = parsePastedTicketSegments(pasted);
+    if (!parsed) return;
+    e.preventDefault();
+    if ('rawQrPayload' in parsed) {
+      setSuffixPart(parsed.rawQrPayload);
+      void submitScanCode(parsed.rawQrPayload);
+      return;
+    }
+    setOrderPart(parsed.orderPart);
+    setIndexPart(parsed.indexPart);
+    setSuffixPart(parsed.suffixPart);
+    setHighlightedSegment('none');
+    setSegmentHint(null);
   }
 
   // Real camera stream + QR code decoding (BarcodeDetector with jsQR fallback for iOS Safari/Firefox)
@@ -629,13 +823,13 @@ export function ScannerAdmissionTerminal({
                 title={isOfflineMode ? 'โหมดออฟไลน์' : 'โหมดออนไลน์'}
               >
                 <span className={`online-pulse-dot ${isOfflineMode ? 'offline' : 'online'}`} />
-                <span>{isOfflineMode ? 'ออฟไลน์ (Offline)' : 'ออนไลน์ (Online)'}</span>
+                <span>{isOfflineMode ? 'ออฟไลน์' : 'ออนไลน์'}</span>
               </span>
 
               {isPrimary ? (
                 <span className="scanner-badge badge-primary-offline" data-testid="terminal-primary-badge">
-                  <ShieldCheckIcon width={12} height={12} />
-                  <span>เครื่องหลักออฟไลน์</span>
+                  <ShieldCheckIcon width={13} height={13} />
+                  <span>เครื่องหลัก</span>
                   <span className="sr-only"> เครื่องหลักประจำงาน (Primary Device)</span>
                 </span>
               ) : (
@@ -643,7 +837,7 @@ export function ScannerAdmissionTerminal({
                   className="scanner-badge badge-standard-online"
                   data-testid="terminal-secondary-badge"
                 >
-                  <span>เครื่องรอง (เครื่องหลัก: {primaryScannerName || 'ยังไม่กำหนด'})</span>
+                  <span>เครื่องรอง ({primaryScannerName || 'ยังไม่กำหนดเครื่องหลัก'})</span>
                 </span>
               )}
 
@@ -657,10 +851,9 @@ export function ScannerAdmissionTerminal({
             <div className="terminal-top-actions">
               <Link
                 href="/back-office/ticket-inspector"
-                className="secondary-button mini-btn"
+                className="terminal-nav-btn"
                 id="open-ticket-inspector-btn"
                 title="เปิดระบบตรวจสอบและทดสอบคิวอาร์โค้ดบัตร (โหมดปลอดภัย ไม่ตัดรอบ)"
-                style={{ display: 'inline-flex', alignItems: 'center', gap: '0.3rem' }}
               >
                 <QrCodeIcon width={14} height={14} />
                 <span>ตรวจสอบบัตร</span>
@@ -668,7 +861,7 @@ export function ScannerAdmissionTerminal({
               {(actorRole === 'organizer' || actorRole === 'owner') && (
                 <Link
                   href="/back-office/organizer?section=scanners"
-                  className="secondary-button mini-btn"
+                  className="terminal-nav-btn"
                   id="back-to-organizer-btn"
                   data-testid="back-to-organizer-btn"
                   title="กลับสู่หน้าจัดการหลังบ้านผู้จัดงาน"
@@ -679,7 +872,7 @@ export function ScannerAdmissionTerminal({
               {onClose && (
                 <button
                   type="button"
-                  className="secondary-button mini-btn"
+                  className="terminal-nav-btn"
                   onClick={onClose}
                   id="close-terminal-btn"
                 >
@@ -813,21 +1006,26 @@ export function ScannerAdmissionTerminal({
                 <span className="sr-only">{cameraActive ? 'ปิดช่องมองภาพกล้อง' : 'เปิดช่องมองภาพสแกนกล้อง'}</span>
               </button>
 
-              {/* Torch Toggle Button */}
-              {cameraActive && (
-                <button
-                  type="button"
-                  id="toggle-torch-btn"
-                  data-testid="toggle-torch-btn"
-                  className={`camera-icon-toggle-btn torch-toggle-btn ${torchActive ? 'active' : ''}`}
-                  onClick={handleToggleTorch}
-                  title={torchActive ? 'ปิดไฟแฟลช' : 'เปิดไฟแฟลช'}
-                  aria-label={torchActive ? 'ปิดไฟแฟลช' : 'เปิดไฟแฟลช'}
-                >
-                  <FlashlightIcon width={22} height={22} />
-                  <span className="sr-only">{torchActive ? 'ปิดไฟแฟลช' : 'เปิดไฟแฟลช'}</span>
-                </button>
-              )}
+              {/* Torch Toggle Button (single unified location next to camera toggle) */}
+              <button
+                type="button"
+                id="toggle-torch-btn"
+                data-testid="toggle-torch-btn"
+                className={`camera-icon-toggle-btn torch-toggle-btn ${torchActive ? 'active' : ''}`}
+                onClick={handleToggleTorch}
+                disabled={!cameraActive || cameraStatus !== 'active'}
+                title={
+                  !cameraActive || cameraStatus !== 'active'
+                    ? 'เปิดไฟแฟลช (ต้องเปิดกล้องสำเร็จก่อน)'
+                    : torchActive
+                      ? 'ปิดไฟแฟลช'
+                      : 'เปิดไฟแฟลช'
+                }
+                aria-label={torchActive ? 'ปิดไฟแฟลช' : 'เปิดไฟแฟลช'}
+              >
+                <FlashlightIcon width={22} height={22} />
+                <span className="sr-only">{torchActive ? 'ปิดไฟแฟลช' : 'เปิดไฟแฟลช'}</span>
+              </button>
             </div>
 
             {/* Camera Viewfinder (Live Rear Camera + Automatic QR Scanner) */}
@@ -841,25 +1039,15 @@ export function ScannerAdmissionTerminal({
                   playsInline
                   muted
                 />
-                <button
-                  type="button"
-                  id="viewfinder-floating-torch-btn"
-                  data-testid="viewfinder-floating-torch-btn"
-                  className={`viewfinder-floating-torch-btn ${torchActive ? 'active' : ''}`}
-                  onClick={handleToggleTorch}
-                  title={torchActive ? 'ปิดไฟแฟลช' : 'เปิดไฟแฟลช'}
-                  aria-label={torchActive ? 'ปิดไฟแฟลช' : 'เปิดไฟแฟลช'}
-                >
-                  <FlashlightIcon width={16} height={16} />
-                </button>
                 {torchFeedback && (
-                  <div style={{ position: 'absolute', bottom: '10px', zIndex: 12, background: 'rgba(15,23,42,0.9)', color: '#fca5a5', padding: '4px 10px', borderRadius: '6px', fontSize: '0.75rem', pointerEvents: 'none' }}>
+                  <div style={{ position: 'absolute', top: '12px', zIndex: 12, background: 'rgba(15,23,42,0.88)', color: '#f8fafc', padding: '4px 12px', borderRadius: '999px', fontSize: '0.75rem', pointerEvents: 'none' }}>
                     {torchFeedback}
                   </div>
                 )}
                 <div className="camera-overlay-layer">
                   {cameraStatus === 'error' ? (
                     <div className="camera-status-box">
+                      <CameraOffIcon width={32} height={32} className="camera-error-icon" />
                       <p className="camera-error-text">{cameraError}</p>
                       <button
                         type="button"
@@ -870,14 +1058,20 @@ export function ScannerAdmissionTerminal({
                       </button>
                     </div>
                   ) : (
-                    <div className="viewfinder-frame">
-                      <div className="viewfinder-laser" />
-                      <p className="viewfinder-hint">
+                    <>
+                      <div className="viewfinder-frame scanner-reticle" aria-hidden="true">
+                        <span className="reticle-corner tl" />
+                        <span className="reticle-corner tr" />
+                        <span className="reticle-corner bl" />
+                        <span className="reticle-corner br" />
+                        <div className="viewfinder-laser" />
+                      </div>
+                      <p className="scanner-hint-pill">
                         {cameraStatus === 'starting'
                           ? 'กำลังเปิดกล้อง...'
-                          : 'นำ QR Code บัตรมาส่องในกรอบเพื่อสแกนอัตโนมัติ'}
+                          : 'วาง QR Code ให้อยู่ในกรอบเพื่อสแกนอัตโนมัติ'}
                       </p>
-                    </div>
+                    </>
                   )}
                 </div>
               </div>
@@ -890,24 +1084,94 @@ export function ScannerAdmissionTerminal({
                   {action === 'entry' ? 'หรือสแกน QR / กรอกรหัสบัตร เพื่อบันทึกเข้างาน:' : 'หรือสแกน QR / กรอกรหัสบัตร เพื่อบันทึกออกนอกงาน:'}
                 </label>
                 <div className="scan-input-group">
-                  <input
-                    id="scanner-ticket-input"
-                    type="text"
-                    className="text-input font-mono"
-                    placeholder="สแกน QR Code หรือกรอกรหัสบัตร (TK-...)"
-                    value={ticketInput}
-                    onChange={e => setTicketInput(e.target.value)}
-                    autoComplete="off"
-                  />
+                  <fieldset className="segmented-ticket-bar" aria-label="รหัสบัตรแบบแบ่งช่อง">
+                    <span className="segment-prefix" aria-hidden="true">TK</span>
+                    <span className="segment-dash" aria-hidden="true">-</span>
+                    <input
+                      ref={orderInputRef}
+                      id="scanner-order-input"
+                      data-testid="scanner-order-input"
+                      type="text"
+                      maxLength={4}
+                      aria-label="รหัสคำสั่งซื้อ 4 ตัว"
+                      placeholder="XXXX"
+                      className={`text-input font-mono segment-box segment-order${highlightedSegment === 'order' ? ' is-highlighted' : ''}`}
+                      value={orderPart}
+                      onChange={e => {
+                        const next = e.target.value.replace(/[^0-9A-Za-z]/g, '').toUpperCase().slice(0, 4);
+                        setOrderPart(next);
+                        if (highlightedSegment === 'order' && next.length === 4) {
+                          setHighlightedSegment('none');
+                          setSegmentHint(null);
+                        }
+                      }}
+                      onPaste={handleSegmentPaste}
+                      autoComplete="off"
+                      autoCapitalize="characters"
+                      spellCheck={false}
+                    />
+                    <span className="segment-dash" aria-hidden="true">-</span>
+                    <input
+                      ref={indexInputRef}
+                      id="scanner-index-input"
+                      data-testid="scanner-index-input"
+                      type="text"
+                      maxLength={2}
+                      inputMode="numeric"
+                      aria-label="ลำดับใบ 2 หลัก"
+                      placeholder="NN"
+                      className={`text-input font-mono segment-box segment-index${highlightedSegment === 'index' ? ' is-highlighted' : ''}`}
+                      value={indexPart}
+                      onChange={e => {
+                        const next = e.target.value.replace(/[^0-9A-Za-z]/g, '').toUpperCase().slice(0, 2);
+                        setIndexPart(next);
+                        if (highlightedSegment === 'index' && next.length === 2) {
+                          setHighlightedSegment('none');
+                          setSegmentHint(null);
+                        }
+                      }}
+                      onPaste={handleSegmentPaste}
+                      autoComplete="off"
+                      spellCheck={false}
+                    />
+                    <span className="segment-dash" aria-hidden="true">-</span>
+                    <input
+                      ref={ticketInputRef}
+                      id="scanner-ticket-input"
+                      data-testid="scanner-ticket-input"
+                      type="text"
+                      aria-label="รหัสสุ่ม 8 ตัวท้าย หรือสแกน QR"
+                      placeholder="8 ตัวท้าย (เช่น 9C4E12B0)"
+                      className="text-input font-mono segment-box segment-suffix"
+                      value={suffixPart}
+                      onChange={e => {
+                        const raw = e.target.value;
+                        if (/^tkt-qr-/i.test(raw.trim()) || /^tkt-q?r?$/i.test(raw.trim())) {
+                          setSuffixPart(raw.trim());
+                          return;
+                        }
+                        setSuffixPart(raw.replace(/[^0-9A-Za-z]/g, '').toUpperCase().slice(0, 8));
+                      }}
+                      onPaste={handleSegmentPaste}
+                      autoComplete="off"
+                      autoCapitalize="characters"
+                      spellCheck={false}
+                    />
+                  </fieldset>
                   <button
                     type="submit"
                     id="scanner-submit-btn"
-                    className="button button-primary terminal-submit-btn"
-                    disabled={loading || !hydrated || !ticketInput.trim()}
+                    className="secondary-button terminal-submit-btn"
+                    disabled={loading || !hydrated || !manualQuery}
                   >
                     {loading ? 'กำลังตรวจ...' : action === 'entry' ? 'บันทึกเข้างาน' : 'บันทึกออก'}
                   </button>
                 </div>
+                {segmentHint && (
+                  <p className="segment-escalation-hint" role="alert" data-testid="segment-escalation-hint">
+                    {segmentHint}
+                  </p>
+                )}
               </form>
             </div>
 
@@ -915,31 +1179,39 @@ export function ScannerAdmissionTerminal({
             <div className="terminal-quick-stats-grid">
               <div className="terminal-quick-stat-card">
                 <span className="terminal-quick-stat-label">บัตรที่ขายได้</span>
-                <span className="terminal-quick-stat-val" id="stats-tab1-total-tickets">
-                  {stats?.totalTickets ?? (offlineDataset?.totalTickets ?? 0)}
-                </span>
-                <span className="stat-unit" style={{ fontSize: '0.75rem', color: '#64748b', marginLeft: '3px' }}>ใบ</span>
+                <div className="terminal-quick-stat-value-row">
+                  <span className="terminal-quick-stat-val" id="stats-tab1-total-tickets">
+                    {stats?.totalTickets ?? (offlineDataset?.totalTickets ?? 0)}
+                  </span>
+                  <span className="terminal-stat-unit">ใบ</span>
+                </div>
               </div>
               <div className="terminal-quick-stat-card">
                 <span className="terminal-quick-stat-label">อยู่ในงานขณะนี้</span>
-                <span className="terminal-quick-stat-val" id="stats-currently-inside">
-                  {stats?.currentlyInside ?? 0}
-                </span>
-                <span className="stat-unit" style={{ fontSize: '0.75rem', color: '#64748b', marginLeft: '3px' }}>คน</span>
+                <div className="terminal-quick-stat-value-row">
+                  <span className="terminal-quick-stat-val" id="stats-currently-inside">
+                    {stats?.currentlyInside ?? 0}
+                  </span>
+                  <span className="terminal-stat-unit">คน</span>
+                </div>
               </div>
               <div className="terminal-quick-stat-card">
                 <span className="terminal-quick-stat-label">สแกนเข้าแล้ว</span>
-                <span className="terminal-quick-stat-val" id="stats-total-entries">
-                  {stats?.totalEntries ?? 0}
-                </span>
-                <span className="stat-unit" style={{ fontSize: '0.75rem', color: '#64748b', marginLeft: '3px' }}>ครั้ง</span>
+                <div className="terminal-quick-stat-value-row">
+                  <span className="terminal-quick-stat-val" id="stats-total-entries">
+                    {stats?.totalEntries ?? 0}
+                  </span>
+                  <span className="terminal-stat-unit">ครั้ง</span>
+                </div>
               </div>
               <div className="terminal-quick-stat-card">
                 <span className="terminal-quick-stat-label">สแกนออกแล้ว</span>
-                <span className="terminal-quick-stat-val" id="stats-total-exits">
-                  {stats?.totalExits ?? 0}
-                </span>
-                <span className="stat-unit" style={{ fontSize: '0.75rem', color: '#64748b', marginLeft: '3px' }}>ครั้ง</span>
+                <div className="terminal-quick-stat-value-row">
+                  <span className="terminal-quick-stat-val" id="stats-total-exits">
+                    {stats?.totalExits ?? 0}
+                  </span>
+                  <span className="terminal-stat-unit">ครั้ง</span>
+                </div>
               </div>
             </div>
           </div>
@@ -970,31 +1242,39 @@ export function ScannerAdmissionTerminal({
                 </button>
               </div>
 
-              <div className="stats-grid">
-                <div className="stat-card stat-total">
-                  <span className="stat-label">บัตรที่จำหน่ายได้</span>
-                  <span className="stat-value" id="stats-total-tickets">
-                    {stats?.totalTickets ?? (offlineDataset?.totalTickets ?? 0)}
-                  </span>
-                  <span className="stat-unit">ใบ</span>
+              <div className="terminal-stats-grid-compact">
+                <div className="terminal-quick-stat-card">
+                  <span className="terminal-quick-stat-label">บัตรที่จำหน่ายได้</span>
+                  <div className="terminal-quick-stat-value-row">
+                    <span className="terminal-quick-stat-val" id="stats-total-tickets">
+                      {stats?.totalTickets ?? (offlineDataset?.totalTickets ?? 0)}
+                    </span>
+                    <span className="terminal-stat-unit">ใบ</span>
+                  </div>
                 </div>
 
-                <div className="stat-card stat-inside">
-                  <span className="stat-label">อยู่ในงานขณะนี้</span>
-                  <span className="stat-value">{stats?.currentlyInside ?? 0}</span>
-                  <span className="stat-unit">คน</span>
+                <div className="terminal-quick-stat-card">
+                  <span className="terminal-quick-stat-label">อยู่ในงานขณะนี้</span>
+                  <div className="terminal-quick-stat-value-row">
+                    <span className="terminal-quick-stat-val">{stats?.currentlyInside ?? 0}</span>
+                    <span className="terminal-stat-unit">คน</span>
+                  </div>
                 </div>
 
-                <div className="stat-card stat-entries">
-                  <span className="stat-label">สแกนเข้าแล้ว</span>
-                  <span className="stat-value">{stats?.totalEntries ?? 0}</span>
-                  <span className="stat-unit">ครั้ง</span>
+                <div className="terminal-quick-stat-card">
+                  <span className="terminal-quick-stat-label">สแกนเข้าแล้ว</span>
+                  <div className="terminal-quick-stat-value-row">
+                    <span className="terminal-quick-stat-val">{stats?.totalEntries ?? 0}</span>
+                    <span className="terminal-stat-unit">ครั้ง</span>
+                  </div>
                 </div>
 
-                <div className="stat-card stat-exits">
-                  <span className="stat-label">สแกนออกแล้ว</span>
-                  <span className="stat-value">{stats?.totalExits ?? 0}</span>
-                  <span className="stat-unit">ครั้ง</span>
+                <div className="terminal-quick-stat-card">
+                  <span className="terminal-quick-stat-label">สแกนออกแล้ว</span>
+                  <div className="terminal-quick-stat-value-row">
+                    <span className="terminal-quick-stat-val">{stats?.totalExits ?? 0}</span>
+                    <span className="terminal-stat-unit">ครั้ง</span>
+                  </div>
                 </div>
               </div>
             </section>
@@ -1023,8 +1303,10 @@ export function ScannerAdmissionTerminal({
                     {recentLogs.map(log => (
                       <tr key={log.id} className={log.status === 'success' ? 'log-success' : 'log-rejected'}>
                         <td className="font-mono text-xs whitespace-nowrap">
-                          <ClockIcon className="inline-icon" />
-                          {formatTime(new Date(log.createdAt))}
+                          <span className="log-time-cell">
+                            <ClockIcon width={14} height={14} />
+                            <span>{formatTime(new Date(log.createdAt))}</span>
+                          </span>
                         </td>
                         <td className="font-mono text-xs font-semibold">{log.ticketCode}</td>
                         <td>
@@ -1126,7 +1408,7 @@ export function ScannerAdmissionTerminal({
                   className="secondary-button terminal-action-btn"
                   onClick={handleToggleOfflineMode}
                 >
-                  {isOfflineMode ? 'สลับเป็นโหมดออนไลน์ (Switch to Online)' : 'สลับเป็นโหมดออฟไลน์ (Offline Mode)'}
+                  {isOfflineMode ? 'สลับเป็นโหมดออนไลน์' : 'สลับเป็นโหมดออฟไลน์'}
                 </button>
 
                 <button
@@ -1137,21 +1419,53 @@ export function ScannerAdmissionTerminal({
                   onClick={handleDownloadOfflineDataset}
                   disabled={syncingDataset || isSyncingPending}
                 >
-                  {syncingDataset ? 'กำลังดาวน์โหลด...' : 'ดาวน์โหลดชุดข้อมูลออฟไลน์ (Download Offline Dataset)'}
+                  {syncingDataset ? 'กำลังดาวน์โหลด...' : 'ดาวน์โหลดข้อมูลออฟไลน์'}
                 </button>
 
                 <button
                   type="button"
                   id="sync-offline-pending-btn"
                   data-testid="sync-offline-pending-btn"
-                  className="button button-primary terminal-action-btn"
+                  className="secondary-button terminal-action-btn"
                   onClick={handleSyncPendingScans}
                   disabled={isSyncingPending || pendingSyncCount === 0 || isOfflineMode}
                 >
                   {isSyncingPending
-                    ? 'กำลังซิงก์...'
+                    ? syncProgress
+                      ? `กำลังซิงก์ (${syncProgress.syncedSoFar}/${syncProgress.total})...`
+                      : 'กำลังซิงก์...'
                     : `ซิงก์ข้อมูลค้าง (${pendingSyncCount} รายการ)`}
                 </button>
+
+                <button
+                  type="button"
+                  id="export-offline-backup-btn"
+                  data-testid="export-offline-backup-btn"
+                  className="secondary-button terminal-action-btn"
+                  onClick={handleExportOfflineBackup}
+                  disabled={syncingDataset || isSyncingPending}
+                >
+                  สำรองข้อมูล (.json)
+                </button>
+
+                <button
+                  type="button"
+                  id="import-offline-backup-btn"
+                  data-testid="import-offline-backup-btn"
+                  className="secondary-button terminal-action-btn"
+                  onClick={() => backupFileInputRef.current?.click()}
+                  disabled={syncingDataset || isSyncingPending}
+                >
+                  กู้คืนไฟล์สำรอง (.json)
+                </button>
+                <input
+                  ref={backupFileInputRef}
+                  type="file"
+                  accept=".json,application/json"
+                  onChange={handleImportOfflineBackup}
+                  style={{ display: 'none' }}
+                  aria-label="เลือกไฟล์สำรองข้อมูลออฟไลน์"
+                />
               </div>
             </div>
 
@@ -1187,6 +1501,38 @@ export function ScannerAdmissionTerminal({
               </div>
             )}
           </section>
+
+          <section
+            className="offline-guide-card"
+            data-testid="offline-usage-guide"
+            aria-labelledby="offline-guide-heading"
+          >
+            <h3 id="offline-guide-heading" className="offline-guide-title">
+              คู่มือการใช้งานระบบออฟไลน์
+            </h3>
+            <ol className="offline-guide-steps">
+              <li>
+                <strong>เตรียมข้อมูลก่อนเริ่มงาน (ขณะมีอินเทอร์เน็ต):</strong>{' '}
+                กดปุ่ม &ldquo;ดาวน์โหลดข้อมูลออฟไลน์&rdquo; เพื่อบันทึกรหัสบัตรลงเครื่อง (ไม่มีข้อมูลส่วนตัวผู้ซื้อ) และแนะนำให้กด &ldquo;สำรองข้อมูล (.json)&rdquo; เก็บไว้สำรอง
+              </li>
+              <li>
+                <strong>ใช้งานเฉพาะเครื่องหลักเมื่อเน็ตขัดข้อง:</strong>{' '}
+                กด &ldquo;สลับเป็นโหมดออฟไลน์&rdquo; เฉพาะบนเครื่องหลักเพียงเครื่องเดียว และหยุดสแกนบนเครื่องอื่นทั้งหมด เพื่อป้องกันบัตรถูกสแกนซ้ำข้ามเครื่อง
+              </li>
+              <li>
+                <strong>สแกนบัตรตามปกติระหว่างออฟไลน์:</strong>{' '}
+                รายการเข้าและออกจะถูกบันทึกไว้ในเครื่องและแสดงจำนวนที่ &ldquo;รอซิงก์&rdquo;
+              </li>
+              <li>
+                <strong>ซิงก์ข้อมูลกลับสู่ระบบกลาง:</strong>{' '}
+                เมื่ออินเทอร์เน็ตกลับมา ให้กด &ldquo;สลับเป็นโหมดออนไลน์&rdquo; แล้วกด &ldquo;ซิงก์ข้อมูลค้าง&rdquo; จนกว่าจำนวนรอซิงก์จะเป็น 0 รายการ
+              </li>
+              <li>
+                <strong>กรณีย้ายเครื่องหรือล้างข้อมูลเบราว์เซอร์:</strong>{' '}
+                ใช้ปุ่ม &ldquo;กู้คืนไฟล์สำรอง (.json)&rdquo; เพื่อนำข้อมูลที่สำรองไว้กลับมาใช้งานต่อได้ทันที
+              </li>
+            </ol>
+          </section>
         </div>
 
         {/* Scan Result Modal with Pause & "สแกนคนถัดไป" (D-107) */}
@@ -1213,11 +1559,19 @@ export function ScannerAdmissionTerminal({
               }`}
             >
               <div className="result-header">
-                {scanResult.status === 'success' ? (
-                  <CheckCircleIcon className="result-icon-success" width={44} height={44} />
-                ) : (
-                  <CrossCircleIcon className="result-icon-rejected" width={44} height={44} />
-                )}
+                <div
+                  className={`result-icon-badge ${
+                    scanResult.status === 'success'
+                      ? (scanResult.action === 'entry' ? 'is-entry' : 'is-exit')
+                      : 'is-rejected'
+                  }`}
+                >
+                  {scanResult.status === 'success' ? (
+                    <CheckCircleIcon width={26} height={26} />
+                  ) : (
+                    <CrossCircleIcon width={26} height={26} />
+                  )}
+                </div>
                 <div className="result-headline">
                   <span className="result-badge-text">
                     {scanResult.status === 'success'
@@ -1267,7 +1621,7 @@ export function ScannerAdmissionTerminal({
                   type="button"
                   id="scan-next-btn"
                   data-testid="scan-next-btn"
-                  className="button button-primary scan-next-modal-btn"
+                  className="secondary-button scan-next-modal-btn"
                   onClick={() => {
                     setScanResult(null);
                     setCameraActive(true);
@@ -1280,7 +1634,7 @@ export function ScannerAdmissionTerminal({
                   type="button"
                   id="dismiss-scan-modal-btn"
                   data-testid="dismiss-scan-modal-btn"
-                  className="secondary-button"
+                  className="secondary-button dismiss-scan-modal-btn"
                   onClick={() => setScanResult(null)}
                 >
                   ปิด / ยกเลิก

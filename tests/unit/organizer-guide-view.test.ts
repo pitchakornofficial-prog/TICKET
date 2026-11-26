@@ -92,10 +92,12 @@ describe('Organizer User Guide Workspace (D-86)', () => {
     expect(guideContent).not.toContain('guide-header-icon-wrap');
     expect(guideContent).toContain('คู่มือการใช้งานระบบสำหรับผู้จัดงาน');
 
-    // 2. Uses unified floating-back-to-top button matching Settings
-    expect(guideContent).toContain('className="floating-back-to-top"');
-    expect(guideContent).toContain('title="กลับสู่ด้านบนสุด"');
-    expect(guideContent).toContain('aria-label="กลับสู่ด้านบนสุด"');
+    // 2. Uses unified FloatingBackToTop at workspace level across all organizer sections
+    const workspaceContent = readFileSync(
+      join(rootDir, 'src/components/organizer-workspace-view.tsx'),
+      'utf8',
+    );
+    expect(workspaceContent).toContain('<FloatingBackToTop testId="organizer-back-to-top-btn" />');
 
     // 3. Zero emojis check
     expect(guideContent).not.toMatch(/\p{Extended_Pictographic}/u);
