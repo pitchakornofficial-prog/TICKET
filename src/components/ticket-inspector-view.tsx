@@ -13,6 +13,8 @@ import {
   RefreshIcon,
   SearchIcon,
   ShieldCheckIcon,
+  FlashlightIcon,
+  SwitchCameraIcon,
 } from '@/components/icons';
 import { TicketIcon } from '@/components/ticket-icon';
 import type { TicketInspectionResult } from '@/server/ticket-inspector';
@@ -52,8 +54,11 @@ export function TicketInspectorView() {
   const [cameraStatus, setCameraStatus] = useState<'idle' | 'starting' | 'active' | 'error'>('idle');
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [cameraFacing, setCameraFacing] = useState<'environment' | 'user'>('environment');
+  const [torchActive, setTorchActive] = useState(false);
+  const [torchFeedback, setTorchFeedback] = useState<string | null>(null);
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
   const decodeCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const lastScannedRef = useRef<{ code: string; at: number } | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -206,6 +211,7 @@ export function TicketInspectorView() {
           videoRef.current.srcObject = stream;
           videoRef.current.setAttribute('playsinline', 'true');
           await videoRef.current.play();
+          streamRef.current = stream;
           setCameraStatus('active');
           void decodeFrame();
         }
@@ -225,6 +231,16 @@ export function TicketInspectorView() {
     return () => {
       cancelled = true;
       if (scanTimer) clearTimeout(scanTimer);
+      if (streamRef.current) {
+        const track = streamRef.current.getVideoTracks()[0];
+        if (track) {
+          track.applyConstraints({
+            advanced: [{ torch: false } as unknown as MediaTrackConstraintSet],
+          }).catch(() => undefined);
+        }
+      }
+      setTorchActive(false);
+      streamRef.current = null;
       if (stream) {
         for (const track of stream.getTracks()) track.stop();
       }
@@ -233,6 +249,27 @@ export function TicketInspectorView() {
       }
     };
   }, [activeTab, cameraActive, cameraFacing, handleInspect, loading]);
+
+  const handleToggleTorch = useCallback(async () => {
+    const track = streamRef.current?.getVideoTracks()[0];
+    if (!track) {
+      setTorchFeedback('กรุณาเปิดกล้องก่อนใช้งานไฟแฟลช');
+      setTimeout(() => setTorchFeedback(null), 3000);
+      return;
+    }
+    const nextTorch = !torchActive;
+    try {
+      await track.applyConstraints({
+        advanced: [{ torch: nextTorch } as unknown as MediaTrackConstraintSet],
+      });
+      setTorchActive(nextTorch);
+      setTorchFeedback(null);
+    } catch {
+      setTorchActive(false);
+      setTorchFeedback('อุปกรณ์หรือกล้องนี้ไม่รองรับการเปิดไฟแฟลช');
+      setTimeout(() => setTorchFeedback(null), 3000);
+    }
+  }, [torchActive]);
 
   // Image Upload Decode Handler
   const handleUploadImageFile = async (file: File) => {
@@ -342,18 +379,21 @@ export function TicketInspectorView() {
         </div>
       </div>
 
-      {/* Main Grid: Left Scanner / Input Column & Right Result Column */}
-      <div style={{ display: 'grid', gridTemplateColumns: result ? 'minmax(320px, 420px) 1fr' : '1fr', gap: '1.25rem', alignItems: 'start' }}>
+      {/* Main Grid: Fixed-Width Left Scanner / Input Column & Right Result Column */}
+      <div className="ticket-inspector-layout">
         {/* Scanner Control Box */}
-        <div style={{ background: '#ffffff', borderRadius: '12px', border: '1px solid #e2e8f0', padding: '1rem', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+        <div className="ticket-inspector-scanner-col" style={{ background: '#ffffff', borderRadius: '12px', border: '1px solid #e2e8f0', padding: '1rem', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
           {/* Input Method Tabs */}
-          <div style={{ display: 'flex', gap: '0.5rem', background: '#f1f5f9', padding: '0.25rem', borderRadius: '8px', marginBottom: '1rem' }}>
+          <div style={{ display: 'flex', gap: '0.4rem', background: '#f1f5f9', padding: '0.25rem', borderRadius: '8px', marginBottom: '1rem' }}>
             <button
               type="button"
               onClick={() => setActiveTab('camera')}
+              title="กล้องสแกนสด"
+              aria-label="กล้องสแกนสด"
               style={{
-                flex: 1,
-                padding: '0.45rem 0.5rem',
+                flex: activeTab === 'camera' ? 1 : '0 0 auto',
+                minWidth: activeTab === 'camera' ? 0 : '42px',
+                padding: '0.45rem 0.75rem',
                 fontSize: '0.8125rem',
                 fontWeight: activeTab === 'camera' ? 600 : 400,
                 color: activeTab === 'camera' ? '#0f172a' : '#64748b',
@@ -365,19 +405,23 @@ export function TicketInspectorView() {
                 alignItems: 'center',
                 justifyContent: 'center',
                 gap: '0.35rem',
+                whiteSpace: 'nowrap',
                 boxShadow: activeTab === 'camera' ? '0 1px 2px rgba(0,0,0,0.06)' : 'none',
               }}
             >
-              <CameraIcon style={{ width: '16px', height: '16px' }} />
-              <span>กล้องสแกนสด</span>
+              <CameraIcon style={{ width: '16px', height: '16px', flexShrink: 0 }} />
+              {activeTab === 'camera' && <span>กล้องสแกนสด</span>}
             </button>
 
             <button
               type="button"
               onClick={() => setActiveTab('upload')}
+              title="อัปโหลดภาพ QR"
+              aria-label="อัปโหลดภาพ QR"
               style={{
-                flex: 1,
-                padding: '0.45rem 0.5rem',
+                flex: activeTab === 'upload' ? 1 : '0 0 auto',
+                minWidth: activeTab === 'upload' ? 0 : '42px',
+                padding: '0.45rem 0.75rem',
                 fontSize: '0.8125rem',
                 fontWeight: activeTab === 'upload' ? 600 : 400,
                 color: activeTab === 'upload' ? '#0f172a' : '#64748b',
@@ -389,19 +433,23 @@ export function TicketInspectorView() {
                 alignItems: 'center',
                 justifyContent: 'center',
                 gap: '0.35rem',
+                whiteSpace: 'nowrap',
                 boxShadow: activeTab === 'upload' ? '0 1px 2px rgba(0,0,0,0.06)' : 'none',
               }}
             >
-              <QrCodeIcon style={{ width: '16px', height: '16px' }} />
-              <span>อัปโหลดภาพ QR</span>
+              <QrCodeIcon style={{ width: '16px', height: '16px', flexShrink: 0 }} />
+              {activeTab === 'upload' && <span>อัปโหลดภาพ QR</span>}
             </button>
 
             <button
               type="button"
               onClick={() => setActiveTab('manual')}
+              title="กรอกรหัสค้นหา"
+              aria-label="กรอกรหัสค้นหา"
               style={{
-                flex: 1,
-                padding: '0.45rem 0.5rem',
+                flex: activeTab === 'manual' ? 1 : '0 0 auto',
+                minWidth: activeTab === 'manual' ? 0 : '42px',
+                padding: '0.45rem 0.75rem',
                 fontSize: '0.8125rem',
                 fontWeight: activeTab === 'manual' ? 600 : 400,
                 color: activeTab === 'manual' ? '#0f172a' : '#64748b',
@@ -413,11 +461,12 @@ export function TicketInspectorView() {
                 alignItems: 'center',
                 justifyContent: 'center',
                 gap: '0.35rem',
+                whiteSpace: 'nowrap',
                 boxShadow: activeTab === 'manual' ? '0 1px 2px rgba(0,0,0,0.06)' : 'none',
               }}
             >
-              <SearchIcon style={{ width: '16px', height: '16px' }} />
-              <span>กรอกรหัสค้นหา</span>
+              <SearchIcon style={{ width: '16px', height: '16px', flexShrink: 0 }} />
+              {activeTab === 'manual' && <span>กรอกรหัสค้นหา</span>}
             </button>
           </div>
 
@@ -470,6 +519,26 @@ export function TicketInspectorView() {
                   </div>
                 )}
 
+                {/* Floating Torch Toggle Button */}
+                {cameraStatus === 'active' && (
+                  <button
+                    type="button"
+                    className={`viewfinder-floating-torch-btn ${torchActive ? 'active' : ''}`}
+                    onClick={handleToggleTorch}
+                    title={torchActive ? 'ปิดไฟแฟลช' : 'เปิดไฟแฟลช'}
+                    aria-label={torchActive ? 'ปิดไฟแฟลช' : 'เปิดไฟแฟลช'}
+                    data-testid="inspector-floating-torch-btn"
+                  >
+                    <FlashlightIcon style={{ width: '16px', height: '16px' }} />
+                  </button>
+                )}
+
+                {torchFeedback && (
+                  <div style={{ position: 'absolute', bottom: '10px', zIndex: 12, background: 'rgba(15,23,42,0.9)', color: '#fca5a5', padding: '4px 10px', borderRadius: '6px', fontSize: '0.75rem', pointerEvents: 'none' }}>
+                    {torchFeedback}
+                  </div>
+                )}
+
                 {/* Camera Starting / Error Overlay */}
                 {cameraStatus === 'starting' && (
                   <div style={{ textAlign: 'center', color: '#94a3b8', padding: '1rem' }}>
@@ -493,24 +562,24 @@ export function TicketInspectorView() {
                 )}
               </div>
 
-              {/* Camera Actions Toolbar */}
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '0.5rem' }}>
+              {/* Camera Actions Toolbar (Icon-Only, Centered) */}
+              <div
+                data-testid="inspector-camera-actions-toolbar"
+                style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.75rem' }}
+              >
                 <button
                   type="button"
                   className="secondary-button"
-                  style={{ fontSize: '0.75rem', padding: '0.35rem 0.65rem', height: '34px' }}
+                  style={{ width: '36px', height: '36px', padding: 0, justifyContent: 'center' }}
                   onClick={() => setCameraActive(!cameraActive)}
+                  title={cameraActive ? 'ปิดกล้อง' : 'เปิดกล้อง'}
+                  aria-label={cameraActive ? 'ปิดกล้อง' : 'เปิดกล้อง'}
+                  data-testid="inspector-toggle-camera-btn"
                 >
                   {cameraActive ? (
-                    <>
-                      <CameraOffIcon className="btn-icon" />
-                      <span>ปิดกล้อง</span>
-                    </>
+                    <CameraOffIcon style={{ width: '17px', height: '17px' }} />
                   ) : (
-                    <>
-                      <CameraIcon className="btn-icon" />
-                      <span>เปิดกล้อง</span>
-                    </>
+                    <CameraIcon style={{ width: '17px', height: '17px' }} />
                   )}
                 </button>
 
@@ -518,11 +587,49 @@ export function TicketInspectorView() {
                   <button
                     type="button"
                     className="secondary-button"
-                    style={{ fontSize: '0.75rem', padding: '0.35rem 0.65rem', height: '34px' }}
-                    onClick={() => setCameraFacing(prev => (prev === 'environment' ? 'user' : 'environment'))}
+                    style={{
+                      width: '36px',
+                      height: '36px',
+                      padding: 0,
+                      justifyContent: 'center',
+                      background: torchActive ? '#fef3c7' : '#ffffff',
+                      color: torchActive ? '#92400e' : '#0f172a',
+                      borderColor: torchActive ? '#f59e0b' : '#cbd5e1',
+                    }}
+                    onClick={handleToggleTorch}
+                    data-testid="inspector-toggle-torch-btn"
+                    title={torchActive ? 'ปิดไฟแฟลช' : 'เปิดไฟแฟลช'}
+                    aria-label={torchActive ? 'ปิดไฟแฟลช' : 'เปิดไฟแฟลช'}
                   >
-                    <RefreshIcon className="btn-icon" />
-                    <span>สลับกล้อง ({cameraFacing === 'environment' ? 'หลัง' : 'หน้า'})</span>
+                    <FlashlightIcon style={{ width: '17px', height: '17px' }} />
+                  </button>
+                )}
+
+                {cameraActive && (
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    style={{ width: '36px', height: '36px', padding: 0, justifyContent: 'center' }}
+                    onClick={() => setCameraFacing(prev => (prev === 'environment' ? 'user' : 'environment'))}
+                    title={`สลับกล้อง (${cameraFacing === 'environment' ? 'หลัง' : 'หน้า'})`}
+                    aria-label={`สลับกล้อง (${cameraFacing === 'environment' ? 'หลัง' : 'หน้า'})`}
+                    data-testid="inspector-switch-camera-btn"
+                  >
+                    <SwitchCameraIcon style={{ width: '17px', height: '17px' }} />
+                  </button>
+                )}
+
+                {result && (
+                  <button
+                    type="button"
+                    className="secondary-button"
+                    style={{ width: '36px', height: '36px', padding: 0, justifyContent: 'center' }}
+                    onClick={resetForNextScan}
+                    title="สแกนใบถัดไป"
+                    aria-label="สแกนใบถัดไป"
+                    data-testid="inspector-rescan-btn"
+                  >
+                    <RefreshIcon style={{ width: '17px', height: '17px' }} />
                   </button>
                 )}
               </div>
@@ -629,25 +736,56 @@ export function TicketInspectorView() {
             </div>
           )}
 
-          {/* Quick Actions at bottom of scanner box */}
-          {result && (
-            <div style={{ marginTop: '1rem', borderTop: '1px solid #e2e8f0', paddingTop: '0.75rem' }}>
+          {/* Quick Actions at bottom of scanner box (for upload/manual tabs) */}
+          {result && activeTab !== 'camera' && (
+            <div style={{ marginTop: '1rem', borderTop: '1px solid #e2e8f0', paddingTop: '0.75rem', display: 'flex', justifyContent: 'center' }}>
               <button
                 type="button"
                 className="secondary-button"
-                style={{ width: '100%', height: '36px', fontSize: '0.8125rem', justifyContent: 'center' }}
+                style={{ width: '36px', height: '36px', padding: 0, justifyContent: 'center' }}
                 onClick={resetForNextScan}
+                title="สแกนใบถัดไป"
+                aria-label="สแกนใบถัดไป"
+                data-testid="inspector-rescan-btn"
               >
-                <RefreshIcon className="btn-icon" />
-                <span>สแกนใบถัดไป</span>
+                <RefreshIcon style={{ width: '17px', height: '17px' }} />
               </button>
             </div>
           )}
         </div>
 
         {/* Right Column: Inspection Result Card */}
-        {result && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+        <div className={`ticket-inspector-result-col ${result ? 'has-result' : ''}`}>
+          {!result ? (
+            <div
+              data-testid="inspector-empty-result-placeholder"
+              style={{
+                background: '#ffffff',
+                borderRadius: '12px',
+                border: '1px dashed #cbd5e1',
+                padding: '3rem 1.5rem',
+                textAlign: 'center',
+                color: '#64748b',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '0.75rem',
+                minHeight: '340px',
+              }}
+            >
+              <QrCodeIcon style={{ width: '40px', height: '40px', color: '#94a3b8' }} />
+              <div style={{ maxWidth: '380px' }}>
+                <h3 style={{ margin: '0 0 0.35rem', fontSize: '1rem', fontWeight: 500, color: '#0f172a' }}>
+                  พร้อมตรวจสอบข้อมูลบัตร
+                </h3>
+                <p style={{ margin: 0, fontSize: '0.8125rem', lineHeight: 1.5, color: '#64748b' }}>
+                  สแกน QR Code จากกล้อง อัปโหลดรูปภาพ หรือกรอกรหัสบัตรด้านซ้าย ผลลัพธ์และประวัติการใช้งานจะแสดงในพื้นที่นี้ทันที
+                </p>
+              </div>
+            </div>
+          ) : (
+            <>
             {/* 1. Main Status Banner */}
             <div
               style={{
@@ -961,8 +1099,9 @@ export function TicketInspectorView() {
                 {copyFeedback}
               </div>
             )}
-          </div>
-        )}
+            </>
+          )}
+        </div>
       </div>
     </div>
   );

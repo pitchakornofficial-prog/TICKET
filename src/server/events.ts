@@ -250,6 +250,13 @@ export async function ensureEventSchema(pool: Pool): Promise<void> {
         ALTER TABLE session_amendments ADD COLUMN IF NOT EXISTS "concertDetails" JSONB;
         ALTER TABLE event_scanners ADD COLUMN IF NOT EXISTS "boundDeviceId" TEXT;
         ALTER TABLE event_scanners ADD COLUMN IF NOT EXISTS "boundAt" TIMESTAMPTZ;
+
+        -- Automatically synchronize status for events where all sessions have been cancelled
+        UPDATE events e
+        SET status = 'cancelled', "updatedAt" = now()
+        WHERE e.status = 'approved'
+          AND EXISTS (SELECT 1 FROM event_sessions s WHERE s."eventId" = e.id)
+          AND NOT EXISTS (SELECT 1 FROM event_sessions s WHERE s."eventId" = e.id AND s.status != 'cancelled');
       `);
       await ensureFeeSchema(pool);
       await ensureScannerAccessTokenSchema(pool);
@@ -610,8 +617,22 @@ export async function rejectSession(
 export async function listOrganizerEvents(pool: Pool, organizerId: string) {
   await ensureEventSchema(pool);
   const res = await pool.query(
-    `SELECT e.*, 
+    `SELECT e.id, e."organizerId", e.title, e.description, e.location, e."posterUrl",
+            e."ticketTemplateUrl", e."coverBannerUrl", e."googleMapsUrl", e."salesStartTime",
+            e."salesEndTime", e."limitPerOrder", e."createdAt", e."updatedAt",
+            e."ageRestriction", e."refundPolicy", e."entryGuidelines", e."payoutAccountId",
+            e."payoutBankName", e."payoutAccountNumber", e."payoutAccountName",
+            e."ubuPrivilegeMode", e.artists, e."isSalesPaused", e."salesPausedReason",
+            CASE 
+              WHEN e.status = 'approved' 
+                   AND COUNT(DISTINCT s.id) > 0 
+                   AND COUNT(DISTINCT s.id) = COUNT(DISTINCT s.id) FILTER (WHERE s.status = 'cancelled') 
+                THEN 'cancelled'
+              ELSE e.status
+            END AS status,
             COUNT(DISTINCT s.id) AS "sessionCount",
+            COUNT(DISTINCT s.id) FILTER (WHERE s.status = 'approved')::int AS "approvedSessionCount",
+            COUNT(DISTINCT s.id) FILTER (WHERE s.status = 'cancelled')::int AS "cancelledSessionCount",
             COALESCE(SUM(tt.quota), 0) AS "totalQuota",
             MIN(tt.price) AS "minPrice",
             MAX(tt.price) AS "maxPrice",
@@ -631,7 +652,20 @@ export async function listOrganizerEvents(pool: Pool, organizerId: string) {
 export async function listAllEventsForOwner(pool: Pool) {
   await ensureEventSchema(pool);
   const res = await pool.query(
-    `SELECT e.*, u.name AS "organizerName", u.email AS "organizerEmail",
+    `SELECT e.id, e."organizerId", e.title, e.description, e.location, e."posterUrl",
+            e."ticketTemplateUrl", e."coverBannerUrl", e."googleMapsUrl", e."salesStartTime",
+            e."salesEndTime", e."limitPerOrder", e."createdAt", e."updatedAt",
+            e."ageRestriction", e."refundPolicy", e."entryGuidelines", e."payoutAccountId",
+            e."payoutBankName", e."payoutAccountNumber", e."payoutAccountName",
+            e."ubuPrivilegeMode", e.artists, e."isSalesPaused", e."salesPausedReason",
+            CASE 
+              WHEN e.status = 'approved' 
+                   AND COUNT(DISTINCT s.id) > 0 
+                   AND COUNT(DISTINCT s.id) = COUNT(DISTINCT s.id) FILTER (WHERE s.status = 'cancelled') 
+                THEN 'cancelled'
+              ELSE e.status
+            END AS status,
+            u.name AS "organizerName", u.email AS "organizerEmail",
             COUNT(DISTINCT s.id) FILTER (WHERE s.status = 'approved')::int AS "approvedSessionCount",
             COUNT(DISTINCT s.id) FILTER (WHERE s.status = 'cancelled')::int AS "cancelledSessionCount",
             MAX(s."endTime") FILTER (WHERE s.status = 'approved') AS "lastApprovedSessionEndTime",
@@ -716,8 +750,14 @@ export async function getEventDetails(clientOrPool: { query: Pool['query'] }, ev
     ticketTypes: ticketTypesBySession.get(sess.id as string) ?? [],
   }));
 
+  const hasActiveSessions = sessions.some(s => s.status !== 'cancelled');
+  const effectiveStatus = (event.status === 'approved' && sessions.length > 0 && !hasActiveSessions)
+    ? 'cancelled'
+    : event.status;
+
   return {
     ...event,
+    status: effectiveStatus,
     ...feeSettings,
     feeSettings: Object.keys(feeSettings).length > 0 ? feeSettings : undefined,
     sessions,
@@ -2647,6 +2687,18 @@ export async function approveSessionCancellation(
        WHERE id = $1`,
       [cancelReq.sessionId, now],
     );
+
+    // Update event status to 'cancelled' if all sessions for this event are now cancelled
+    const remainingActiveSessions = await client.query<{ id: string }>(
+      `SELECT id FROM event_sessions WHERE "eventId" = $1 AND id != $2 AND status != 'cancelled'`,
+      [cancelReq.eventId, cancelReq.sessionId],
+    );
+    if (remainingActiveSessions.rowCount === 0) {
+      await client.query(
+        `UPDATE events SET status = 'cancelled', "updatedAt" = $2 WHERE id = $1`,
+        [cancelReq.eventId, now],
+      );
+    }
 
     // 4. Update cancellation request to 'approved'
     await client.query(

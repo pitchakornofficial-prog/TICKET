@@ -12,6 +12,7 @@ import {
   ShieldCheckIcon,
   CameraIcon,
   CameraOffIcon,
+  FlashlightIcon,
 } from './icons';
 import { formatTime } from '@/lib/locale';
 import {
@@ -137,8 +138,11 @@ export function ScannerAdmissionTerminal({
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [cameraRetryNonce, setCameraRetryNonce] = useState(0);
   const [activeTerminalTab, setActiveTerminalTab] = useState<'scan' | 'logs' | 'offline'>('scan');
+  const [torchActive, setTorchActive] = useState(false);
+  const [torchFeedback, setTorchFeedback] = useState<string | null>(null);
 
   const videoRef = useRef<HTMLVideoElement | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
   const decodeCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const lastScannedRef = useRef<{ code: string; at: number } | null>(null);
   const scanPausedRef = useRef(false);
@@ -547,6 +551,7 @@ export function ScannerAdmissionTerminal({
           await video.play().catch(() => undefined);
         }
 
+        streamRef.current = stream;
         setCameraStatus('active');
         void decodeFrame();
       } catch (err) {
@@ -568,6 +573,16 @@ export function ScannerAdmissionTerminal({
     return () => {
       cancelled = true;
       if (scanTimer) clearTimeout(scanTimer);
+      if (streamRef.current) {
+        const track = streamRef.current.getVideoTracks()[0];
+        if (track) {
+          track.applyConstraints({
+            advanced: [{ torch: false } as unknown as MediaTrackConstraintSet],
+          }).catch(() => undefined);
+        }
+      }
+      setTorchActive(false);
+      streamRef.current = null;
       if (stream) {
         for (const track of stream.getTracks()) {
           track.stop();
@@ -579,6 +594,27 @@ export function ScannerAdmissionTerminal({
       }
     };
   }, [hydrated, cameraActive, activeTerminalTab, cameraRetryNonce]);
+
+  const handleToggleTorch = useCallback(async () => {
+    const track = streamRef.current?.getVideoTracks()[0];
+    if (!track) {
+      setTorchFeedback('กรุณาเปิดกล้องก่อนใช้งานไฟแฟลช');
+      setTimeout(() => setTorchFeedback(null), 3000);
+      return;
+    }
+    const nextTorch = !torchActive;
+    try {
+      await track.applyConstraints({
+        advanced: [{ torch: nextTorch } as unknown as MediaTrackConstraintSet],
+      });
+      setTorchActive(nextTorch);
+      setTorchFeedback(null);
+    } catch {
+      setTorchActive(false);
+      setTorchFeedback('อุปกรณ์หรือกล้องนี้ไม่รองรับการเปิดไฟแฟลช');
+      setTimeout(() => setTorchFeedback(null), 3000);
+    }
+  }, [torchActive]);
 
   return (
     <div className="terminal-centered-wrapper" style={{ minWidth: 0 }}>
@@ -776,6 +812,22 @@ export function ScannerAdmissionTerminal({
                 )}
                 <span className="sr-only">{cameraActive ? 'ปิดช่องมองภาพกล้อง' : 'เปิดช่องมองภาพสแกนกล้อง'}</span>
               </button>
+
+              {/* Torch Toggle Button */}
+              {cameraActive && (
+                <button
+                  type="button"
+                  id="toggle-torch-btn"
+                  data-testid="toggle-torch-btn"
+                  className={`camera-icon-toggle-btn torch-toggle-btn ${torchActive ? 'active' : ''}`}
+                  onClick={handleToggleTorch}
+                  title={torchActive ? 'ปิดไฟแฟลช' : 'เปิดไฟแฟลช'}
+                  aria-label={torchActive ? 'ปิดไฟแฟลช' : 'เปิดไฟแฟลช'}
+                >
+                  <FlashlightIcon width={22} height={22} />
+                  <span className="sr-only">{torchActive ? 'ปิดไฟแฟลช' : 'เปิดไฟแฟลช'}</span>
+                </button>
+              )}
             </div>
 
             {/* Camera Viewfinder (Live Rear Camera + Automatic QR Scanner) */}
@@ -789,6 +841,22 @@ export function ScannerAdmissionTerminal({
                   playsInline
                   muted
                 />
+                <button
+                  type="button"
+                  id="viewfinder-floating-torch-btn"
+                  data-testid="viewfinder-floating-torch-btn"
+                  className={`viewfinder-floating-torch-btn ${torchActive ? 'active' : ''}`}
+                  onClick={handleToggleTorch}
+                  title={torchActive ? 'ปิดไฟแฟลช' : 'เปิดไฟแฟลช'}
+                  aria-label={torchActive ? 'ปิดไฟแฟลช' : 'เปิดไฟแฟลช'}
+                >
+                  <FlashlightIcon width={16} height={16} />
+                </button>
+                {torchFeedback && (
+                  <div style={{ position: 'absolute', bottom: '10px', zIndex: 12, background: 'rgba(15,23,42,0.9)', color: '#fca5a5', padding: '4px 10px', borderRadius: '6px', fontSize: '0.75rem', pointerEvents: 'none' }}>
+                    {torchFeedback}
+                  </div>
+                )}
                 <div className="camera-overlay-layer">
                   {cameraStatus === 'error' ? (
                     <div className="camera-status-box">

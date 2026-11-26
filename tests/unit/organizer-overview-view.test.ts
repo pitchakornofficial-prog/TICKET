@@ -118,4 +118,29 @@ describe('Organizer Workspace Overview View Redesign (D-114, D-210 to D-216)', (
     expect(cssContent).toContain('.overview-concert-card');
     expect(cssContent).toContain('.soft-pulse-highlight');
   });
+
+  it('uses real database periodSales in organizer overview without mock multipliers or hardcoded trends', () => {
+    const overviewContent = readFileSync(
+      join(rootDir, 'src/components/organizer-overview-view.tsx'),
+      'utf8',
+    );
+    expect(overviewContent).toContain('periodSales');
+    expect(overviewContent).toContain('formatPeriodTrend');
+    expect(overviewContent).not.toContain('totalGrossRevenue * 0.08');
+    expect(overviewContent).not.toContain('totalGrossRevenue * 0.38');
+    expect(overviewContent).not.toContain('+12.5% จากเมื่อวาน');
+    expect(overviewContent).not.toContain('+8.2% จากสัปดาห์ก่อน');
+    expect(overviewContent).not.toContain('+15.4% จากเดือนก่อน');
+
+    const reportsContent = readFileSync(join(rootDir, 'src/server/reports.ts'), 'utf8');
+    expect(reportsContent).toContain('export async function getOrganizerPeriodSales(');
+    expect(reportsContent).toContain("AT TIME ZONE 'Asia/Bangkok'");
+
+    const apiContent = readFileSync(
+      join(rootDir, 'src/app/api/organizer/finance/summaries/route.ts'),
+      'utf8',
+    );
+    expect(apiContent).toContain('getOrganizerPeriodSales');
+    expect(apiContent).toContain('periodSales');
+  });
 });

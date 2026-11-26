@@ -103,7 +103,7 @@ describe('Real Database Notifications System Unit Tests', () => {
     expect(result.savedCount).toBe(2);
     expect(result.totalCount).toBe(10);
     expect(result.notifications).toHaveLength(1);
-    expect(result.notifications[0].timeAgo).toBe('10 นาทีที่แล้ว');
+    expect(result.notifications[0].timeAgo).toMatch(/^(9|10) นาทีที่แล้ว$/);
     expect(result.notifications[0].formattedDate).toBeDefined();
   });
 

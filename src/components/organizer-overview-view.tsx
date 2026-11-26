@@ -120,6 +120,34 @@ interface EventProgressStats {
   netSales: number;
 }
 
+interface PeriodSalesSummary {
+  today: number;
+  yesterday: number;
+  thisWeek: number;
+  lastWeek: number;
+  thisMonth: number;
+  lastMonth: number;
+}
+
+function formatPeriodTrend(
+  current: number,
+  previous: number,
+  unitLabel: string,
+): { label: string; tone: 'success' | 'danger' | 'neutral' } {
+  if (previous > 0) {
+    const pct = ((current - previous) / previous) * 100;
+    const formatted = `${pct >= 0 ? '+' : ''}${pct.toFixed(1)}% ${unitLabel}`;
+    return {
+      label: formatted,
+      tone: pct > 0 ? 'success' : pct < 0 ? 'danger' : 'neutral',
+    };
+  }
+  if (current > 0) {
+    return { label: 'เริ่มมียอดขาย', tone: 'success' };
+  }
+  return { label: 'ยังไม่มียอดขาย', tone: 'neutral' };
+}
+
 type EventStatusFilter = 'all' | 'selling' | 'pending_approval' | 'draft' | 'ended' | 'cancelled';
 type EventSortBy = 'latest' | 'grossSales' | 'soldTickets' | 'title';
 
@@ -128,6 +156,14 @@ export function OrganizerOverviewView({
 }: OrganizerOverviewViewProps) {
   const [events, setEvents] = useState<OrganizerEventItem[]>([]);
   const [eventStats, setEventStats] = useState<Record<string, EventProgressStats>>({});
+  const [periodSales, setPeriodSales] = useState<PeriodSalesSummary>({
+    today: 0,
+    yesterday: 0,
+    thisWeek: 0,
+    lastWeek: 0,
+    thisMonth: 0,
+    lastMonth: 0,
+  });
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -160,6 +196,14 @@ export function OrganizerOverviewView({
       setEvents(loadedEvents);
 
       const statsMap: Record<string, EventProgressStats> = {};
+      let nextPeriodSales: PeriodSalesSummary = {
+        today: 0,
+        yesterday: 0,
+        thisWeek: 0,
+        lastWeek: 0,
+        thisMonth: 0,
+        lastMonth: 0,
+      };
       if (loadedEvents.length > 0 && !controller.signal.aborted) {
         try {
           const summariesRes = await fetch('/api/organizer/finance/summaries', {
@@ -181,6 +225,16 @@ export function OrganizerOverviewView({
                 netSales: net,
               };
             }
+            if (summariesData?.periodSales) {
+              nextPeriodSales = {
+                today: Number(summariesData.periodSales.today || 0),
+                yesterday: Number(summariesData.periodSales.yesterday || 0),
+                thisWeek: Number(summariesData.periodSales.thisWeek || 0),
+                lastWeek: Number(summariesData.periodSales.lastWeek || 0),
+                thisMonth: Number(summariesData.periodSales.thisMonth || 0),
+                lastMonth: Number(summariesData.periodSales.lastMonth || 0),
+              };
+            }
           }
         } catch {
           // Silently skip failed or aborted summaries
@@ -189,6 +243,7 @@ export function OrganizerOverviewView({
 
       if (!controller.signal.aborted) {
         setEventStats(statsMap);
+        setPeriodSales(nextPeriodSales);
       }
     } catch {
       if (!controller.signal.aborted) {
@@ -228,6 +283,8 @@ export function OrganizerOverviewView({
 
   let totalSoldTickets = 0;
   let totalGrossRevenue = 0;
+  let totalFee = 0;
+  let totalNetSales = 0;
   let totalQuota = 0;
 
   for (const ev of events) {
@@ -236,18 +293,21 @@ export function OrganizerOverviewView({
     if (stats) {
       totalSoldTickets += stats.soldTickets;
       totalGrossRevenue += stats.grossSales;
+      totalFee += stats.fee;
+      totalNetSales += stats.netSales;
     }
   }
 
-  const totalFee = Math.round(totalGrossRevenue * 0.03);
-  const totalNetSales = totalGrossRevenue - totalFee;
   const avgTicketPrice = totalSoldTickets > 0 ? Math.round(totalGrossRevenue / totalSoldTickets) : 0;
   const remainingQuota = Math.max(0, totalQuota - totalSoldTickets);
 
-  // Multi-Period Sales Breakdown (D-212)
-  const todaySales = totalGrossRevenue > 0 ? Math.round(totalGrossRevenue * 0.08) : 0;
-  const thisWeekSales = totalGrossRevenue > 0 ? Math.round(totalGrossRevenue * 0.38) : 0;
-  const thisMonthSales = totalGrossRevenue > 0 ? totalGrossRevenue : 0;
+  // Real Multi-Period Sales Breakdown from DB (Asia/Bangkok)
+  const todaySales = periodSales.today;
+  const thisWeekSales = periodSales.thisWeek;
+  const thisMonthSales = periodSales.thisMonth;
+  const todayTrend = formatPeriodTrend(periodSales.today, periodSales.yesterday, 'จากเมื่อวาน');
+  const weekTrend = formatPeriodTrend(periodSales.thisWeek, periodSales.lastWeek, 'จากสัปดาห์ก่อน');
+  const monthTrend = formatPeriodTrend(periodSales.thisMonth, periodSales.lastMonth, 'จากเดือนก่อน');
 
   const soldPercentage =
     totalQuota > 0 ? Math.min(100, Math.round((totalSoldTickets / totalQuota) * 100)) : 0;
@@ -478,21 +538,21 @@ export function OrganizerOverviewView({
             <div className="kpi-period-row" data-testid="overview-kpi-today">
               <div className="kpi-period-meta">
                 <span className="period-name">ยอดขายวันนี้ (Today)</span>
-                <span className="overview-trend-badge success">+12.5% จากเมื่อวาน</span>
+                <span className={`overview-trend-badge ${todayTrend.tone}`}>{todayTrend.label}</span>
               </div>
               <span className="period-val">{formatBaht(todaySales)}</span>
             </div>
             <div className="kpi-period-row" data-testid="overview-kpi-week">
               <div className="kpi-period-meta">
-                <span className="period-name">ยอดขายสัปดาห์นี้</span>
-                <span className="overview-trend-badge success">+8.2% จากสัปดาห์ก่อน</span>
+                <span className="period-name">ยอดขายสัปดาห์นี้ (7 วันล่าสุด)</span>
+                <span className={`overview-trend-badge ${weekTrend.tone}`}>{weekTrend.label}</span>
               </div>
               <span className="period-val">{formatBaht(thisWeekSales)}</span>
             </div>
             <div className="kpi-period-row" data-testid="overview-kpi-month">
               <div className="kpi-period-meta">
                 <span className="period-name">ยอดขายเดือนนี้</span>
-                <span className="overview-trend-badge success">+15.4% จากเดือนก่อน</span>
+                <span className={`overview-trend-badge ${monthTrend.tone}`}>{monthTrend.label}</span>
               </div>
               <span className="period-val font-bold">{formatBaht(thisMonthSales)}</span>
             </div>

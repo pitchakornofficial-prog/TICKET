@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import sharp from 'sharp';
 import type { Pool } from 'pg';
 import type { TicketDetail } from './tickets.ts';
@@ -16,11 +18,53 @@ function escapeXml(value: string): string {
     .replaceAll("'", '&apos;');
 }
 
+let cachedKanitFontCss: string | null = null;
+
+function getEmbeddedKanitFontCss(): string {
+  if (cachedKanitFontCss !== null) return cachedKanitFontCss;
+  const weights = [200, 300, 400, 500, 600, 700];
+  const subsets = ['thai', 'latin'];
+  const rules: string[] = [];
+
+  for (const weight of weights) {
+    for (const subset of subsets) {
+      try {
+        const fontPath = join(
+          process.cwd(),
+          'node_modules',
+          '@fontsource',
+          'kanit',
+          'files',
+          `kanit-${subset}-${weight}-normal.woff`,
+        );
+        const buf = readFileSync(fontPath);
+        const b64 = buf.toString('base64');
+        rules.push(
+          `@font-face { font-family: 'Kanit'; font-style: normal; font-weight: ${weight}; src: url('data:font/woff;base64,${b64}') format('woff'); }`,
+        );
+      } catch {
+        // Ignore missing subset/weight file
+      }
+    }
+  }
+
+  cachedKanitFontCss = rules.join('\n');
+  return cachedKanitFontCss;
+}
+
+function guessFontMimeAndFormat(url: string): { mime: string; format: string } {
+  const lower = url.toLowerCase();
+  if (lower.endsWith('.woff2')) return { mime: 'font/woff2', format: 'woff2' };
+  if (lower.endsWith('.woff')) return { mime: 'font/woff', format: 'woff' };
+  if (lower.endsWith('.otf')) return { mime: 'font/otf', format: 'opentype' };
+  return { mime: 'font/ttf', format: 'truetype' };
+}
+
 async function resolveImageBuffer(url: string | null | undefined): Promise<Buffer | null> {
   const trimmed = (url || '').trim();
   if (!trimmed) return null;
 
-  if (trimmed.startsWith('data:image/')) {
+  if (trimmed.startsWith('data:image/') || trimmed.startsWith('data:font/') || trimmed.startsWith('data:application/')) {
     const commaIndex = trimmed.indexOf(',');
     if (commaIndex !== -1) {
       try {
@@ -106,8 +150,23 @@ export async function generateTicketCardPngBuffer(
     }
   }
 
-  // Fallback elements if template is completely absent
   const els = template?.elements || {};
+  const defaultTitleWeight = String(template?.titleFontWeight ?? 400);
+  const defaultBodyWeight = String(template?.bodyFontWeight ?? 400);
+
+  // Build embedded @font-face CSS (Kanit + optional custom uploaded font)
+  const fontRules: string[] = [getEmbeddedKanitFontCss()];
+  if (template?.customFontUrl && template?.customFontName) {
+    const customFontBuf = await resolveImageBuffer(template.customFontUrl);
+    if (customFontBuf) {
+      const { mime, format } = guessFontMimeAndFormat(template.customFontUrl);
+      const safeName = template.customFontName.replaceAll("'", '');
+      fontRules.push(
+        `@font-face { font-family: '${safeName}'; font-style: normal; font-weight: 100 900; src: url('data:${mime};base64,${customFontBuf.toString('base64')}') format('${format}'); }`,
+      );
+    }
+  }
+  const fontStyleBlock = `<defs><style>${fontRules.filter(Boolean).join('\n')}</style></defs>`;
 
   // Formatted date and time values
   const sessionDate = ticket.sessionStartTime
@@ -120,14 +179,14 @@ export async function generateTicketCardPngBuffer(
     ? escapeXml(formatTime(new Date(ticket.sessionEndTime)))
     : '';
   const fullDateTime = sessionDate
-    ? `${sessionDate} | เวลา ${sessionTime}${sessionEndTime ? ` - ${sessionEndTime}` : ''} น.`
+    ? `${sessionDate} เวลา ${sessionTime}${sessionEndTime ? ` - ${sessionEndTime}` : ''}`
     : '-';
 
   // Generate QR SVG
   const qrPayload = ticket.qrPayload || ticket.ticketCode || 'TICKET';
   const qrSvgUrl = generateCustomQrSvg(qrPayload, {
-    fgColor: template?.qrFgColor || '#000000',
-    bgColor: template?.qrBgColor || '#ffffff',
+    fgColor: '#000000',
+    bgColor: '#ffffff',
     moduleSize: 6,
     quietZone: 2,
   });
@@ -137,21 +196,96 @@ export async function generateTicketCardPngBuffer(
 
   // 2. Resolve background image if configured
   const bgType = template?.bgType || (ticket.ticketTemplateUrl || ticket.eventPosterUrl ? 'image' : 'gradient');
+  const fallbackEventImg = ticket.ticketTemplateUrl || ticket.eventPosterUrl || '';
+  const isDefaultBlankWhite =
+    bgType === 'solid' &&
+    template?.presetId === 'classic-white' &&
+    !template?.bgImageUrl &&
+    (template?.bgColor || '#ffffff').toLowerCase() === '#ffffff';
   const targetBgUrl =
     (bgType === 'image' && template?.bgImageUrl ? template.bgImageUrl : null) ||
-    ticket.ticketTemplateUrl ||
-    ticket.eventPosterUrl ||
-    '';
+    (bgType === 'image' || isDefaultBlankWhite ? fallbackEventImg : '');
 
   let bgBuffer: Buffer | null = null;
-  if (bgType === 'image' && targetBgUrl) {
+  if (targetBgUrl) {
     bgBuffer = await resolveImageBuffer(targetBgUrl);
   }
 
-  // 3. Build elements SVG
+  // 3. Build elements SVG (using dominant-baseline="hanging" to match top-left CSS/Canvas coordinates)
   const elementsSvg: string[] = [];
   const baseFont = template?.fontFamily || 'Kanit';
-  const fontFamily = `'${baseFont}', 'Noto Sans Thai', 'Leelawadee UI', 'Segoe UI', Tahoma, sans-serif`;
+  const fontFamily = baseFont !== 'Kanit'
+    ? `'${baseFont}', 'Kanit', 'Noto Sans Thai', 'Segoe UI', Tahoma, sans-serif`
+    : `'Kanit', 'Noto Sans Thai', 'Segoe UI', Tahoma, sans-serif`;
+  const monoFont = `'ui-monospace', 'SFMono-Regular', Menlo, Monaco, Consolas, monospace`;
+
+  const renderLabeledSvgField = (
+    el: NonNullable<TicketDesignerState['elements'][string]> | undefined,
+    defaults: {
+      x: number;
+      y: number;
+      bodySize: number;
+      secSize: number;
+      secText: string;
+      bodyText: string;
+      color: string;
+      secColor: string;
+      useMono?: boolean;
+      defaultShowSec?: boolean;
+      defaultAlign?: 'left' | 'center' | 'right';
+    },
+  ) => {
+    if (el?.visible === false) return;
+    const x = Math.round((el?.x ?? defaults.x) * scale);
+    const y = Math.round((el?.y ?? defaults.y) * scale);
+    const bodyPx = el?.fontSize || defaults.bodySize;
+    const secPx = el?.secondaryFontSize || defaults.secSize;
+    const bodySize = Math.round(bodyPx * scale);
+    const secSize = Math.round(secPx * scale);
+    const bodyWeight = el?.fontWeight || defaultBodyWeight;
+    const titleWeight = el?.secondaryFontWeight || defaultTitleWeight;
+    const color = el?.color || defaults.color;
+    const secColor = el?.secondaryColor || defaults.secColor;
+    const align = el?.align || defaults.defaultAlign || 'left';
+    const textAnchor = align === 'center' ? 'middle' : align === 'right' ? 'end' : 'start';
+    const showSec = el?.showSecondaryText !== undefined ? el.showSecondaryText : (defaults.defaultShowSec !== false);
+    const targetFont = defaults.useMono ? monoFont : fontFamily;
+    const bodyText = escapeXml(defaults.bodyText);
+
+    if (showSec) {
+      const secText = escapeXml(el?.secondaryText || defaults.secText);
+      const offsetY = Math.round((secPx + 5) * scale);
+      elementsSvg.push(
+        `<text x="${x}" y="${y}" text-anchor="${textAnchor}" dominant-baseline="hanging" font-family="${fontFamily}" font-size="${secSize}px" font-weight="${titleWeight}" fill="${secColor}">${secText}</text>`,
+      );
+      elementsSvg.push(
+        `<text x="${x}" y="${y + offsetY}" text-anchor="${textAnchor}" dominant-baseline="hanging" font-family="${targetFont}" font-size="${bodySize}px" font-weight="${bodyWeight}" fill="${color}">${bodyText}</text>`,
+      );
+    } else {
+      elementsSvg.push(
+        `<text x="${x}" y="${y}" text-anchor="${textAnchor}" dominant-baseline="hanging" font-family="${targetFont}" font-size="${bodySize}px" font-weight="${bodyWeight}" fill="${color}">${bodyText}</text>`,
+      );
+    }
+  };
+
+  // Brand Logo
+  const elBrandLogo = els.brandLogo;
+  if (elBrandLogo?.visible) {
+    const x = Math.round((elBrandLogo.x ?? 30) * scale);
+    const y = Math.round((elBrandLogo.y ?? 26) * scale);
+    const bodySize = Math.round((elBrandLogo.fontSize || 16) * scale);
+    const secSize = Math.round((elBrandLogo.secondaryFontSize || 10) * scale);
+    const bodyWeight = elBrandLogo.fontWeight || defaultBodyWeight;
+    const titleWeight = elBrandLogo.secondaryFontWeight || defaultTitleWeight;
+    elementsSvg.push(
+      `<text x="${x + Math.round(24 * scale)}" y="${y}" dominant-baseline="hanging" font-family="${fontFamily}" font-size="${bodySize}px" font-weight="${bodyWeight}" fill="${elBrandLogo.color || '#0f172a'}">${escapeXml(elBrandLogo.text || 'TICKET')}</text>`,
+    );
+    if (elBrandLogo.showSecondaryText !== false && elBrandLogo.secondaryText) {
+      elementsSvg.push(
+        `<text x="${x + Math.round(92 * scale)}" y="${y + Math.round(4 * scale)}" dominant-baseline="hanging" font-family="${fontFamily}" font-size="${secSize}px" font-weight="${titleWeight}" fill="${elBrandLogo.secondaryColor || '#64748b'}">${escapeXml(elBrandLogo.secondaryText)}</text>`,
+      );
+    }
+  }
 
   // Event Title
   const elEventTitle = els.eventTitle;
@@ -159,156 +293,178 @@ export async function generateTicketCardPngBuffer(
     const x = Math.round((elEventTitle?.x ?? 34) * scale);
     const y = Math.round((elEventTitle?.y ?? 157) * scale);
     const fontSize = Math.round((elEventTitle?.fontSize ?? 26) * scale);
-    const color = elEventTitle?.color || '#ffffff';
+    const bodyWeight = elEventTitle?.fontWeight || defaultBodyWeight;
+    const color = elEventTitle?.color || '#0f172a';
     const text = escapeXml(ticket.eventTitle || elEventTitle?.text || 'CONCERT TICKET');
     elementsSvg.push(
-      `<text x="${x}" y="${y}" font-family="${fontFamily}" font-size="${fontSize}px" font-weight="700" fill="${color}">${text}</text>`,
+      `<text x="${x}" y="${y}" dominant-baseline="hanging" font-family="${fontFamily}" font-size="${fontSize}px" font-weight="${bodyWeight}" fill="${color}">${text}</text>`,
     );
   }
 
   // Zone / Tier Badge
-  const elZoneBadge = els.zoneBadge;
-  if (elZoneBadge?.visible !== false) {
-    const x = Math.round((elZoneBadge?.x ?? 34) * scale);
-    const y = Math.round((elZoneBadge?.y ?? 192) * scale);
-    const fontSize = Math.round((elZoneBadge?.fontSize ?? 13) * scale);
-    const color = elZoneBadge?.color || '#ffffff';
-    const text = escapeXml(ticket.ticketTypeName || elZoneBadge?.text || 'GENERAL PASS');
-    const showSec = elZoneBadge?.showSecondaryText === true && Boolean(elZoneBadge?.secondaryText);
-    if (showSec && elZoneBadge?.secondaryText) {
-      const secText = escapeXml(elZoneBadge.secondaryText);
-      const secColor = elZoneBadge.secondaryColor || '#94a3b8';
-      const secSize = Math.round(11 * scale);
-      elementsSvg.push(
-        `<text x="${x}" y="${y}" font-family="${fontFamily}" font-size="${secSize}px" font-weight="500" fill="${secColor}">${secText}</text>`,
-      );
-      elementsSvg.push(
-        `<text x="${x}" y="${y + Math.round(18 * scale)}" font-family="${fontFamily}" font-size="${fontSize}px" font-weight="700" fill="${color}">${text}</text>`,
-      );
-    } else {
-      elementsSvg.push(
-        `<text x="${x}" y="${y}" font-family="${fontFamily}" font-size="${fontSize}px" font-weight="700" fill="${color}">${text}</text>`,
-      );
+  renderLabeledSvgField(els.zoneBadge, {
+    x: 34,
+    y: 192,
+    bodySize: 16,
+    secSize: 11,
+    secText: 'โซน / ประเภทบัตร (ZONE & CATEGORY)',
+    bodyText: ticket.ticketTypeName || els.zoneBadge?.text || 'GENERAL PASS',
+    color: '#0f172a',
+    secColor: '#64748b',
+    defaultShowSec: false,
+  });
+
+  // Gate Info
+  if (els.gateInfo?.visible) {
+    const val = (ticket as unknown as { gate?: string }).gate || els.gateInfo.text || 'GATE 2';
+    renderLabeledSvgField(els.gateInfo, {
+      x: 34,
+      y: 225,
+      bodySize: 16,
+      secSize: 11,
+      secText: 'ประตูทางเข้า (GATE)',
+      bodyText: val,
+      color: '#0f172a',
+      secColor: '#64748b',
+    });
+  }
+
+  // Seat Info
+  if (els.seatInfo?.visible) {
+    const val =
+      (ticket as unknown as { seatNumber?: string; seat?: string }).seatNumber ||
+      (ticket as unknown as { seatNumber?: string; seat?: string }).seat ||
+      els.seatInfo.text ||
+      'แถว A / ที่นั่ง 14';
+    renderLabeledSvgField(els.seatInfo, {
+      x: 160,
+      y: 225,
+      bodySize: 16,
+      secSize: 11,
+      secText: 'แถว/ที่นั่ง (ROW / SEAT)',
+      bodyText: val,
+      color: '#0f172a',
+      secColor: '#64748b',
+    });
+  }
+
+  // Price Info
+  if (els.priceInfo?.visible) {
+    const priceNum = (ticket as unknown as { price?: number; ticketPrice?: number }).ticketPrice ?? (ticket as unknown as { price?: number }).price;
+    const priceDisplayMode = (ticket as unknown as { priceDisplayMode?: string }).priceDisplayMode;
+    const val = priceDisplayMode === 'complimentary'
+      ? 'บัตรเชิญ (COMPLIMENTARY)'
+      : typeof priceNum === 'number'
+      ? `THB ${priceNum.toLocaleString('th-TH')}`
+      : els.priceInfo.text || '';
+    if (val) {
+      renderLabeledSvgField(els.priceInfo, {
+        x: 340,
+        y: 225,
+        bodySize: 16,
+        secSize: 11,
+        secText: 'ราคาบัตร (PRICE)',
+        bodyText: val,
+        color: '#0f172a',
+        secColor: '#64748b',
+      });
     }
   }
 
   // Date & Time
-  const elDateTime = els.dateTime;
-  if (elDateTime?.visible !== false) {
-    const x = Math.round((elDateTime?.x ?? 30) * scale);
-    const y = Math.round((elDateTime?.y ?? 245) * scale);
-    const fontSize = Math.round((elDateTime?.fontSize ?? 14) * scale);
-    const color = elDateTime?.color || '#ffffff';
-    const showSec = elDateTime?.showSecondaryText !== false;
-    const text = escapeXml(ticket.sessionStartTime ? fullDateTime : elDateTime?.text || fullDateTime);
-    if (showSec) {
-      const secText = escapeXml(elDateTime?.secondaryText || 'วันและเวลาแสดง (DATE & TIME)');
-      const secColor = elDateTime?.secondaryColor || '#cbd5e1';
-      const secSize = Math.round(11 * scale);
-      elementsSvg.push(
-        `<text x="${x}" y="${y}" font-family="${fontFamily}" font-size="${secSize}px" font-weight="500" fill="${secColor}">${secText}</text>`,
-      );
-      elementsSvg.push(
-        `<text x="${x}" y="${y + Math.round(18 * scale)}" font-family="${fontFamily}" font-size="${fontSize}px" font-weight="600" fill="${color}">${text}</text>`,
-      );
-    } else {
-      elementsSvg.push(
-        `<text x="${x}" y="${y}" font-family="${fontFamily}" font-size="${fontSize}px" font-weight="600" fill="${color}">${text}</text>`,
-      );
-    }
-  }
+  renderLabeledSvgField(els.dateTime, {
+    x: 30,
+    y: 245,
+    bodySize: 14,
+    secSize: 11,
+    secText: 'วันและเวลาแสดง (DATE & TIME)',
+    bodyText: ticket.sessionStartTime ? fullDateTime : els.dateTime?.text || fullDateTime,
+    color: '#0f172a',
+    secColor: '#64748b',
+  });
 
   // Venue
-  const elVenue = els.venue;
-  if (elVenue?.visible !== false) {
-    const x = Math.round((elVenue?.x ?? 30) * scale);
-    const y = Math.round((elVenue?.y ?? 290) * scale);
-    const fontSize = Math.round((elVenue?.fontSize ?? 14) * scale);
-    const color = elVenue?.color || '#ffffff';
-    const showSec = elVenue?.showSecondaryText !== false;
-    const text = escapeXml(ticket.location || elVenue?.text || '-');
-    if (showSec) {
-      const secText = escapeXml(elVenue?.secondaryText || 'สถานที่จัดงาน (VENUE & HALL)');
-      const secColor = elVenue?.secondaryColor || '#cbd5e1';
-      const secSize = Math.round(11 * scale);
-      elementsSvg.push(
-        `<text x="${x}" y="${y}" font-family="${fontFamily}" font-size="${secSize}px" font-weight="500" fill="${secColor}">${secText}</text>`,
-      );
-      elementsSvg.push(
-        `<text x="${x}" y="${y + Math.round(18 * scale)}" font-family="${fontFamily}" font-size="${fontSize}px" font-weight="600" fill="${color}">${text}</text>`,
-      );
-    } else {
-      elementsSvg.push(
-        `<text x="${x}" y="${y}" font-family="${fontFamily}" font-size="${fontSize}px" font-weight="600" fill="${color}">${text}</text>`,
-      );
-    }
-  }
+  renderLabeledSvgField(els.venue, {
+    x: 30,
+    y: 290,
+    bodySize: 14,
+    secSize: 11,
+    secText: 'สถานที่จัดงาน (VENUE & HALL)',
+    bodyText: ticket.location || els.venue?.text || '-',
+    color: '#0f172a',
+    secColor: '#64748b',
+  });
 
-  // Ticket Code (Left Column) and Buyer Name (Right Column) collision prevention
+  // Ticket Code and Buyer Name collision prevention
   const elTicketCode = els.ticketCode;
   const elBuyerName = els.buyerName;
-  let tcX = Math.round((elTicketCode?.x ?? 31) * scale);
-  const tcY = Math.round((elTicketCode?.y ?? 334) * scale);
-  let bnX = Math.round((elBuyerName?.x ?? 280) * scale);
-  const bnY = Math.round((elBuyerName?.y ?? 335) * scale);
+  let tcX = elTicketCode?.x ?? 31;
+  const tcY = elTicketCode?.y ?? 334;
+  let bnX = elBuyerName?.x ?? 280;
+  const bnY = elBuyerName?.y ?? 335;
 
-  // If both are visible on the same row, ensure a minimum horizontal separation of 260px
   if (
     elTicketCode?.visible !== false &&
     elBuyerName?.visible !== false &&
     Math.abs(tcY - bnY) < 25
   ) {
-    if (tcX <= bnX && bnX < tcX + Math.round(260 * scale)) {
-      bnX = tcX + Math.round(260 * scale);
-    } else if (bnX < tcX && tcX < bnX + Math.round(260 * scale)) {
-      tcX = bnX + Math.round(260 * scale);
+    if (tcX <= bnX && bnX < tcX + 260) {
+      bnX = tcX + 260;
+    } else if (bnX < tcX && tcX < bnX + 260) {
+      tcX = bnX + 260;
     }
   }
 
-  // Ticket Code
-  if (elTicketCode?.visible !== false) {
-    const fontSize = Math.round((elTicketCode?.fontSize ?? 14) * scale);
-    const color = elTicketCode?.color || '#ffffff';
-    const showSec = elTicketCode?.showSecondaryText !== false;
-    const text = escapeXml(ticket.ticketCode || elTicketCode?.text || '-');
-    if (showSec) {
-      const secText = escapeXml(elTicketCode?.secondaryText || 'รหัสบัตร (TICKET CODE)');
-      const secColor = elTicketCode?.secondaryColor || '#cbd5e1';
-      const secSize = Math.round(11 * scale);
-      elementsSvg.push(
-        `<text x="${tcX}" y="${tcY}" font-family="${fontFamily}" font-size="${secSize}px" font-weight="500" fill="${secColor}">${secText}</text>`,
-      );
-      elementsSvg.push(
-        `<text x="${tcX}" y="${tcY + Math.round(18 * scale)}" font-family="monospace" font-size="${fontSize}px" font-weight="700" fill="${color}">${text}</text>`,
-      );
-    } else {
-      elementsSvg.push(
-        `<text x="${tcX}" y="${tcY}" font-family="monospace" font-size="${fontSize}px" font-weight="700" fill="${color}">${text}</text>`,
-      );
-    }
-  }
+  renderLabeledSvgField(elTicketCode ? { ...elTicketCode, x: tcX } : undefined, {
+    x: tcX,
+    y: tcY,
+    bodySize: 14,
+    secSize: 11,
+    secText: 'รหัสบัตร (TICKET CODE)',
+    bodyText: ticket.ticketCode || elTicketCode?.text || '-',
+    color: '#0f172a',
+    secColor: '#64748b',
+    useMono: true,
+  });
 
-  // Buyer Name
-  if (elBuyerName?.visible !== false) {
-    const fontSize = Math.round((elBuyerName?.fontSize ?? 13) * scale);
-    const color = elBuyerName?.color || '#ffffff';
-    const showSec = elBuyerName?.showSecondaryText !== false;
-    const text = escapeXml(ticket.buyerName || elBuyerName?.text || '-');
-    if (showSec) {
-      const secText = escapeXml(elBuyerName?.secondaryText || 'ผู้ถือบัตร (ATTENDEE)');
-      const secColor = elBuyerName?.secondaryColor || '#cbd5e1';
-      const secSize = Math.round(11 * scale);
+  renderLabeledSvgField(elBuyerName ? { ...elBuyerName, x: bnX } : undefined, {
+    x: bnX,
+    y: bnY,
+    bodySize: 13,
+    secSize: 11,
+    secText: 'ผู้ถือบัตร (ATTENDEE)',
+    bodyText: ticket.buyerName || elBuyerName?.text || '-',
+    color: '#0f172a',
+    secColor: '#64748b',
+  });
+
+  // Security Barcode
+  const elBarcode = els.barcode;
+  if (elBarcode?.visible) {
+    const bcX = Math.round((elBarcode.x ?? 30) * scale);
+    const bcY = Math.round((elBarcode.y ?? 340) * scale);
+    const secPx = elBarcode.secondaryFontSize || 10;
+    const secSize = Math.round(secPx * scale);
+    const bodySize = Math.round((elBarcode.fontSize || 11) * scale);
+    const titleWeight = elBarcode.secondaryFontWeight || defaultTitleWeight;
+    const bodyWeight = elBarcode.fontWeight || defaultBodyWeight;
+    const barColor = elBarcode.color || '#0f172a';
+    elementsSvg.push(
+      `<text x="${bcX}" y="${bcY}" dominant-baseline="hanging" font-family="${fontFamily}" font-size="${secSize}px" font-weight="${titleWeight}" fill="${elBarcode.secondaryColor || '#64748b'}">${escapeXml(elBarcode.secondaryText || 'SECURITY VERIFICATION')}</text>`,
+    );
+    const barTop = bcY + Math.round((secPx + 4) * scale);
+    let barOffset = 0;
+    for (let i = 0; i < 35; i++) {
+      const w = (i % 3 === 0 ? 3 : 1.5) * scale;
       elementsSvg.push(
-        `<text x="${bnX}" y="${bnY}" font-family="${fontFamily}" font-size="${secSize}px" font-weight="500" fill="${secColor}">${secText}</text>`,
+        `<rect x="${bcX + barOffset}" y="${barTop}" width="${w}" height="${Math.round(20 * scale)}" fill="${barColor}" />`,
       );
-      elementsSvg.push(
-        `<text x="${bnX}" y="${bnY + Math.round(18 * scale)}" font-family="${fontFamily}" font-size="${fontSize}px" font-weight="600" fill="${color}">${text}</text>`,
-      );
-    } else {
-      elementsSvg.push(
-        `<text x="${bnX}" y="${bnY}" font-family="${fontFamily}" font-size="${fontSize}px" font-weight="600" fill="${color}">${text}</text>`,
-      );
+      barOffset += w + 2 * scale;
     }
+    const totalBarsWidth = Math.max(barOffset - 2 * scale, 100);
+    elementsSvg.push(
+      `<text x="${bcX + Math.round(totalBarsWidth / 2)}" y="${barTop + Math.round(24 * scale)}" text-anchor="middle" dominant-baseline="hanging" font-family="${monoFont}" font-size="${bodySize}px" font-weight="${bodyWeight}" fill="${barColor}">*${escapeXml(ticket.ticketCode)}*</text>`,
+    );
   }
 
   // Footer Note
@@ -317,53 +473,89 @@ export async function generateTicketCardPngBuffer(
     const x = Math.round((elFooterNote?.x ?? 30) * scale);
     const y = Math.round((elFooterNote?.y ?? 380) * scale);
     const fontSize = Math.round((elFooterNote?.fontSize ?? 11) * scale);
-    const color = elFooterNote?.color || '#cbd5e1';
+    const bodyWeight = elFooterNote?.fontWeight || defaultBodyWeight;
+    const color = elFooterNote?.color || '#64748b';
     const text = escapeXml(elFooterNote?.text || '* บัตรนี้สามารถสแกนเข้างานได้ 1 ครั้งต่อท่าน - ห้ามทำซ้ำหรือดัดแปลง');
     elementsSvg.push(
-      `<text x="${x}" y="${y}" font-family="${fontFamily}" font-size="${fontSize}px" fill="${color}">${text}</text>`,
+      `<text x="${x}" y="${y}" dominant-baseline="hanging" font-family="${fontFamily}" font-size="${fontSize}px" font-weight="${bodyWeight}" fill="${color}">${text}</text>`,
     );
+  }
+
+  // Stub Event Summary
+  if (els.stubEventSummary?.visible) {
+    renderLabeledSvgField(els.stubEventSummary, {
+      x: 745,
+      y: 26,
+      bodySize: 12,
+      secSize: 10,
+      secText: 'ADMISSION STUB',
+      bodyText: `${ticket.eventTitle} · ${ticket.ticketTypeName}`,
+      color: '#0f172a',
+      secColor: '#64748b',
+      defaultAlign: 'center',
+    });
   }
 
   // QR Code Box & SVG
   const elQr = els.qrCode;
   const qrX = Math.round((elQr?.x ?? 754) * scale);
   const qrY = Math.round((elQr?.y ?? 84) * scale);
-  const qrSize = Math.round((elQr?.size ?? 155) * scale);
+  const qrSize = Math.round((elQr?.size ?? template?.qrSize ?? 155) * scale);
   const qrInnerPad = Math.round(8 * scale);
   const qrInnerSize = qrSize - qrInnerPad * 2;
 
-  // Solid white background for QR code
-  elementsSvg.push(
-    `<rect x="${qrX}" y="${qrY}" width="${qrSize}" height="${qrSize}" rx="${Math.round(8 * scale)}" fill="#ffffff" />`,
-  );
-  elementsSvg.push(
-    `<g transform="translate(${qrX + qrInnerPad}, ${qrY + qrInnerPad}) scale(${qrInnerSize / 250})">${qrSvgXml}</g>`,
-  );
+  if (elQr?.visible !== false) {
+    elementsSvg.push(
+      `<rect x="${qrX}" y="${qrY}" width="${qrSize}" height="${qrSize}" rx="${Math.round(8 * scale)}" fill="#ffffff" stroke="#e2e8f0" stroke-width="${Math.max(1, Math.round(scale))}" />`,
+    );
+    elementsSvg.push(
+      `<g transform="translate(${qrX + qrInnerPad}, ${qrY + qrInnerPad}) scale(${qrInnerSize / 250})">${qrSvgXml}</g>`,
+    );
+  }
 
   // QR Code Stub Label
   const elQrLabel = els.qrCodeLabel;
   if (elQrLabel?.visible !== false) {
-    const centerX = qrX + Math.round(qrSize / 2);
+    const centerX = elQrLabel?.x !== undefined && elQrLabel?.align !== 'center'
+      ? Math.round(elQrLabel.x * scale)
+      : qrX + Math.round(qrSize / 2);
     const y = Math.round((elQrLabel?.y ?? 263) * scale);
     const fontSize = Math.round((elQrLabel?.fontSize ?? 13) * scale);
-    const color = elQrLabel?.color || '#ffffff';
+    const secPx = elQrLabel?.secondaryFontSize || 10;
+    const secSize = Math.round(secPx * scale);
+    const bodyWeight = elQrLabel?.fontWeight || defaultBodyWeight;
+    const titleWeight = elQrLabel?.secondaryFontWeight || defaultTitleWeight;
+    const color = elQrLabel?.color || '#0f172a';
     const showSec = elQrLabel?.showSecondaryText !== false;
     const text = escapeXml(ticket.ticketCode || elQrLabel?.text || '-');
     if (showSec) {
       const secText = escapeXml(elQrLabel?.secondaryText || 'รหัสอ้างอิงบัตร (TICKET CODE)');
-      const secColor = elQrLabel?.secondaryColor || '#cbd5e1';
-      const secSize = Math.round(10 * scale);
+      const secColor = elQrLabel?.secondaryColor || '#64748b';
       elementsSvg.push(
-        `<text x="${centerX}" y="${y}" text-anchor="middle" font-family="${fontFamily}" font-size="${secSize}px" font-weight="500" fill="${secColor}">${secText}</text>`,
+        `<text x="${centerX}" y="${y}" text-anchor="middle" dominant-baseline="hanging" font-family="${fontFamily}" font-size="${secSize}px" font-weight="${titleWeight}" fill="${secColor}">${secText}</text>`,
       );
       elementsSvg.push(
-        `<text x="${centerX}" y="${y + Math.round(16 * scale)}" text-anchor="middle" font-family="monospace" font-size="${fontSize}px" font-weight="700" fill="${color}">${text}</text>`,
+        `<text x="${centerX}" y="${y + Math.round((secPx + 4) * scale)}" text-anchor="middle" dominant-baseline="hanging" font-family="${monoFont}" font-size="${fontSize}px" font-weight="${bodyWeight}" fill="${color}">${text}</text>`,
       );
     } else {
       elementsSvg.push(
-        `<text x="${centerX}" y="${y}" text-anchor="middle" font-family="monospace" font-size="${fontSize}px" font-weight="700" fill="${color}">${text}</text>`,
+        `<text x="${centerX}" y="${y}" text-anchor="middle" dominant-baseline="hanging" font-family="${monoFont}" font-size="${fontSize}px" font-weight="${bodyWeight}" fill="${color}">${text}</text>`,
       );
     }
+  }
+
+  // Scan Hint
+  if (els.scanHint?.visible) {
+    const x = Math.round((els.scanHint.x ?? 760) * scale);
+    const y = Math.round((els.scanHint.y ?? 335) * scale);
+    const fontSize = Math.round((els.scanHint.fontSize ?? 11) * scale);
+    const bodyWeight = els.scanHint.fontWeight || defaultBodyWeight;
+    const align = els.scanHint.align || 'center';
+    const anchor = align === 'center' ? 'middle' : align === 'right' ? 'end' : 'start';
+    const targetX = align === 'center' ? qrX + Math.round(qrSize / 2) : x;
+    elementsSvg.push(
+      `<text x="${targetX}" y="${y}" text-anchor="${anchor}" dominant-baseline="hanging" font-family="${fontFamily}" font-size="${fontSize}px" font-weight="${bodyWeight}" fill="${els.scanHint.color || '#64748b'}">${escapeXml(els.scanHint.text || 'แสดง QR เพื่อสแกนเข้างาน')}</text>`,
+    );
   }
 
   // Order ID
@@ -372,35 +564,53 @@ export async function generateTicketCardPngBuffer(
     const centerX = qrX + Math.round(qrSize / 2);
     const y = Math.round((elOrderId?.y ?? 362) * scale);
     const fontSize = Math.round((elOrderId?.fontSize ?? 11) * scale);
-    const color = elOrderId?.color || '#cbd5e1';
+    const secPx = elOrderId?.secondaryFontSize || 10;
+    const secSize = Math.round(secPx * scale);
+    const bodyWeight = elOrderId?.fontWeight || defaultBodyWeight;
+    const titleWeight = elOrderId?.secondaryFontWeight || defaultTitleWeight;
+    const color = elOrderId?.color || '#0f172a';
     const showSec = elOrderId?.showSecondaryText !== false;
     const text = escapeXml(ticket.orderId || elOrderId?.text || '-');
     if (showSec) {
       const secText = escapeXml(elOrderId?.secondaryText || 'หมายเลขคำสั่งซื้อ (ORDER ID)');
-      const secColor = elOrderId?.secondaryColor || '#94a3b8';
-      const secSize = Math.round(9 * scale);
+      const secColor = elOrderId?.secondaryColor || '#64748b';
       elementsSvg.push(
-        `<text x="${centerX}" y="${y}" text-anchor="middle" font-family="${fontFamily}" font-size="${secSize}px" font-weight="500" fill="${secColor}">${secText}</text>`,
+        `<text x="${centerX}" y="${y}" text-anchor="middle" dominant-baseline="hanging" font-family="${fontFamily}" font-size="${secSize}px" font-weight="${titleWeight}" fill="${secColor}">${secText}</text>`,
       );
       elementsSvg.push(
-        `<text x="${centerX}" y="${y + Math.round(15 * scale)}" text-anchor="middle" font-family="monospace" font-size="${fontSize}px" font-weight="600" fill="${color}">${text}</text>`,
+        `<text x="${centerX}" y="${y + Math.round((secPx + 4) * scale)}" text-anchor="middle" dominant-baseline="hanging" font-family="${monoFont}" font-size="${fontSize}px" font-weight="${bodyWeight}" fill="${color}">${text}</text>`,
       );
     } else {
       elementsSvg.push(
-        `<text x="${centerX}" y="${y}" text-anchor="middle" font-family="monospace" font-size="${fontSize}px" font-weight="600" fill="${color}">${text}</text>`,
+        `<text x="${centerX}" y="${y}" text-anchor="middle" dominant-baseline="hanging" font-family="${monoFont}" font-size="${fontSize}px" font-weight="${bodyWeight}" fill="${color}">${text}</text>`,
       );
     }
   }
 
   // Tear line if enabled
-  if (template?.tearLineStyle && template.tearLineStyle !== 'none') {
-    const tearX = Math.round((template.tearLineX || 720) * scale);
-    const tearColor = template.tearLineColor || '#94a3b8';
-    const dash = template.tearLineStyle === 'dashed' ? 'stroke-dasharray="6,6"' : '';
+  if (template?.tearLineStyle !== 'none') {
+    const tearX = Math.round((template?.tearLineX ?? 720) * scale);
+    const tearColor = template?.tearLineColor || '#cbd5e1';
+    const dash =
+      template?.tearLineStyle === 'dashed' || !template?.tearLineStyle
+        ? 'stroke-dasharray="8,8"'
+        : template.tearLineStyle === 'dotted'
+        ? 'stroke-dasharray="3,5"'
+        : '';
     elementsSvg.push(
-      `<line x1="${tearX}" y1="0" x2="${tearX}" y2="${height}" stroke="${tearColor}" stroke-width="2" ${dash} opacity="0.75" />`,
+      `<line x1="${tearX}" y1="0" x2="${tearX}" y2="${height}" stroke="${tearColor}" stroke-width="2" ${dash} />`,
     );
   }
+
+  // Border Outline
+  const cardRadius = Math.max(Math.round((typeof template?.borderRadius === 'number' ? template.borderRadius : 4) * scale), 0);
+  const borderWidth = template?.borderWidth && template.borderWidth > 0 ? template.borderWidth * scale : 2;
+  const borderColor = (template?.borderWidth && template.borderWidth > 0 && template.borderColor && template.borderColor !== 'transparent')
+    ? template.borderColor
+    : '#e2e8f0';
+  elementsSvg.push(
+    `<rect x="${borderWidth / 2}" y="${borderWidth / 2}" width="${width - borderWidth}" height="${height - borderWidth}" rx="${cardRadius}" fill="none" stroke="${borderColor}" stroke-width="${borderWidth}" />`,
+  );
 
   // 4. Combine Background + SVG Overlay
   if (bgBuffer) {
@@ -410,6 +620,7 @@ export async function generateTicketCardPngBuffer(
 
     const overlaySvg = `
 <svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
+  ${fontStyleBlock}
   ${template?.bgOverlayDarkness ? `<rect x="0" y="0" width="${width}" height="${height}" fill="#000000" opacity="${template.bgOverlayDarkness / 100}" />` : ''}
   ${elementsSvg.join('\n  ')}
 </svg>`;
@@ -424,7 +635,7 @@ export async function generateTicketCardPngBuffer(
   let bgElement = '';
   if (bgType === 'gradient') {
     const angle = template?.gradientAngle ?? 135;
-    const startColor = template?.gradientStart || '#1e1b4b';
+    const startColor = template?.gradientStart || '#ffffff';
     const endColor = template?.gradientEnd || '#0f172a';
     bgElement = `
       <defs>
@@ -433,23 +644,15 @@ export async function generateTicketCardPngBuffer(
           <stop offset="100%" stop-color="${endColor}" />
         </linearGradient>
       </defs>
-      <rect x="0" y="0" width="${width}" height="${height}" rx="12" fill="url(#ticketBgGrad)" />`;
-  } else if (bgType === 'solid') {
-    const bgColor = template?.bgColor || '#0f172a';
-    bgElement = `<rect x="0" y="0" width="${width}" height="${height}" rx="12" fill="${bgColor}" />`;
+      <rect x="0" y="0" width="${width}" height="${height}" rx="${cardRadius}" fill="url(#ticketBgGrad)" />`;
   } else {
-    bgElement = `
-      <defs>
-        <linearGradient id="fallbackGrad" x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stop-color="#1e1b4b" />
-          <stop offset="100%" stop-color="#0f172a" />
-        </linearGradient>
-      </defs>
-      <rect x="0" y="0" width="${width}" height="${height}" rx="12" fill="url(#fallbackGrad)" />`;
+    const bgColor = template?.bgColor || '#ffffff';
+    bgElement = `<rect x="0" y="0" width="${width}" height="${height}" rx="${cardRadius}" fill="${bgColor}" />`;
   }
 
   const fullSvg = `
 <svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
+  ${fontStyleBlock}
   ${bgElement}
   ${elementsSvg.join('\n  ')}
 </svg>`;

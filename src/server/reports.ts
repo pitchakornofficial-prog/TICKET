@@ -1093,6 +1093,98 @@ export async function getOrganizerFinanceSummaries(
   return getBatchFinanceSummaries(pool, actor, scopeOrganizerId);
 }
 
+export interface OrganizerPeriodSales {
+  today: number;
+  yesterday: number;
+  thisWeek: number;
+  lastWeek: number;
+  thisMonth: number;
+  lastMonth: number;
+}
+
+/**
+ * Computes real multi-period gross sales in Asia/Bangkok timezone
+ * across all web orders belonging to the organizer's events (excludes direct_issue).
+ */
+export async function getOrganizerPeriodSales(
+  pool: Pool,
+  actor: ActorContext,
+  scopeOrganizerId?: string,
+): Promise<OrganizerPeriodSales> {
+  if (actor.role !== 'organizer' && actor.role !== 'owner') {
+    throw new Error('ไม่อนุญาต: เฉพาะผู้จัดงานหรือเจ้าของแพลตฟอร์มเท่านั้น');
+  }
+
+  const { ensureEventSchema } = await import('./events.ts');
+  await ensureEventSchema(pool);
+  await ensureReportSchema(pool);
+
+  const filterOrganizerId =
+    actor.role === 'organizer' ? actor.id : scopeOrganizerId || null;
+
+  const eventsRes = await pool.query<{ id: string }>(
+    `SELECT id FROM events WHERE ($1::text IS NULL OR "organizerId" = $1)`,
+    [filterOrganizerId],
+  );
+
+  if (eventsRes.rows.length === 0) {
+    return {
+      today: 0,
+      yesterday: 0,
+      thisWeek: 0,
+      lastWeek: 0,
+      thisMonth: 0,
+      lastMonth: 0,
+    };
+  }
+
+  const eventIds = eventsRes.rows.map(r => r.id);
+
+  const res = await pool.query<{
+    today: string;
+    yesterday: string;
+    thisWeek: string;
+    lastWeek: string;
+    thisMonth: string;
+    lastMonth: string;
+  }>(
+    `${ORDER_FEES_CTE}
+     SELECT
+       COALESCE(SUM("grossSubtotal") FILTER (
+         WHERE ("orderCreatedAt" AT TIME ZONE 'Asia/Bangkok')::date = (now() AT TIME ZONE 'Asia/Bangkok')::date
+       ), 0)::text AS "today",
+       COALESCE(SUM("grossSubtotal") FILTER (
+         WHERE ("orderCreatedAt" AT TIME ZONE 'Asia/Bangkok')::date = ((now() AT TIME ZONE 'Asia/Bangkok')::date - INTERVAL '1 day')
+       ), 0)::text AS "yesterday",
+       COALESCE(SUM("grossSubtotal") FILTER (
+         WHERE ("orderCreatedAt" AT TIME ZONE 'Asia/Bangkok')::date >= ((now() AT TIME ZONE 'Asia/Bangkok')::date - INTERVAL '6 days')
+           AND ("orderCreatedAt" AT TIME ZONE 'Asia/Bangkok')::date <= (now() AT TIME ZONE 'Asia/Bangkok')::date
+       ), 0)::text AS "thisWeek",
+       COALESCE(SUM("grossSubtotal") FILTER (
+         WHERE ("orderCreatedAt" AT TIME ZONE 'Asia/Bangkok')::date >= ((now() AT TIME ZONE 'Asia/Bangkok')::date - INTERVAL '13 days')
+           AND ("orderCreatedAt" AT TIME ZONE 'Asia/Bangkok')::date <= ((now() AT TIME ZONE 'Asia/Bangkok')::date - INTERVAL '7 days')
+       ), 0)::text AS "lastWeek",
+       COALESCE(SUM("grossSubtotal") FILTER (
+         WHERE date_trunc('month', "orderCreatedAt" AT TIME ZONE 'Asia/Bangkok') = date_trunc('month', now() AT TIME ZONE 'Asia/Bangkok')
+       ), 0)::text AS "thisMonth",
+       COALESCE(SUM("grossSubtotal") FILTER (
+         WHERE date_trunc('month', "orderCreatedAt" AT TIME ZONE 'Asia/Bangkok') = date_trunc('month', now() AT TIME ZONE 'Asia/Bangkok') - INTERVAL '1 month'
+       ), 0)::text AS "lastMonth"
+     FROM order_fees`,
+    [eventIds],
+  );
+
+  const row = res.rows[0];
+  return {
+    today: roundHalfUp(Number(row?.today || 0)),
+    yesterday: roundHalfUp(Number(row?.yesterday || 0)),
+    thisWeek: roundHalfUp(Number(row?.thisWeek || 0)),
+    lastWeek: roundHalfUp(Number(row?.lastWeek || 0)),
+    thisMonth: roundHalfUp(Number(row?.thisMonth || 0)),
+    lastMonth: roundHalfUp(Number(row?.lastMonth || 0)),
+  };
+}
+
 export interface RecordPayoutInput {
   eventId: string;
   amount: number;

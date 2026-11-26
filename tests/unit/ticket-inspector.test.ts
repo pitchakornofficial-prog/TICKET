@@ -303,6 +303,34 @@ describe('Ticket QR Inspector & Tester (Unit Tests)', () => {
     expect(terminalContent).toContain('/back-office/ticket-inspector');
   });
 
+  it('uses fixed-width non-shifting layout on desktop, keeps mobile result below scanner, and renders icon-only inactive tabs', () => {
+    const viewPath = path.resolve(rootDir, 'src/components/ticket-inspector-view.tsx');
+    const viewContent = fs.readFileSync(viewPath, 'utf8');
+    expect(viewContent).toContain('ticket-inspector-layout');
+    expect(viewContent).toContain('ticket-inspector-scanner-col');
+    expect(viewContent).toContain('ticket-inspector-result-col');
+    expect(viewContent).toContain('inspector-empty-result-placeholder');
+    expect(viewContent).not.toContain('inspector-banner-next-scan-btn');
+    expect(viewContent).not.toContain("gridTemplateColumns: result ? 'minmax(320px, 420px) 1fr' : '1fr'");
+    expect(viewContent).toContain("{activeTab === 'camera' && <span>กล้องสแกนสด</span>}");
+    expect(viewContent).toContain("{activeTab === 'upload' && <span>อัปโหลดภาพ QR</span>}");
+    expect(viewContent).toContain("{activeTab === 'manual' && <span>กรอกรหัสค้นหา</span>}");
+
+    // Icon-only camera, torch, switch camera, and rescan controls (centered)
+    expect(viewContent).toContain('SwitchCameraIcon');
+    expect(viewContent).toContain('data-testid="inspector-camera-actions-toolbar"');
+    expect(viewContent).toContain("justifyContent: 'center'");
+    expect(viewContent).toContain('data-testid="inspector-toggle-camera-btn"');
+    expect(viewContent).toContain('data-testid="inspector-toggle-torch-btn"');
+    expect(viewContent).toContain('data-testid="inspector-switch-camera-btn"');
+    expect(viewContent).toContain('data-testid="inspector-rescan-btn"');
+
+    const cssPath = path.resolve(rootDir, 'src/app/back-office/back-office.css');
+    const cssContent = fs.readFileSync(cssPath, 'utf8');
+    expect(cssContent).toMatch(/\.ticket-inspector-layout\s*\{[^}]*grid-template-columns:\s*400px minmax\(0, 1fr\)/);
+    expect(cssContent).not.toMatch(/\.ticket-inspector-result-col\.has-result\s*\{[^}]*order:\s*-1/);
+  });
+
   it('enforces strict D-14 zero emojis across all ticket inspector files', () => {
     const emojiRegex = /[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/u;
 

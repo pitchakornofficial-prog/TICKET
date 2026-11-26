@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { generateTicketQrPngBuffer } from '../../src/server/ticket-qr-png';
 import { generateTicketCardPngBuffer } from '../../src/server/ticket-card-png';
 import type { TicketDetail } from '../../src/server/tickets';
@@ -117,4 +119,34 @@ describe('Ticket PNG Generation (QR and Card)', () => {
     expect(png[2]).toBe(0x4e);
     expect(png[3]).toBe(0x47);
   }, 15000);
+
+  it('synchronizes font weights, custom fonts, and top-aligned SVG baseline across server PNG, canvas download, and app layout', () => {
+    const rootDir = process.cwd();
+    const layoutContent = readFileSync(join(rootDir, 'src/app/layout.tsx'), 'utf8');
+    const canvasContent = readFileSync(join(rootDir, 'src/components/ticket-canvas-download.ts'), 'utf8');
+    const pngContent = readFileSync(join(rootDir, 'src/server/ticket-card-png.ts'), 'utf8');
+
+    // 1. App layout loads Kanit weights 200..700 to avoid fake-bold synthesis
+    expect(layoutContent).toContain('@fontsource/kanit/thai-400.css');
+    expect(layoutContent).toContain('@fontsource/kanit/thai-700.css');
+
+    // 2. Canvas download loads customFontUrl/Google Fonts and respects titleFontWeight/bodyFontWeight
+    expect(canvasContent).toContain('ensureTemplateFontsLoaded');
+    expect(canvasContent).toContain('template.customFontUrl');
+    expect(canvasContent).toContain('template.titleFontWeight');
+    expect(canvasContent).toContain('template.bodyFontWeight');
+
+    // 3. Server PNG embeds Kanit & custom fonts, uses dominant-baseline="hanging", and renders all elements
+    expect(pngContent).toContain('getEmbeddedKanitFontCss');
+    expect(pngContent).toContain('dominant-baseline="hanging"');
+    expect(pngContent).toContain('template?.titleFontWeight');
+    expect(pngContent).toContain('template?.bodyFontWeight');
+    expect(pngContent).toContain('els.brandLogo');
+    expect(pngContent).toContain('els.gateInfo');
+    expect(pngContent).toContain('els.seatInfo');
+    expect(pngContent).toContain('els.priceInfo');
+    expect(pngContent).toContain('els.barcode');
+    expect(pngContent).toContain('els.stubEventSummary');
+    expect(pngContent).toContain('els.scanHint');
+  });
 });

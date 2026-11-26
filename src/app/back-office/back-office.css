@@ -2606,6 +2606,19 @@ button.scanner-action-btn[aria-disabled="true"] {
   color: #ffffff;
 }
 
+.camera-icon-toggle-btn.torch-toggle-btn.active {
+  background: #fef3c7;
+  border-color: #f59e0b;
+  color: #92400e;
+}
+
+.camera-icon-toggle-btn.torch-toggle-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
 /* Unified 4-Metric Quick Stats in Tab 1 & Tab 2 (D-107) */
 .terminal-quick-stats-grid {
   display: grid;
@@ -6637,9 +6650,9 @@ button.modal-close-btn:active {
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
-  background: #0f172a;
-  color: #ffffff;
-  border: 1px solid #0f172a;
+  background: #ffffff;
+  color: #0f172a;
+  border: 1px solid #cbd5e1;
   border-radius: 10px;
   height: 40px;
   padding: 0 1.25rem;
@@ -6647,15 +6660,16 @@ button.modal-close-btn:active {
   font-weight: 400;
   cursor: pointer;
   transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
-  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.12);
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.05);
   font-family: inherit;
 }
 
 .events-create-btn:hover {
-  background: #1e293b;
-  border-color: #1e293b;
+  background: #f8fafc;
+  border-color: #94a3b8;
+  color: #0f172a;
   transform: translateY(-1px);
-  box-shadow: 0 3px 8px rgba(15, 23, 42, 0.2);
+  box-shadow: 0 3px 8px rgba(15, 23, 42, 0.08);
 }
 
 .events-filter-bar {
@@ -6723,7 +6737,7 @@ button.modal-close-btn:active {
 
 .events-editorial-card {
   display: flex;
-  align-items: center;
+  align-items: stretch;
   justify-content: space-between;
   gap: 1.5rem;
   background: #ffffff;
@@ -6733,6 +6747,7 @@ button.modal-close-btn:active {
   box-shadow: 0 4px 20px -2px rgba(15, 23, 42, 0.05);
   transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
   position: relative;
+  min-height: 200px;
 }
 
 .events-editorial-card:hover {
@@ -6747,6 +6762,7 @@ button.modal-close-btn:active {
     align-items: stretch;
     gap: 1rem;
     padding: 1rem 1.15rem;
+    min-height: auto;
   }
 }
 
@@ -6863,7 +6879,10 @@ button.modal-close-btn:active {
   justify-content: center;
   padding-left: 1.25rem;
   border-left: 1px solid #f1f5f9;
-  min-width: 140px;
+  width: 210px;
+  min-width: 210px;
+  flex-shrink: 0;
+  align-self: stretch;
 }
 
 @media (max-width: 768px) {
@@ -6874,6 +6893,8 @@ button.modal-close-btn:active {
     padding-left: 0;
     padding-top: 0.75rem;
     flex-wrap: wrap;
+    width: 100%;
+    min-width: 0;
   }
 }
 
@@ -6885,13 +6906,14 @@ button.modal-close-btn:active {
   font-size: 0.8rem;
   font-weight: 400;
   height: 34px;
-  padding: 0 0.85rem;
+  padding: 0 0.75rem;
   border-radius: 8px;
   cursor: pointer;
   transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
   font-family: inherit;
   width: 100%;
   text-decoration: none;
+  white-space: nowrap;
 }
 
 .events-action-btn:hover {
@@ -6926,14 +6948,15 @@ button.modal-close-btn:active {
 }
 
 .events-action-btn.btn-submit {
-  background: #0f172a;
-  color: #ffffff;
-  border: 1px solid #0f172a;
+  background: #ffffff;
+  color: #0f172a;
+  border: 1px solid #cbd5e1;
 }
 
 .events-action-btn.btn-submit:hover {
-  background: #1e293b;
-  border-color: #1e293b;
+  background: #f8fafc;
+  border-color: #94a3b8;
+  color: #0f172a;
 }
 
 .events-action-btn.btn-amendment {
@@ -6956,6 +6979,24 @@ button.modal-close-btn:active {
 .events-action-btn.btn-cancel:hover {
   background: #f8fafc;
   border-color: #94a3b8;
+}
+
+.events-action-pill-cancelled {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  height: 34px;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0 0.75rem;
+  font-size: 0.8rem;
+  font-weight: 400;
+  color: #991b1b;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+  white-space: nowrap;
 }
 
 .events-empty-box {
@@ -9422,6 +9463,18 @@ button.modal-close-btn:active {
   background-color: #f0fdf4;
   color: #15803d;
   border: 1px solid #bbf7d0;
+}
+
+.overview-trend-badge.danger {
+  background-color: #fef2f2;
+  color: #b91c1c;
+  border: 1px solid #fecaca;
+}
+
+.overview-trend-badge.neutral {
+  background-color: #f8fafc;
+  color: #64748b;
+  border: 1px solid #e2e8f0;
 }
 
 /* Executive 4-Card Hero Grid (2x2 on Desktop) & Detailed Metrics */
@@ -18527,6 +18580,31 @@ button.direct-btn-sm span,
 .email-reorder-btn:disabled {
   opacity: 0.4;
   cursor: not-allowed;
+}
+
+/* Ticket Inspector Responsive Fixed-Column Layout (Zero Layout Shift) */
+.ticket-inspector-layout {
+  display: grid;
+  grid-template-columns: 400px minmax(0, 1fr);
+  gap: 1.25rem;
+  align-items: start;
+}
+
+.ticket-inspector-scanner-col {
+  min-width: 0;
+}
+
+.ticket-inspector-result-col {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+@media (max-width: 960px) {
+  .ticket-inspector-layout {
+    grid-template-columns: 1fr;
+  }
 }
 
 

@@ -47,9 +47,10 @@ describe('D-210 to D-216: Organizer Overview Executive Redesign, Multi-Period KP
     expect(overviewSrc).toContain('ยอดขายวันนี้ (Today)');
     expect(overviewSrc).toContain('ยอดขายสัปดาห์นี้');
     expect(overviewSrc).toContain('ยอดขายเดือนนี้');
-    expect(overviewSrc).toContain('+12.5% จากเมื่อวาน');
-    expect(overviewSrc).toContain('+8.2% จากสัปดาห์ก่อน');
-    expect(overviewSrc).toContain('+15.4% จากเดือนก่อน');
+    expect(overviewSrc).toContain('formatPeriodTrend');
+    expect(overviewSrc).toContain('จากเมื่อวาน');
+    expect(overviewSrc).toContain('จากสัปดาห์ก่อน');
+    expect(overviewSrc).toContain('จากเดือนก่อน');
   });
 
   it('verifies D-213: 3-zone horizontal concert performance cards with financial values and direct actions', () => {

@@ -157,4 +157,45 @@ describe('Cancelled Event Status Evaluation', () => {
     expect(status.reason).toBe('cancelled');
     expect(status.message).toContain('ยกเลิกการแสดง');
   });
+
+  it('computes effectiveStatus as cancelled when all sessions in getEventDetails are cancelled', async () => {
+    const { getEventDetails } = await import('../../src/server/events');
+    const mockClient = {
+      query: vi.fn().mockImplementation((query: string) => {
+        if (query.includes('events')) {
+          return Promise.resolve({
+            rows: [{
+              id: 'event-1',
+              title: 'คอนเสิร์ตทดสอบ',
+              status: 'approved',
+              description: '',
+              location: 'Hall A',
+              salesStartTime: new Date().toISOString(),
+              salesEndTime: new Date().toISOString(),
+            }],
+            rowCount: 1,
+          });
+        }
+        if (query.includes('FROM event_sessions')) {
+          return Promise.resolve({
+            rows: [
+              { id: 'sess-1', eventId: 'event-1', status: 'cancelled', startTime: new Date().toISOString(), endTime: new Date().toISOString() },
+              { id: 'sess-2', eventId: 'event-1', status: 'cancelled', startTime: new Date().toISOString(), endTime: new Date().toISOString() },
+            ],
+            rowCount: 2,
+          });
+        }
+        if (query.includes('FROM ticket_types')) {
+          return Promise.resolve({ rows: [], rowCount: 0 });
+        }
+        if (query.includes('FROM event_fee_settings')) {
+          return Promise.resolve({ rows: [], rowCount: 0 });
+        }
+        return Promise.resolve({ rows: [], rowCount: 0 });
+      }),
+    };
+
+    const details = await getEventDetails(mockClient, 'event-1');
+    expect(details?.status).toBe('cancelled');
+  });
 });

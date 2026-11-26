@@ -9,6 +9,62 @@ import {
 export const FONT_SANS = 'Kanit, "Noto Sans Thai", "Segoe UI", -apple-system, BlinkMacSystemFont, sans-serif';
 export const FONT_MONO = 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace';
 
+const loadedFontCache = new Set<string>();
+
+/**
+ * Ensures custom uploaded fonts and selected Google Fonts (Sarabun, Prompt, Chakra Petch)
+ * are loaded into document.fonts before rendering onto HTML5 Canvas.
+ */
+export async function ensureTemplateFontsLoaded(template: Partial<TicketDesignerState>): Promise<void> {
+  if (typeof document === 'undefined') return;
+
+  if (template.customFontUrl && template.customFontName && typeof FontFace !== 'undefined') {
+    const cacheKey = `${template.customFontName}::${template.customFontUrl}`;
+    if (!loadedFontCache.has(cacheKey)) {
+      try {
+        const face = new FontFace(template.customFontName, `url("${template.customFontUrl}")`);
+        const loaded = await face.load();
+        document.fonts.add(loaded);
+        loadedFontCache.add(cacheKey);
+      } catch {
+        // Ignore font load errors and fall back cleanly
+      }
+    }
+  }
+
+  const family = template.fontFamily;
+  const googleFonts: Record<string, string> = {
+    Sarabun: 'Sarabun:wght@200;300;400;500;600;700',
+    Prompt: 'Prompt:wght@200;300;400;500;600;700',
+    'Chakra Petch': 'Chakra+Petch:wght@300;400;500;600;700',
+  };
+
+  if (family && googleFonts[family] && !loadedFontCache.has(`gfont::${family}`)) {
+    const linkId = `ticket-gfont-${family.toLowerCase().replace(/\s+/g, '-')}`;
+    if (!document.getElementById(linkId)) {
+      const link = document.createElement('link');
+      link.id = linkId;
+      link.rel = 'stylesheet';
+      link.href = `https://fonts.googleapis.com/css2?family=${googleFonts[family]}&display=swap`;
+      document.head.appendChild(link);
+    }
+    loadedFontCache.add(`gfont::${family}`);
+    try {
+      await document.fonts.load(`400 16px "${family}"`);
+    } catch {
+      // Ignore if offline or blocked
+    }
+  }
+
+  if (document.fonts) {
+    try {
+      await document.fonts.ready;
+    } catch {
+      // fallback to system font stack
+    }
+  }
+}
+
 /**
  * Renders full text without truncation or ellipsis.
  * Dynamically scales down font size if needed so 100% of the text fits within maxWidth.
@@ -221,17 +277,14 @@ export async function generateTicketCanvas(
   const ctx = canvas.getContext('2d');
   if (!ctx) throw new Error('Canvas 2D context not supported');
 
-  // Ensure fonts are loaded in browser if available
-  if (typeof document !== 'undefined' && document.fonts) {
-    try {
-      await document.fonts.ready;
-    } catch {
-      // fallback to system font stack
-    }
-  }
-
   const template = overrideTemplate || loadLocalMasterTemplate();
-  const fontFam = template.fontFamily ? `${template.fontFamily}, ${FONT_SANS}` : FONT_SANS;
+  await ensureTemplateFontsLoaded(template);
+
+  const fontFam = template.fontFamily && template.fontFamily !== 'Kanit'
+    ? `"${template.fontFamily}", ${FONT_SANS}`
+    : FONT_SANS;
+  const defaultTitleWeight = String(template.titleFontWeight ?? 400);
+  const defaultBodyWeight = String(template.bodyFontWeight ?? 400);
   const cardRadius = Math.max((typeof template.borderRadius === 'number' ? template.borderRadius : 4) * scaleFactor, 0);
 
   // Clip canvas if rounded card corners are configured
@@ -348,19 +401,41 @@ export async function generateTicketCanvas(
 
   // 5. Elements rendering with live concert ticket data
   const elements = template.elements || {};
+  const getFieldStyles = (
+    el: NonNullable<TicketDesignerState['elements'][string]>,
+    defaultBodySize: number,
+    defaultSecSize = 11,
+  ) => {
+    const titleWeight = el.secondaryFontWeight || defaultTitleWeight;
+    const bodyWeight = el.fontWeight || defaultBodyWeight;
+    const secPx = el.secondaryFontSize || defaultSecSize;
+    const bodyPx = el.fontSize || defaultBodySize;
+    const secSize = Math.round(secPx * scaleFactor);
+    const bodySize = Math.round(bodyPx * scaleFactor);
+    const offsetY = Math.round((secPx + 5) * scaleFactor);
+    return {
+      titleWeight,
+      bodyWeight,
+      secSize,
+      bodySize,
+      offsetY,
+      headerFont: `${titleWeight} ${secSize}px ${fontFam}`,
+    };
+  };
 
   // Brand Logo
   const logo = elements.brandLogo;
   if (logo?.visible) {
     const logoX = logo.x * scaleFactor;
     const logoY = logo.y * scaleFactor;
+    const st = getFieldStyles(logo, 16, 10);
     ctx.fillStyle = logo.color || '#0f172a';
-    ctx.font = `400 16px ${fontFam}`;
-    ctx.fillText(logo.text || 'TICKET', logoX + 24, logoY);
-    if (logo.secondaryText) {
+    ctx.font = `${st.bodyWeight} ${st.bodySize}px ${fontFam}`;
+    ctx.fillText(logo.text || 'TICKET', logoX + Math.round(24 * scaleFactor), logoY);
+    if (logo.showSecondaryText !== false && logo.secondaryText) {
       ctx.fillStyle = logo.secondaryColor || '#64748b';
-      ctx.font = `200 10px ${fontFam}`;
-      ctx.fillText(logo.secondaryText, logoX + 92, logoY + 4);
+      ctx.font = `${st.titleWeight} ${st.secSize}px ${fontFam}`;
+      ctx.fillText(logo.secondaryText, logoX + Math.round(92 * scaleFactor), logoY + Math.round(4 * scaleFactor));
     }
   }
 
@@ -370,9 +445,10 @@ export async function generateTicketCanvas(
     const titleX = title.x * scaleFactor;
     const titleY = title.y * scaleFactor;
     const titleWidth = Math.max(stubX - titleX - 40, 400);
-    const initialFs = Math.round((title.fontSize || 26) * scaleFactor);
+    const st = getFieldStyles(title, 26, 11);
+    const lineHeight = Math.round((title.fontSize || 26) * 1.15 * scaleFactor);
     ctx.fillStyle = title.color || '#0f172a';
-    renderFullEventTitle(ctx, ticket.eventTitle, titleX, titleY, titleWidth, initialFs, 20, 38, fontFam, title.fontWeight || '700');
+    renderFullEventTitle(ctx, ticket.eventTitle, titleX, titleY, titleWidth, st.bodySize, Math.round(18 * scaleFactor), lineHeight, fontFam, st.bodyWeight);
   }
 
   // Ticket Type / Zone (Matching other meta items, no frame)
@@ -380,7 +456,7 @@ export async function generateTicketCanvas(
   if (badge?.visible) {
     const badgeX = badge.x * scaleFactor;
     const badgeY = badge.y * scaleFactor;
-    const fs = Math.round((badge.fontSize || 16) * scaleFactor);
+    const st = getFieldStyles(badge, 16, 11);
     const align = badge.align || 'left';
     const showHeader = badge.showSecondaryText === true && Boolean(badge.secondaryText);
     drawLabeledField(
@@ -390,17 +466,17 @@ export async function generateTicketCanvas(
       badgeX,
       badgeY,
       Math.max(stubX - badgeX - 40, 300),
-      fs,
+      st.bodySize,
       12,
       fontFam,
       badge.secondaryColor || '#64748b',
       badge.color || '#0f172a',
       align,
-      true,
-      22,
-      `500 11px ${fontFam}`,
+      false,
+      st.offsetY,
+      st.headerFont,
       showHeader,
-      badge.fontWeight || '700',
+      st.bodyWeight,
     );
   }
 
@@ -412,6 +488,7 @@ export async function generateTicketCanvas(
     const val = (ticket as unknown as { gate?: string }).gate || gate.text || 'GATE 2';
     const align = gate.align || 'left';
     const showHeader = gate.showSecondaryText !== false;
+    const st = getFieldStyles(gate, 16, 11);
     drawLabeledField(
       ctx,
       gate.secondaryText || 'ประตูทางเข้า (GATE)',
@@ -419,16 +496,17 @@ export async function generateTicketCanvas(
       gX,
       gY,
       130 * scaleFactor,
-      Math.round((gate.fontSize || 16) * scaleFactor),
+      st.bodySize,
       12,
       fontFam,
       gate.secondaryColor || '#64748b',
       gate.color || '#0f172a',
       align,
-      true,
-      22,
-      undefined,
+      false,
+      st.offsetY,
+      st.headerFont,
       showHeader,
+      st.bodyWeight,
     );
   }
 
@@ -444,6 +522,7 @@ export async function generateTicketCanvas(
       'แถว A / ที่นั่ง 14';
     const align = seat.align || 'left';
     const showHeader = seat.showSecondaryText !== false;
+    const st = getFieldStyles(seat, 16, 11);
     drawLabeledField(
       ctx,
       seat.secondaryText || 'แถว/ที่นั่ง (ROW / SEAT)',
@@ -451,16 +530,17 @@ export async function generateTicketCanvas(
       sX,
       sY,
       160 * scaleFactor,
-      Math.round((seat.fontSize || 16) * scaleFactor),
+      st.bodySize,
       12,
       fontFam,
       seat.secondaryColor || '#64748b',
       seat.color || '#0f172a',
       align,
-      true,
-      22,
-      undefined,
+      false,
+      st.offsetY,
+      st.headerFont,
       showHeader,
+      st.bodyWeight,
     );
   }
 
@@ -482,6 +562,7 @@ export async function generateTicketCanvas(
     if (val) {
       const align = price.align || 'left';
       const showHeader = price.showSecondaryText !== false;
+      const st = getFieldStyles(price, 16, 11);
       drawLabeledField(
         ctx,
         price.secondaryText || 'ราคาบัตร (PRICE)',
@@ -489,16 +570,17 @@ export async function generateTicketCanvas(
         pX,
         pY,
         140 * scaleFactor,
-        Math.round((price.fontSize || 16) * scaleFactor),
+        st.bodySize,
         12,
         fontFam,
         price.secondaryColor || '#64748b',
         price.color || '#0f172a',
         align,
-        true,
-        22,
-        undefined,
+        false,
+        st.offsetY,
+        st.headerFont,
         showHeader,
+        st.bodyWeight,
       );
     }
   }
@@ -515,6 +597,7 @@ export async function generateTicketCanvas(
       : dt.text || '-';
     const align = dt.align || 'left';
     const showHeader = dt.showSecondaryText !== false;
+    const st = getFieldStyles(dt, 14, 11);
     drawLabeledField(
       ctx,
       dt.secondaryText || 'วันและเวลาแสดง (DATE & TIME)',
@@ -522,16 +605,17 @@ export async function generateTicketCanvas(
       dtX,
       dtY,
       380 * scaleFactor,
-      Math.round((dt.fontSize || 14) * scaleFactor),
+      st.bodySize,
       12,
       fontFam,
       dt.secondaryColor || '#64748b',
       dt.color || '#0f172a',
       align,
-      true,
-      22,
-      undefined,
+      false,
+      st.offsetY,
+      st.headerFont,
       showHeader,
+      st.bodyWeight,
     );
   }
 
@@ -542,6 +626,7 @@ export async function generateTicketCanvas(
     const venY = ven.y * scaleFactor;
     const align = ven.align || 'left';
     const showHeader = ven.showSecondaryText !== false;
+    const st = getFieldStyles(ven, 14, 11);
     drawLabeledField(
       ctx,
       ven.secondaryText || 'สถานที่จัดงาน (VENUE)',
@@ -549,16 +634,17 @@ export async function generateTicketCanvas(
       venX,
       venY,
       380 * scaleFactor,
-      Math.round((ven.fontSize || 14) * scaleFactor),
+      st.bodySize,
       12,
       fontFam,
       ven.secondaryColor || '#64748b',
       ven.color || '#0f172a',
       align,
-      true,
-      22,
-      undefined,
+      false,
+      st.offsetY,
+      st.headerFont,
       showHeader,
+      st.bodyWeight,
     );
   }
 
@@ -570,6 +656,7 @@ export async function generateTicketCanvas(
     const align = buyer.align || 'left';
     const showHeader = buyer.showSecondaryText !== false;
     const bMaxW = Math.max(stubX - bX - 20, 180 * scaleFactor);
+    const st = getFieldStyles(buyer, 13, 11);
     drawLabeledField(
       ctx,
       buyer.secondaryText || 'ผู้สั่งซื้อ (BUYER)',
@@ -577,16 +664,17 @@ export async function generateTicketCanvas(
       bX,
       bY,
       bMaxW,
-      Math.round((buyer.fontSize || 13) * scaleFactor),
+      st.bodySize,
       12,
       fontFam,
       buyer.secondaryColor || '#64748b',
       buyer.color || '#0f172a',
       align,
-      true,
-      22,
-      undefined,
+      false,
+      st.offsetY,
+      st.headerFont,
       showHeader,
+      st.bodyWeight,
     );
   }
 
@@ -600,6 +688,7 @@ export async function generateTicketCanvas(
     const tcMaxW = buyer?.visible && buyer.x > tCode.x && Math.abs(buyer.y - tCode.y) < 30
       ? (buyer.x - tCode.x - 12) * scaleFactor
       : 380 * scaleFactor;
+    const st = getFieldStyles(tCode, 14, 11);
     drawLabeledField(
       ctx,
       tCode.secondaryText || 'รหัสบัตร (TICKET CODE)',
@@ -607,16 +696,17 @@ export async function generateTicketCanvas(
       tcX,
       tcY,
       tcMaxW,
-      Math.round((tCode.fontSize || 14) * scaleFactor),
+      st.bodySize,
       12,
       FONT_MONO,
       tCode.secondaryColor || '#64748b',
       tCode.color || '#0f172a',
       align,
-      true,
-      22,
-      undefined,
+      false,
+      st.offsetY,
+      st.headerFont,
       showHeader,
+      st.bodyWeight,
     );
   }
 
@@ -625,23 +715,25 @@ export async function generateTicketCanvas(
   if (bcode?.visible) {
     const bcX = bcode.x * scaleFactor;
     const bcY = bcode.y * scaleFactor;
+    const st = getFieldStyles(bcode, 11, 10);
     ctx.save();
     ctx.fillStyle = bcode.secondaryColor || '#64748b';
-    ctx.font = `200 11px ${fontFam}`;
+    ctx.font = `${st.titleWeight} ${st.secSize}px ${fontFam}`;
     ctx.fillText(bcode.secondaryText || 'SECURITY VERIFICATION', bcX, bcY);
+    const barTop = bcY + Math.round(((bcode.secondaryFontSize || 10) + 4) * scaleFactor);
     ctx.fillStyle = bcode.color || '#0f172a';
     let barOffset = 0;
     for (let i = 0; i < 35; i++) {
       const w = (i % 3 === 0 ? 3 : 1.5) * scaleFactor;
-      ctx.fillRect(bcX + barOffset, bcY + 16, w, 20 * scaleFactor);
+      ctx.fillRect(bcX + barOffset, barTop, w, 20 * scaleFactor);
       barOffset += w + 2 * scaleFactor;
     }
     const totalBarsWidth = Math.max(barOffset - 2 * scaleFactor, 100);
     const codeString = `*${ticket.ticketCode}*`;
-    ctx.font = `11px ${FONT_MONO}`;
+    ctx.font = `${st.bodyWeight} ${st.bodySize}px ${FONT_MONO}`;
     const codeW = ctx.measureText(codeString).width;
     // Align code directly under center of barcode bars matching designer
-    ctx.fillText(codeString, bcX + Math.max(0, (totalBarsWidth - codeW) / 2), bcY + 16 + 24 * scaleFactor);
+    ctx.fillText(codeString, bcX + Math.max(0, (totalBarsWidth - codeW) / 2), barTop + 24 * scaleFactor);
     ctx.restore();
   }
 
@@ -650,7 +742,8 @@ export async function generateTicketCanvas(
   if (fn?.visible) {
     const fnX = fn.x * scaleFactor;
     const fnY = fn.y * scaleFactor;
-    ctx.font = `200 13px ${fontFam}`;
+    const st = getFieldStyles(fn, 11, 10);
+    ctx.font = `${st.bodyWeight} ${st.bodySize}px ${fontFam}`;
     ctx.fillStyle = fn.color || '#64748b';
     ctx.fillText(fn.text || '* กรุณาแสดง QR Code ต่อเจ้าหน้าที่เพื่อสแกนเข้างาน · บัตรนี้สามารถสแกนได้ 1 ครั้ง', fnX, fnY);
   }
@@ -661,9 +754,10 @@ export async function generateTicketCanvas(
     const sesX = ses.x * scaleFactor;
     const sesY = ses.y * scaleFactor;
     const isCenter = ses.align === 'center';
+    const st = getFieldStyles(ses, 12, 10);
     ctx.save();
     ctx.fillStyle = ses.secondaryColor || '#64748b';
-    ctx.font = `200 11px ${fontFam}`;
+    ctx.font = `${st.titleWeight} ${st.secSize}px ${fontFam}`;
     const badgeText = ses.secondaryText || 'ADMISSION STUB';
     const sumText = `${ticket.eventTitle} · ${ticket.ticketTypeName}`;
     const availableWidth = width - sesX - 20;
@@ -671,11 +765,11 @@ export async function generateTicketCanvas(
       ctx.textAlign = 'center';
       ctx.fillText(badgeText, sesX + availableWidth / 2, sesY);
       ctx.fillStyle = ses.color || '#0f172a';
-      renderTextFitted(ctx, sumText, sesX + availableWidth / 2, sesY + 16, availableWidth, Math.round((ses.fontSize || 12) * scaleFactor), 10, fontFam, true);
+      renderTextFitted(ctx, sumText, sesX + availableWidth / 2, sesY + st.offsetY, availableWidth, st.bodySize, 10, fontFam, false, 'center', st.bodyWeight);
     } else {
       ctx.fillText(badgeText, sesX, sesY);
       ctx.fillStyle = ses.color || '#0f172a';
-      renderTextFitted(ctx, sumText, sesX, sesY + 16, availableWidth, Math.round((ses.fontSize || 12) * scaleFactor), 10, fontFam, true);
+      renderTextFitted(ctx, sumText, sesX, sesY + st.offsetY, availableWidth, st.bodySize, 10, fontFam, false, 'left', st.bodyWeight);
     }
     ctx.restore();
   }
@@ -782,8 +876,10 @@ export async function generateTicketCanvas(
     const qrlX = qrl.x * scaleFactor;
     const qrlY = qrl.y * scaleFactor;
     const align = qrl.align || 'center';
+    const showHeader = qrl.showSecondaryText !== false;
     const tagText = qrl.secondaryText || 'รหัสบัตรสำหรับเข้างาน';
     const codeText = ticket.ticketCode;
+    const st = getFieldStyles(qrl, 13, 10);
     drawLabeledField(
       ctx,
       tagText,
@@ -791,15 +887,17 @@ export async function generateTicketCanvas(
       qrlX,
       qrlY,
       220 * scaleFactor,
-      18,
-      13,
+      st.bodySize,
+      11,
       FONT_MONO,
       qrl.secondaryColor || '#64748b',
       qrl.color || '#0f172a',
       align,
-      true,
-      20,
-      `200 13px ${fontFam}`,
+      false,
+      st.offsetY,
+      st.headerFont,
+      showHeader,
+      st.bodyWeight,
     );
   }
 
@@ -810,8 +908,9 @@ export async function generateTicketCanvas(
     const shY = sh.y * scaleFactor;
     const align = sh.align || 'center';
     const isCenter = align === 'center';
+    const st = getFieldStyles(sh, 11, 10);
     ctx.save();
-    ctx.font = `200 11px ${fontFam}`;
+    ctx.font = `${st.bodyWeight} ${st.bodySize}px ${fontFam}`;
     ctx.fillStyle = sh.color || '#64748b';
     const hintText = sh.text || 'แสดง QR เพื่อสแกนเข้างาน';
     if (isCenter) {
@@ -831,8 +930,10 @@ export async function generateTicketCanvas(
     const oX = oid.x * scaleFactor;
     const oY = oid.y * scaleFactor;
     const align = oid.align || 'center';
+    const showHeader = oid.showSecondaryText !== false;
     const tagText = oid.secondaryText || 'หมายเลขคำสั่งซื้อ (ORDER ID)';
     const orderText = ticket.orderId || oid.text || '-';
+    const st = getFieldStyles(oid, 11, 10);
     drawLabeledField(
       ctx,
       tagText,
@@ -840,15 +941,17 @@ export async function generateTicketCanvas(
       oX,
       oY,
       220 * scaleFactor,
-      13,
+      st.bodySize,
       10,
       FONT_MONO,
       oid.secondaryColor || '#64748b',
       oid.color || '#0f172a',
       align,
-      true,
-      16,
-      `200 11px ${fontFam}`,
+      false,
+      st.offsetY,
+      st.headerFont,
+      showHeader,
+      st.bodyWeight,
     );
   }
 

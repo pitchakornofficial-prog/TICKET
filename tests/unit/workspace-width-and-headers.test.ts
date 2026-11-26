@@ -176,11 +176,14 @@ describe('Unified 1200px Workspace Width & Standardized Section Header Architect
 
   it('ensures 100% monochrome black & white buttons across organizer and owner back-office (D-124)', () => {
     // 1. Primary buttons use solid dark (#0f172a)
-    expect(css).toMatch(/\.events-create-btn\s*\{[^}]*background:\s*#0f172a/);
     expect(css).toMatch(/\.overview-create-btn\s*\{[^}]*background-color:\s*#0f172a/);
     expect(css).toMatch(/\.ui-btn-primary\s*\{[^}]*background:\s*#0f172a/);
 
     // 2. Secondary/Outline buttons use white (#ffffff) with grey border (#cbd5e1)
+    expect(css).toMatch(/\.events-create-btn\s*\{[^}]*background:\s*#ffffff/);
+    expect(css).toMatch(/\.events-create-btn\s*\{[^}]*border:\s*1px solid #cbd5e1/);
+    expect(css).toMatch(/\.events-action-btn\.btn-submit\s*\{[^}]*background:\s*#ffffff/);
+    expect(css).toMatch(/\.events-action-btn\.btn-submit\s*\{[^}]*border:\s*1px solid #cbd5e1/);
     expect(css).toMatch(/\.ui-btn-outline\s*\{[^}]*background:\s*#ffffff/);
     expect(css).toMatch(/\.ui-btn-outline\s*\{[^}]*border-color:\s*#cbd5e1/);
 
@@ -203,6 +206,26 @@ describe('Unified 1200px Workspace Width & Standardized Section Header Architect
     expect(css).toMatch(/\.finance-action-btn:hover:not\(:disabled\)\s*\{[^}]*transform:\s*translateY\(-1px\)/);
     // 5. Policies print button lifts up on hover
     expect(css).toMatch(/\.policies-print-btn:hover\s*\{[^}]*transform:\s*translateY\(-1px\)/);
+  });
+
+  it('ensures consistent vertical divider line height and stretch layout on organizer event cards', () => {
+    // 1. Event card has stretch layout and uniform minimum height
+    expect(css).toMatch(/\.events-editorial-card\s*\{[^}]*align-items:\s*stretch/);
+    expect(css).toMatch(/\.events-editorial-card\s*\{[^}]*min-height:\s*200px/);
+
+    // 2. Action buttons column stretches full height and has fixed width for aligned divider and uniform buttons
+    expect(css).toMatch(/\.events-card-actions-col\s*\{[^}]*align-self:\s*stretch/);
+    expect(css).toMatch(/\.events-card-actions-col\s*\{[^}]*border-left:\s*1px solid #f1f5f9/);
+    expect(css).toMatch(/\.events-card-actions-col\s*\{[^}]*width:\s*210px/);
+    expect(css).toMatch(/\.events-card-actions-col\s*\{[^}]*flex-shrink:\s*0/);
+
+    // 3. All action buttons and status pills have uniform height, full width, and single-line nowrap
+    expect(css).toMatch(/\.events-action-btn\s*\{[^}]*height:\s*34px/);
+    expect(css).toMatch(/\.events-action-btn\s*\{[^}]*width:\s*100%/);
+    expect(css).toMatch(/\.events-action-btn\s*\{[^}]*white-space:\s*nowrap/);
+    expect(css).toMatch(/\.events-action-pill-cancelled\s*\{[^}]*height:\s*34px/);
+    expect(css).toMatch(/\.events-action-pill-cancelled\s*\{[^}]*width:\s*100%/);
+    expect(css).toMatch(/\.events-action-pill-cancelled\s*\{[^}]*white-space:\s*nowrap/);
   });
 
   it('ensures zero emojis (D-14) across all modified organizer and owner views', () => {

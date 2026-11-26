@@ -434,4 +434,24 @@ export function ChevronUpIcon(props: SVGProps<SVGSVGElement>) {
   );
 }
 
+export function FlashlightIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...props}>
+      <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
+    </svg>
+  );
+}
+
+export function SwitchCameraIcon(props: SVGProps<SVGSVGElement>) {
+  return (
+    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" {...props}>
+      <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
+      <path d="M9 13.5A3.5 3.5 0 0 1 15 11l1.5 1.5" />
+      <path d="M16.5 9.5v3h-3" />
+      <path d="M15 14.5A3.5 3.5 0 0 1 9 17l-1.5-1.5" />
+      <path d="M7.5 18.5v-3h3" />
+    </svg>
+  );
+}
+
 

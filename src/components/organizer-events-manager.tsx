@@ -1040,9 +1040,14 @@ export function OrganizerEventsManager({
         return;
       }
       const data = await res.json();
-      setCancelEventDetails(data.event);
-      if (data.event?.sessions?.length > 0) {
-        setSelectedCancelSessionId(data.event.sessions[0].id);
+      const event = data.event;
+      setCancelEventDetails(event);
+      // Select the first active (non-cancelled) session
+      const activeSessions = (event?.sessions || []).filter((s: { status: string }) => s.status !== 'cancelled');
+      if (activeSessions.length > 0) {
+        setSelectedCancelSessionId(activeSessions[0].id);
+      } else if (event?.sessions?.length > 0) {
+        setSelectedCancelSessionId(event.sessions[0].id);
       }
       setLoadingCancelDetails(false);
     } catch {
@@ -1197,7 +1202,7 @@ export function OrganizerEventsManager({
             />
           </div>
           <Button
-            variant="primary"
+            variant="outline"
             size="md"
             className="events-create-btn"
             disabled={!hydrated}
@@ -2938,6 +2943,32 @@ export function OrganizerEventsManager({
                   </>
                 )}
 
+                {ev.status === 'rejected' && (
+                  <>
+                    <button
+                      type="button"
+                      className="events-action-btn btn-amendment"
+                      onClick={() => handleEditDraft(ev.id)}
+                      title="แก้ไขข้อมูลคอนเสิร์ตที่ถูกปฏิเสธ"
+                      data-testid={`edit-rejected-btn-${ev.id}`}
+                    >
+                      <PencilSquareIcon width={14} height={14} />
+                      <span>แก้ไขข้อมูล</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      className="events-action-btn btn-cancel"
+                      onClick={() => setDeletingEvent(ev)}
+                      title="ลบงานคอนเสิร์ตนี้"
+                      data-testid={`delete-event-btn-${ev.id}`}
+                    >
+                      <TrashIcon width={14} height={14} />
+                      <span>ลบ</span>
+                    </button>
+                  </>
+                )}
+
                 {ev.status === 'approved' && (
                   <>
                     <button
@@ -2982,6 +3013,30 @@ export function OrganizerEventsManager({
                       <AlertIcon />
                       <span>ขอยกเลิก</span>
                     </button>
+                  </>
+                )}
+
+                {ev.status === 'cancelled' && (
+                  <>
+                    <button
+                      type="button"
+                      disabled={!hydrated}
+                      onClick={() => setSelectedReportEventId(selectedReportEventId === ev.id ? null : ev.id)}
+                      data-testid={`open-money-report-btn-${ev.id}`}
+                      className="events-action-btn btn-finance"
+                      title="ดูรายงานสรุปยอดขายและการคืนเงิน"
+                    >
+                      <BanknotesIcon width={14} height={14} />
+                      <span>รายงานการเงิน</span>
+                    </button>
+
+                    <span
+                      className="events-action-pill-cancelled"
+                      data-testid={`cancelled-pill-${ev.id}`}
+                    >
+                      <AlertIcon width={14} height={14} />
+                      <span>ยกเลิกการแสดงแล้ว</span>
+                    </span>
                   </>
                 )}
               </div>
@@ -3613,6 +3668,26 @@ export function OrganizerEventsManager({
               <p style={{ textAlign: 'center', padding: '1.5rem', color: '#64748b' }}>กำลังโหลดข้อมูล...</p>
             ) : (
               <form onSubmit={handleSubmitCancellation}>
+                {cancelEventDetails.sessions.every(s => s.status === 'cancelled') && (
+                  <div
+                    style={{
+                      background: '#fef2f2',
+                      border: '1px solid #fecaca',
+                      borderRadius: '8px',
+                      padding: '12px 14px',
+                      marginBottom: '1rem',
+                      color: '#991b1b',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      fontSize: '0.85rem',
+                    }}
+                  >
+                    <AlertIcon />
+                    <span>รอบการแสดงทั้งหมดของคอนเสิร์ตนี้ถูกยกเลิกแล้ว ไม่สามารถยื่นคำขอยกเลิกซ้ำได้</span>
+                  </div>
+                )}
+
                 {cancelEventDetails.sessions.length > 1 && (
                   <div style={{ marginBottom: '1.25rem' }}>
                     <label htmlFor="cancel-session-select" style={{ display: 'block', fontSize: '0.88rem', fontWeight: 400, color: '#0f172a', marginBottom: '0.4rem' }}>
@@ -3627,8 +3702,8 @@ export function OrganizerEventsManager({
                       style={{ width: '100%', fontSize: '0.88rem' }}
                     >
                       {cancelEventDetails.sessions.map((s, idx) => (
-                        <option key={s.id} value={s.id}>
-                          รอบที่ {idx + 1}: {new Date(s.startTime).toLocaleString('th-TH')} ({s.status})
+                        <option key={s.id} value={s.id} disabled={s.status === 'cancelled'}>
+                          รอบที่ {idx + 1}: {new Date(s.startTime).toLocaleString('th-TH')} ({s.status === 'cancelled' ? 'ยกเลิกแล้ว' : s.status})
                         </option>
                       ))}
                     </select>
@@ -3647,6 +3722,11 @@ export function OrganizerEventsManager({
                     onChange={e => setCancellationReason(e.target.value)}
                     placeholder="ระบุเหตุผล เช่น ศิลปินติดภารกิจด่วน, ปัญหาทางเทคนิคของสถานที่, สภาพอากาศ หรือเหตุสุดวิสัย..."
                     required
+                    disabled={
+                      cancelSubmitting ||
+                      cancelEventDetails.sessions.every(s => s.status === 'cancelled') ||
+                      Boolean(cancelEventDetails.sessions.find(s => s.id === selectedCancelSessionId)?.status === 'cancelled')
+                    }
                     className="modal-textarea"
                   />
                 </div>
@@ -3661,7 +3741,11 @@ export function OrganizerEventsManager({
                   </button>
                   <button
                     type="submit"
-                    disabled={cancelSubmitting}
+                    disabled={
+                      cancelSubmitting ||
+                      cancelEventDetails.sessions.every(s => s.status === 'cancelled') ||
+                      Boolean(cancelEventDetails.sessions.find(s => s.id === selectedCancelSessionId)?.status === 'cancelled')
+                    }
                     data-testid="submit-cancel-session-btn"
                     className="btn-danger-modal"
                   >

@@ -1,6 +1,6 @@
 import { createSafeErrorResponse } from '@/server/api-error';
 import { getAuth } from '@/server/auth';
-import { getOrganizerFinanceSummaries } from '@/server/reports';
+import { getOrganizerFinanceSummaries, getOrganizerPeriodSales } from '@/server/reports';
 import type { Pool } from 'pg';
 
 export const runtime = 'nodejs';
@@ -28,16 +28,19 @@ export async function GET(request: Request) {
   const organizerId = searchParams.get('organizerId') || undefined;
 
   try {
-    const summaries = await getOrganizerFinanceSummaries(
-      pool,
-      {
-        id: session.user.id,
-        role: session.user.role as 'organizer' | 'owner',
-      },
-      organizerId,
-    );
+    const actor = {
+      id: session.user.id,
+      role: session.user.role as 'organizer' | 'owner',
+    };
+    const [summaries, periodSales] = await Promise.all([
+      getOrganizerFinanceSummaries(pool, actor, organizerId),
+      getOrganizerPeriodSales(pool, actor, organizerId),
+    ]);
 
-    return Response.json({ summaries }, { status: 200, headers: { 'Cache-Control': 'private, no-store, no-cache, must-revalidate' } });
+    return Response.json(
+      { summaries, periodSales },
+      { status: 200, headers: { 'Cache-Control': 'private, no-store, no-cache, must-revalidate' } },
+    );
   } catch (error: unknown) {
     return createSafeErrorResponse(error, 'เกิดข้อผิดพลาดในการดึงสรุปข้อมูลการเงิน', {
       defaultStatus: 500,
