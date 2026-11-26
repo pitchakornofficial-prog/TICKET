@@ -321,7 +321,6 @@ export function OwnerSessionApprovalManager() {
   const [savingEdit, setSavingEdit] = useState<boolean>(false);
   const [uploadingPoster, setUploadingPoster] = useState<boolean>(false);
   const [uploadingCover, setUploadingCover] = useState<boolean>(false);
-  const [uploadingTemplate, setUploadingTemplate] = useState<boolean>(false);
   const [showConfirmModal, setShowConfirmModal] = useState<boolean>(false);
   const [pendingChangesList, setPendingChangesList] = useState<string[]>([]);
 
@@ -1253,8 +1252,11 @@ export function OwnerSessionApprovalManager() {
     setShowConfirmModal(true);
   };
 
-  // Alias for backward compatibility (D-227)
-  const handleSaveAdminEdit = handlePrepareSubmitEdit;
+  function toSafeIsoString(val?: string | null): string | null {
+    if (!val || typeof val !== 'string' || !val.trim()) return null;
+    const d = new Date(val);
+    return Number.isNaN(d.getTime()) ? null : d.toISOString();
+  }
 
   // Step 2: Final Confirm & Execute Admin Override with Auto CSV Snapshot Backup (D-227, D-278)
   const handleFinalConfirmOverride = async () => {
@@ -1279,9 +1281,6 @@ export function OwnerSessionApprovalManager() {
         ageRestriction: editingEvent.ageRestriction,
         refundPolicy: editingEvent.refundPolicy,
         entryGuidelines: editingEvent.entryGuidelines,
-        payoutBankName: editingEvent.payoutBankName,
-        payoutAccountNumber: editingEvent.payoutAccountNumber,
-        payoutAccountName: editingEvent.payoutAccountName,
         ubuPrivilegeMode: editingEvent.ubuPrivilegeMode,
         organizerFeeRate: editingEvent.organizerFeeRate ?? 3.0,
         customerFeeRate: editingEvent.customerFeeRate ?? 0.0,
@@ -1298,8 +1297,8 @@ export function OwnerSessionApprovalManager() {
         location: editFormData.location.trim(),
         googleMapsUrl: editFormData.googleMapsUrl.trim(),
         description: editFormData.description.trim(),
-        salesStartTime: editFormData.salesStartTime ? new Date(editFormData.salesStartTime).toISOString() : null,
-        salesEndTime: editFormData.salesEndTime ? new Date(editFormData.salesEndTime).toISOString() : null,
+        salesStartTime: toSafeIsoString(editFormData.salesStartTime),
+        salesEndTime: toSafeIsoString(editFormData.salesEndTime),
         limitPerOrder: Number(editFormData.limitPerOrder) || 6,
         isSalesPaused: Boolean(editFormData.isSalesPaused),
         salesPausedReason: editFormData.isSalesPaused
@@ -1310,24 +1309,24 @@ export function OwnerSessionApprovalManager() {
         entryGuidelines: editFormData.entryGuidelines.trim(),
         posterUrl: editFormData.posterUrl.trim() || null,
         coverBannerUrl: editFormData.coverBannerUrl.trim() || null,
-        ticketTemplateUrl: editFormData.ticketTemplateUrl.trim() || null,
-        payoutBankName: editFormData.payoutBankName.trim() || null,
-        payoutAccountNumber: editFormData.payoutAccountNumber.trim() || null,
-        payoutAccountName: editFormData.payoutAccountName.trim() || null,
+        ticketTemplateUrl: null,
+        payoutBankName: null,
+        payoutAccountNumber: null,
+        payoutAccountName: null,
         organizerFeeMode: editFormData.organizerFeeMode || 'percentage',
         organizerFeeRate: Number(editFormData.organizerFeeRate),
         customerFeeMode: editFormData.customerFeeMode || 'percentage',
         customerFeeRate: Number(editFormData.customerFeeRate),
         reservePercentage: Number(editFormData.reservePercentage),
         ubuPrivilegeMode: Boolean(editFormData.ubuPrivilegeMode),
-        changesSummary: pendingChangesList,
+        changesSummary: pendingChangesList.length > 0 ? pendingChangesList : ['แก้ไขและอัปเดตข้อมูลคอนเสิร์ตโดยผู้ดูแลระบบ'],
         snapshotCsv,
         sessions: editFormData.sessions.map((s) => ({
           id: s.id,
-          startTime: new Date(s.startTime).toISOString(),
-          endTime: new Date(s.endTime).toISOString(),
-          admissionStartTime: s.admissionStartTime ? new Date(s.admissionStartTime).toISOString() : null,
-          admissionEndTime: s.admissionEndTime ? new Date(s.admissionEndTime).toISOString() : null,
+          startTime: toSafeIsoString(s.startTime) || new Date().toISOString(),
+          endTime: toSafeIsoString(s.endTime) || new Date().toISOString(),
+          admissionStartTime: toSafeIsoString(s.admissionStartTime),
+          admissionEndTime: toSafeIsoString(s.admissionEndTime),
           ticketTypes: s.ticketTypes.map((tt) => ({
             id: tt.id,
             name: tt.name.trim(),
@@ -1356,7 +1355,7 @@ export function OwnerSessionApprovalManager() {
         id: `audit-${Date.now()}`,
         timestamp: new Date().toLocaleString('th-TH'),
         editor: 'เจ้าของระบบ (Admin/Owner)',
-        changesSummary: pendingChangesList,
+        changesSummary: payload.changesSummary,
         snapshotCsv,
       };
 
@@ -1372,6 +1371,7 @@ export function OwnerSessionApprovalManager() {
 
       setShowConfirmModal(false);
       setEditingEvent(null);
+      setEditFormData(null);
       await loadData();
     } catch (err: unknown) {
       triggerToast({
@@ -1382,6 +1382,9 @@ export function OwnerSessionApprovalManager() {
       setSavingEdit(false);
     }
   };
+
+  // Alias for submit edit triggering Step 1 validation and Double Confirmation modal (D-227, D-278)
+  const handleSaveAdminEdit = handlePrepareSubmitEdit;
 
   return (
     <div
@@ -2838,11 +2841,11 @@ export function OwnerSessionApprovalManager() {
                 </div>
               ) : editFormData ? (
                 <div className="edit-form-stack">
-                  {/* Section 1: General Info & Artists */}
+                  {/* Section 1: Event Details & Artists */}
                   <div className="admin-override-section">
                     <div style={{ marginBottom: '0.75rem' }}>
                       <h4 className="admin-override-section-title" style={{ borderBottom: 'none', paddingBottom: 0, margin: 0 }}>
-                        <span>1. ข้อมูลทั่วไปและไลน์อัปศิลปิน</span>
+                        <span>1. ข้อมูลงาน & ศิลปิน</span>
                       </h4>
                       <span style={{ fontSize: '0.75rem', color: '#64748b' }}>
                         แสดงที่: หน้ารายละเอียดคอนเสิร์ตบนเว็บไซต์ (/events/[id]) และแคตตาล็อกหน้าแรก (/)
@@ -2873,6 +2876,30 @@ export function OwnerSessionApprovalManager() {
                       />
                     </div>
 
+                    <div className="form-field">
+                      <label htmlFor="edit-concert-desc">รายละเอียดคอนเสิร์ต</label>
+                      <textarea
+                        id="edit-concert-desc"
+                        rows={3}
+                        value={editFormData.description}
+                        onChange={(e) => setEditFormData({ ...editFormData, description: e.target.value })}
+                        className="text-input"
+                        placeholder="รายละเอียดงาน กำหนดการ ข้อความประชาสัมพันธ์..."
+                      />
+                    </div>
+                  </div>
+
+                  {/* Section 2: Location & Maps */}
+                  <div className="admin-override-section">
+                    <div style={{ marginBottom: '0.75rem' }}>
+                      <h4 className="admin-override-section-title" style={{ borderBottom: 'none', paddingBottom: 0, margin: 0 }}>
+                        <span>2. สถานที่ & แผนที่</span>
+                      </h4>
+                      <span style={{ fontSize: '0.75rem', color: '#64748b' }}>
+                        แสดงที่: ข้อมูลสถานที่จัดงานบนบัตรคอนเสิร์ต หน้างาน และลิงก์นำทาง Google Maps
+                      </span>
+                    </div>
+
                     <div className="form-row-two-col">
                       <div className="form-field">
                         <label htmlFor="edit-concert-location">สถานที่จัดงาน *</label>
@@ -2897,17 +2924,17 @@ export function OwnerSessionApprovalManager() {
                         />
                       </div>
                     </div>
+                  </div>
 
-                    <div className="form-field">
-                      <label htmlFor="edit-concert-desc">รายละเอียดคอนเสิร์ต</label>
-                      <textarea
-                        id="edit-concert-desc"
-                        rows={3}
-                        value={editFormData.description}
-                        onChange={(e) => setEditFormData({ ...editFormData, description: e.target.value })}
-                        className="text-input"
-                        placeholder="รายละเอียดงาน กำหนดการ ข้อความประชาสัมพันธ์..."
-                      />
+                  {/* Section 3: Schedule, Limits & Guidelines */}
+                  <div className="admin-override-section">
+                    <div style={{ marginBottom: '0.75rem' }}>
+                      <h4 className="admin-override-section-title" style={{ borderBottom: 'none', paddingBottom: 0, margin: 0 }}>
+                        <span>3. กำหนดการ & กติกา</span>
+                      </h4>
+                      <span style={{ fontSize: '0.75rem', color: '#64748b' }}>
+                        แสดงที่: แถบแจ้งเตือนเวลาขายบัตร เงื่อนไขคำสั่งซื้อ กติกาการเข้างาน และนโยบายการคืนเงิน
+                      </span>
                     </div>
 
                     <div className="form-row-three-col">
@@ -2941,6 +2968,47 @@ export function OwnerSessionApprovalManager() {
                       </div>
                     </div>
 
+                    <div className="form-row-two-col" style={{ marginTop: '0.75rem', marginBottom: '0.75rem' }}>
+                      <div className="form-field">
+                        <label htmlFor="edit-age-restriction">การจำกัดอายุ</label>
+                        <select
+                          id="edit-age-restriction"
+                          value={editFormData.ageRestriction}
+                          onChange={(e) => setEditFormData({ ...editFormData, ageRestriction: e.target.value })}
+                          className="text-input"
+                        >
+                          <option value="all_ages">ไม่จำกัดอายุ (All Ages)</option>
+                          <option value="18_plus">อายุ 18 ปีขึ้นไป (18+)</option>
+                          <option value="20_plus">อายุ 20 ปีขึ้นไป (20+)</option>
+                        </select>
+                      </div>
+
+                      <div className="form-field">
+                        <label htmlFor="edit-refund-policy">นโยบายการคืนเงิน</label>
+                        <select
+                          id="edit-refund-policy"
+                          value={editFormData.refundPolicy}
+                          onChange={(e) => setEditFormData({ ...editFormData, refundPolicy: e.target.value })}
+                          className="text-input"
+                        >
+                          <option value="standard">มาตรฐาน (คืนได้ตามเงื่อนไขภายใน 7 วัน)</option>
+                          <option value="non_refundable">ไม่สามารถขอคืนเงินได้เว้นแต่ผู้จัดยกเลิกงาน</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div className="form-field">
+                      <label htmlFor="edit-entry-guidelines">กติกาการเข้างาน</label>
+                      <input
+                        id="edit-entry-guidelines"
+                        type="text"
+                        value={editFormData.entryGuidelines}
+                        onChange={(e) => setEditFormData({ ...editFormData, entryGuidelines: e.target.value })}
+                        className="text-input"
+                        placeholder="เช่น ห้ามนำอาหารและเครื่องดื่มเข้าพื้นที่..."
+                      />
+                    </div>
+
                     {editFormData.isSalesPaused && (
                       <div className="emergency-pause-control-card form-field" style={{ marginTop: '0.75rem', padding: '0.75rem', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '6px' }}>
                         <label htmlFor="edit-paused-reason" style={{ color: '#991b1b', fontWeight: 500 }}>
@@ -2958,167 +3026,15 @@ export function OwnerSessionApprovalManager() {
                     )}
                   </div>
 
-                  {/* Section 2: Visual Assets */}
-                  <div className="admin-override-section">
-                    <div style={{ marginBottom: '0.75rem' }}>
-                      <h4 className="admin-override-section-title" style={{ borderBottom: 'none', paddingBottom: 0, margin: 0 }}>
-                        <span>2. รูปภาพและสื่อประชาสัมพันธ์</span>
-                      </h4>
-                      <span style={{ fontSize: '0.75rem', color: '#64748b' }}>
-                        แสดงที่: แบนเนอร์หน้าแรก สื่อประชาสัมพันธ์ และแผนผังที่นั่ง
-                      </span>
-                    </div>
-
-                    <div className="image-upload-grid">
-                      {/* Poster */}
-                      <div className="image-upload-card">
-                        <span style={{ fontSize: '0.8125rem', fontWeight: 400, color: '#334155' }}>
-                          รูปโปสเตอร์หลัก (Poster)
-                        </span>
-                        <div className="image-preview-box">
-                          {editFormData.posterUrl ? (
-                            <Image
-                              src={editFormData.posterUrl}
-                              alt="Poster preview"
-                              className="image-preview-img"
-                              width={240}
-                              height={140}
-                              unoptimized
-                            />
-                          ) : (
-                            <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>ไม่มีรูปภาพโปสเตอร์</span>
-                          )}
-                        </div>
-                        <div className="image-upload-actions">
-                          <label className="secondary-button" style={{ cursor: 'pointer', fontSize: '0.75rem', padding: '0.35rem 0.65rem' }}>
-                            <span>{uploadingPoster ? 'กำลังอัปโหลด...' : 'เลือกรูปใหม่'}</span>
-                            <input
-                              type="file"
-                              accept="image/*"
-                              style={{ display: 'none' }}
-                              disabled={uploadingPoster}
-                              onChange={(e) => {
-                                const file = e.target.files?.[0];
-                                if (file) handleUploadImage(file, 'posterUrl', setUploadingPoster);
-                              }}
-                            />
-                          </label>
-                          {editFormData.posterUrl && (
-                            <button
-                              type="button"
-                              className="secondary-button"
-                              style={{ fontSize: '0.75rem', padding: '0.35rem 0.65rem', color: '#dc2626' }}
-                              onClick={() => setEditFormData({ ...editFormData, posterUrl: '' })}
-                            >
-                              <span>ลบรูป</span>
-                            </button>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Cover Banner */}
-                      <div className="image-upload-card">
-                        <span style={{ fontSize: '0.8125rem', fontWeight: 400, color: '#334155' }}>
-                          แบนเนอร์หน้าปก (Cover Banner)
-                        </span>
-                        <div className="image-preview-box">
-                          {editFormData.coverBannerUrl ? (
-                            <Image
-                              src={editFormData.coverBannerUrl}
-                              alt="Cover banner preview"
-                              className="image-preview-img"
-                              width={240}
-                              height={140}
-                              unoptimized
-                            />
-                          ) : (
-                            <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>ไม่มีรูปภาพแบนเนอร์</span>
-                          )}
-                        </div>
-                        <div className="image-upload-actions">
-                          <label className="secondary-button" style={{ cursor: 'pointer', fontSize: '0.75rem', padding: '0.35rem 0.65rem' }}>
-                            <span>{uploadingCover ? 'กำลังอัปโหลด...' : 'เลือกรูปใหม่'}</span>
-                            <input
-                              type="file"
-                              accept="image/*"
-                              style={{ display: 'none' }}
-                              disabled={uploadingCover}
-                              onChange={(e) => {
-                                const file = e.target.files?.[0];
-                                if (file) handleUploadImage(file, 'coverBannerUrl', setUploadingCover);
-                              }}
-                            />
-                          </label>
-                          {editFormData.coverBannerUrl && (
-                            <button
-                              type="button"
-                              className="secondary-button"
-                              style={{ fontSize: '0.75rem', padding: '0.35rem 0.65rem', color: '#dc2626' }}
-                              onClick={() => setEditFormData({ ...editFormData, coverBannerUrl: '' })}
-                            >
-                              <span>ลบรูป</span>
-                            </button>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Ticket Seating Map Template */}
-                      <div className="image-upload-card">
-                        <span style={{ fontSize: '0.8125rem', fontWeight: 400, color: '#334155' }}>
-                          แผนผังที่นั่ง / ผังคอนเสิร์ต
-                        </span>
-                        <div className="image-preview-box">
-                          {editFormData.ticketTemplateUrl ? (
-                            <Image
-                              src={editFormData.ticketTemplateUrl}
-                              alt="Seating map preview"
-                              className="image-preview-img"
-                              width={240}
-                              height={140}
-                              unoptimized
-                            />
-                          ) : (
-                            <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>ไม่มีรูปภาพผังที่นั่ง</span>
-                          )}
-                        </div>
-                        <div className="image-upload-actions">
-                          <label className="secondary-button" style={{ cursor: 'pointer', fontSize: '0.75rem', padding: '0.35rem 0.65rem' }}>
-                            <span>{uploadingTemplate ? 'กำลังอัปโหลด...' : 'เลือกรูปใหม่'}</span>
-                            <input
-                              type="file"
-                              accept="image/*"
-                              style={{ display: 'none' }}
-                              disabled={uploadingTemplate}
-                              onChange={(e) => {
-                                const file = e.target.files?.[0];
-                                if (file) handleUploadImage(file, 'ticketTemplateUrl', setUploadingTemplate);
-                              }}
-                            />
-                          </label>
-                          {editFormData.ticketTemplateUrl && (
-                            <button
-                              type="button"
-                              className="secondary-button"
-                              style={{ fontSize: '0.75rem', padding: '0.35rem 0.65rem', color: '#dc2626' }}
-                              onClick={() => setEditFormData({ ...editFormData, ticketTemplateUrl: '' })}
-                            >
-                              <span>ลบรูป</span>
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Section 3: Sessions & Zones Builder */}
+                  {/* Section 4: Sessions & Zones Builder */}
                   <div className="admin-override-section">
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '0.75rem' }}>
                       <div>
                         <h4 className="admin-override-section-title" style={{ borderBottom: 'none', paddingBottom: 0, margin: 0 }}>
-                          <span>3. รอบการแสดง ราคา และโซนที่นั่ง</span>
+                          <span>4. รอบ & โซนบัตร</span>
                         </h4>
                         <span style={{ fontSize: '0.75rem', color: '#64748b' }}>
-                          แสดงที่: หน้ารอบการแสดงและเลือกโซนที่นั่ง (/events/[id]/sessions) และระบบตรวจบัตร
+                          จัดการรอบการแสดง วันที่ เวลา และประเภทบัตร/โซนราคา
                         </span>
                       </div>
                       <button
@@ -3345,56 +3261,121 @@ export function OwnerSessionApprovalManager() {
                     </div>
                   </div>
 
-                  {/* Section 4: Services & Financials */}
+                  {/* Section 5: Visual Assets */}
                   <div className="admin-override-section">
                     <div style={{ marginBottom: '0.75rem' }}>
                       <h4 className="admin-override-section-title" style={{ borderBottom: 'none', paddingBottom: 0, margin: 0 }}>
-                        <span>4. การบริการ นโยบายการคืนเงิน และการเงิน</span>
+                        <span>5. รูปภาพ & สื่อ</span>
                       </h4>
                       <span style={{ fontSize: '0.75rem', color: '#64748b' }}>
-                        แสดงที่: หน้าสรุปคำสั่งซื้อและใบเสร็จลูกค้า (/orders), หน้าสรุปการเงินผู้จัดงาน (/organizer/payouts) และระบบจ่ายเงินส่วนแบ่งรายได้ (/back-office/owner#payouts)
+                        แสดงที่: โปสเตอร์หลักและแบนเนอร์หน้าปกคอนเสิร์ต
                       </span>
                     </div>
 
-                    <div className="form-row-two-col" style={{ marginBottom: '1rem' }}>
-                      <div className="form-field">
-                        <label htmlFor="edit-age-restriction">การจำกัดอายุ</label>
-                        <select
-                          id="edit-age-restriction"
-                          value={editFormData.ageRestriction}
-                          onChange={(e) => setEditFormData({ ...editFormData, ageRestriction: e.target.value })}
-                          className="text-input"
-                        >
-                          <option value="all_ages">ไม่จำกัดอายุ (All Ages)</option>
-                          <option value="18_plus">อายุ 18 ปีขึ้นไป (18+)</option>
-                          <option value="20_plus">อายุ 20 ปีขึ้นไป (20+)</option>
-                        </select>
+                    <div className="image-upload-grid">
+                      {/* Poster */}
+                      <div className="image-upload-card">
+                        <span style={{ fontSize: '0.8125rem', fontWeight: 400, color: '#334155' }}>
+                          รูปโปสเตอร์หลัก (Poster)
+                        </span>
+                        <div className="image-preview-box">
+                          {editFormData.posterUrl ? (
+                            <Image
+                              src={editFormData.posterUrl}
+                              alt="Poster preview"
+                              className="image-preview-img"
+                              width={240}
+                              height={140}
+                              unoptimized
+                            />
+                          ) : (
+                            <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>ไม่มีรูปภาพโปสเตอร์</span>
+                          )}
+                        </div>
+                        <div className="image-upload-actions">
+                          <label className="secondary-button" style={{ cursor: 'pointer', fontSize: '0.75rem', padding: '0.35rem 0.65rem' }}>
+                            <span>{uploadingPoster ? 'กำลังอัปโหลด...' : 'เลือกรูปใหม่'}</span>
+                            <input
+                              type="file"
+                              accept="image/*"
+                              style={{ display: 'none' }}
+                              disabled={uploadingPoster}
+                              onChange={(e) => {
+                                const file = e.target.files?.[0];
+                                if (file) handleUploadImage(file, 'posterUrl', setUploadingPoster);
+                              }}
+                            />
+                          </label>
+                          {editFormData.posterUrl && (
+                            <button
+                              type="button"
+                              className="secondary-button"
+                              style={{ fontSize: '0.75rem', padding: '0.35rem 0.65rem', color: '#dc2626' }}
+                              onClick={() => setEditFormData({ ...editFormData, posterUrl: '' })}
+                            >
+                              <span>ลบรูป</span>
+                            </button>
+                          )}
+                        </div>
                       </div>
 
-                      <div className="form-field">
-                        <label htmlFor="edit-refund-policy">นโยบายการคืนเงิน</label>
-                        <select
-                          id="edit-refund-policy"
-                          value={editFormData.refundPolicy}
-                          onChange={(e) => setEditFormData({ ...editFormData, refundPolicy: e.target.value })}
-                          className="text-input"
-                        >
-                          <option value="standard">มาตรฐาน (คืนได้ตามเงื่อนไขภายใน 7 วัน)</option>
-                          <option value="non_refundable">ไม่สามารถขอคืนเงินได้เว้นแต่ผู้จัดยกเลิกงาน</option>
-                        </select>
+                      {/* Cover Banner */}
+                      <div className="image-upload-card">
+                        <span style={{ fontSize: '0.8125rem', fontWeight: 400, color: '#334155' }}>
+                          แบนเนอร์หน้าปก (Cover Banner)
+                        </span>
+                        <div className="image-preview-box">
+                          {editFormData.coverBannerUrl ? (
+                            <Image
+                              src={editFormData.coverBannerUrl}
+                              alt="Cover banner preview"
+                              className="image-preview-img"
+                              width={240}
+                              height={140}
+                              unoptimized
+                            />
+                          ) : (
+                            <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>ไม่มีรูปภาพแบนเนอร์</span>
+                          )}
+                        </div>
+                        <div className="image-upload-actions">
+                          <label className="secondary-button" style={{ cursor: 'pointer', fontSize: '0.75rem', padding: '0.35rem 0.65rem' }}>
+                            <span>{uploadingCover ? 'กำลังอัปโหลด...' : 'เลือกรูปใหม่'}</span>
+                            <input
+                              type="file"
+                              accept="image/*"
+                              style={{ display: 'none' }}
+                              disabled={uploadingCover}
+                              onChange={(e) => {
+                                const file = e.target.files?.[0];
+                                if (file) handleUploadImage(file, 'coverBannerUrl', setUploadingCover);
+                              }}
+                            />
+                          </label>
+                          {editFormData.coverBannerUrl && (
+                            <button
+                              type="button"
+                              className="secondary-button"
+                              style={{ fontSize: '0.75rem', padding: '0.35rem 0.65rem', color: '#dc2626' }}
+                              onClick={() => setEditFormData({ ...editFormData, coverBannerUrl: '' })}
+                            >
+                              <span>ลบรูป</span>
+                            </button>
+                          )}
+                        </div>
                       </div>
                     </div>
+                  </div>
 
-                    <div className="form-field" style={{ marginBottom: '1rem' }}>
-                      <label htmlFor="edit-entry-guidelines">กติกาการเข้างาน</label>
-                      <input
-                        id="edit-entry-guidelines"
-                        type="text"
-                        value={editFormData.entryGuidelines}
-                        onChange={(e) => setEditFormData({ ...editFormData, entryGuidelines: e.target.value })}
-                        className="text-input"
-                        placeholder="เช่น ห้ามนำอาหารและเครื่องดื่มเข้าพื้นที่..."
-                      />
+                  {/* Section 6: Fee Settings */}
+                  <div className="admin-override-section">
+                    <div style={{ marginBottom: '0.75rem' }}>
+                      <h4 className="admin-override-section-title" style={{ borderBottom: 'none', paddingBottom: 0, margin: 0 }}>
+                        <span>6. ส่วนแบ่งค่าบริการระบบ</span>
+                      </h4>
+                      <span style={{ fontSize: '0.75rem', color: '#64748b' }}>
+                        กำหนดอัตราค่าบริการแพลตฟอร์ม เงินสำรองความปลอดภัย และสิทธิ์พิเศษ ม.อุบลฯ
+                      </span>
                     </div>
 
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
@@ -3467,7 +3448,7 @@ export function OwnerSessionApprovalManager() {
                       </div>
                     </div>
 
-                    <div className="form-row-two-col" style={{ marginBottom: '1rem' }}>
+                    <div className="form-row-two-col" style={{ marginBottom: '0.5rem' }}>
                       <div className="form-field">
                         <label htmlFor="edit-reserve-pct">สัดส่วนเงินสำรองความปลอดภัย (Reserve %)</label>
                         <input
@@ -3501,72 +3482,19 @@ export function OwnerSessionApprovalManager() {
                         </span>
                       </div>
                     </div>
-
-                    <div style={{ backgroundColor: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '8px', padding: '0.85rem', marginBottom: '1rem' }}>
-                      <strong style={{ fontSize: '0.85rem', color: '#1e40af', display: 'block', marginBottom: '0.25rem' }}>
-                        คำชี้แจงสำคัญเกี่ยวกับบัญชีรับเงิน (Payout Bank Account):
-                      </strong>
-                      <p style={{ margin: 0, fontSize: '0.825rem', color: '#1e3a8a', lineHeight: 1.5 }}>
-                        ข้อมูลบัญชีนี้จำเป็นอย่างยิ่งสำหรับผู้ดูแลระบบ (Admin) ในการโอนเงินส่วนแบ่งรายได้ค่าตั๋วสุทธิ (หลังหักค่าบริการแพลตฟอร์ม) ให้แก่ผู้จัดงาน (Organizer Payout) หลังจากคอนเสิร์ตแสดงเสร็จสิ้น <em>โดยไม่เกี่ยวข้องกับการชำระเงินของลูกค้า</em> เนื่องจากเวลาลูกค้าชำระเงิน ระบบจะแสดง PromptPay QR Code เข้าสู่บัญชีกลางของแพลตฟอร์มโดยตรง
-                      </p>
-                    </div>
-
-                    <div className="form-row-three-col">
-                      <div className="form-field">
-                        <label htmlFor="edit-payout-bank">ชื่อธนาคารรับเงิน (Payout Bank)</label>
-                        <input
-                          id="edit-payout-bank"
-                          type="text"
-                          value={editFormData.payoutBankName}
-                          onChange={(e) => setEditFormData({ ...editFormData, payoutBankName: e.target.value })}
-                          className="text-input"
-                          placeholder="เช่น ธนาคารกสิกรไทย"
-                        />
-                      </div>
-                      <div className="form-field">
-                        <label htmlFor="edit-payout-num">เลขที่บัญชี</label>
-                        <input
-                          id="edit-payout-num"
-                          type="text"
-                          value={editFormData.payoutAccountNumber}
-                          onChange={(e) => setEditFormData({ ...editFormData, payoutAccountNumber: e.target.value })}
-                          className="text-input"
-                          placeholder="xxx-x-xxxxx-x"
-                        />
-                      </div>
-                      <div className="form-field">
-                        <label htmlFor="edit-payout-name">ชื่อบัญชีรับเงิน</label>
-                        <input
-                          id="edit-payout-name"
-                          type="text"
-                          value={editFormData.payoutAccountName}
-                          onChange={(e) => setEditFormData({ ...editFormData, payoutAccountName: e.target.value })}
-                          className="text-input"
-                          placeholder="ชื่อ-สกุล หรือ บจก."
-                        />
-                      </div>
-                    </div>
                   </div>
 
-                  {/* Section 5: Audit Trail & Backup Download */}
+                  {/* Section 7: Audit Trail */}
                   <div className="audit-trail-history-box">
                     <div className="audit-header">
                       <div>
                         <h4 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 600, color: '#0f172a' }}>
-                          5. ประวัติการแก้ไขและไฟล์สำรอง CSV (Audit Trail)
+                          7. ประวัติการแก้ไข (Audit Trail)
                         </h4>
                         <p style={{ margin: '0.25rem 0 0', fontSize: '0.75rem', color: '#64748b' }}>
                           บันทึกลงฐานข้อมูลตาราง event_audit_logs อย่างถาวร เรียกดูและดาวน์โหลด CSV สำรองย้อนหลังได้ตลอดเวลา
                         </p>
                       </div>
-                      <button
-                        type="button"
-                        className="secondary-button export-now-btn"
-                        onClick={() => handleExportCurrentCsv(editingEvent)}
-                      >
-                        <DownloadIcon className="btn-icon" />
-                        <span>ดาวน์โหลด CSV ข้อมูลปัจจุบัน</span>
-                      </button>
                     </div>
 
                     {auditLogs[editingEvent.id] && auditLogs[editingEvent.id].length > 0 ? (
@@ -3607,7 +3535,15 @@ export function OwnerSessionApprovalManager() {
             </div>
 
             <footer className="review-modal-footer" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', width: '100%', gap: '1rem', flexWrap: 'wrap' }}>
-              <div className="footer-left-actions">
+              <div className="footer-left-actions" style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', alignItems: 'center' }}>
+                <button
+                  type="button"
+                  className="secondary-button"
+                  onClick={() => handleExportCurrentCsv(editingEvent)}
+                >
+                  <DownloadIcon className="btn-icon" />
+                  <span>ดาวน์โหลด CSV ข้อมูลปัจจุบัน</span>
+                </button>
                 {editFormData && (
                   <button
                     type="button"
@@ -3685,7 +3621,7 @@ export function OwnerSessionApprovalManager() {
           DOUBLE CONFIRMATION MODAL ("ถามฉันอีกทีเพื่อความมั่นใจ")
           ========================================================= */}
       {showConfirmModal && editingEvent && (
-        <div className="admin-edit-drawer-modal" role="dialog" aria-modal="true" aria-labelledby="confirm-modal-title" style={{ zIndex: 1100 }}>
+        <div className="admin-edit-drawer-modal" role="dialog" aria-modal="true" aria-labelledby="confirm-modal-title" style={{ zIndex: 11000 }}>
           <button
             type="button"
             className="review-modal-backdrop"

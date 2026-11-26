@@ -463,7 +463,7 @@ export function OrderSuccessView({ orderId }: OrderSuccessViewProps) {
 
                   {reservation.discountAmount != null && reservation.discountAmount > 0 && (
                     <div className="slip-row" style={{ color: '#16a34a' }}>
-                      <span className="slip-label">ส่วนลดสิทธิพิเศษ ม.อุบลฯ (15%):</span>
+                      <span className="slip-label">ส่วนลดสิทธิพิเศษ ม.อุบลฯ:</span>
                       <strong className="slip-value" style={{ color: '#16a34a' }}>
                         -{formatBaht(reservation.discountAmount)}
                       </strong>

@@ -26,6 +26,7 @@ export interface TicketDetail {
   eventTitle: string;
   ticketTemplateUrl?: string | null;
   eventPosterUrl?: string | null;
+  coverBannerUrl?: string | null;
   createdAt: string;
 }
 
@@ -318,7 +319,8 @@ export async function getOrderTickets(pool: Pool, orderId: string): Promise<Tick
             t."createdAt", tt.name as "ticketTypeName", COALESCE(t.price, oi."unitPrice") as "ticketPrice",
             o."buyerName", o."buyerEmail", o."buyerPhone",
             es."startTime" as "sessionStartTime", es."endTime" as "sessionEndTime",
-            e.location, e.title as "eventTitle", e."ticketTemplateUrl", e."posterUrl" as "eventPosterUrl"
+            e.location, e.title as "eventTitle", e."ticketTemplateUrl", e."posterUrl" as "eventPosterUrl",
+            e."coverBannerUrl"
      FROM tickets t
      JOIN ticket_types tt ON t."ticketTypeId" = tt.id
      JOIN order_items oi ON oi.id = t."orderItemId"
@@ -353,6 +355,7 @@ export async function getOrderTickets(pool: Pool, orderId: string): Promise<Tick
     eventTitle: r.eventTitle,
     ticketTemplateUrl: r.ticketTemplateUrl || null,
     eventPosterUrl: r.eventPosterUrl || null,
+    coverBannerUrl: r.coverBannerUrl || null,
     createdAt: new Date(r.createdAt).toISOString(),
   }));
 }
@@ -368,7 +371,8 @@ export async function getTicketById(pool: Pool, ticketIdOrCode: string): Promise
             t."createdAt", tt.name as "ticketTypeName", COALESCE(t.price, oi."unitPrice") as "ticketPrice",
             o."buyerName", o."buyerEmail", o."buyerPhone",
             es."startTime" as "sessionStartTime", es."endTime" as "sessionEndTime",
-            e.location, e.title as "eventTitle", e."ticketTemplateUrl", e."posterUrl" as "eventPosterUrl"
+            e.location, e.title as "eventTitle", e."ticketTemplateUrl", e."posterUrl" as "eventPosterUrl",
+            e."coverBannerUrl"
      FROM tickets t
      JOIN ticket_types tt ON t."ticketTypeId" = tt.id
      JOIN order_items oi ON oi.id = t."orderItemId"
@@ -406,6 +410,7 @@ export async function getTicketById(pool: Pool, ticketIdOrCode: string): Promise
     eventTitle: r.eventTitle,
     ticketTemplateUrl: r.ticketTemplateUrl || null,
     eventPosterUrl: r.eventPosterUrl || null,
+    coverBannerUrl: r.coverBannerUrl || null,
     createdAt: new Date(r.createdAt).toISOString(),
   };
 }

@@ -222,7 +222,18 @@ export function QueueWaitingRoom({
   return (
     <div className="event-detail-page">
       <nav className="detail-breadcrumb" aria-label="ย้อนกลับ">
-        <Link href={`/events/${eventId}`} replace className="back-link">
+        <Link
+          href={`/events/${eventId}`}
+          replace className="back-link"
+          onClick={e => {
+            e.preventDefault();
+            window.dispatchEvent(
+              new CustomEvent('ticket:request-exit', {
+                detail: { targetUrl: `/events/${eventId}` },
+              }),
+            );
+          }}
+        >
           <ArrowLeftIcon /> ย้อนกลับไปหน้ารายละเอียดคอนเสิร์ต
         </Link>
       </nav>

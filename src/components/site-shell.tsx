@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { Suspense, useState, useEffect, type ReactNode } from 'react';
+import { Suspense, useState, useEffect, useRef, type ReactNode } from 'react';
 import { TicketIcon } from './ticket-icon';
 import { NavbarSearch } from './navbar-search';
 import { AlertIcon } from './alert-icon';
@@ -24,6 +24,8 @@ export function SiteShell({ children }: { children: ReactNode }) {
   const [isMobileSearchOpen, setIsMobileSearchOpen] = useState(false);
   const [isExitModalOpen, setIsExitModalOpen] = useState(false);
   const [pendingExitUrl, setPendingExitUrl] = useState<string | null>(null);
+  const pendingExitCallbackRef = useRef<(() => void) | null>(null);
+  const isBypassingGuardRef = useRef(false);
   const isBackOffice = pathname?.startsWith('/back-office');
 
   const isFocusedCheckout = Boolean(
@@ -36,13 +38,67 @@ export function SiteShell({ children }: { children: ReactNode }) {
     if (pathname) {
       setIsMobileMenuOpen(false);
       setIsMobileSearchOpen(false);
+      isBypassingGuardRef.current = false;
     }
   }, [pathname]);
+
+  // Listen for custom exit request from child pages (e.g. back to event details button)
+  useEffect(() => {
+    const handleCustomExit = (e: Event) => {
+      const detail = (e as CustomEvent<{ targetUrl?: string; onConfirm?: () => void }>).detail;
+      setPendingExitUrl(detail?.targetUrl || '/');
+      pendingExitCallbackRef.current = detail?.onConfirm || null;
+      setIsExitModalOpen(true);
+    };
+
+    window.addEventListener('ticket:request-exit', handleCustomExit);
+    return () => {
+      window.removeEventListener('ticket:request-exit', handleCustomExit);
+    };
+  }, []);
+
+  // History PopState Guard: Trap browser Back and Forward navigation during focused checkout
+  useEffect(() => {
+    if (!isFocusedCheckout) return;
+
+    window.history.pushState({ ticketCheckoutGuard: true }, '', window.location.href);
+
+    const handlePopState = () => {
+      if (isBypassingGuardRef.current) return;
+      // Push state back to prevent leaving
+      window.history.pushState({ ticketCheckoutGuard: true }, '', window.location.href);
+      setPendingExitUrl('__BROWSER_BACK__');
+      pendingExitCallbackRef.current = null;
+      setIsExitModalOpen(true);
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+    };
+  }, [isFocusedCheckout]);
+
+  // BeforeUnload Guard: Trap browser Reload and Tab Close
+  useEffect(() => {
+    if (!isFocusedCheckout) return;
+
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (isBypassingGuardRef.current) return;
+      e.preventDefault();
+      e.returnValue = '';
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, [isFocusedCheckout]);
 
   const handleNavClick = (e: React.MouseEvent, href: string) => {
     if (isFocusedCheckout) {
       e.preventDefault();
       setPendingExitUrl(href);
+      pendingExitCallbackRef.current = null;
       setIsExitModalOpen(true);
       setIsMobileMenuOpen(false);
       setIsMobileSearchOpen(false);
@@ -50,8 +106,23 @@ export function SiteShell({ children }: { children: ReactNode }) {
   };
 
   const handleConfirmExit = () => {
+    isBypassingGuardRef.current = true;
     setIsExitModalOpen(false);
-    if (pendingExitUrl) {
+
+    const callback = pendingExitCallbackRef.current;
+    pendingExitCallbackRef.current = null;
+    if (callback) {
+      try {
+        callback();
+      } catch {
+        // ignore callback errors
+      }
+    }
+
+    if (pendingExitUrl === '__BROWSER_BACK__') {
+      setPendingExitUrl(null);
+      window.history.back();
+    } else if (pendingExitUrl) {
       const url = pendingExitUrl;
       setPendingExitUrl(null);
       router.push(url);
@@ -61,6 +132,7 @@ export function SiteShell({ children }: { children: ReactNode }) {
   const handleCancelExit = () => {
     setIsExitModalOpen(false);
     setPendingExitUrl(null);
+    pendingExitCallbackRef.current = null;
   };
 
   if (isBackOffice) {
@@ -97,7 +169,28 @@ export function SiteShell({ children }: { children: ReactNode }) {
           </div>
 
           {/* Center Navbar Instant Search */}
-          <div className="header-search-center">
+          <div
+            className="header-search-center"
+            onClickCapture={e => {
+              if (isFocusedCheckout) {
+                e.preventDefault();
+                e.stopPropagation();
+                setPendingExitUrl('/');
+                pendingExitCallbackRef.current = null;
+                setIsExitModalOpen(true);
+              }
+            }}
+            onFocusCapture={e => {
+              if (isFocusedCheckout) {
+                e.preventDefault();
+                e.stopPropagation();
+                (e.target as HTMLElement)?.blur();
+                setPendingExitUrl('/');
+                pendingExitCallbackRef.current = null;
+                setIsExitModalOpen(true);
+              }
+            }}
+          >
             <Suspense fallback={<div className="navbar-search-wrapper" />}>
               <NavbarSearch />
             </Suspense>
@@ -118,7 +211,14 @@ export function SiteShell({ children }: { children: ReactNode }) {
               className="mobile-search-btn"
               aria-label={isMobileSearchOpen ? 'ปิดช่องค้นหา' : 'เปิดช่องค้นหา'}
               aria-expanded={isMobileSearchOpen}
-              onClick={() => {
+              onClick={e => {
+                if (isFocusedCheckout) {
+                  e.preventDefault();
+                  setPendingExitUrl('/');
+                  pendingExitCallbackRef.current = null;
+                  setIsExitModalOpen(true);
+                  return;
+                }
                 setIsMobileSearchOpen(prev => !prev);
                 setIsMobileMenuOpen(false);
               }}

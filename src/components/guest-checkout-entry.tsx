@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useTransition } from 'react';
 import { AcademicCapIcon, CheckCircleIcon, ShieldCheckIcon, SparklesIcon } from './icons';
 import { AlertIcon } from './alert-icon';
+import { PdpaModal } from './pdpa-modal';
 
 export interface VerifiedBuyerInfo {
   token: string;
@@ -58,6 +59,7 @@ export function GuestCheckoutEntry({
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [pdpaAccepted, setPdpaAccepted] = useState(false);
+  const [showPdpaModal, setShowPdpaModal] = useState(false);
 
   // OTP details
   const [otpCode, setOtpCode] = useState('');
@@ -494,7 +496,24 @@ export function GuestCheckoutEntry({
                 required
               />
               <label htmlFor="pdpa-consent-checkbox" className="pdpa-label">
-                ฉันได้อ่านและยอมรับ <a href="/privacy" target="_blank" rel="noopener noreferrer" className="pdpa-link">นโยบายความเป็นส่วนตัว (PDPA)</a> และเงื่อนไขการให้บริการ
+                ฉันได้อ่านและยอมรับ{' '}
+                <button
+                  type="button"
+                  onClick={() => setShowPdpaModal(true)}
+                  className="pdpa-link"
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    padding: 0,
+                    font: 'inherit',
+                    color: 'inherit',
+                    textDecoration: 'underline',
+                    cursor: 'pointer',
+                  }}
+                >
+                  นโยบายความเป็นส่วนตัว (PDPA)
+                </button>{' '}
+                และเงื่อนไขการให้บริการ
               </label>
             </div>
           </div>
@@ -706,6 +725,8 @@ export function GuestCheckoutEntry({
           </div>
         </div>
       )}
+      {/* PDPA Policy Modal (In-place popup to prevent leaving checkout) */}
+      <PdpaModal isOpen={showPdpaModal} onClose={() => setShowPdpaModal(false)} />
     </section>
   );
 }

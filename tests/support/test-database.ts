@@ -1,5 +1,5 @@
 export function testDatabaseUrl(value = process.env.TEST_DATABASE_URL): string {
-  const connectionString = value ?? 'postgresql://ticket:ticket_test_local@127.0.0.1:55433/ticket_test';
+  const connectionString = value ?? 'postgresql://ticket:ticket_test_local@127.0.0.1:54321/ticket_test';
   const url = new URL(connectionString);
   if (!['postgres:', 'postgresql:'].includes(url.protocol)
     || !['127.0.0.1', 'localhost', '[::1]'].includes(url.hostname)

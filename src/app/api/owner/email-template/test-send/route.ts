@@ -9,6 +9,7 @@ import {
   parseEmailMasterTemplate,
 } from '@/server/email-master-template';
 import { buildTicketEmailContent, escapeHtml, sanitizeEmailUrl } from '@/server/ticket-delivery';
+import { generateTicketCardPngBuffer } from '@/server/ticket-card-png';
 import { readBoundedJson } from '@/server/upload-quota';
 import type { TicketDetail } from '@/server/tickets';
 
@@ -18,6 +19,7 @@ function buildGenericScenarioEmailContent(
   scenarioKey: EmailScenarioKey,
   templateState: typeof DEFAULT_EMAIL_MASTER_TEMPLATE,
   origin: string,
+  cardDataUrl?: string,
 ): { subject: string; html: string; text: string } {
   const scenarioDef = EMAIL_SCENARIOS[scenarioKey] || EMAIL_SCENARIOS.ticket_delivery;
   const sampleData = { ...scenarioDef.sampleData };
@@ -113,6 +115,32 @@ function buildGenericScenarioEmailContent(
         </table>
       </div>
     `;
+  } else if (scenarioKey === 'direct_ticket') {
+    const cardImgUrl = cardDataUrl || `${origin}/api/public/tickets/TKT-SAMPLE-001/image`;
+    extraHtml = `
+      <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:14px 18px;margin-bottom:20px;font-size:13px;line-height:1.6;">
+        <div style="font-weight:600;color:#0f172a;margin-bottom:4px;">${escapeHtml(String(sampleData.concert_name || 'TICKET FESTIVAL 2026: LIVE IN BANGKOK'))}</div>
+        <div>ผู้รับมอบ: <strong style="color:#0f172a;">${escapeHtml(String(sampleData.recipient_name || 'คุณพงศธร รักดนตรี (VIP Guest)'))}</strong></div>
+        <div>หมายเหตุ: <span style="color:#64748b;">${escapeHtml(String(sampleData.reference_note || 'โควตาแขกพิเศษผู้สนับสนุนหลัก'))}</span></div>
+        <div>รหัสบัตร: <code style="color:#2563eb;font-weight:600;">${escapeHtml(String(sampleData.ticket_code || 'TK-DIR-202611-VIP01'))}</code></div>
+      </div>
+      ${
+        templateState.showTicketCard !== false
+          ? `
+        <div style="margin-bottom:20px;text-align:center;">
+          <div style="border-radius:8px;overflow:hidden;box-shadow:0 4px 6px -1px rgba(0,0,0,0.1);border:1px solid #e2e8f0;background:#0f172a;">
+            <img src="${cardImgUrl}" alt="รูปบัตรคอนเสิร์ต VIP" style="width:100%;height:auto;display:block;" />
+          </div>
+          <div style="margin-top:8px;">
+            <a href="${cardImgUrl}" target="_blank" rel="noreferrer" style="font-size:12px;color:#0f172a;text-decoration:underline;font-weight:500;">
+              ดาวน์โหลดรูปบัตรคอนเสิร์ตความละเอียดสูง (ใบที่ 1: ${escapeHtml(String(sampleData.ticket_code || 'TK-DIR-202611-VIP01'))})
+            </a>
+          </div>
+        </div>
+      `
+          : ''
+      }
+    `;
   } else if (scenarioKey === 'staff_invitation') {
     extraHtml = `
       <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:16px;margin:16px 0;text-align:center;">
@@ -121,6 +149,24 @@ function buildGenericScenarioEmailContent(
         <div style="font-size:12px;color:#475569;margin-top:4px;">คอนเสิร์ต: ${escapeHtml(String(sampleData.concert_name))}</div>
       </div>
     `;
+  }
+
+  let posterBlockHtml = '';
+  if (templateState.showConcertPoster !== false) {
+    let rawPoster =
+      templateState.posterUrl?.trim() ||
+      'https://images.unsplash.com/photo-1540039155733-5bb30b53aa14?auto=format&fit=crop&w=1200&q=80';
+    if (rawPoster.startsWith('/')) {
+      rawPoster = `${origin}${rawPoster}`;
+    }
+    const safePosterUrl = sanitizeEmailUrl(rawPoster);
+    if (safePosterUrl) {
+      posterBlockHtml = `
+        <div style="width: 100%; max-height: 220px; overflow: hidden; background-color: #0f172a; border-top-left-radius: 10px; border-top-right-radius: 10px;">
+          <img src="${safePosterUrl}" alt="Concert Cover" style="width: 100%; height: auto; max-height: 220px; object-fit: cover; display: block;" />
+        </div>
+      `;
+    }
   }
 
   const html = `<!DOCTYPE html>
@@ -132,6 +178,7 @@ function buildGenericScenarioEmailContent(
 </head>
 <body style="margin:0;padding:24px 0;background-color:#f8fafc;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#0f172a;">
   <div style="max-width:600px;margin:0 auto;background:#ffffff;border:1px solid #e2e8f0;border-radius:10px;overflow:hidden;box-shadow:0 4px 16px rgba(15,23,42,0.06);">
+    ${posterBlockHtml}
     <div style="background:#ffffff;color:#0f172a;padding:16px 20px;border-bottom:1px solid #e2e8f0;font-size:15px;font-weight:600;">
       ${escapeHtml(templateState.headerTitle || 'TICKET')}
     </div>
@@ -225,11 +272,20 @@ export async function POST(request: Request) {
         location: 'อิมแพ็ค อารีน่า เมืองทองธานี',
         eventTitle: 'TICKET FESTIVAL 2026: LIVE IN BANGKOK',
         eventPosterUrl: template.posterUrl || 'https://images.unsplash.com/photo-1540039155733-5bb30b53aa14?auto=format&fit=crop&w=1200&q=80',
+        coverBannerUrl: template.posterUrl || 'https://images.unsplash.com/photo-1540039155733-5bb30b53aa14?auto=format&fit=crop&w=1200&q=80',
         createdAt: new Date().toISOString(),
       },
     ];
 
     const orderUrl = `${origin}/orders/ORD-SAMPLE-9999/success?tab=tickets`;
+
+    let sampleCardDataUrl = '';
+    try {
+      const samplePng = await generateTicketCardPngBuffer(mockTickets[0], { width: 1000, height: 420 });
+      sampleCardDataUrl = `data:image/png;base64,${samplePng.toString('base64')}`;
+    } catch (e) {
+      console.warn('Failed to generate sample card PNG buffer:', e);
+    }
 
     const ticketDeliveryContent = buildTicketEmailContent(
       'ORD-SAMPLE-9999',
@@ -240,12 +296,45 @@ export async function POST(request: Request) {
       mockTickets,
       orderUrl,
       template,
+      sampleCardDataUrl ? { cardImageDataUrls: { 'TKT-SAMPLE-001': sampleCardDataUrl } } : undefined,
     );
     subject = ticketDeliveryContent.subject;
     html = ticketDeliveryContent.html;
     text = ticketDeliveryContent.text;
   } else {
-    const genericContent = buildGenericScenarioEmailContent(scenarioKey, template, origin);
+    let directCardDataUrl = '';
+    if (scenarioKey === 'direct_ticket') {
+      try {
+        const sampleDirectTicket: TicketDetail = {
+          id: 'TKT-SAMPLE-001',
+          orderId: 'DIR-SAMPLE-9999',
+          orderItemId: 'OI-SAMPLE-1',
+          eventId: 'EVT-SAMPLE',
+          sessionId: 'SES-SAMPLE',
+          ticketTypeId: 'TT-SAMPLE',
+          ticketTypeName: 'VIP FRONT ROW - ZONE A',
+          ticketPrice: 3500,
+          ticketCode: 'TK-DIR-202611-VIP01',
+          qrPayload: 'TK-DIR-202611-VIP01',
+          qrCodeUrl: '',
+          status: 'valid',
+          admissionStatus: 'outside',
+          buyerName: session.user.name || 'คุณพงศธร รักดนตรี (VIP Guest)',
+          buyerEmail: recipient,
+          buyerPhone: '0812345678',
+          sessionStartTime: new Date(Date.now() + 86400000 * 14).toISOString(),
+          sessionEndTime: new Date(Date.now() + 86400000 * 14 + 10800000).toISOString(),
+          location: 'อิมแพ็ค อารีน่า เมืองทองธานี',
+          eventTitle: 'TICKET FESTIVAL 2026: LIVE IN BANGKOK',
+          createdAt: new Date().toISOString(),
+        };
+        const samplePng = await generateTicketCardPngBuffer(sampleDirectTicket, { width: 1000, height: 420 });
+        directCardDataUrl = `data:image/png;base64,${samplePng.toString('base64')}`;
+      } catch (e) {
+        console.warn('Failed to generate direct ticket card PNG buffer:', e);
+      }
+    }
+    const genericContent = buildGenericScenarioEmailContent(scenarioKey, template, origin, directCardDataUrl);
     subject = genericContent.subject;
     html = genericContent.html;
     text = genericContent.text;

@@ -370,7 +370,18 @@ export function OrderPaymentView({ orderId }: OrderPaymentViewProps) {
     <div className="event-detail-page payment-page-wrapper">
       <div className="payment-stacked-container">
         <nav className="detail-breadcrumb" aria-label="ย้อนกลับ">
-          <Link href={`/events/${reservation.eventId}`} className="back-link">
+          <Link
+            href={`/events/${reservation.eventId}`}
+            className="back-link"
+            onClick={e => {
+              e.preventDefault();
+              window.dispatchEvent(
+                new CustomEvent('ticket:request-exit', {
+                  detail: { targetUrl: `/events/${reservation.eventId}` },
+                }),
+              );
+            }}
+          >
             <ArrowLeftIcon /> ย้อนกลับไปหน้ารายละเอียดคอนเสิร์ต
           </Link>
         </nav>
@@ -728,7 +739,7 @@ export function OrderPaymentView({ orderId }: OrderPaymentViewProps) {
 
           {reservation.discountAmount > 0 && (
             <div className="payment-price-row discount-row" style={{ color: '#16a34a' }}>
-              <span>ส่วนลดสิทธิพิเศษ ม.อุบลฯ (15% สูงสุด 2 ใบ):</span>
+              <span>ส่วนลดสิทธิพิเศษ ม.อุบลฯ:</span>
               <strong id="quote-discount">-{formatBaht(reservation.discountAmount)}</strong>
             </div>
           )}

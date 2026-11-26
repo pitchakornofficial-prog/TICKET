@@ -18,6 +18,7 @@ import {
   normalizeEmailSectionOrder,
 } from '@/lib/email-template';
 import { generateTicketDataUrl } from './ticket-canvas-download';
+import { loadOwnerMasterTemplate } from '@/lib/ticket-master-template-sync';
 import type { TicketDetail } from '@/server/tickets';
 import {
   CheckCircleIcon,
@@ -192,10 +193,14 @@ export function AdminEmailDesigner() {
   // Generate real ticket pass PNG images on client mount
   useEffect(() => {
     let isMounted = true;
-    Promise.all([
-      generateTicketDataUrl(SAMPLE_TICKET_DETAIL),
-      generateTicketDataUrl(SAMPLE_TICKET_DETAIL_2),
-    ])
+    loadOwnerMasterTemplate()
+      .then((masterTmpl) => {
+        const tmpl = masterTmpl || undefined;
+        return Promise.all([
+          generateTicketDataUrl(SAMPLE_TICKET_DETAIL, tmpl),
+          generateTicketDataUrl(SAMPLE_TICKET_DETAIL_2, tmpl),
+        ]);
+      })
       .then(([url1, url2]) => {
         if (isMounted) {
           setRealTicketPassDataUrl(url1);
@@ -802,6 +807,7 @@ export function AdminEmailDesigner() {
     // 1. Poster Block (Edge-to-edge landscape banner, fixed 220px)
     const showPoster = targetTemplate.showConcertPoster !== false && (
       activeScenario === 'ticket_delivery' ||
+      activeScenario === 'direct_ticket' ||
       activeScenario === 'event_reminder' ||
       activeScenario === 'event_rescheduled' ||
       Boolean(targetTemplate.posterUrl)

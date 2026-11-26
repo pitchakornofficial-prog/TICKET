@@ -177,46 +177,53 @@ describe('Admin Override All-in-One Concert Editing & Double Confirmation', () =
     expect(content).toContain('adminOverrideConcertFull');
   });
 
-  it('verifies OwnerSessionApprovalManager frontend has complete 5 sections and Double Confirmation', () => {
+  it('verifies OwnerSessionApprovalManager frontend has complete 7 reordered sections matching creation wizard', () => {
     const compPath = path.resolve(rootDir, 'src/components/owner-session-approval-manager.tsx');
     const content = fs.readFileSync(compPath, 'utf8');
 
-    // Section 1: General Info & Artists
-    expect(content).toContain('1. ข้อมูลทั่วไปและไลน์อัปศิลปิน');
+    // Section 1: Event Info & Artists
+    expect(content).toContain('1. ข้อมูลงาน & ศิลปิน');
     expect(content).toContain('edit-concert-title');
     expect(content).toContain('edit-concert-artists');
+
+    // Section 2: Location & Maps
+    expect(content).toContain('2. สถานที่ & แผนที่');
     expect(content).toContain('edit-concert-location');
     expect(content).toContain('edit-concert-maps');
+
+    // Section 3: Schedule & Guidelines
+    expect(content).toContain('3. กำหนดการ & กติกา');
     expect(content).toContain('edit-limit-per-order');
-
-    // Section 2: Visual Assets
-    expect(content).toContain('2. รูปภาพและสื่อประชาสัมพันธ์');
-    expect(content).toContain('รูปโปสเตอร์หลัก (Poster)');
-    expect(content).toContain('แบนเนอร์หน้าปก (Cover Banner)');
-    expect(content).toContain('แผนผังที่นั่ง / ผังคอนเสิร์ต');
-    expect(content).toContain('handleUploadImage');
-
-    // Section 3: Sessions & Zones Builder
-    expect(content).toContain('3. รอบการแสดง ราคา และโซนที่นั่ง');
-    expect(content).toContain('handleAddSession');
-    expect(content).toContain('handleRemoveSession');
-    expect(content).toContain('handleAddTicketType');
-    expect(content).toContain('handleRemoveTicketType');
-    expect(content).toContain('badge-sold-warning');
-
-    // Section 4: Services & Financials
-    expect(content).toContain('4. การบริการ นโยบายการคืนเงิน และการเงิน');
     expect(content).toContain('edit-age-restriction');
     expect(content).toContain('edit-refund-policy');
     expect(content).toContain('edit-entry-guidelines');
+
+    // Section 4: Sessions & Zones Builder
+    expect(content).toContain('4. รอบ & โซนบัตร');
+    expect(content).toContain('handleAddSession');
+    expect(content).toContain('handleRemoveSession');
+
+    // Section 5: Visual Assets (Poster & Cover Banner only, no seating map)
+    expect(content).toContain('5. รูปภาพ & สื่อ');
+    expect(content).toContain('รูปโปสเตอร์หลัก (Poster)');
+    expect(content).toContain('แบนเนอร์หน้าปก (Cover Banner)');
+    expect(content).not.toContain('แผนผังที่นั่ง / ผังคอนเสิร์ต');
+    expect(content).toContain('handleUploadImage');
+
+    // Section 6: Fees & UBU Privileges (no payout bank fields)
+    expect(content).toContain('6. ส่วนแบ่งค่าบริการระบบ');
     expect(content).toContain('edit-org-fee');
     expect(content).toContain('edit-cust-fee');
-    expect(content).toContain('edit-payout-bank');
-    expect(content).toContain('edit-payout-num');
-    expect(content).toContain('edit-payout-name');
+    expect(content).toContain('edit-ubu-mode');
+    expect(content).not.toContain('edit-payout-bank');
+    expect(content).not.toContain('edit-payout-num');
+    expect(content).not.toContain('edit-payout-name');
 
-    // Section 5: Audit Trail & Backup
-    expect(content).toContain('5. ประวัติการแก้ไขและไฟล์สำรอง CSV (Audit Trail)');
+    // Section 7: Audit Trail
+    expect(content).toContain('7. ประวัติการแก้ไข (Audit Trail)');
+
+    // Modal Footer with CSV Export button
+    expect(content).toContain('ดาวน์โหลด CSV ข้อมูลปัจจุบัน');
 
     // Double Confirmation Modal ("ถามฉันอีกทีเพื่อความมั่นใจ")
     expect(content).toContain('showConfirmModal');

@@ -160,6 +160,79 @@ export function OwnerOverviewDashboard({
     return Math.max(...lineChartData.map((d) => d.value), 1);
   }, [lineChartData]);
 
+  // Selected Period Sales and Est. Fee calculations for Analytics Card
+  const selectedPeriodSales = useMemo(() => {
+    if (chartMode === 'bar') {
+      return totalGrossRevenue;
+    }
+    return lineChartData.reduce((acc, cur) => acc + (cur.value || 0), 0);
+  }, [chartMode, totalGrossRevenue, lineChartData]);
+
+  const selectedPeriodEstFee = useMemo(() => {
+    if (chartMode === 'bar') {
+      return sales?.platformFee ?? Math.round(totalGrossRevenue * 0.03);
+    }
+    return Math.round(selectedPeriodSales * 0.03);
+  }, [chartMode, sales?.platformFee, totalGrossRevenue, selectedPeriodSales]);
+
+  // Breakdown of pending action queues for direct action jumping
+  const pendingQueues = useMemo(() => {
+    if (!counts) return [];
+    const list: {
+      id: string;
+      label: string;
+      count: number;
+      section: 'approval' | 'finance' | 'customer' | 'system' | 'refunds' | 'scanner';
+      targetManagerId: string;
+    }[] = [];
+    if ((counts.pendingSessions ?? 0) > 0) {
+      list.push({
+        id: 'sessions',
+        label: `รอบการแสดงรออนุมัติ (${counts.pendingSessions})`,
+        count: counts.pendingSessions,
+        section: 'approval',
+        targetManagerId: 'owner-session-approval-manager',
+      });
+    }
+    if ((counts.pendingRefunds ?? 0) > 0) {
+      list.push({
+        id: 'refunds',
+        label: `คำขอคืนเงินรอตรวจสอบ (${counts.pendingRefunds})`,
+        count: counts.pendingRefunds,
+        section: 'refunds',
+        targetManagerId: 'owner-refund-approval-manager',
+      });
+    }
+    if ((counts.paymentExceptions ?? 0) > 0) {
+      list.push({
+        id: 'payments',
+        label: `ชำระเงินต้องตรวจสอบ (${counts.paymentExceptions})`,
+        count: counts.paymentExceptions,
+        section: 'finance',
+        targetManagerId: 'owner-payment-recovery-manager',
+      });
+    }
+    if ((counts.failedEmails ?? 0) > 0) {
+      list.push({
+        id: 'emails',
+        label: `อีเมลส่งไม่สำเร็จ (${counts.failedEmails})`,
+        count: counts.failedEmails,
+        section: 'customer',
+        targetManagerId: 'owner-email-deliveries-manager',
+      });
+    }
+    if ((counts.syncConflicts ?? 0) > 0) {
+      list.push({
+        id: 'conflicts',
+        label: `ข้อขัดแย้งออฟไลน์ (${counts.syncConflicts})`,
+        count: counts.syncConflicts,
+        section: 'scanner',
+        targetManagerId: 'owner-offline-sync-manager',
+      });
+    }
+    return list;
+  }, [counts]);
+
   // Recent Operational Activity Data (D-256: Live Stream from real counts)
   const recentActivities: RecentActivityItem[] = useMemo(() => {
     const items: RecentActivityItem[] = [];
@@ -462,23 +535,51 @@ export function OwnerOverviewDashboard({
                   <AlertTriangleIcon className="overview-borderless-icon text-amber" />
                 </div>
                 <div className="banner-content">
-                  <h2 className="banner-title">
-                    มีคิวงานค้างที่ต้องตัดสินใจ {totalPending} รายการ (Pending Action Required)
-                  </h2>
+                  <div className="banner-title-row">
+                    <h2 className="banner-title">
+                      มีคิวงานค้างที่ต้องตัดสินใจ {totalPending} รายการ (Pending Action Required)
+                    </h2>
+                    <span className="badge-pending-count">ต้องดำเนินการ</span>
+                  </div>
                   <p className="banner-desc">
-                    มีรอบการแสดงรออนุมัติ คำขอคืนเงิน หรือข้อผิดพลาดระบบที่รอการพิจารณา กรุณาตรวจสอบเพื่อความต่อเนื่องของบริการ
+                    มีรายการที่รอการตรวจสอบและตัดสินใจโดยเจ้าของระบบ กรุณาเลือกรายการด้านล่างเพื่อดำเนินการทันที
                   </p>
+                  {pendingQueues.length > 0 && (
+                    <div className="pending-breakdown-chips">
+                      {pendingQueues.map((q) => (
+                        <button
+                          key={q.id}
+                          type="button"
+                          className="pending-chip-btn"
+                          onClick={() => onNavigateToSection(q.section, q.targetManagerId)}
+                        >
+                          <span className="chip-dot" />
+                          <span>{q.label}</span>
+                          <ChevronRightIcon style={{ width: '12px', height: '12px' }} />
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
-              <button
-                type="button"
-                className="banner-action-btn"
-                onClick={() => onNavigateToSection('approval', 'owner-session-approval-manager')}
-                style={{ height: '38px', minHeight: '38px' }}
-              >
-                <span>ตรวจสอบคิวงานทันที</span>
-                <ChevronRightIcon className="btn-icon-right" />
-              </button>
+              <div className="banner-right-actions">
+                <button
+                  type="button"
+                  className="banner-action-btn"
+                  onClick={() => {
+                    const firstTarget = pendingQueues[0];
+                    if (firstTarget) {
+                      onNavigateToSection(firstTarget.section, firstTarget.targetManagerId);
+                    } else {
+                      onNavigateToSection('approval', 'owner-session-approval-manager');
+                    }
+                  }}
+                  style={{ height: '38px', minHeight: '38px' }}
+                >
+                  <span>ตรวจสอบคิวงานทันที</span>
+                  <ChevronRightIcon className="btn-icon-right" />
+                </button>
+              </div>
             </div>
           ) : (
             <div className="overview-attention-banner success" data-testid="owner-attention-success">
@@ -575,11 +676,35 @@ export function OwnerOverviewDashboard({
               </div>
             </div>
 
+            {/* Financial Quick Metrics Summary Bar */}
+            <div className="charts-kpi-summary-strip">
+              <div className="chart-summary-chip">
+                <span className="summary-chip-label">
+                  {chartMode === 'bar' ? 'ยอดจำหน่ายรวมทั้งระบบ' : `ยอดขายรวม (${timeRange === 'today' ? 'วันนี้' : timeRange === '7d' ? '7 วันล่าสุด' : '30 วันล่าสุด'})`}
+                </span>
+                <strong className="summary-chip-value">{formatBaht(selectedPeriodSales)}</strong>
+              </div>
+              <div className="chart-summary-chip">
+                <span className="summary-chip-label">ส่วนแบ่งค่าบริการระบบ (3%)</span>
+                <strong className="summary-chip-value text-emerald">{formatBaht(selectedPeriodEstFee)}</strong>
+              </div>
+              <div className="chart-summary-chip">
+                <span className="summary-chip-label">คอนเสิร์ตที่มีการขาย</span>
+                <strong className="summary-chip-value">{barChartEvents.length} งาน</strong>
+              </div>
+            </div>
+
             {/* Chart Viewport */}
             <div className="charts-content-viewport">
-              {!sales ? <p>{loading ? 'กำลังโหลดยอดขาย...' : 'ไม่สามารถแสดงยอดขายได้'}</p> :
-              chartMode === 'bar' && barChartEvents.length === 0 ? <p>ยังไม่มีรายการขายบัตร</p> :
-              chartMode === 'bar' ? (
+              {!sales ? (
+                <div className="charts-empty-placeholder">
+                  <p>{loading ? 'กำลังโหลดยอดขาย...' : 'ไม่สามารถแสดงยอดขายได้'}</p>
+                </div>
+              ) : chartMode === 'bar' && barChartEvents.length === 0 ? (
+                <div className="charts-empty-placeholder">
+                  <p>ยังไม่มีรายการขายบัตร</p>
+                </div>
+              ) : chartMode === 'bar' ? (
                 /* Mode 1: Bar Chart Comparison Across Concerts */
                 <div className="overview-barchart-container" data-testid="owner-barchart">
                   <div className="barchart-bars-stack">
@@ -638,22 +763,31 @@ export function OwnerOverviewDashboard({
                     >
                       <defs>
                         <linearGradient id="ownerLineAreaGrad" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%" stopColor="#1848ed" stopOpacity="0.25" />
-                          <stop offset="100%" stopColor="#1848ed" stopOpacity="0.0" />
+                          <stop offset="0%" stopColor="#2563eb" stopOpacity="0.22" />
+                          <stop offset="100%" stopColor="#2563eb" stopOpacity="0.0" />
                         </linearGradient>
                       </defs>
 
-                      {/* Horizontal Grid lines */}
-                      <line x1="40" y1="30" x2="740" y2="30" stroke="#f1f5f9" strokeWidth="1" strokeDasharray="3 3" />
-                      <line x1="40" y1="80" x2="740" y2="80" stroke="#f1f5f9" strokeWidth="1" strokeDasharray="3 3" />
-                      <line x1="40" y1="130" x2="740" y2="130" stroke="#f1f5f9" strokeWidth="1" strokeDasharray="3 3" />
-                      <line x1="40" y1="180" x2="740" y2="180" stroke="#e2e8f0" strokeWidth="1" />
+                      {/* Horizontal Grid lines with Y-Axis Tick Labels */}
+                      <g className="linechart-grid-lines">
+                        <line x1="55" y1="30" x2="745" y2="30" stroke="#f1f5f9" strokeWidth="1" strokeDasharray="3 3" />
+                        <text x="48" y="34" textAnchor="end" fill="#94a3b8" fontSize="10">{formatBaht(maxLineValue)}</text>
+
+                        <line x1="55" y1="80" x2="745" y2="80" stroke="#f1f5f9" strokeWidth="1" strokeDasharray="3 3" />
+                        <text x="48" y="84" textAnchor="end" fill="#94a3b8" fontSize="10">{formatBaht(Math.round(maxLineValue * 0.67))}</text>
+
+                        <line x1="55" y1="130" x2="745" y2="130" stroke="#f1f5f9" strokeWidth="1" strokeDasharray="3 3" />
+                        <text x="48" y="134" textAnchor="end" fill="#94a3b8" fontSize="10">{formatBaht(Math.round(maxLineValue * 0.33))}</text>
+
+                        <line x1="55" y1="180" x2="745" y2="180" stroke="#e2e8f0" strokeWidth="1" />
+                        <text x="48" y="184" textAnchor="end" fill="#94a3b8" fontSize="10">฿0</text>
+                      </g>
 
                       {/* Generate Path Coordinates */}
                       {(() => {
-                        const stepX = (740 - 60) / Math.max(lineChartData.length - 1, 1);
+                        const stepX = (740 - 75) / Math.max(lineChartData.length - 1, 1);
                         const coords = lineChartData.map((d, i) => {
-                          const x = 60 + i * stepX;
+                          const x = 75 + i * stepX;
                           const y = 180 - (d.value / maxLineValue) * 150;
                           return { x, y, ...d };
                         });
@@ -667,21 +801,23 @@ export function OwnerOverviewDashboard({
                         return (
                           <>
                             <path d={areaD} fill="url(#ownerLineAreaGrad)" />
-                            <path d={pathD} fill="none" stroke="#1848ed" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+                            <path d={pathD} fill="none" stroke="#2563eb" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
                             {coords.map((pt) => (
                               <g key={`point-${pt.label}`} className="linechart-data-point">
-                                <circle cx={pt.x} cy={pt.y} r="5" fill="#ffffff" stroke="#1848ed" strokeWidth="2.5" />
-                                <text
-                                  x={pt.x}
-                                  y={pt.y - 12}
-                                  textAnchor="middle"
-                                  className="linechart-val-text"
-                                  fill="#0f172a"
-                                  fontSize="10"
-                                  fontWeight="600"
-                                >
-                                  {formatBaht(pt.value)}
-                                </text>
+                                <circle cx={pt.x} cy={pt.y} r="4.5" fill="#ffffff" stroke="#2563eb" strokeWidth="2.5" />
+                                {pt.value > 0 && (
+                                  <text
+                                    x={pt.x}
+                                    y={pt.y - 10}
+                                    textAnchor="middle"
+                                    className="linechart-val-text"
+                                    fill="#0f172a"
+                                    fontSize="10"
+                                    fontWeight="600"
+                                  >
+                                    {formatBaht(pt.value)}
+                                  </text>
+                                )}
                                 <text
                                   x={pt.x}
                                   y={202}

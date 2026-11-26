@@ -17,18 +17,26 @@ export async function GET(
     const pool = getDatabasePool();
     const ticket = await getTicketById(pool, id);
 
+    let qrPayload = ticket?.qrPayload;
+    let ticketCode = ticket?.ticketCode || 'SAMPLE-QR';
+
     if (!ticket) {
-      return new Response('Ticket not found', { status: 404 });
+      if (id.startsWith('TKT-SAMPLE') || id.toLowerCase() === 'sample') {
+        qrPayload = 'SAMPLE-QR-PAYLOAD-PREVIEW-01';
+        ticketCode = 'TK-SAMPLE-8888-01';
+      } else {
+        return new Response('Ticket not found', { status: 404 });
+      }
     }
 
-    const pngBuffer = await generateTicketQrPngBuffer(ticket.qrPayload, { size: 400 });
+    const pngBuffer = await generateTicketQrPngBuffer(qrPayload || ticketCode, { size: 400 });
 
     return new Response(new Uint8Array(pngBuffer), {
       status: 200,
       headers: {
         'Content-Type': 'image/png',
         'Cache-Control': 'public, max-age=86400, stale-while-revalidate=604800',
-        'Content-Disposition': `inline; filename="ticket-qr-${ticket.ticketCode}.png"`,
+        'Content-Disposition': `inline; filename="ticket-qr-${ticketCode}.png"`,
       },
     });
   } catch (error) {

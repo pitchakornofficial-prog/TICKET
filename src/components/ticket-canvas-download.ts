@@ -24,12 +24,13 @@ export function renderTextFitted(
   fontFamily = FONT_SANS,
   isBold = true,
   align: 'left' | 'center' | 'right' = 'left',
+  fontWeight?: string,
 ): void {
   if (!text) return;
   ctx.save();
   ctx.textAlign = align;
   let fontSize = initialFontSize;
-  const weight = isBold ? '400 ' : '200 ';
+  const weight = fontWeight ? `${fontWeight} ` : isBold ? '700 ' : '400 ';
   ctx.font = `${weight}${fontSize}px ${fontFamily}`;
   while (ctx.measureText(text).width > maxWidth && fontSize > minFontSize) {
     fontSize -= 1;
@@ -60,10 +61,30 @@ function drawLabeledField(
   isDetailBold = true,
   offsetY = 22,
   headerFont?: string,
+  showHeader = true,
+  detailFontWeight?: string,
 ): void {
+  if (!showHeader || !headerText) {
+    ctx.fillStyle = detailColor;
+    renderTextFitted(
+      ctx,
+      detailText,
+      posX,
+      posY,
+      maxWidth,
+      fontSize,
+      minFontSize,
+      fontFamily,
+      isDetailBold,
+      align,
+      detailFontWeight,
+    );
+    return;
+  }
+
   // 1. Header is ALWAYS anchored at posX (fixed position, never shifted by detail length)
   ctx.save();
-  if (headerFont) ctx.font = headerFont;
+  ctx.font = headerFont || `500 11px ${fontFamily}`;
   ctx.fillStyle = headerColor;
   ctx.textAlign = 'left';
   ctx.fillText(headerText, posX, posY);
@@ -87,6 +108,7 @@ function drawLabeledField(
     fontFamily,
     isDetailBold,
     align,
+    detailFontWeight,
   );
 }
 
@@ -103,11 +125,13 @@ export function renderFullEventTitle(
   initialFontSize = 34,
   minFontSize = 22,
   lineHeight = 38,
+  fontFamily = FONT_SANS,
+  fontWeight = '700',
 ): number {
   if (!text) return y;
 
   let fontSize = initialFontSize;
-  ctx.font = `400 ${fontSize}px ${FONT_SANS}`;
+  ctx.font = `${fontWeight} ${fontSize}px ${fontFamily}`;
 
   if (ctx.measureText(text).width <= maxWidth) {
     ctx.fillText(text, x, y);
@@ -116,7 +140,7 @@ export function renderFullEventTitle(
 
   while (fontSize > minFontSize) {
     fontSize -= 1;
-    ctx.font = `400 ${fontSize}px ${FONT_SANS}`;
+    ctx.font = `${fontWeight} ${fontSize}px ${fontFamily}`;
     if (ctx.measureText(text).width <= maxWidth) {
       ctx.fillText(text, x, y);
       return y;
@@ -348,7 +372,7 @@ export async function generateTicketCanvas(
     const titleWidth = Math.max(stubX - titleX - 40, 400);
     const initialFs = Math.round((title.fontSize || 26) * scaleFactor);
     ctx.fillStyle = title.color || '#0f172a';
-    renderFullEventTitle(ctx, ticket.eventTitle, titleX, titleY, titleWidth, initialFs, 20);
+    renderFullEventTitle(ctx, ticket.eventTitle, titleX, titleY, titleWidth, initialFs, 20, 38, fontFam, title.fontWeight || '700');
   }
 
   // Ticket Type / Zone (Matching other meta items, no frame)
@@ -358,6 +382,7 @@ export async function generateTicketCanvas(
     const badgeY = badge.y * scaleFactor;
     const fs = Math.round((badge.fontSize || 16) * scaleFactor);
     const align = badge.align || 'left';
+    const showHeader = badge.showSecondaryText === true && Boolean(badge.secondaryText);
     drawLabeledField(
       ctx,
       badge.secondaryText || 'โซน / ประเภทบัตร (ZONE & CATEGORY)',
@@ -373,7 +398,9 @@ export async function generateTicketCanvas(
       align,
       true,
       22,
-      `200 13px ${fontFam}`,
+      `500 11px ${fontFam}`,
+      showHeader,
+      badge.fontWeight || '700',
     );
   }
 
@@ -384,6 +411,7 @@ export async function generateTicketCanvas(
     const gY = gate.y * scaleFactor;
     const val = (ticket as unknown as { gate?: string }).gate || gate.text || 'GATE 2';
     const align = gate.align || 'left';
+    const showHeader = gate.showSecondaryText !== false;
     drawLabeledField(
       ctx,
       gate.secondaryText || 'ประตูทางเข้า (GATE)',
@@ -397,6 +425,10 @@ export async function generateTicketCanvas(
       gate.secondaryColor || '#64748b',
       gate.color || '#0f172a',
       align,
+      true,
+      22,
+      undefined,
+      showHeader,
     );
   }
 
@@ -411,6 +443,7 @@ export async function generateTicketCanvas(
       seat.text ||
       'แถว A / ที่นั่ง 14';
     const align = seat.align || 'left';
+    const showHeader = seat.showSecondaryText !== false;
     drawLabeledField(
       ctx,
       seat.secondaryText || 'แถว/ที่นั่ง (ROW / SEAT)',
@@ -424,6 +457,10 @@ export async function generateTicketCanvas(
       seat.secondaryColor || '#64748b',
       seat.color || '#0f172a',
       align,
+      true,
+      22,
+      undefined,
+      showHeader,
     );
   }
 
@@ -444,6 +481,7 @@ export async function generateTicketCanvas(
     }
     if (val) {
       const align = price.align || 'left';
+      const showHeader = price.showSecondaryText !== false;
       drawLabeledField(
         ctx,
         price.secondaryText || 'ราคาบัตร (PRICE)',
@@ -457,6 +495,10 @@ export async function generateTicketCanvas(
         price.secondaryColor || '#64748b',
         price.color || '#0f172a',
         align,
+        true,
+        22,
+        undefined,
+        showHeader,
       );
     }
   }
@@ -472,6 +514,7 @@ export async function generateTicketCanvas(
         }`
       : dt.text || '-';
     const align = dt.align || 'left';
+    const showHeader = dt.showSecondaryText !== false;
     drawLabeledField(
       ctx,
       dt.secondaryText || 'วันและเวลาแสดง (DATE & TIME)',
@@ -485,6 +528,10 @@ export async function generateTicketCanvas(
       dt.secondaryColor || '#64748b',
       dt.color || '#0f172a',
       align,
+      true,
+      22,
+      undefined,
+      showHeader,
     );
   }
 
@@ -494,6 +541,7 @@ export async function generateTicketCanvas(
     const venX = ven.x * scaleFactor;
     const venY = ven.y * scaleFactor;
     const align = ven.align || 'left';
+    const showHeader = ven.showSecondaryText !== false;
     drawLabeledField(
       ctx,
       ven.secondaryText || 'สถานที่จัดงาน (VENUE)',
@@ -507,6 +555,10 @@ export async function generateTicketCanvas(
       ven.secondaryColor || '#64748b',
       ven.color || '#0f172a',
       align,
+      true,
+      22,
+      undefined,
+      showHeader,
     );
   }
 
@@ -516,19 +568,25 @@ export async function generateTicketCanvas(
     const bX = buyer.x * scaleFactor;
     const bY = buyer.y * scaleFactor;
     const align = buyer.align || 'left';
+    const showHeader = buyer.showSecondaryText !== false;
+    const bMaxW = Math.max(stubX - bX - 20, 180 * scaleFactor);
     drawLabeledField(
       ctx,
       buyer.secondaryText || 'ผู้สั่งซื้อ (BUYER)',
       ticket.buyerName,
       bX,
       bY,
-      380 * scaleFactor,
+      bMaxW,
       Math.round((buyer.fontSize || 13) * scaleFactor),
       12,
       fontFam,
       buyer.secondaryColor || '#64748b',
       buyer.color || '#0f172a',
       align,
+      true,
+      22,
+      undefined,
+      showHeader,
     );
   }
 
@@ -538,19 +596,27 @@ export async function generateTicketCanvas(
     const tcX = tCode.x * scaleFactor;
     const tcY = tCode.y * scaleFactor;
     const align = tCode.align || 'left';
+    const showHeader = tCode.showSecondaryText !== false;
+    const tcMaxW = buyer?.visible && buyer.x > tCode.x && Math.abs(buyer.y - tCode.y) < 30
+      ? (buyer.x - tCode.x - 12) * scaleFactor
+      : 380 * scaleFactor;
     drawLabeledField(
       ctx,
       tCode.secondaryText || 'รหัสบัตร (TICKET CODE)',
       ticket.ticketCode,
       tcX,
       tcY,
-      380 * scaleFactor,
+      tcMaxW,
       Math.round((tCode.fontSize || 14) * scaleFactor),
       12,
       FONT_MONO,
       tCode.secondaryColor || '#64748b',
       tCode.color || '#0f172a',
       align,
+      true,
+      22,
+      undefined,
+      showHeader,
     );
   }
 

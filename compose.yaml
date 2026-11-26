@@ -7,7 +7,7 @@ services:
       POSTGRES_PASSWORD: ticket_local
       POSTGRES_DB: ticket_dev
     ports:
-      - '127.0.0.1:55432:5432'
+      - '127.0.0.1:54320:5432'
     volumes:
       - dev-data:/var/lib/postgresql
     healthcheck:
@@ -22,7 +22,7 @@ services:
       POSTGRES_PASSWORD: ticket_test_local
       POSTGRES_DB: ticket_test
     ports:
-      - '127.0.0.1:55433:5432'
+      - '127.0.0.1:54321:5432'
     tmpfs:
       - /var/lib/postgresql
     healthcheck:

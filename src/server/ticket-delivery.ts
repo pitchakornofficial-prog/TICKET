@@ -136,6 +136,9 @@ export function buildTicketEmailContent(
   tickets: TicketDetail[],
   orderUrl: string,
   template?: EmailTemplateState,
+  options?: {
+    cardImageDataUrls?: Record<string, string>;
+  },
 ): { subject: string; html: string; text: string } {
   const activeTemplate = template || DEFAULT_EMAIL_MASTER_TEMPLATE;
   const formattedSessionStart = thLocaleDateTimeFormatter.format(new Date(sessionStartTime));
@@ -200,19 +203,21 @@ export function buildTicketEmailContent(
           const safeTicketTypeName = escapeHtml(t.ticketTypeName);
           const safeTicketCode = escapeHtml(t.ticketCode);
           const cardImgUrl = baseUrl ? `${escapeHtml(baseUrl)}/api/public/tickets/${encodeURIComponent(t.id)}/image` : '';
+          const inlineCardImg = options?.cardImageDataUrls?.[t.id] || (t as { cardImageDataUrl?: string }).cardImageDataUrl || '';
+          const effectiveCardSrc = inlineCardImg || cardImgUrl;
           const qrImgUrl = baseUrl
             ? `${escapeHtml(baseUrl)}/api/public/tickets/${encodeURIComponent(t.id)}/qr`
             : escapeHtml(sanitizeEmailUrl(t.qrCodeUrl, { allowDataImage: true }));
 
           // Render high-res ticket pass image if card image is accessible
-          if (cardImgUrl) {
+          if (effectiveCardSrc) {
             return `
               <div style="margin-bottom: 20px; text-align: center;">
                 <div style="border-radius: 8px; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -2px rgba(0,0,0,0.1); border: 1px solid #e2e8f0; background: #0f172a;">
-                  <img src="${cardImgUrl}" alt="บัตรคอนเสิร์ต ${safeTicketTypeName} (${safeTicketCode})" style="width: 100%; height: auto; display: block;" />
+                  <img src="${effectiveCardSrc}" alt="บัตรคอนเสิร์ต ${safeTicketTypeName} (${safeTicketCode})" style="width: 100%; height: auto; display: block;" />
                 </div>
                 <div style="margin-top: 8px;">
-                  <a href="${cardImgUrl}" target="_blank" rel="noreferrer" style="font-size: 12px; color: #0f172a; text-decoration: underline; font-weight: 500;">
+                  <a href="${cardImgUrl || '#'}" target="_blank" rel="noreferrer" style="font-size: 12px; color: #0f172a; text-decoration: underline; font-weight: 500;">
                     ดาวน์โหลดรูปบัตรคอนเสิร์ตความละเอียดสูง (ใบที่ ${idx + 1}: ${safeTicketCode})
                   </a>
                 </div>
@@ -305,11 +310,19 @@ export function buildTicketEmailContent(
     `
     : '';
 
-  const posterUrl = activeTemplate.posterUrl?.trim() || '';
+  const rawPosterUrl =
+    activeTemplate.posterUrl?.trim() ||
+    firstTicket?.coverBannerUrl?.trim() ||
+    firstTicket?.eventPosterUrl?.trim() ||
+    '';
+  const posterUrl =
+    rawPosterUrl.startsWith('/') && baseUrl
+      ? `${baseUrl}${rawPosterUrl}`
+      : rawPosterUrl;
   const showPoster = activeTemplate.showConcertPoster !== false && Boolean(posterUrl);
   const posterBlockHtml = showPoster
-    ? `<div style="margin: 0 0 20px 0; overflow: hidden;">
-        <img src="${escapeHtml(posterUrl)}" alt="${safeEventTitle}" style="width: 100%; height: 220px; object-fit: cover; object-position: center; display: block;" />
+    ? `<div style="margin: 0 0 20px 0; overflow: hidden; border-radius: 8px 8px 0 0;">
+        <img src="${escapeHtml(posterUrl)}" alt="${safeEventTitle}" style="width: 100%; max-height: 240px; object-fit: cover; object-position: center; display: block;" />
       </div>`
     : '';
 
@@ -775,12 +788,14 @@ export async function sendDirectIssuedTicketsEmail(
     priceDisplayMode: string | null;
     eventTitle: string;
     location: string;
+    coverBannerUrl?: string | null;
+    posterUrl?: string | null;
     sessionStartTime: Date;
     sessionEndTime: Date;
   }>(
     `SELECT o.id, o."buyerName", o."buyerEmail", o."buyerPhone", o."orderSource",
             o."referenceNote", o."priceDisplayMode",
-            e.title as "eventTitle", e.location,
+            e.title as "eventTitle", e.location, e."coverBannerUrl", e."posterUrl",
             es."startTime" as "sessionStartTime", es."endTime" as "sessionEndTime"
      FROM orders o
      JOIN events e ON o."eventId" = e.id
@@ -906,6 +921,57 @@ export async function sendDirectIssuedTicketsEmail(
     ticketsText = tickets.map((t, idx) => `${idx + 1}. ${t.ticketTypeName} - รหัส: ${t.ticketCode}`).join('\n');
   }
 
+  const headerTitle = escapeHtml(
+    interpolateEmailVariables(
+      scenarioTemplate.headerTitle || 'TICKET - บัตรคอนเสิร์ตสำหรับเข้างาน (ออกบัตรตรง)',
+      vars,
+    ),
+  );
+  const greetingText = escapeHtml(
+    interpolateEmailVariables(
+      scenarioTemplate.greetingText || 'เรียนคุณ {{recipient_name}},',
+      vars,
+    ),
+  );
+  const bodyText = escapeHtml(
+    interpolateEmailVariables(
+      scenarioTemplate.bodyText ||
+        'ผู้จัดงานมีความยินดีมอบบัตรคอนเสิร์ต {{concert_name}} ให้แก่ท่านเพื่อเข้าชมการแสดงตามรายละเอียดด้านล่างนี้ กรุณาบันทึกภาพบัตรและ QR Code เพื่อนำมาแสดง ณ จุดลงทะเบียนเข้างาน:',
+      vars,
+    ),
+  ).replace(/\n/g, '<br/>');
+
+  const primaryBtnText = escapeHtml(scenarioTemplate.primaryButtonText || 'เปิดดูและบันทึกบัตรคอนเสิร์ต');
+  const rawBtnUrl = scenarioTemplate.primaryButtonUrl || '/direct-tickets/view';
+  const fullBtnUrl = rawBtnUrl.startsWith('http') ? rawBtnUrl : baseUrl ? `${baseUrl}${rawBtnUrl}` : rawBtnUrl;
+  const safeBtnUrl = escapeHtml(sanitizeEmailUrl(fullBtnUrl) || '#');
+
+  const footerNotes = escapeHtml(
+    interpolateEmailVariables(
+      scenarioTemplate.footerNotes ||
+        'บัตรนี้เป็นสิทธิ์เฉพาะบุคคล ห้ามนำไปจำหน่ายต่อ กรุณาแสดง QR Code ต่อเจ้าหน้าที่ลงทะเบียนในวันจัดงาน',
+      vars,
+    ),
+  ).replace(/\n/g, '<br/>');
+
+  const rawPosterUrl =
+    scenarioTemplate.posterUrl?.trim() ||
+    order.coverBannerUrl?.trim() ||
+    order.posterUrl?.trim() ||
+    tickets[0]?.coverBannerUrl?.trim() ||
+    tickets[0]?.eventPosterUrl?.trim() ||
+    '';
+  const posterUrl =
+    rawPosterUrl.startsWith('/') && baseUrl
+      ? `${baseUrl}${rawPosterUrl}`
+      : rawPosterUrl;
+  const showPoster = scenarioTemplate.showConcertPoster !== false && Boolean(posterUrl);
+  const posterBlockHtml = showPoster
+    ? `<div style="margin: 0 0 20px 0; overflow: hidden; border-radius: 8px 8px 0 0;">
+        <img src="${escapeHtml(posterUrl)}" alt="${escapeHtml(order.eventTitle)}" style="width: 100%; max-height: 240px; object-fit: cover; object-position: center; display: block;" />
+      </div>`
+    : '';
+
   const html = `
     <!DOCTYPE html>
     <html lang="th">
@@ -919,43 +985,50 @@ export async function sendDirectIssuedTicketsEmail(
           color-scheme: light;
           supported-color-schemes: light;
         }
-        .qr-solid-container {
-          background-color: #ffffff !important;
-          color-scheme: light !important;
-          padding: 12px !important;
-          border-radius: 8px !important;
-          display: inline-block !important;
-        }
-        .qr-solid-container img {
-          background-color: #ffffff !important;
-          display: block !important;
-        }
       </style>
     </head>
     <body style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; background-color: #f1f5f9; margin: 0; padding: 24px; color: #1e293b;">
       <div style="max-width: 600px; margin: 0 auto; background-color: #ffffff; border-radius: 12px; border: 1px solid #e2e8f0; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);">
-        <div style="background-color: #0f172a; padding: 20px 24px; color: #ffffff;">
-          <h1 style="font-size: 20px; font-weight: 400; margin: 0;">TICKET</h1>
-          <div style="font-size: 13px; color: #94a3b8; margin-top: 4px;">ระบบจำหน่ายบัตรคอนเสิร์ต</div>
+        <!-- Top Cover Banner (Horizontal Poster) -->
+        ${posterBlockHtml}
+
+        <!-- Email Header -->
+        <div style="padding: 24px 28px 16px; border-bottom: 1px solid #f1f5f9;">
+          <h1 style="font-size: 18px; font-weight: 700; color: #0f172a; margin: 0;">${headerTitle}</h1>
         </div>
-        <div style="padding: 24px;">
-          <div style="display: inline-block; background-color: #e0f2fe; color: #0369a1; font-size: 12px; font-weight: 400; padding: 4px 10px; border-radius: 9999px; margin-bottom: 12px;">
-            รายการออกบัตรตรง (Direct Issuance)
+
+        <div style="padding: 24px 28px;">
+          <div style="font-size: 15px; font-weight: 600; color: #0f172a; margin-bottom: 12px;">
+            ${greetingText}
           </div>
-          <h2 style="font-size: 18px; font-weight: 400; color: #0f172a; margin: 0 0 16px 0;">
-            ${escapeHtml(order.eventTitle)}
-          </h2>
-          <div style="background-color: #f8fafc; border-left: 4px solid #2563eb; padding: 12px 16px; margin-bottom: 20px; font-size: 14px; line-height: 1.6;">
-            <div><strong>หมายเลขรายการ:</strong> ${escapeHtml(order.id)}</div>
-            <div><strong>ผู้รับมอบบัตร:</strong> ${escapeHtml(order.buyerName)}</div>
-            <div><strong>รอบการแสดง:</strong> ${escapeHtml(formattedDate)}</div>
-            <div><strong>สถานที่จัดงาน:</strong> ${escapeHtml(order.location)}</div>
-            ${order.referenceNote ? `<div><strong>หมายเหตุอ้างอิง:</strong> ${escapeHtml(order.referenceNote)}</div>` : ''}
+          <div style="font-size: 14px; color: #475569; line-height: 1.6; margin-bottom: 20px;">
+            ${bodyText}
           </div>
+
+          <!-- Concert & Recipient Summary Box -->
+          <div style="background-color: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 14px 18px; margin-bottom: 24px; font-size: 13px; line-height: 1.6;">
+            <div style="font-size: 14px; font-weight: 600; color: #0f172a; margin-bottom: 6px;">${escapeHtml(order.eventTitle)}</div>
+            <div>ผู้รับมอบ: <strong style="color: #0f172a;">${escapeHtml(order.buyerName)}</strong></div>
+            <div>รอบการแสดง: <span style="color: #0f172a;">${escapeHtml(formattedDate)}</span></div>
+            <div>สถานที่: <span style="color: #0f172a;">${escapeHtml(order.location)}</span></div>
+            ${order.referenceNote ? `<div>หมายเหตุ: <span style="color: #64748b;">${escapeHtml(order.referenceNote)}</span></div>` : ''}
+            <div>รหัสบัตร: <code style="color: #2563eb; font-weight: 600;">${escapeHtml(vars.ticket_code)}</code></div>
+          </div>
+
+          <!-- Ticket Card Images (100% Designer Match) -->
           ${ticketsHtml}
-        </div>
-        <div style="background-color: #f8fafc; border-top: 1px solid #e2e8f0; padding: 16px 24px; text-align: center; font-size: 12px; color: #64748b;">
-          อีเมลนี้ถูกส่งโดยระบบอัตโนมัติของ TICKET เพื่อยืนยันการจัดสรรบัตรตรง
+
+          <!-- Action Button -->
+          <div style="text-align: center; margin: 28px 0 20px;">
+            <a href="${safeBtnUrl}" style="background-color: #0f172a; color: #ffffff; padding: 12px 28px; border-radius: 6px; font-weight: 600; font-size: 14px; text-decoration: none; display: inline-block;">
+              ${primaryBtnText}
+            </a>
+          </div>
+
+          <!-- Footer Notes -->
+          <div style="font-size: 11px; color: #64748b; line-height: 1.6; border-top: 1px solid #f1f5f9; padding-top: 16px; margin-top: 24px;">
+            ${footerNotes}
+          </div>
         </div>
       </div>
     </body>

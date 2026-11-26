@@ -479,7 +479,7 @@ export const EMAIL_SCENARIOS: Record<EmailScenarioKey, EmailScenarioDefinition> 
       greetingText: 'เรียนคุณ {{recipient_name}},',
       bodyText:
         'ผู้จัดงานมีความยินดีมอบบัตรคอนเสิร์ต {{concert_name}} ให้แก่ท่านเพื่อเข้าชมการแสดงตามรายละเอียดด้านล่างนี้ กรุณาบันทึกภาพบัตรและ QR Code เพื่อนำมาแสดง ณ จุดลงทะเบียนเข้างาน:',
-      showConcertPoster: false,
+      showConcertPoster: true,
       showTicketCard: true,
       primaryButtonText: 'เปิดดูและบันทึกบัตรคอนเสิร์ต',
       primaryButtonUrl: '/direct-tickets/view',

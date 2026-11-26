@@ -1,14 +1,9 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import Link from 'next/link';
 import { TicketIcon } from './ticket-icon';
-import {
-  CalendarIcon,
-  ChevronRightIcon,
-  SearchIcon,
-  XMarkIcon,
-} from './icons';
+import { CalendarIcon, ChevronRightIcon } from './icons';
 import { FloatingBackToTop } from './floating-back-to-top';
 import { formatDate } from '../lib/locale';
 
@@ -91,206 +86,39 @@ interface NewsListClientProps {
 }
 
 export function NewsListClient({ initialNews }: NewsListClientProps) {
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState('all');
-  const [timeframeFilter, setTimeframeFilter] = useState<TimeframeFilter>('all');
-  const [sortBy, setSortBy] = useState<NewsSortOption>('newest');
-
-  const filteredNews = useMemo(() => {
-    let result = [...initialNews];
-
-    // 1. Omni-search filter across title, snippet, category, and related concert
-    const q = searchQuery.trim().toLowerCase();
-    if (q) {
-      result = result.filter(item => {
-        const matchTitle = item.title.toLowerCase().includes(q);
-        const matchSnippet = item.snippet.toLowerCase().includes(q);
-        const matchCategory = item.category.toLowerCase().includes(q);
-        const matchRelated = item.relatedConcertTitle?.toLowerCase().includes(q);
-        return matchTitle || matchSnippet || matchCategory || Boolean(matchRelated);
-      });
-    }
-
-    // 2. Category filter
-    if (selectedCategory !== 'all') {
-      result = result.filter(item => {
-        if (selectedCategory === 'concert') {
-          return item.category.includes('คอนเสิร์ต');
-        }
-        if (selectedCategory === 'announcement') {
-          return item.category.includes('ประกาศ');
-        }
-        if (selectedCategory === 'perk') {
-          return item.category.includes('สิทธิพิเศษ') || item.category.includes('กิจกรรม');
-        }
-        if (selectedCategory === 'system') {
-          return item.category.includes('ระบบ') || item.category.includes('อัปเดต');
-        }
-        return item.category === selectedCategory;
-      });
-    }
-
-    // 3. Timeframe filter
-    if (timeframeFilter !== 'all') {
-      result = result.filter(item => isWithinTimeframe(item.publishedAt, timeframeFilter));
-    }
-
-    // 4. Sorting
-    result.sort((a, b) => {
+  const sortedNews = useMemo(() => {
+    return [...initialNews].sort((a, b) => {
       const timeA = new Date(a.publishedAt).getTime();
       const timeB = new Date(b.publishedAt).getTime();
-      return sortBy === 'newest' ? timeB - timeA : timeA - timeB;
+      return timeB - timeA;
     });
+  }, [initialNews]);
 
-    return result;
-  }, [initialNews, searchQuery, selectedCategory, timeframeFilter, sortBy]);
+  const heroArticle = sortedNews.length > 0 ? sortedNews[0] : null;
+  const gridArticles = sortedNews.length > 1 ? sortedNews.slice(1) : [];
 
-  const isFilteringActive =
-    searchQuery.trim().length > 0 ||
-    selectedCategory !== 'all' ||
-    timeframeFilter !== 'all' ||
-    sortBy !== 'newest';
-
-  const handleResetFilters = () => {
-    setSearchQuery('');
-    setSelectedCategory('all');
-    setTimeframeFilter('all');
-    setSortBy('newest');
-  };
-
-  const heroArticle = filteredNews.length > 0 ? filteredNews[0] : null;
-  const gridArticles = filteredNews.length > 1 ? filteredNews.slice(1) : [];
+  if (sortedNews.length === 0) {
+    return (
+      <div className="news-content-container">
+        <section
+          className="news-empty-container"
+          style={{
+            textAlign: 'center',
+            padding: '4rem 1rem',
+            color: 'var(--muted, #64748b)',
+          }}
+        >
+          <TicketIcon style={{ width: '48px', height: '48px', margin: '0 auto 1rem', opacity: 0.4 }} />
+          <p style={{ fontSize: '1.05rem', margin: 0 }}>ขณะนี้ยังไม่มีประกาศหรือข่าวสารใหม่</p>
+        </section>
+      </div>
+    );
+  }
 
   return (
     <div className="news-content-container">
-      {/* Omni-Search & Multi-Dimensional Filter Toolbar (D-173) */}
-      <section className="news-search-filter-toolbar" aria-label="ค้นหาและกรองข่าวสาร">
-        {/* Search Input Box */}
-        <div className="news-search-box">
-          <SearchIcon className="news-search-icon" aria-hidden="true" />
-          <input
-            id="news-search-input"
-            type="search"
-            value={searchQuery}
-            onChange={e => setSearchQuery(e.target.value)}
-            placeholder="ค้นหาข่าวสาร ประกาศสำคัญ หรือชื่อคอนเสิร์ต..."
-            className="news-search-input"
-            aria-label="ค้นหาข่าวสาร"
-          />
-          {searchQuery && (
-            <button
-              type="button"
-              className="news-search-clear-btn"
-              onClick={() => setSearchQuery('')}
-              aria-label="ล้างคำค้นหา"
-            >
-              <XMarkIcon style={{ width: '16px', height: '16px' }} />
-            </button>
-          )}
-        </div>
-
-        {/* Unified Secondary Row (D-174): Category Capsule Tabs (Left) + Search-Style Filter Controls (Right) */}
-        <div className="news-toolbar-secondary-row">
-          {/* Category Tabs: Exact Parity with Home Page .catalog-tabs / .catalog-tab-btn (D-175, D-176) */}
-          <div className="catalog-tabs news-filter-pills" role="tablist" aria-label="เลือกหมวดหมู่ข่าวสาร">
-            {CATEGORY_TABS.map(tab => {
-              const isActive = selectedCategory === tab.id;
-              const displayLabel =
-                tab.id === 'all'
-                  ? `${tab.label} (${initialNews.length})`
-                  : tab.label;
-              return (
-                <button
-                  key={tab.id}
-                  type="button"
-                  role="tab"
-                  aria-selected={isActive}
-                  className={`catalog-tab-btn ${isActive ? 'active' : ''}`}
-                  onClick={() => setSelectedCategory(tab.id)}
-                  data-testid={`news-category-${tab.id}`}
-                >
-                  <span>{displayLabel}</span>
-                </button>
-              );
-            })}
-          </div>
-
-          {/* Filter Controls: Search Page Dropdown Style (Image 2, D-174, D-179) */}
-          <div className="news-filter-controls-group">
-            <div className="filter-group-item news-filter-field">
-              <label htmlFor="news-timeframe-select" className="filter-label news-filter-label">
-                <CalendarIcon className="filter-icon" />
-                <span>ช่วงเวลา</span>
-              </label>
-              <select
-                id="news-timeframe-select"
-                value={timeframeFilter}
-                onChange={e => setTimeframeFilter(e.target.value as TimeframeFilter)}
-                className="filter-select news-select-input"
-                aria-label="กรองช่วงเวลา"
-              >
-                {TIMEFRAME_OPTIONS.map(opt => (
-                  <option key={opt.id} value={opt.id}>
-                    {opt.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div className="filter-group-item news-filter-field">
-              <label htmlFor="news-sort-select" className="filter-label news-filter-label">
-                <span>จัดเรียงตาม</span>
-              </label>
-              <select
-                id="news-sort-select"
-                value={sortBy}
-                onChange={e => setSortBy(e.target.value as NewsSortOption)}
-                className="filter-select news-select-input"
-                aria-label="เรียงลำดับข่าวสาร"
-              >
-                <option value="newest">ข่าวล่าสุด</option>
-                <option value="oldest">ข่าวแรกสุด</option>
-              </select>
-            </div>
-
-            {isFilteringActive && (
-              <div className="news-filter-reset-wrap">
-                <button
-                  type="button"
-                  id="news-clear-filters-btn"
-                  className="search-reset-filters-btn news-filter-reset-btn"
-                  onClick={handleResetFilters}
-                  title="ล้างการค้นหาและตัวกรองทั้งหมด"
-                >
-                  ล้างตัวกรองทั้งหมด
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
-      </section>
-
-      {/* Main Content Area: Empty State OR Hero Article + Magazine Grid */}
-      {filteredNews.length === 0 ? (
-        <section
-          className="empty-catalog-card news-empty-card"
-          aria-label="ไม่พบข่าวสารที่ตรงกับการค้นหาหรือตัวกรอง"
-        >
-          <TicketIcon className="empty-icon" />
-          <h2>ไม่พบข่าวสารที่ตรงกับเงื่อนไข</h2>
-          <p>ลองปรับคำค้นหา หรือกดล้างตัวกรองเพื่อดูข่าวสารและประกาศทั้งหมดของ TICKET</p>
-          <button
-            type="button"
-            className="primary-button button-link"
-            onClick={handleResetFilters}
-          >
-            ล้างการค้นหาและตัวกรองทั้งหมด
-          </button>
-        </section>
-      ) : (
-        <>
-          {/* 1. Hero Highlight Article (D-173) */}
-          {heroArticle && (
+      {/* 1. Hero Highlight Article (D-173) */}
+      {heroArticle && (
             <article className="news-hero-card" aria-label={`ข่าวเด่น: ${heroArticle.title}`}>
               <Link
                 href={`/news/${heroArticle.id}`}
@@ -419,8 +247,6 @@ export function NewsListClient({ initialNews }: NewsListClientProps) {
               </section>
             </div>
           )}
-        </>
-      )}
 
       {/* Universal Floating Back-to-Top Button (D-172) */}
       <FloatingBackToTop testId="news-back-to-top-btn" />

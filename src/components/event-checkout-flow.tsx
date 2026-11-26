@@ -457,7 +457,19 @@ export function EventCheckoutFlow({
   return (
     <div className="event-detail-page">
       <nav className="detail-breadcrumb" aria-label="ย้อนกลับ">
-        <Link href={`/events/${eventId}`} replace className="back-link" onClick={handleBackToDetails}>
+        <Link
+          href={`/events/${eventId}`}
+          replace
+          className="back-link"
+          onClick={e => {
+            e.preventDefault();
+            window.dispatchEvent(
+              new CustomEvent('ticket:request-exit', {
+                detail: { targetUrl: `/events/${eventId}`, onConfirm: handleBackToDetails },
+              }),
+            );
+          }}
+        >
           <ArrowLeftIcon /> ย้อนกลับไปหน้ารายละเอียดคอนเสิร์ต
         </Link>
       </nav>
