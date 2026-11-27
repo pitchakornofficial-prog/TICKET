@@ -4,10 +4,12 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import type { DirectTicketBatchSummary } from '@/server/direct-tickets';
 import type { TicketDetail } from '@/server/tickets';
 import { formatBaht, formatDate, formatTime } from '@/lib/locale';
+import { loadOwnerMasterTemplate } from '@/lib/ticket-master-template-sync';
 import { triggerToast, triggerRefreshToast } from './toast-notification';
 import {
   downloadTicketAsPng,
   downloadAllTicketsAsZip,
+  generateTicketDataUrl,
 } from './ticket-canvas-download';
 import {
   RefreshIcon,
@@ -351,12 +353,35 @@ export function OwnerDirectTicketsManager() {
           priceDisplayMode,
           referenceNote: referenceNote.trim() || undefined,
           sendEmail,
+          deferEmail: sendEmail,
         }),
       });
 
       const data = await res.json();
       if (!res.ok) {
         throw new Error(data.message || data.error || 'ออกบัตรตรงไม่สำเร็จ');
+      }
+
+      if (sendEmail && data.orderId) {
+        const masterTemplate = await loadOwnerMasterTemplate().catch(() => null);
+        const issuedTickets: TicketDetail[] = Array.isArray(data.tickets) ? data.tickets : [];
+        const renderedImages: Array<{ ticketId: string; dataUrl: string }> = [];
+        for (const t of issuedTickets.slice(0, 20)) {
+          try {
+            const dataUrl = await generateTicketDataUrl(
+              { ...t, priceDisplayMode } as TicketDetail,
+              masterTemplate ?? undefined,
+            );
+            if (dataUrl) renderedImages.push({ ticketId: t.id, dataUrl });
+          } catch {
+            // Skip failed browser render; server fallback handles missing entries
+          }
+        }
+        await fetch(`/api/owner/direct-tickets/${data.orderId}/resend-email`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ renderedImages }),
+        });
       }
 
       triggerToast({
@@ -452,8 +477,27 @@ export function OwnerDirectTicketsManager() {
     if (!viewingBatch) return;
     setIsResendingEmail(true);
     try {
+      const masterTemplate = await loadOwnerMasterTemplate().catch(() => null);
+      const renderedImages: Array<{ ticketId: string; dataUrl: string }> = [];
+      for (const t of batchTickets.slice(0, 20)) {
+        try {
+          const dataUrl = await generateTicketDataUrl(
+            {
+              ...t,
+              priceDisplayMode: viewingBatch.priceDisplayMode,
+            } as TicketDetail,
+            masterTemplate ?? undefined,
+          );
+          if (dataUrl) renderedImages.push({ ticketId: t.id, dataUrl });
+        } catch {
+          // Fallback to server-side render if canvas fails
+        }
+      }
+
       const res = await fetch(`/api/owner/direct-tickets/${viewingBatch.orderId}/resend-email`, {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ renderedImages }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'ส่งอีเมลไม่สำเร็จ');

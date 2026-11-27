@@ -136,8 +136,9 @@ describe('Ticket PNG Generation (QR and Card)', () => {
     expect(canvasContent).toContain('template.titleFontWeight');
     expect(canvasContent).toContain('template.bodyFontWeight');
 
-    // 3. Server PNG embeds Kanit & custom fonts, uses dominant-baseline="hanging", and renders all elements
-    expect(pngContent).toContain('getEmbeddedKanitFontCss');
+    // 3. Server PNG embeds Kanit & custom fonts via Resvg, uses dominant-baseline="hanging", and renders all elements
+    expect(pngContent).toContain('getEmbeddedKanitFontFiles');
+    expect(pngContent).toContain('new Resvg(');
     expect(pngContent).toContain('dominant-baseline="hanging"');
     expect(pngContent).toContain('template?.titleFontWeight');
     expect(pngContent).toContain('template?.bodyFontWeight');

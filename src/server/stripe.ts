@@ -330,6 +330,9 @@ export class StripeContractDouble implements StripeClient {
     const intent = this.intents.get(intentId);
     if (intent) {
       intent.status = status;
+      if (status === 'succeeded') {
+        intent.amount_received = intent.amount;
+      }
     }
   }
 

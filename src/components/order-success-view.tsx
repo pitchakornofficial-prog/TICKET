@@ -18,7 +18,7 @@ import {
 } from './icons';
 import { OrderLinkOtpGate } from './order-link-otp-gate';
 import { TicketIcon } from './ticket-icon';
-import { downloadTicketAsPng, downloadAllTicketsAsPng, generateTicketDataUrl } from './ticket-canvas-download';
+import { downloadTicketAsPng, downloadAllTicketsAsPng, generateTicketDataUrl, syncBrowserRenderedTicketImage } from './ticket-canvas-download';
 
 interface OrderSuccessViewProps {
   orderId: string;
@@ -127,12 +127,15 @@ export function OrderSuccessView({ orderId }: OrderSuccessViewProps) {
     // Generate image URLs for tickets to ensure 100% parity between on-screen view and downloaded file (D-165, D-168)
     let active = true;
     if (tickets && tickets.length > 0) {
-      for (const tkt of tickets) {
+      for (const [idx, tkt] of tickets.entries()) {
         if (!ticketImageUrls[tkt.id]) {
           generateTicketDataUrl(tkt)
             .then(url => {
               if (active) {
                 setTicketImageUrls(prev => ({ ...prev, [tkt.id]: url }));
+              }
+              if (idx < 20) {
+                void syncBrowserRenderedTicketImage(tkt.id, url);
               }
             })
             .catch(() => {
@@ -584,7 +587,7 @@ export function OrderSuccessView({ orderId }: OrderSuccessViewProps) {
                       data-ticket-id={tkt.id}
                       style={
                         ticketImageUrls[tkt.id]
-                          ? { padding: 0, border: 'none', background: 'transparent', boxShadow: 'none' }
+                          ? { padding: 0, border: 'none', background: 'transparent', boxShadow: 'none', minHeight: 'auto' }
                           : undefined
                       }
                     >

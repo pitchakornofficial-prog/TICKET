@@ -299,7 +299,7 @@ export function GuestOrderRefundManager({
       )}
 
       {/* Refund Request Toggle Button */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <div className="lookup-refund-actions-bar">
         <button
           type="button"
           onClick={() => {
@@ -308,25 +308,13 @@ export function GuestOrderRefundManager({
             setSuccessMessage(null);
           }}
           data-testid="toggle-refund-section-btn"
-          style={{
-            backgroundColor: isOpen ? '#f1f5f9' : '#ffffff',
-            border: '1px solid #cbd5e1',
-            borderRadius: '6px',
-            padding: '8px 16px',
-            fontSize: '13px',
-            fontWeight: 400,
-            color: '#1848ed',
-            cursor: 'pointer',
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: '6px',
-          }}
+          className={`lookup-refund-toggle-btn ${isOpen ? 'is-open' : ''}`}
         >
           {isOpen ? 'ซ่อนแบบฟอร์มขอคืนเงิน' : 'ยื่นคำขอคืนเงินบัตร (บางใบหรือทั้งหมด)'}
         </button>
 
         {eligibility && (
-          <span style={{ fontSize: '12px', color: '#64748b' }}>
+          <span className="lookup-refund-eligibility-note">
             บัตรที่สามารถยื่นคืนได้ {eligibleCount} จาก {eligibility.tickets.length} ใบ
           </span>
         )}

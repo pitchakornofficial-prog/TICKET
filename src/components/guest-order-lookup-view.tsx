@@ -18,7 +18,7 @@ import {
 } from './icons';
 import { AlertIcon } from './alert-icon';
 import { TicketIcon } from './ticket-icon';
-import { downloadTicketAsPng, downloadAllTicketsAsPng, generateTicketDataUrl } from './ticket-canvas-download';
+import { downloadTicketAsPng, downloadAllTicketsAsPng, generateTicketDataUrl, syncBrowserRenderedTicketImage } from './ticket-canvas-download';
 import { FloatingBackToTop } from './floating-back-to-top';
 import { OrderRefundSection } from './guest-order-refund-manager';
 
@@ -138,12 +138,15 @@ export function GuestOrderLookupView({ initialOrderId }: GuestOrderLookupViewPro
     let active = true;
     async function loadTicketImages() {
       for (const ord of orders) {
-        for (const tkt of ord.tickets || []) {
+        for (const [idx, tkt] of (ord.tickets || []).entries()) {
           if (!ticketImageUrls[tkt.id]) {
             try {
               const url = await generateTicketDataUrl(tkt);
               if (active) {
                 setTicketImageUrls(prev => ({ ...prev, [tkt.id]: url }));
+              }
+              if (idx < 20) {
+                void syncBrowserRenderedTicketImage(tkt.id, url);
               }
             } catch {
               // fallback is handled
@@ -802,7 +805,9 @@ export function GuestOrderLookupView({ initialOrderId }: GuestOrderLookupViewPro
                 <TicketIcon style={{ width: '24px', height: '24px', color: '#0f172a' }} />
               </div>
               <div className="lookup-session-contact-prominent">
-                อีเมล: {buyerInfo?.email} · โทรศัพท์: {buyerInfo?.phone}
+                <span className="lookup-contact-item">อีเมล: {buyerInfo?.email}</span>
+                <span className="lookup-contact-sep" aria-hidden="true"> · </span>
+                <span className="lookup-contact-item">โทรศัพท์: {buyerInfo?.phone}</span>
               </div>
             </div>
           </div>
@@ -1145,14 +1150,7 @@ export function GuestOrderLookupView({ initialOrderId }: GuestOrderLookupViewPro
                                         type="button"
                                         onClick={() => handleDownloadAll(order.tickets)}
                                         disabled={isDownloadingAll}
-                                        className="primary-button"
-                                        style={{
-                                          display: 'inline-flex',
-                                          alignItems: 'center',
-                                          gap: '0.5rem',
-                                          fontSize: '0.88rem',
-                                          padding: '0.55rem 1rem',
-                                        }}
+                                        className="secondary-button lookup-download-all-btn"
                                       >
                                         <DownloadIcon style={{ width: '16px', height: '16px' }} />
                                         <span>
@@ -1174,7 +1172,7 @@ export function GuestOrderLookupView({ initialOrderId }: GuestOrderLookupViewPro
                                           data-ticket-id={tkt.id}
                                           style={
                                             ticketImageUrls[tkt.id]
-                                              ? { padding: 0, border: 'none', background: 'transparent', boxShadow: 'none' }
+                                              ? { padding: 0, border: 'none', background: 'transparent', boxShadow: 'none', minHeight: 'auto' }
                                               : undefined
                                           }
                                         >

@@ -4,12 +4,49 @@ import { generateCustomQrSvg } from '@/lib/ticket-qr';
 import {
   type TicketDesignerState,
   loadLocalMasterTemplate,
+  loadPublicMasterTemplate,
 } from '@/lib/ticket-master-template-sync';
 
 export const FONT_SANS = 'Kanit, "Noto Sans Thai", "Segoe UI", -apple-system, BlinkMacSystemFont, sans-serif';
 export const FONT_MONO = 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace';
 
 const loadedFontCache = new Set<string>();
+let cachedServerMasterTemplate: TicketDesignerState | null = null;
+let inFlightMasterTemplateFetch: Promise<TicketDesignerState | null> | null = null;
+let templateInvalidationListenerBound = false;
+
+async function resolveFreshMasterTemplate(): Promise<TicketDesignerState> {
+  if (typeof window === 'undefined') {
+    return loadLocalMasterTemplate();
+  }
+  if (!templateInvalidationListenerBound) {
+    templateInvalidationListenerBound = true;
+    const invalidate = () => {
+      cachedServerMasterTemplate = null;
+      inFlightMasterTemplateFetch = null;
+    };
+    window.addEventListener('ticket_master_template_updated', invalidate);
+    window.addEventListener('ticket:master-template-changed', invalidate);
+  }
+  if (cachedServerMasterTemplate) {
+    return cachedServerMasterTemplate;
+  }
+  if (!inFlightMasterTemplateFetch) {
+    inFlightMasterTemplateFetch = loadPublicMasterTemplate()
+      .then((tpl) => {
+        if (tpl) {
+          cachedServerMasterTemplate = tpl;
+        }
+        return tpl;
+      })
+      .catch(() => null)
+      .finally(() => {
+        inFlightMasterTemplateFetch = null;
+      });
+  }
+  const serverTemplate = await inFlightMasterTemplateFetch;
+  return serverTemplate || loadLocalMasterTemplate();
+}
 
 /**
  * Ensures custom uploaded fonts and selected Google Fonts (Sarabun, Prompt, Chakra Petch)
@@ -277,7 +314,7 @@ export async function generateTicketCanvas(
   const ctx = canvas.getContext('2d');
   if (!ctx) throw new Error('Canvas 2D context not supported');
 
-  const template = overrideTemplate || loadLocalMasterTemplate();
+  const template = overrideTemplate || (await resolveFreshMasterTemplate());
   await ensureTemplateFontsLoaded(template);
 
   const fontFam = template.fontFamily && template.fontFamily !== 'Kanit'
@@ -1058,4 +1095,41 @@ export async function downloadAllTicketsAsZip(
   a.click();
   document.body.removeChild(a);
   URL.revokeObjectURL(downloadUrl);
+}
+
+const syncedTicketImageKeys = new Set<string>();
+
+/**
+ * Best-effort background upload of a browser-rendered ticket PNG so email links
+ * and /api/public/tickets/[id]/image serve the exact web-rendered image.
+ */
+export async function syncBrowserRenderedTicketImage(
+  ticketId: string,
+  dataUrl: string,
+): Promise<void> {
+  if (typeof window === 'undefined' || !ticketId || !dataUrl.startsWith('data:image/png;base64,')) {
+    return;
+  }
+  const cacheKey = `${ticketId}:${dataUrl.length}`;
+  if (syncedTicketImageKeys.has(cacheKey)) return;
+  syncedTicketImageKeys.add(cacheKey);
+
+  try {
+    const guestToken = sessionStorage.getItem('ticket_guest_otp_token') || '';
+    const orderToken = new URLSearchParams(window.location.search).get('token') || '';
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (guestToken) headers['x-guest-token'] = guestToken;
+    if (orderToken) headers['x-order-token'] = orderToken;
+
+    const res = await fetch(`/api/public/tickets/${encodeURIComponent(ticketId)}/image`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ dataUrl }),
+    });
+    if (!res.ok) {
+      syncedTicketImageKeys.delete(cacheKey);
+    }
+  } catch {
+    syncedTicketImageKeys.delete(cacheKey);
+  }
 }

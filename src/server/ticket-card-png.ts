@@ -1,5 +1,8 @@
-import { readFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { Resvg } from '@resvg/resvg-js';
 import sharp from 'sharp';
 import type { Pool } from 'pg';
 import type { TicketDetail } from './tickets.ts';
@@ -18,38 +21,20 @@ function escapeXml(value: string): string {
     .replaceAll("'", '&apos;');
 }
 
-let cachedKanitFontCss: string | null = null;
+let cachedKanitFontFiles: string[] | null = null;
 
-function getEmbeddedKanitFontCss(): string {
-  if (cachedKanitFontCss !== null) return cachedKanitFontCss;
-  const weights = [200, 300, 400, 500, 600, 700];
-  const subsets = ['thai', 'latin'];
-  const rules: string[] = [];
-
-  for (const weight of weights) {
-    for (const subset of subsets) {
-      try {
-        const fontPath = join(
-          process.cwd(),
-          'node_modules',
-          '@fontsource',
-          'kanit',
-          'files',
-          `kanit-${subset}-${weight}-normal.woff`,
-        );
-        const buf = readFileSync(fontPath);
-        const b64 = buf.toString('base64');
-        rules.push(
-          `@font-face { font-family: 'Kanit'; font-style: normal; font-weight: ${weight}; src: url('data:font/woff;base64,${b64}') format('woff'); }`,
-        );
-      } catch {
-        // Ignore missing subset/weight file
-      }
+function getEmbeddedKanitFontFiles(): string[] {
+  if (cachedKanitFontFiles !== null) return cachedKanitFontFiles;
+  const files = ['Kanit-Regular.ttf', 'Kanit-SemiBold.ttf'];
+  const paths: string[] = [];
+  for (const file of files) {
+    const fullPath = join(process.cwd(), 'src', 'server', 'fonts', file);
+    if (existsSync(fullPath)) {
+      paths.push(fullPath);
     }
   }
-
-  cachedKanitFontCss = rules.join('\n');
-  return cachedKanitFontCss;
+  cachedKanitFontFiles = paths;
+  return cachedKanitFontFiles;
 }
 
 function guessFontMimeAndFormat(url: string): { mime: string; format: string } {
@@ -68,7 +53,12 @@ async function resolveImageBuffer(url: string | null | undefined): Promise<Buffe
     const commaIndex = trimmed.indexOf(',');
     if (commaIndex !== -1) {
       try {
-        return Buffer.from(trimmed.slice(commaIndex + 1), 'base64');
+        const meta = trimmed.slice(0, commaIndex).toLowerCase();
+        const payload = trimmed.slice(commaIndex + 1);
+        if (meta.includes(';base64')) {
+          return Buffer.from(payload, 'base64');
+        }
+        return Buffer.from(decodeURIComponent(payload), 'utf8');
       } catch {
         return null;
       }
@@ -85,15 +75,24 @@ async function resolveImageBuffer(url: string | null | undefined): Promise<Buffe
       // Ignore key decode failure
     }
 
-    // Fallback: try loopback fetch if running server
-    try {
-      const res = await fetch(`http://127.0.0.1:3000${trimmed}`, { signal: AbortSignal.timeout(1500) });
-      if (res.ok) {
-        const arr = await res.arrayBuffer();
-        return Buffer.from(arr);
+    // Fallback: try loopback / configured origin fetch if running server
+    const candidateOrigins = Array.from(
+      new Set([
+        process.env.BETTER_AUTH_URL?.replace(/\/$/, ''),
+        `http://127.0.0.1:${process.env.PORT || 3000}`,
+        'http://127.0.0.1:3000',
+      ].filter((v): v is string => Boolean(v))),
+    );
+    for (const origin of candidateOrigins) {
+      try {
+        const res = await fetch(`${origin}${trimmed}`, { signal: AbortSignal.timeout(3000) });
+        if (res.ok) {
+          const arr = await res.arrayBuffer();
+          return Buffer.from(arr);
+        }
+      } catch {
+        // Loopback fetch failed
       }
-    } catch {
-      // Loopback fetch failed
     }
   }
 
@@ -154,19 +153,25 @@ export async function generateTicketCardPngBuffer(
   const defaultTitleWeight = String(template?.titleFontWeight ?? 400);
   const defaultBodyWeight = String(template?.bodyFontWeight ?? 400);
 
-  // Build embedded @font-face CSS (Kanit + optional custom uploaded font)
-  const fontRules: string[] = [getEmbeddedKanitFontCss()];
+  // Collect TTF/OTF font files for Resvg (works identically on Windows/Linux/Docker without OS fonts)
+  const fontFiles: string[] = [...getEmbeddedKanitFontFiles()];
   if (template?.customFontUrl && template?.customFontName) {
     const customFontBuf = await resolveImageBuffer(template.customFontUrl);
     if (customFontBuf) {
-      const { mime, format } = guessFontMimeAndFormat(template.customFontUrl);
-      const safeName = template.customFontName.replaceAll("'", '');
-      fontRules.push(
-        `@font-face { font-family: '${safeName}'; font-style: normal; font-weight: 100 900; src: url('data:${mime};base64,${customFontBuf.toString('base64')}') format('${format}'); }`,
-      );
+      const { format } = guessFontMimeAndFormat(template.customFontUrl);
+      if (format === 'truetype' || format === 'opentype') {
+        const ext = format === 'opentype' ? 'otf' : 'ttf';
+        const hash = createHash('sha256').update(customFontBuf).digest('hex').slice(0, 16);
+        const fontCacheDir = join(tmpdir(), 'ticket-resvg-fonts');
+        mkdirSync(fontCacheDir, { recursive: true });
+        const tempFontPath = join(fontCacheDir, `${hash}.${ext}`);
+        if (!existsSync(tempFontPath)) {
+          writeFileSync(tempFontPath, customFontBuf);
+        }
+        fontFiles.push(tempFontPath);
+      }
     }
   }
-  const fontStyleBlock = `<defs><style>${fontRules.filter(Boolean).join('\n')}</style></defs>`;
 
   // Formatted date and time values
   const sessionDate = ticket.sessionStartTime
@@ -504,12 +509,16 @@ export async function generateTicketCardPngBuffer(
   const qrInnerPad = Math.round(8 * scale);
   const qrInnerSize = qrSize - qrInnerPad * 2;
 
+  const qrViewBoxMatch = qrSvgXml.match(/viewBox="0 0 (\d+) (\d+)"/);
+  const qrNativeSize = qrViewBoxMatch ? Number(qrViewBoxMatch[1]) : 222;
+  const qrInnerSvg = qrSvgXml.replace(/^<svg[^>]*>/i, '').replace(/<\/svg>\s*$/i, '');
+
   if (elQr?.visible !== false) {
     elementsSvg.push(
       `<rect x="${qrX}" y="${qrY}" width="${qrSize}" height="${qrSize}" rx="${Math.round(8 * scale)}" fill="#ffffff" stroke="#e2e8f0" stroke-width="${Math.max(1, Math.round(scale))}" />`,
     );
     elementsSvg.push(
-      `<g transform="translate(${qrX + qrInnerPad}, ${qrY + qrInnerPad}) scale(${qrInnerSize / 250})">${qrSvgXml}</g>`,
+      `<svg x="${qrX + qrInnerPad}" y="${qrY + qrInnerPad}" width="${qrInnerSize}" height="${qrInnerSize}" viewBox="0 0 ${qrNativeSize} ${qrNativeSize}">${qrInnerSvg}</svg>`,
     );
   }
 
@@ -563,7 +572,9 @@ export async function generateTicketCardPngBuffer(
   if (elOrderId?.visible !== false) {
     const centerX = qrX + Math.round(qrSize / 2);
     const y = Math.round((elOrderId?.y ?? 362) * scale);
-    const fontSize = Math.round((elOrderId?.fontSize ?? 11) * scale);
+    const rawFontSize = Math.round((elOrderId?.fontSize ?? 11) * scale);
+    const rawOrderIdText = ticket.orderId || elOrderId?.text || '-';
+    const fontSize = rawOrderIdText.length > 24 ? Math.min(rawFontSize, Math.round(9 * scale)) : rawFontSize;
     const secPx = elOrderId?.secondaryFontSize || 10;
     const secSize = Math.round(secPx * scale);
     const bodyWeight = elOrderId?.fontWeight || defaultBodyWeight;
@@ -612,6 +623,20 @@ export async function generateTicketCardPngBuffer(
     `<rect x="${borderWidth / 2}" y="${borderWidth / 2}" width="${width - borderWidth}" height="${height - borderWidth}" rx="${cardRadius}" fill="none" stroke="${borderColor}" stroke-width="${borderWidth}" />`,
   );
 
+  const renderSvgWithResvg = (svgMarkup: string): Buffer => {
+    const resvg = new Resvg(svgMarkup, {
+      fitTo: { mode: 'width', value: width },
+      font: {
+        fontFiles,
+        defaultFontFamily: 'Kanit',
+        sansSerifFamily: 'Kanit',
+        monospaceFamily: 'Kanit',
+        loadSystemFonts: false,
+      },
+    });
+    return Buffer.from(resvg.render().asPng());
+  };
+
   // 4. Combine Background + SVG Overlay
   if (bgBuffer) {
     const resizedBg = await sharp(bgBuffer)
@@ -620,13 +645,13 @@ export async function generateTicketCardPngBuffer(
 
     const overlaySvg = `
 <svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
-  ${fontStyleBlock}
   ${template?.bgOverlayDarkness ? `<rect x="0" y="0" width="${width}" height="${height}" fill="#000000" opacity="${template.bgOverlayDarkness / 100}" />` : ''}
   ${elementsSvg.join('\n  ')}
 </svg>`;
 
+    const overlayPng = renderSvgWithResvg(overlaySvg);
     return await sharp(resizedBg)
-      .composite([{ input: Buffer.from(overlaySvg), top: 0, left: 0 }])
+      .composite([{ input: overlayPng, top: 0, left: 0 }])
       .png()
       .toBuffer();
   }
@@ -646,16 +671,18 @@ export async function generateTicketCardPngBuffer(
       </defs>
       <rect x="0" y="0" width="${width}" height="${height}" rx="${cardRadius}" fill="url(#ticketBgGrad)" />`;
   } else {
-    const bgColor = template?.bgColor || '#ffffff';
+    const hasLightText = ['#fff', '#ffffff', '#f8fafc', '#f1f5f9', '#e2e8f0'].includes(
+      (els.eventTitle?.color || '').toLowerCase(),
+    );
+    const bgColor = bgType === 'image' && hasLightText ? '#1e293b' : (template?.bgColor || '#ffffff');
     bgElement = `<rect x="0" y="0" width="${width}" height="${height}" rx="${cardRadius}" fill="${bgColor}" />`;
   }
 
   const fullSvg = `
 <svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">
-  ${fontStyleBlock}
   ${bgElement}
   ${elementsSvg.join('\n  ')}
 </svg>`;
 
-  return await sharp(Buffer.from(fullSvg)).png().toBuffer();
+  return renderSvgWithResvg(fullSvg);
 }

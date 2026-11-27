@@ -6996,27 +6996,128 @@ textarea.text-input {
   border-color: #0f172a;
 }
 
+.lookup-download-all-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  font-size: 0.88rem;
+  padding: 0.55rem 1rem;
+  background: #ffffff;
+  color: #0f172a;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+}
+
+.lookup-refund-actions-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+
+.lookup-refund-toggle-btn {
+  background-color: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 400;
+  color: #1848ed;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.lookup-refund-toggle-btn.is-open {
+  background-color: #f1f5f9;
+}
+
+.lookup-refund-eligibility-note {
+  font-size: 12px;
+  color: #64748b;
+  white-space: nowrap;
+}
+
 @media (max-width: 768px) {
   .lookup-search-filter-toolbar {
     flex-direction: column;
     align-items: stretch;
+    gap: 0.75rem;
     padding: 0.85rem;
   }
   .lookup-search-box {
+    flex: 0 0 auto;
     width: 100%;
     min-width: 0;
+    min-height: 42px;
+    height: auto;
+    box-sizing: border-box;
   }
   .lookup-toolbar-right {
-    justify-content: space-between;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.65rem;
     width: 100%;
   }
   .lookup-tabs-wrap {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.4rem;
     width: 100%;
-    overflow-x: auto;
+  }
+  .lookup-tab-pill {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 0.45rem 0.5rem;
+    font-size: 0.8rem;
   }
   .lookup-sort-wrap {
     width: 100%;
-    justify-content: flex-end;
+    justify-content: space-between;
+    gap: 0.6rem;
+  }
+  .lookup-sort-select {
+    flex: 1;
+    min-width: 0;
+  }
+}
+
+@media (max-width: 640px) {
+  .lookup-session-contact-prominent {
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+    font-size: 0.95rem;
+  }
+  .lookup-contact-sep {
+    display: none;
+  }
+  .lookup-tickets-header-row {
+    justify-content: center;
+  }
+  .lookup-download-all-btn {
+    width: 100%;
+    justify-content: center;
+  }
+  .lookup-refund-actions-bar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.45rem;
+  }
+  .lookup-refund-toggle-btn {
+    width: 100%;
+    font-size: 12.5px;
+    padding: 9px 12px;
+  }
+  .lookup-refund-eligibility-note {
+    text-align: center;
   }
 }
 

@@ -51,6 +51,7 @@ const privateNoStoreHeaders = [
 const nextConfig: NextConfig = {
   distDir: process.env.NEXT_DIST_DIR || '.next',
   output: 'standalone',
+  serverExternalPackages: ['@resvg/resvg-js'],
   poweredByHeader: false,
   agentRules: false,
   devIndicators: false,

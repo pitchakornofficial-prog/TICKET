@@ -57,7 +57,7 @@ export async function POST(request: Request) {
     return Response.json({ message: 'ไม่อนุญาต: เฉพาะเจ้าของเว็บเท่านั้น (403)' }, { status: 403 });
   }
 
-  let body: Partial<IssueDirectTicketsInput> = {};
+  let body: Partial<IssueDirectTicketsInput> & { deferEmail?: boolean } = {};
   try {
     body = await readBoundedJson(request, 64 * 1024);
   } catch (error) {
@@ -82,7 +82,7 @@ export async function POST(request: Request) {
       recipientPhone: body.recipientPhone,
       referenceNote: body.referenceNote,
       priceDisplayMode: body.priceDisplayMode || 'face_value',
-      sendEmail: body.sendEmail !== false,
+      sendEmail: body.deferEmail ? false : body.sendEmail !== false,
       issuedByUserId: session.user.id,
     });
 
@@ -92,6 +92,7 @@ export async function POST(request: Request) {
       {
         ok: true,
         orderId: result.orderId,
+        tickets: result.tickets,
         totalTickets: result.totalTickets,
         emailSent: result.emailSent,
         emailError: result.emailError,
